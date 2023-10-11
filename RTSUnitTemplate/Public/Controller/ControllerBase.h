@@ -23,8 +23,13 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ACameraBase* CameraBase;
 	
 	void Tick(float DeltaSeconds);
@@ -35,17 +40,48 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShiftReleased", Keywords = "RTSUnitTemplate ShiftReleased"), Category = RTSUnitTemplate)
 		void ShiftReleased();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LeftClickAMoveUEPF(AUnitBase* Unit, FVector Location);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LeftClickAMove(AUnitBase* Unit, FVector Location);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LeftClickAttack(AUnitBase* Unit, FVector Location);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LeftClickSelect();
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickPressed", Keywords = "RTSUnitTemplate LeftClickPressed"), Category = RTSUnitTemplate)
 		void LeftClickPressed();
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
-
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetUnitState_Replication(AUnitBase* Unit, int State);
+	
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 		bool UseUnrealEnginePathFinding = true;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetToggleUnitDetection(AUnitBase* Unit, bool State);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void RightClickRunShift(AUnitBase* Unit, FVector Location);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void RightClickRunUEPF(AUnitBase* Unit, FVector Location);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
+
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
 		void RightClickPressed();
@@ -62,6 +98,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SpaceReleased", Keywords = "RTSUnitTemplate SpaceReleased"), Category = RTSUnitTemplate)
 		void SpaceReleased();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void ToggleUnitDetection(AUnitBase* Unit);
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "APressed", Keywords = "RTSUnitTemplate APressed"), Category = RTSUnitTemplate)
 		void TPressed();
 
@@ -83,55 +122,61 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ZoomOut", Keywords = "RTSUnitTemplate ZoomOut"), Category = RTSUnitTemplate)
 		void ZoomOut();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		TSubclassOf<class AMissileRain> MissileRainClass;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SpawnMissileRain(int TeamId, FVector Location);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		TSubclassOf<class AEffectArea> EffectAreaClass;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SpawnEffectArea(int TeamId, FVector Location);
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 		bool IsShiftPressed = false;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "AttackToggled", Keywords = "RTSUnitTemplate AttackToggled"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AttackToggled", Keywords = "RTSUnitTemplate AttackToggled"), Category = RTSUnitTemplate)
 		bool AttackToggled = false;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IsStrgPressed", Keywords = "RTSUnitTemplate IsStrgPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsStrgPressed", Keywords = "RTSUnitTemplate IsStrgPressed"), Category = RTSUnitTemplate)
 		bool IsStrgPressed = false;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IsSpacePressed", Keywords = "RTSUnitTemplate IsSpacePressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsSpacePressed", Keywords = "RTSUnitTemplate IsSpacePressed"), Category = RTSUnitTemplate)
 		bool IsSpacePressed = false;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "AltIsPressed", Keywords = "RTSUnitTemplate AltIsPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AltIsPressed", Keywords = "RTSUnitTemplate AltIsPressed"), Category = RTSUnitTemplate)
 		bool AltIsPressed = false;
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "LeftClickisPressed", Keywords = "RTSUnitTemplate LeftClickisPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "LeftClickisPressed", Keywords = "RTSUnitTemplate LeftClickisPressed"), Category = RTSUnitTemplate)
 		bool LeftClickIsPressed = false;
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "LockCameraToUnit", Keywords = "RTSUnitTemplate LockCameraToUnit"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "LockCameraToUnit", Keywords = "RTSUnitTemplate LockCameraToUnit"), Category = RTSUnitTemplate)
 		bool LockCameraToUnit = false;
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "AIsPressed", Keywords = "TopDownRTSCamLib AIsPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AIsPressed", Keywords = "TopDownRTSCamLib AIsPressed"), Category = RTSUnitTemplate)
 		int AIsPressedState = 0;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "DIsPressed", Keywords = "TopDownRTSCamLib DIsPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "DIsPressed", Keywords = "TopDownRTSCamLib DIsPressed"), Category = RTSUnitTemplate)
 		int DIsPressedState = 0;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "WIsPressed", Keywords = "TopDownRTSCamLib WIsPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "WIsPressed", Keywords = "TopDownRTSCamLib WIsPressed"), Category = RTSUnitTemplate)
 		int WIsPressedState = 0;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SIsPressed", Keywords = "TopDownRTSCamLib SIsPressed"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "SIsPressed", Keywords = "TopDownRTSCamLib SIsPressed"), Category = RTSUnitTemplate)
 		int SIsPressedState = 0;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool MiddleMouseIsPressed = false;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> SelectedUnits;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		int SelectableTeamId = 0;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetControlerTeamId(int Id);
 };
+

@@ -26,11 +26,15 @@ ACameraBase::ACameraBase(const FObjectInitializer& ObjectInitializer) :Super(Obj
 	
 	CreateCameraComp();
 
+
+	//ControlWidgetComp = CreateDefaultSubobject<UWidgetComponent>(TEXT("ControlWidget"));
+	//ControlWidgetComp->SetupAttachment(RootComponent);
+	
 	ControlWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ControlWidget"));
 	ControlWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	LoadingWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("LoadingWidget"));
-	LoadingWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+	
+	//LoadingWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("LoadingWidget"));
+	//LoadingWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 
 	GetCameraBaseCapsule()->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 	GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
@@ -66,7 +70,9 @@ ACameraBase::ACameraBase(const FObjectInitializer& ObjectInitializer) :Super(Obj
 void ACameraBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	ControlWidgetComp->SetVisibility(false);
+		
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		
@@ -81,9 +87,6 @@ void ACameraBase::BeginPlay()
 		}
 		
 	}
-	
-	SpawnControllWidget();
-	SpawnLoadingWidget();
 }
 
 void ACameraBase::SetActorBasicLocation()
@@ -98,6 +101,8 @@ void ACameraBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	SetActorBasicLocation();
+
+	//if(ShowControlWidgetAtStart) ShowControlWidget();
 }
 
 
@@ -186,21 +191,6 @@ void ACameraBase::CreateCameraComp()
 	CameraComp->SetupAttachment(SpringArm);
 }
 
-void ACameraBase::SpawnControllWidget()
-{
-	FTransform SpellTransform;
-	SpellTransform.SetLocation(FVector(500, 0, 0));
-	SpellTransform.SetRotation(FQuat(FRotator::ZeroRotator));
-
-
-	if (ControlWidgetComp) {
-		FRotator NewRotation = ControlWidgetRotation;
-		FQuat QuatRotation = FQuat(NewRotation);
-		ControlWidgetComp->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
-		ControlWidgetComp->SetRelativeLocation(ControlWidgetLocation);
-	}
-}
-
 
 void ACameraBase::PanMoveCamera(const FVector& NewPanDirection) {
 	if (NewPanDirection != FVector::ZeroVector) {
@@ -250,7 +240,8 @@ void ACameraBase::ZoomOut(float ZoomMultiplier, bool Decelerate) {
 	
 	if(SpringArm)
 		SpringArm->TargetArmLength += zoomAmount;
-	
+
+	SetControlWidgetLocation();
 }
 
 void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
@@ -269,7 +260,8 @@ void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
 	
 	if(SpringArm && SpringArm->TargetArmLength > 100.f)
 		SpringArm->TargetArmLength += zoomAmount;
-	
+
+	SetControlWidgetLocation();
 }
 
 
@@ -355,6 +347,8 @@ bool ACameraBase::RotateCamLeft(float Add, bool stopCam) // CamRotationOffset
 
 	SpringArm->SetRelativeRotation(SpringArmRotator);
 
+	SetControlWidgetLocation();
+	
 	if (SpringArmRotator.Yaw >= 360) SpringArmRotator.Yaw = 0.f;
 	
 	if (FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[0], RotationIncreaser) ||
@@ -386,6 +380,8 @@ bool ACameraBase::RotateCamRight(float Add, bool stopCam) // CamRotationOffset
 		SpringArmRotator.Yaw = floor(SpringArmRotator.Yaw+0.5);
 
 	SpringArm->SetRelativeRotation(SpringArmRotator);
+
+	SetControlWidgetLocation();
 	
 	if (SpringArmRotator.Yaw <= -1) SpringArmRotator.Yaw = 359.f;
 
@@ -455,14 +451,6 @@ bool ACameraBase::RotateCamRightTo(float Position, float Add)
 	return false;
 }
 
-FVector2D ACameraBase::GetMousePos2D()
-{
-	float PosX;
-	float PosY;
-	PC->GetMousePosition(PosX, PosY);
-
-	return FVector2D(PosX, PosY);
-}
 
 bool ACameraBase::ZoomOutToPosition(float Distance, const FVector SelectedActorPosition)
 {
@@ -493,8 +481,17 @@ bool ACameraBase::ZoomInToPosition(float Distance, const FVector SelectedActorPo
 
 void ACameraBase::LockOnUnit(AUnitBase* Unit)
 {
-	if (Unit) {
-		SetActorLocation(Unit->GetActorLocation());
+	if (Unit && Unit->GetUnitState() != UnitData::Dead) {
+		FVector ActorLocation = Unit->GetActorLocation();
+
+		float ZLocation = GetActorLocation().Z;
+
+		if(abs(ZLocation-ActorLocation.Z) >= 100.f) ZLocation = ActorLocation.Z;
+		
+		SetActorLocation(FVector(ActorLocation.X, ActorLocation.Y, ZLocation));
+	}else
+	{
+		SetCameraState(CameraData::UseScreenEdges);
 	}
 }
 
@@ -538,6 +535,8 @@ void ACameraBase::HideControlWidget()
 {
 	if (ControlWidgetComp)
 		ControlWidgetComp->SetVisibility(false);
+
+	ShowControlWidgetAtStart = false;
 }
 
 void ACameraBase::ShowControlWidget()
@@ -545,8 +544,50 @@ void ACameraBase::ShowControlWidget()
 	if (ControlWidgetComp)
 	{
 		ControlWidgetComp->SetVisibility(true);
-		ControlWidgetComp->SetRelativeLocation(ControlWidgetLocation);
+		SetControlWidgetLocation();
 	}
+}
+
+void ACameraBase::SetControlWidgetLocation()
+{
+	if (!ControlWidgetComp || !GetWorld()) return;
+
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	if (!PlayerController) return;
+	
+	FVector2d ScreenPosition = ControlWidgetLocation;
+	
+	FIntPoint ViewportSize;
+	PlayerController->GetViewportSize(ViewportSize.X, ViewportSize.Y);
+
+	// Ensure ScreenPosition is in the range [0, 1] representing percentage of screen width and height.
+	FVector2D ClampedScreenPosition = FMath::Clamp(ScreenPosition, FVector2D(0, 0), FVector2D(1, 1));
+    
+	// Convert it to actual screen pixel coordinates
+	FVector2D PixelPosition = FVector2D(ViewportSize.X * ClampedScreenPosition.X, ViewportSize.Y * ClampedScreenPosition.Y);
+
+
+
+	
+	FVector WorldPosition;
+	FVector WorldDirection;
+
+	// Convert screen position to a world space ray
+	PlayerController->DeprojectScreenPositionToWorld(PixelPosition.X, PixelPosition.Y, WorldPosition, WorldDirection);
+    
+	// Set the widget position in front of the camera by a fixed distance, say 200 units.
+	FVector NewLocation = WorldPosition + WorldDirection*1000.f; //  + WorldDirection * SpringArm->TargetArmLength*WidgetDistance
+	ControlWidgetComp->SetWorldLocation(NewLocation);
+	
+	// Optionally, make the TalentChooser face the camera.
+	FVector CameraLocation = this->GetActorLocation();
+	FVector DirectionToCamera = (CameraLocation - NewLocation).GetSafeNormal();
+	FRotator NewRotation = DirectionToCamera.Rotation();
+
+	FRotator OffsetRotation(180.0f, 0.0f, 180.0f);  // 90-degree pitch
+	FQuat CombinedQuat = NewRotation.Quaternion() * OffsetRotation.Quaternion();
+	
+	ControlWidgetComp->SetWorldRotation(CombinedQuat.Rotator()); // NewRotation
 }
 
 void ACameraBase::DeSpawnLoadingWidget()

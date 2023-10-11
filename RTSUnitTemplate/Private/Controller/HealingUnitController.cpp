@@ -87,7 +87,6 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 	case UnitData::Idle:
 		{
 			//if(UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-			//Idle(UnitBase, DeltaSeconds);
 			UnitBase->SetWalkSpeed(0);
 
 			if(UnitBase->SetNextUnitToChaseHeal())
@@ -354,7 +353,7 @@ void AHealingUnitController::HealPatrolUEPathfinding(AHealingUnit* UnitBase, flo
 
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{
-		SetUEPathfinding(UnitBase, DeltaSeconds);
+		SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->NextWaypoint->GetActorLocation());
 	}
 	else
 	{

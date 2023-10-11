@@ -50,49 +50,51 @@ class RTSUNITTEMPLATE_API UUnitBaseAnimInstance : public UAnimInstance
 public:
 	UUnitBaseAnimInstance();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		TEnumAsByte<UnitData::EState> CharAnimState;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> LastAnimState = UnitData::None;
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		TEnumAsByte<UnitData::EState> LastAnimState = UnitData::None;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BlendPoint_1 = 0;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BlendPoint_2 = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CurrentBlendPoint_1 = 0;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CurrentBlendPoint_2 = 0;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TransitionRate_1 = 0.5;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TransitionRate_2 = 0.5;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Resolution_1 = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated,VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Resolution_2 = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float SoundTimer = 0.f;
 
 	UFUNCTION()
 	virtual void NativeInitializeAnimation() override;
-
+	
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 	UFUNCTION()
 	virtual void NativeUpdateAnimation(float Deltaseconds) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UDataTable* AnimDataTable;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

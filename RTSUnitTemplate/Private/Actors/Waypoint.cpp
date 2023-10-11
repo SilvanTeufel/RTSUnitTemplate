@@ -36,7 +36,7 @@ void AWaypoint::Tick(float DeltaTime)
 
 }
 
-void AWaypoint::OnPlayerEnter(UPrimitiveComponent* OverlapComponent,
+void AWaypoint::OnPlayerEnter_Implementation(UPrimitiveComponent* OverlapComponent,
 	AActor* OtherActor, UPrimitiveComponent* OtherComponent,
 	int32 OtherBodyIndex,
 	bool bFromSweep,
@@ -52,7 +52,6 @@ void AWaypoint::OnPlayerEnter(UPrimitiveComponent* OverlapComponent,
 			ActualCharacter->UnitState != UnitData::Run
 			) {
 			ActualCharacter->SetWaypoint(NextWaypoint);
-		
 				ActualCharacter->SetUEPathfinding = true;
 				ActualCharacter->RunLocationArray.Empty();
 				ActualCharacter->RunLocationArrayIterator = 0;
@@ -62,8 +61,6 @@ void AWaypoint::OnPlayerEnter(UPrimitiveComponent* OverlapComponent,
 				ActualCharacter->DijkstraSetPath = true;
 				ActualCharacter->FollowPath = false;
 				
-			
-			ActualCharacter->SetUnitState(UnitData::Patrol);
 		}
 	}
 }

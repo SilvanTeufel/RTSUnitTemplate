@@ -45,7 +45,7 @@ protected:
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputConfig* InputConfig;
-
+	
 	/** Handles Enhanced Keyboard Inputs */
 	void Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 CamState);
@@ -89,8 +89,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraComp", Keywords = "RTSUnitTemplate CameraComp"), Category = RTSUnitTemplate)
 		UCameraComponent* CameraComp;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "PC", Keywords = "RTSUnitTemplate PC"), Category = RTSUnitTemplate)
-		APlayerController* PC;
+	//UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "PC", Keywords = "RTSUnitTemplate PC"), Category = RTSUnitTemplate)
+		//APlayerController* PC;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "MappingContext", Keywords = "TopDownRTSCamLib MappingContext"), Category = TopDownRTSCamLib)
 		UInputMappingContext* MappingContext;
@@ -100,9 +100,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraDistanceToCharacter", Keywords = "TopDownRTSCamLib CameraDistanceToCharacter"), Category = TopDownRTSCamLib)
 		float CameraDistanceToCharacter = 1500.f;
-	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SpawnControllWidget", Keywords = "RTSUnitTemplate SpawnControllWidget"), Category = RTSUnitTemplate)
-		void SpawnControllWidget();
 
 	UFUNCTION( BlueprintCallable, meta = (DisplayName = "PanMoveCamera", Keywords = "RTSUnitTemplate PanMoveCamera"), Category = RTSUnitTemplate)
 		void PanMoveCamera(const FVector& NewPanDirection);
@@ -200,8 +197,8 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "JumpCamera", Keywords = "RTSUnitTemplate JumpCamera"), Category = RTSUnitTemplate)
 		void JumpCamera(FHitResult Hit);
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = RTSUnitTemplate)
-		FVector2D GetMousePos2D();
+	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = RTSUnitTemplate)
+		//FVector2D GetMousePos2D();
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ZoomOutToPosition", Keywords = "RTSUnitTemplate ZoomOutToPosition"), Category = RTSUnitTemplate)
 		bool ZoomOutToPosition(float Distance, const FVector SelectedActorPosition = FVector(0.f,0.f,0.f));
@@ -335,11 +332,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetRotator", Keywords = "RTSUnitTemplate ControlWidgetRotator"), Category = RTSUnitTemplate)
 		FRotator ControlWidgetRotation = FRotator(50, 180, 0);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetLocation", Keywords = "RTSUnitTemplate ControlWidgetLocation"), Category = RTSUnitTemplate)
-		FVector ControlWidgetLocation = FVector(400.f, -100.0f, -250.0f);
-
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetLocation", Keywords = "TopDownRTSTemplate ControlWidgetLocation"), Category = TopDownRTSTemplate)
+		FVector2D ControlWidgetLocation = FVector2D(0.5f, 0.5f);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetHideLocation", Keywords = "RTSUnitTemplate ControlWidgetHideLocation"), Category = RTSUnitTemplate)
 		FVector ControlWidgetHideLocation = FVector(400.f, -2500.0f, -250.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+		bool ShowControlWidgetAtStart = true;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "HideControlWidget", Keywords = "RTSUnitTemplate HideControlWidget"), Category = RTSUnitTemplate)
 		void HideControlWidget();
@@ -347,6 +347,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShowControlWidget", Keywords = "RTSUnitTemplate ShowControlWidget"), Category = RTSUnitTemplate)
 		void ShowControlWidget();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetControlWidgetLocation();
+	
 	/////// Loading Widget ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "LoadingWidgetComp", Keywords = "RTSUnitTemplate LoadingWidgetComp"), Category = RTSUnitTemplate)

@@ -40,7 +40,7 @@ public:
 	bool Debug = true;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	bool StopLoading = false;
+	bool StopLoading = true;
 	
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	bool DisablePathFindingOnEnemy = true;

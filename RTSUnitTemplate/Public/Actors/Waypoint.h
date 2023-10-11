@@ -34,6 +34,6 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Server, Reliable, Category = RTSUnitTemplate)
 		void OnPlayerEnter(UPrimitiveComponent* OverlapComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 };

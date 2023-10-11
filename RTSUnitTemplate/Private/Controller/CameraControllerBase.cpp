@@ -53,6 +53,7 @@ void ACameraControllerBase::MoveCamToLocation(ACameraBase* Camera, const FVector
 
 bool ACameraControllerBase::CheckSpeakingUnits()
 {
+	if(HUDBase)
 	for (int32 i = 0; i < HUDBase->SpeakingUnits.Num(); i++)
 	{
 		if(HUDBase->SpeakingUnits[i]->LockCamOnUnit)

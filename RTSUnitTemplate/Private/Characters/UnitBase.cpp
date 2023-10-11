@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
@@ -34,6 +35,16 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 
 	Health = SpawnHealth;
 	Shield = SpawnShield;
+
+	CharacterMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("NewMeshComponent"));
+	CharacterMesh->SetupAttachment(RootComponent);
+	
+	if (HasAuthority())
+	{
+		bReplicates = true;
+		SetReplicateMovement(true);
+		GetMesh()->SetIsReplicated(true);
+	}
 }
 
 
@@ -70,8 +81,35 @@ void AUnitBase::BeginPlay()
 			FVector UnitLocation = GetActorLocation();
 			SetActorLocation(FVector(UnitLocation.X, UnitLocation.Y, FlyHeight));
 		}
+	
+	if (HasAuthority())
+	{
+		SetMeshRotation(MeshRotation);
+	}
 
 }
+
+void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AUnitBase, UnitState);
+	DOREPLIFETIME(AUnitBase, UnitStatePlaceholder);
+	DOREPLIFETIME(AUnitBase, TeamId)
+	DOREPLIFETIME(AUnitBase, Shield);
+	DOREPLIFETIME(AUnitBase, MaxShield);
+	DOREPLIFETIME(AUnitBase, SpawnShield);
+	DOREPLIFETIME(AUnitBase, Health);
+	DOREPLIFETIME(AUnitBase, MaxHealth);
+	DOREPLIFETIME(AUnitBase, SpawnHealth);
+	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
+	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
+	DOREPLIFETIME(AUnitBase, RunLocation);
+	DOREPLIFETIME(AUnitBase, MeshRotation);
+	DOREPLIFETIME(AUnitBase, CharacterMesh);
+
+}
+
 
 // Called every frame
 void AUnitBase::Tick(float DeltaTime)
@@ -87,6 +125,15 @@ void AUnitBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 }
 
+void AUnitBase::SetMeshRotation_Implementation(FRotator NewRotation)
+{
+	if (CharacterMesh)
+	{
+		CharacterMesh->SetRelativeRotation(NewRotation);
+	}
+}
+
+
 // HUDBase related //////////////////////////////////////////////////
 void AUnitBase::IsAttacked(AActor* AttackingCharacter) // AActor* SelectedCharacter
 {
@@ -94,6 +141,11 @@ void AUnitBase::IsAttacked(AActor* AttackingCharacter) // AActor* SelectedCharac
 	SetWalkSpeed(IsAttackedSpeed);
 
 }
+void AUnitBase::SetRunLocation_Implementation(FVector Location)
+{
+	RunLocation = Location;
+}
+
 void AUnitBase::SetWalkSpeed(float Speed)
 {
 	UCharacterMovementComponent* MovementPtr = GetCharacterMovement();
@@ -129,7 +181,7 @@ float AUnitBase::GetHealth()
 	return Health;
 }
 
-void AUnitBase::SetHealth(float NewHealth)
+void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	if(NewHealth > MaxHealth)
 	{
@@ -217,7 +269,7 @@ void AUnitBase::SpawnSelectedIcon()
 	}
 }
 
-void AUnitBase::SpawnProjectile(AActor* Target, AActor* Attacker) // FVector TargetLocation
+void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker) // FVector TargetLocation
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
 
@@ -239,6 +291,16 @@ void AUnitBase::SpawnProjectile(AActor* Target, AActor* Attacker) // FVector Tar
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 		}
 	}
+}
+
+void AUnitBase::SetToggleUnitDetection_Implementation(bool ToggleTo)
+{
+		ToggleUnitDetection = ToggleTo;
+}
+
+bool AUnitBase::GetToggleUnitDetection()
+{
+	return ToggleUnitDetection;
 }
 
 bool AUnitBase::SetNextUnitToChase()

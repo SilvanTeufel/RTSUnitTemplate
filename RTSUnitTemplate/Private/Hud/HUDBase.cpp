@@ -9,14 +9,15 @@
 #include "Elements/Actor/ActorElementData.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Components/WidgetSwitcher.h"
+#include "Controller/CameraControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 
 
 void AHUDBase::DrawHUD()
 {
-
+	
 	if (bSelectFriendly) {
-		
+	
 		for (int32 i = 0; i < FriendlyUnits.Num(); i++) {
 			//AllFriendlyUnits[i]->AttackCapsule->Scale
 		}
@@ -111,11 +112,13 @@ void AHUDBase::DrawHUD()
 			
 			for (int32 i = 0; i < NewUnitBases.Num(); i++) {
 
-				//FVector ALocation = NewUnitBases[i]->GetActorLocation();
 
 				const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(NewUnitBases[i]);
-				
-				if(NewUnitBases[i]->TeamId && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
+
+		
+				ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
+			
+				if(Controller && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
 				{
 					NewUnitBases[i]->SetSelected();
 					SelectedUnits.Emplace(NewUnitBases[i]);
@@ -260,11 +263,16 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 
 void AHUDBase::SetUnitSelected(AUnitBase* Unit)
 {
+	
+		
+	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		SelectedUnits[i]->SetDeselected();
 	}
 
+	if(SelectedUnits.Num())
 	SelectedUnits.Empty();
+	
 	SelectedUnits.Add(Unit);
 
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {

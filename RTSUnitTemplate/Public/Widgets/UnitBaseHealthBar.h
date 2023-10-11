@@ -37,13 +37,13 @@ protected:
 		class UTextBlock* MaxHealthLabel;
 
 	UPROPERTY(meta = (BindWidget))
-	class UProgressBar* ShieldBar;
+	    class UProgressBar* ShieldBar;
 
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* CurrentShieldLabel;
+	    class UTextBlock* CurrentShieldLabel;
 
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* MaxShieldLabel;
+	    class UTextBlock* MaxShieldLabel;
 
 private:
 	float PreviousShieldValue = -1.0f;

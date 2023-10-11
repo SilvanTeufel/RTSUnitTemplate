@@ -5,6 +5,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Characters/UnitBase.h"
+#include "Controller/UnitControllerBase.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 AProjectile::AProjectile()
@@ -17,6 +19,12 @@ AProjectile::AProjectile()
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
 	//Mesh->SetupAttachment(RootComponent);
+
+	if (HasAuthority())
+	{
+		bReplicates = true;
+		SetReplicateMovement(true);
+	}
 }
 
 void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
@@ -37,6 +45,20 @@ void AProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	
+}
+
+void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AProjectile, Target);
+	DOREPLIFETIME(AProjectile, Mesh);
+	DOREPLIFETIME(AProjectile, Material);
+	DOREPLIFETIME(AProjectile, TargetLocation);
+	DOREPLIFETIME(AProjectile, Damage);
+	DOREPLIFETIME(AProjectile, LifeTime);
+	DOREPLIFETIME(AProjectile, MaxLifeTime);
+	DOREPLIFETIME(AProjectile, TeamId);
+	DOREPLIFETIME(AProjectile, MovementSpeed);
 }
 
 // Called every frame
@@ -64,7 +86,7 @@ void AProjectile::Tick(float DeltaTime)
 	
 }
 
-void AProjectile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if(OtherActor)

@@ -24,6 +24,8 @@ public:
 
 	virtual void OnPossess(APawn* Pawn) override;
 
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual FRotator GetControlRotation() const override;
@@ -110,15 +112,16 @@ public:
 		void PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds);
+		void SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CreateProjectile", Keywords = "RTSUnitTemplate CreateProjectile"), Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "CreateProjectile", Keywords = "RTSUnitTemplate CreateProjectile"), Category = RTSUnitTemplate)
 		void CreateProjectile (AUnitBase* UnitBase);
-	
-	bool ProjectileSpawned = false;
+
+	UPROPERTY(BlueprintReadWrite,  Category = RTSUnitTemplate)
+		bool ProjectileSpawned = false;
 	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DisableBaseConstructor", Keywords = "RTSUnitTemplate DisableBaseConstructor"), Category = RTSUnitTemplate)
 	//bool DisableBaseConstructor = false;
 };

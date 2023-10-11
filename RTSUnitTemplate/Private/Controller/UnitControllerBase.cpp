@@ -16,6 +16,7 @@
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
 #include "Controller/ControllerBase.h"
+#include "Net/UnrealNetwork.h"
 
 AUnitControllerBase::AUnitControllerBase()
 {
@@ -57,6 +58,10 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 	Super::OnPossess(PawN);
 }
 
+void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+}
 
 
 void AUnitControllerBase::Tick(float DeltaSeconds)
@@ -167,8 +172,8 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Patrol:
 		{
-			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-				
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -177,7 +182,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Run:
 		{
-			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Run"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
 				
 			if(UnitBase->UEPathfindingUsed)
 				RunUEPathfinding(UnitBase, DeltaSeconds);
@@ -187,26 +192,27 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Chase:
 		{
-			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Chase"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
 				
 			Chase(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Attack:
 		{
-			//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Attack"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Attack"));
 			Attack(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Pause:
 		{
-			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("Pause"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
 			Pause(UnitBase, DeltaSeconds);
 		}
 		break;
 
 		case UnitData::IsAttacked:
 		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
 			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
@@ -214,14 +220,15 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 
 		case UnitData::Idle:
 		{
-			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 			Idle(UnitBase, DeltaSeconds);
 		}
 		break;
 		default:
-			{
-				UnitBase->SetUnitState(UnitData::Idle);
-			}
+		{
+			//UE_LOG(LogTemp, Warning, TEXT("default Idle"));
+			UnitBase->SetUnitState(UnitData::Idle);
+		}
 		break;
 		}
 
@@ -251,13 +258,13 @@ bool AUnitControllerBase::IsUnitToChaseInRange(AUnitBase* UnitBase)
 
 void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	UnitBase->SetWalkSpeed(0);
+	//UnitBase->SetWalkSpeed(0);
 				
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
 	FVector ActorLocation = UnitBase->GetActorLocation();
 				
-	UnitBase->SetActorLocation(FVector(ActorLocation.X + 0.f,ActorLocation.Y + 0.f,ActorLocation.Z -1.f));
+	//UnitBase->SetActorLocation(FVector(ActorLocation.X + 0.f,ActorLocation.Y + 0.f,ActorLocation.Z -1.f));
 
 	if (UnitBase->UnitControlTimer >= DespawnTime) {
 		if(UnitBase->DestroyAfterDeath) UnitBase->Destroy(true, false);
@@ -302,7 +309,7 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	
-	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
@@ -370,10 +377,11 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
     						
-    						const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
+    						//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
     						
-    						UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
-    						
+    						//UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+    						UnitBase->SetUEPathfinding = true;
+    						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
     						//SetUEPathfinding(UnitBase, DeltaSeconds);
     						//SetUEPathfindingTo(UnitBase, DeltaSeconds, UnitToChaseLocation);
     					}
@@ -523,8 +531,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-
-	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
@@ -545,7 +552,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
-				
+	
 	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
 		if(UnitBase->SetNextUnitToChase())
@@ -556,14 +563,14 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 		
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{
-		SetUEPathfinding(UnitBase, DeltaSeconds);
+		SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->NextWaypoint->GetActorLocation());
 	}
 	else
 	{
 		UnitBase->SetUnitState(UnitData::Idle);
 	}
 }
-void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
+void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
 {
 	if(!UnitBase->SetUEPathfinding)
 		return;
@@ -578,7 +585,7 @@ void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 			// You can use the controller here
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
-			ControllerBase->MoveToLocationUEPathFinding(UnitBase, UnitBase->NextWaypoint->GetActorLocation());
+			ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
 			
 		}
 	}
@@ -605,7 +612,7 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 	}
 }
 
-void AUnitControllerBase::CreateProjectile(AUnitBase* UnitBase)
+void AUnitControllerBase::CreateProjectile_Implementation(AUnitBase* UnitBase)
 {
 	if(UnitBase->UseProjectile && !ProjectileSpawned)
 	{

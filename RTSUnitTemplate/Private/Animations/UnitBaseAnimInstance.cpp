@@ -7,6 +7,7 @@
 #include "Characters/UnitBase.h"
 #include "Characters/SpeakingUnit.h"
 #include "Core/UnitData.h"
+#include "Net/UnrealNetwork.h"
 
 UUnitBaseAnimInstance::UUnitBaseAnimInstance() {
 	CharAnimState = UnitData::Idle;
@@ -17,6 +18,27 @@ void UUnitBaseAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 
+}
+
+void UUnitBaseAnimInstance::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UUnitBaseAnimInstance, CharAnimState);
+	DOREPLIFETIME(UUnitBaseAnimInstance, LastAnimState);
+	
+	DOREPLIFETIME(UUnitBaseAnimInstance, BlendPoint_1);
+	DOREPLIFETIME(UUnitBaseAnimInstance, BlendPoint_2);
+	DOREPLIFETIME(UUnitBaseAnimInstance, CurrentBlendPoint_1);
+	DOREPLIFETIME(UUnitBaseAnimInstance, CurrentBlendPoint_2);
+	DOREPLIFETIME(UUnitBaseAnimInstance, TransitionRate_1);
+	DOREPLIFETIME(UUnitBaseAnimInstance, TransitionRate_2);
+	DOREPLIFETIME(UUnitBaseAnimInstance, Resolution_1);
+	DOREPLIFETIME(UUnitBaseAnimInstance, Resolution_2);
+	DOREPLIFETIME(UUnitBaseAnimInstance, Sound);
+	
+	DOREPLIFETIME(UUnitBaseAnimInstance, SoundTimer);
+	DOREPLIFETIME(UUnitBaseAnimInstance, AnimDataTable);
 }
 
 void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
@@ -94,7 +116,6 @@ void UUnitBaseAnimInstance::SetBlendPoints(AUnitBase* Unit, float Deltaseconds)
 						BlendPoint_2 = UnitAnimData->BlendPoint_2;
 					}
 					
-					// UE_LOG(LogTemp, Warning, TEXT("found Speaking Unit and Bubble"));
 
 					TransitionRate_1 = UnitAnimData->TransitionRate_1;
 					TransitionRate_2 = UnitAnimData->TransitionRate_2;

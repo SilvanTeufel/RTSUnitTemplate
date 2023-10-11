@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
@@ -23,8 +24,33 @@ void AControllerBase::BeginPlay() {
 	
 		CameraBase = Cast<ACameraBase>(GetPawn());
 		HUDBase = Cast<APathProviderHUD>(GetHUD());
+		if(HUDBase && HUDBase->StopLoading) CameraBase->DeSpawnLoadingWidget();
 }
 
+void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AControllerBase, CameraBase);
+	DOREPLIFETIME(AControllerBase, UseUnrealEnginePathFinding);
+	DOREPLIFETIME(AControllerBase, MissileRainClass);
+	DOREPLIFETIME(AControllerBase, EffectAreaClass);
+	DOREPLIFETIME(AControllerBase, IsShiftPressed);
+	DOREPLIFETIME(AControllerBase, AttackToggled);
+	DOREPLIFETIME(AControllerBase, IsStrgPressed);
+	DOREPLIFETIME(AControllerBase, IsSpacePressed);
+
+	DOREPLIFETIME(AControllerBase, AltIsPressed);
+	DOREPLIFETIME(AControllerBase, LeftClickIsPressed);
+	DOREPLIFETIME(AControllerBase, LockCameraToUnit);
+	DOREPLIFETIME(AControllerBase, AIsPressedState);
+	DOREPLIFETIME(AControllerBase, DIsPressedState);
+	DOREPLIFETIME(AControllerBase, WIsPressedState);
+	DOREPLIFETIME(AControllerBase, SIsPressedState);
+	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
+	DOREPLIFETIME(AControllerBase, SelectableTeamId);
+	
+}
 
 void AControllerBase::SetupInputComponent() {
 
@@ -62,7 +88,8 @@ void AControllerBase::Tick(float DeltaSeconds)
 	}
 
 	TArray<FPathPoint> PathPoints;
-	if(!HUDBase->DisablePathFindingOnEnemy)
+
+	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
 	for (int32 i = 0; i < HUDBase->EnemyUnitBases.Num(); i++)
 		if( HUDBase->EnemyUnitBases[i] && !HUDBase->EnemyUnitBases[i]->TeamId &&  HUDBase->EnemyUnitBases[i]->DijkstraSetPath)
 		{
@@ -81,86 +108,109 @@ void AControllerBase::ShiftReleased()
 	IsShiftPressed = false;
 }
 
+void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
+{
+	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	SetUnitState_Replication(Unit,1);
+	MoveToLocationUEPathFinding(Unit, Location);
+}
+
+void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Location)
+{
+	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	SetUnitState_Replication(Unit,1);
+	Unit->RunLocationArray.Empty();
+	Unit->RunLocationArrayIterator = 0;
+	SetRunLocation(Unit, Location);
+}
+
+
+void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Location)
+{
+	if (Unit && Unit->UnitState != UnitData::Dead) {
+	
+		FHitResult Hit_Pawn;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
+
+		if (Hit_Pawn.bBlockingHit)
+		{
+			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
+					
+			if(UnitBase && !UnitBase->TeamId)
+			{
+				/// Focus Enemy Units ///
+				Unit->UnitToChase = UnitBase;
+				SetUnitState_Replication(Unit, 3);
+				
+			}else if(UseUnrealEnginePathFinding)
+			{
+					
+				if (Unit &&Unit->UnitState != UnitData::Dead)
+				{
+					LeftClickAMoveUEPF(Unit, Location);
+				}
+					
+			}else
+			{
+				LeftClickAMove(Unit, Location);
+			}
+		}else if(UseUnrealEnginePathFinding)
+		{
+			if (Unit &&Unit->UnitState != UnitData::Dead)
+			{
+				/// A-Move Units ///
+				LeftClickAMoveUEPF(Unit, Location);
+			}
+					
+		}
+			
+	}
+}
+
+void AControllerBase::LeftClickSelect_Implementation()
+{
+	FHitResult Hit_IPoint;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit_IPoint);
+	
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if(SelectedUnits[i])
+			SelectedUnits[i]->SetDeselected();
+	}
+		
+	SelectedUnits.Empty();
+
+}
+
 void AControllerBase::LeftClickPressed()
 {
 	LeftClickIsPressed = true;
-	
 	if (AttackToggled) {
 		AttackToggled = false;
+		FHitResult Hit;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
-				FHitResult Hit;
-				GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-				
-				FHitResult Hit_Pawn;
-				GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
-
-				if (Hit_Pawn.bBlockingHit)
-				{
-					AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-					
-					if(UnitBase && !UnitBase->TeamId)
-					{
-						/// Focus Enemy Units ///
-						SelectedUnits[i]->UnitToChase = UnitBase;
-						SelectedUnits[i]->SetUnitState(UnitData::Chase);
-					}else if(UseUnrealEnginePathFinding)
-					{
-					
-						if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
-						{
-							/// A-Move Units ///
-							FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-							DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
-							MoveToLocationUEPathFinding(SelectedUnits[i], RunLocation);
-							SelectedUnits[i]->SetUnitState(UnitData::Run);
-						}
-					
-					}else
-					{
-						/// A-Move Units ///
-						FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0);
-						DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
-						
-						SelectedUnits[i]->SetUnitState(UnitData::Run);
-						SelectedUnits[i]->RunLocationArray.Empty();
-						SelectedUnits[i]->RunLocationArrayIterator = 0;
-						SelectedUnits[i]->RunLocation = RunLocation;
-						//SelectedUnits[i]->UnitStatePlaceholder = UnitData::Run;
-					}
-				}
-				
-			}
-			
+			FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
 		}
 		
 	}
 	else {
+		LeftClickSelect();
 
-		FHitResult Hit_IPoint;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit_IPoint);
-		HUDBase->IPoint = Hit_IPoint.Location;
-		
-		HUDBase->DeselectAllUnits();
-
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			if(SelectedUnits[i])
-			SelectedUnits[i]->SetDeselected();
-		}
-		
-		SelectedUnits.Empty();
 		FHitResult Hit_Pawn;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
 		
-		if (Hit_Pawn.bBlockingHit)
+		if (Hit_Pawn.bBlockingHit && HUDBase)
 		{
 			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
 			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
 			
-			if (UnitBase && UnitBase->TeamId && !SUnit)
+			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
 			{
+				HUDBase->DeselectAllUnits();
 				HUDBase->SetUnitSelected(UnitBase);
 
 				if(CameraBase->AutoLockOnSelect)
@@ -171,7 +221,6 @@ void AControllerBase::LeftClickPressed()
 				HUDBase->bSelectFriendly = true;
 			}
 		}
-
 	}
 
 }
@@ -183,9 +232,20 @@ void AControllerBase::LeftClickReleased()
 	SelectedUnits = HUDBase->SelectedUnits;
 }
 
-void AControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation)
+void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
-	if (!Unit || !Unit->GetCharacterMovement() || !Unit->GetController())
+	Unit->SetRunLocation(DestinationLocation);
+}
+
+void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+
+	if(!HasAuthority())
+	{
+		return;
+	}
+	
+	if (!Unit || !Unit->GetCharacterMovement())
 	{
 		return;
 	}
@@ -196,87 +256,121 @@ void AControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector
 	{
 		return;
 	}
-	
+
 	// Check if we have a valid navigation system
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)
 	{
 		return;
 	}
-
-	//Unit->SetUnitState(UnitData::RunUEPathfinding);
-	Unit->RunLocation = DestinationLocation;
+	
+	SetRunLocation(Unit, DestinationLocation);
 	Unit->UEPathfindingUsed = true;
 	// Move the unit to the destination location using the navigation system
 	FAIMoveRequest MoveRequest;
 	MoveRequest.SetGoalLocation(DestinationLocation);
 	MoveRequest.SetAcceptanceRadius(5.0f); // Set an acceptance radius for reaching the destination
-
 	FNavPathSharedPtr NavPath;
+
 	AIController->MoveTo(MoveRequest, &NavPath);
 }
 
+void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, int State)
+{
+	if(Unit)
+	switch (State)
+	{
+	case 0:
+		Unit->SetUnitState(UnitData::Idle);
+		break;
+
+	case 1:
+		Unit->SetUnitState(UnitData::Run);
+		break;
+
+	case 2:
+		Unit->SetUnitState(UnitData::Attack);
+		break;
+		
+	case 3:
+		Unit->SetUnitState(UnitData::Chase);
+		break;
+		// ... other cases
+
+		default:
+			// Handle invalid state
+			break;
+	}
+}
+
+void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, bool State)
+{
+	Unit->SetToggleUnitDetection(State);
+}
+void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
+{
+	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	if(!Unit->RunLocationArray.Num())
+	{
+		SetRunLocation(Unit, Location);
+		Unit->UEPathfindingUsed = false;
+
+		SetUnitState_Replication(Unit,1);
+	}
+						
+	Unit->RunLocationArray.Add(Location);
+	Unit->UnitsToChase.Empty();
+	Unit->UnitToChase = nullptr;
+	Unit->SetToggleUnitDetection(false);
+}
+
+void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location)
+{
+	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	MoveToLocationUEPathFinding(Unit, Location);
+	SetUnitState_Replication(Unit,1);
+	SetToggleUnitDetection(Unit, false);
+}
+
+void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
+{
+	TArray<FPathPoint> PathPoints;
+
+	FVector UnitLocation = Unit->GetActorLocation();
+
+	DrawDebugCircle(GetWorld(), FVector(Location.X, Location.Y, Location.Z+2.f), 15, 5, FColor::Green, false, 1.5, 0, 1, FVector(0, 1, 0), FVector(1, 0, 0));
+	if(Unit->GetUnitState() != UnitData::Run)
+		Unit->SetWalkSpeed(0.f);
+
+	Unit->UEPathfindingUsed = false;
+	SetUnitState_Replication(Unit,1);
+	Unit->RunLocationArray.Empty();
+	Unit->RunLocationArrayIterator = 0;
+	SetRunLocation(Unit, Location);
+	Unit->SetToggleUnitDetection(false);
+
+	float Range = FVector::Dist(UnitLocation, Location);
+ 
+	if(!HUDBase->DisablePathFindingOnFriendly && Range >= HUDBase->RangeThreshold && !HUDBase->IsLocationInNoPathFindingAreas(Location))
+		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
+}
 void AControllerBase::RightClickPressed()
 {
 	AttackToggled = false;
+	FHitResult Hit;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
+			FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
 			if (IsShiftPressed) {
-			
-						FHitResult Hit;
-						GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-						FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0);
-						DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
-						if(!SelectedUnits[i]->RunLocationArray.Num())
-						{
-							SelectedUnits[i]->RunLocation = RunLocation;
-							SelectedUnits[i]->UEPathfindingUsed = false;
-							SelectedUnits[i]->SetUnitState(UnitData::Run);
-						}
-						
-						SelectedUnits[i]->RunLocationArray.Add(RunLocation);
-						//SelectedUnits[i]->UnitStatePlaceholder = UnitData::Idle;
-						SelectedUnits[i]->UnitsToChase.Empty();
-						SelectedUnits[i]->UnitToChase = nullptr;
-						SelectedUnits[i]->ToggleUnitDetection = false;
-					
+				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
-			{	
-						FHitResult Hit;
-						GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-						FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-						DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
-						MoveToLocationUEPathFinding(SelectedUnits[i], RunLocation);
-						SelectedUnits[i]->ToggleUnitDetection = false;
-						SelectedUnits[i]->SetUnitState(UnitData::Run);
-				
+			{
+				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation);
 			}
 			else {
-				TArray<FPathPoint> PathPoints;
-			
-						FVector UnitLocation = SelectedUnits[i]->GetActorLocation();
-						
-						FHitResult Hit;
-						GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-						FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-
-						DrawDebugCircle(GetWorld(), FVector(RunLocation.X, RunLocation.Y, RunLocation.Z+2.f), 15, 5, FColor::Green, false, 1.5, 0, 1, FVector(0, 1, 0), FVector(1, 0, 0));
-						if(SelectedUnits[i]->GetUnitState() != UnitData::Run)
-						SelectedUnits[i]->SetWalkSpeed(0.f);
-
-						SelectedUnits[i]->UEPathfindingUsed = false;
-						SelectedUnits[i]->SetUnitState(UnitData::Run);
-						SelectedUnits[i]->RunLocationArray.Empty();
-						SelectedUnits[i]->RunLocationArrayIterator = 0;
-						SelectedUnits[i]->RunLocation = RunLocation;
-						//SelectedUnits[i]->UnitStatePlaceholder = UnitData::Idle;
-						SelectedUnits[i]->ToggleUnitDetection = false;
-
-						float Range = FVector::Dist(UnitLocation, Hit.Location);
-
-						if(!HUDBase->DisablePathFindingOnFriendly && Range >= HUDBase->RangeThreshold && !HUDBase->IsLocationInNoPathFindingAreas(Hit.Location))
-							SetRunLocationUseDijkstra(Hit.Location, UnitLocation, SelectedUnits, PathPoints, i);
-				
+				RightClickRunDijkstraPF_Implementation(SelectedUnits[i], RunLocation, i);
 			}
 		}
 	}
@@ -308,8 +402,7 @@ void AControllerBase::SetRunLocationUseDijkstra(FVector HitLocation, FVector Uni
 					
 		if(PathPoints.Num())
 		{
-			Units[i]->RunLocation = PathPoints[0].Point + FVector(i / 2 * 50, i % 2 * 50, 0.f);;
-					
+			SetRunLocation(Units[i], PathPoints[0].Point + FVector(i / 2 * 50, i % 2 * 50, 0.f));		
 			for(int k = 1; k < PathPoints.Num(); k++)
 			{
 				Units[i]->RunLocationArray.Add(PathPoints[k].Point);
@@ -333,8 +426,7 @@ void AControllerBase::SetRunLocationUseDijkstraForAI(FVector HitLocation, FVecto
 					
 		if(PathPoints.Num())
 		{
-			Units[i]->RunLocation = PathPoints[0].Point;;
-					
+			SetRunLocation(Units[i], PathPoints[0].Point);			
 			for(int k = 1; k < PathPoints.Num(); k++)
 			{
 				Units[i]->RunLocationArray.Add(PathPoints[k].Point);
@@ -360,6 +452,15 @@ void AControllerBase::SpaceReleased()
 	IsSpacePressed = false;
 }
 
+void AControllerBase::ToggleUnitDetection_Implementation(AUnitBase* Unit)
+{
+	if (Unit && Unit->UnitState != UnitData::Dead)
+	{
+		if(Unit)
+			Unit->SetToggleUnitDetection(true);
+	}
+}
+
 
 void AControllerBase::TPressed()
 {
@@ -368,11 +469,7 @@ void AControllerBase::TPressed()
 		AttackToggled = true;
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
-			{
-				if(SelectedUnits[i])
-				SelectedUnits[i]->ToggleUnitDetection = true;
-			}
+			ToggleUnitDetection(SelectedUnits[i]);
 		}
 	}
 }
@@ -462,4 +559,10 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location)
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
 	
+}
+
+
+void AControllerBase::SetControlerTeamId_Implementation(int Id)
+{
+	SelectableTeamId = Id;
 }
