@@ -17,6 +17,8 @@ namespace UnitData
 		Idle   UMETA(DisplayName = "Idle"),
 		Run  UMETA(DisplayName = "Run"),
 		Patrol UMETA(DisplayName = "Patrol"),
+		PatrolRandom UMETA(DisplayName = "PatrolRandom"),
+		PatrolIdle UMETA(DisplayName = "PatrolIdle"),
 		Jump   UMETA(DisplayName = "Jump"),
 		Attack UMETA(DisplayName = "Attack"),
 		Healing UMETA(DisplayName = "Healing"),

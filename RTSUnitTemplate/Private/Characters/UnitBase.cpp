@@ -45,8 +45,20 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 		SetReplicateMovement(true);
 		GetMesh()->SetIsReplicated(true);
 	}
+	
 }
 
+void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
+{
+	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
+    
+	AUnitBase* OtherUnit = Cast<AUnitBase>(Other);
+	if (OtherUnit)
+	{
+		// Handle collision with another AUnitBase
+		CollisionUnit = OtherUnit;
+	}
+}
 
 // Called when the game starts or when spawned
 void AUnitBase::BeginPlay()

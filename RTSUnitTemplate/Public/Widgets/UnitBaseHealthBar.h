@@ -21,10 +21,15 @@ public:
 		OwnerCharacter = Enemy;
 	}
 
+	TWeakObjectPtr<AUnitBase> GetOwnerActor(AUnitBase* Enemy) {
+		return OwnerCharacter;
+	}
 
-protected:
+	
+//private:	
 	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate) // EditAnywhere, BlueprintReadWrite, 
 	TWeakObjectPtr<AUnitBase> OwnerCharacter;
 
 	UPROPERTY(meta = (BindWidget))
@@ -45,7 +50,7 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	    class UTextBlock* MaxShieldLabel;
 
-private:
+//private:
 	float PreviousShieldValue = -1.0f;
 
 };

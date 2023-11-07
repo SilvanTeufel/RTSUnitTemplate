@@ -48,6 +48,25 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 				HealPatrol(UnitBase, DeltaSeconds);
 		}
 		break;
+	case UnitData::PatrolRandom:
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+			SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
+
+		}
+		break;
+	case UnitData::PatrolIdle:
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
+			UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
+				
+			if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+			{
+				UnitBase->UnitControlTimer = 0.f;
+				UnitBase->SetUnitState(UnitData::PatrolRandom);
+			}
+		}
+		break;
 	case UnitData::Run:
 		{
 			//if(UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Run"));
@@ -92,10 +111,11 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
-			}
+			}else
+				SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 		}
 		break;
-	default:
+	default: 
 		{
 			UnitBase->SetUnitState(UnitData::Idle);
 		}
@@ -347,7 +367,8 @@ void AHealingUnitController::HealPatrolUEPathfinding(AHealingUnit* UnitBase, flo
 			UnitBase->SetUnitState(UnitData::Healing);
 		}else if(!IsUnitToChaseInRange(UnitBase))
 		{
-			UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+			//UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
 		}
 

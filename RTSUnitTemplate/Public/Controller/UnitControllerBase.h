@@ -106,11 +106,26 @@ public:
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSeconds);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool SetUnitsBackToPatrol = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float SetUnitsBackToPatrolTime = 10.f;
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds);
-
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetPatrolCloseLocation(AUnitBase* UnitBase);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 

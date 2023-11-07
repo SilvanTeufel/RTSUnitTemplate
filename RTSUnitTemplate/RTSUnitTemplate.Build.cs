@@ -12,6 +12,12 @@ public class RTSUnitTemplate : ModuleRules
 		// Core dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "XRBase" });
 
+		// Slate dependencies
+		PublicDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore",});
+		
+		// EOS dependencies
+		PublicDependencyModuleNames.AddRange(new string[] { "OnlineSubsystemEOS", "OnlineSubsystem", "OnlineSubsystemUtils" });
+		
 		// Ai dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "AIModule" });
 

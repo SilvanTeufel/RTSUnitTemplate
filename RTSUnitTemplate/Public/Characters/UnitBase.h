@@ -18,6 +18,12 @@ class RTSUNITTEMPLATE_API AUnitBase : public APathSeekerBase
 public:
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 
+	UFUNCTION()
+	virtual void NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AUnitBase* CollisionUnit;
+	
 protected:
 // Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -57,7 +63,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopChaseAtDistance", Keywords = "RTSUnitTemplate StopChaseAtDistance"), Category = RTSUnitTemplate)
 		float StopChaseAtDistance = 100.f;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool UEPathfindingUsed = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -211,6 +217,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RunLocation;
+
+	UPROPERTY( BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector RandomPatrolLocation;
 /////////////////////////////
 
 // SelectedIcon related /////////

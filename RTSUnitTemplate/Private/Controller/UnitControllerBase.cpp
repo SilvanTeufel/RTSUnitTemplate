@@ -152,6 +152,9 @@ void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase
 	}
 }
 
+
+
+
 void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 {
 
@@ -180,6 +183,25 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 				Patrol(UnitBase, DeltaSeconds);
 		}
 		break;
+		case UnitData::PatrolRandom:
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+				SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
+
+			}
+			break;
+		case UnitData::PatrolIdle:
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
+				UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
+				
+				if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+				{
+					UnitBase->UnitControlTimer = 0.f;
+					UnitBase->SetUnitState(UnitData::PatrolRandom);
+				}
+			}
+			break;
 		case UnitData::Run:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
@@ -339,12 +361,19 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 {
-					if(!UnitBase->SetNextUnitToChase())
+					if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+					{
+						UnitBase->UnitToChase = UnitBase->CollisionUnit;
+						UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
+						UnitBase->CollisionUnit = nullptr;
+					}else if(!UnitBase->SetNextUnitToChase())
 					{
 						UnitBase->SetUEPathfinding = true;
 						UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 					}else if (UnitBase->UnitToChase) {
-    				UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+    					UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+
+		
     				
     				RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
     				DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
@@ -377,13 +406,9 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
     						
-    						//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
-    						
-    						//UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
     						UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
-    						//SetUEPathfinding(UnitBase, DeltaSeconds);
-    						//SetUEPathfindingTo(UnitBase, DeltaSeconds, UnitToChaseLocation);
+    	
     					}
     
     					if (DistanceToUnitToChase > LoseSightRadius) {
@@ -523,9 +548,32 @@ void AUnitControllerBase::IsAttacked(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(0);
+
+
+
 	if(UnitBase->UnitsToChase.Num())
 	{
 		UnitBase->SetUnitState(UnitData::Chase);
+	}else
+		SetUnitBackToPatrol(UnitBase, DeltaSeconds);
+}
+
+void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	UnitBase->UnitControlTimer += DeltaSeconds;
+	
+	if(UnitBase->NextWaypoint && SetUnitsBackToPatrol && UnitBase->UnitControlTimer > SetUnitsBackToPatrolTime)
+	{
+		if(UnitBase->NextWaypoint->PatrolCloseToWaypoint)
+		{
+			UnitBase->UnitControlTimer = 0.f;
+			UnitBase->NextWaypoint->RandomTime = FMath::FRandRange(UnitBase->NextWaypoint->PatrolCloseMinInterval, UnitBase->NextWaypoint->PatrolCloseMaxInterval);
+			UnitBase->SetUnitState(UnitData::PatrolRandom);
+		}else
+		{
+			UnitBase->UnitControlTimer = 0.f;
+			UnitBase->SetUnitState(UnitData::Patrol);
+		}
 	}
 }
 
@@ -553,7 +601,14 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 {
 	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
 	
-	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId !=  UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->UnitToChase = UnitBase->CollisionUnit;
+		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
+		UnitBase->CollisionUnit = nullptr;
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+	}if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
@@ -563,13 +618,81 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 		
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{
-		SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->NextWaypoint->GetActorLocation());
+		if(UnitBase->IsFlying)
+		{
+			FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
+			WaypointLocation =  FVector(WaypointLocation.X, WaypointLocation.Y, UnitBase->FlyHeight);
+			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), WaypointLocation);
+			UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+		}else 
+			SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->NextWaypoint->GetActorLocation());
+		
 	}
 	else
 	{
 		UnitBase->SetUnitState(UnitData::Idle);
 	}
 }
+
+void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
+{
+
+	UnitBase->RandomPatrolLocation = UnitBase->NextWaypoint->GetActorLocation()
+	+ FMath::RandPointInBox(FBox(FVector(-UnitBase->NextWaypoint->PatrolCloseOffset.X, -UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0),
+	FVector(UnitBase->NextWaypoint->PatrolCloseOffset.X, UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0)));
+
+	// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
+	const FVector Start = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
+	const FVector End = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
+
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
+	{
+		// If the line trace hits something, set the Z-coordinate of PatrolCloseLocation to the hit point's Z-coordinate
+		UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+	}
+}
+
+void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	if(!UnitBase ||  !UnitBase->NextWaypoint) return;
+	
+
+	
+	FVector ActorLocation = UnitBase->GetActorLocation();
+	FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
+	
+	if (ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f) ||
+		UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime) 
+	{
+		if (FMath::FRand() * 100.0f < UnitBase->NextWaypoint->PatrolCloseIdlePercentage && !ActorLocation.Equals(WaypointLocation, 200.f)) // && DistanceToWaypoint > 500.f
+		{
+			UnitBase->UnitControlTimer = 0.f;
+			UnitBase->SetUnitState(UnitData::PatrolIdle);
+			return;
+		}
+		
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUEPathfinding = true;
+		
+	}
+
+	if(UnitBase->CollisionUnit)
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->CollisionUnit = nullptr;
+	}
+	
+	if(!UnitBase->SetUEPathfinding)
+		return;
+
+	SetPatrolCloseLocation(UnitBase);
+	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RandomPatrolLocation);
+}
+
 void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
 {
 	if(!UnitBase->SetUEPathfinding)
@@ -586,7 +709,6 @@ void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
 			ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
-			
 		}
 	}
 }

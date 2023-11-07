@@ -67,6 +67,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				
 			}
 			
+			
 			if(abs(CurrentBlendPoint_1-BlendPoint_1) <= Resolution_1) CurrentBlendPoint_1 = BlendPoint_1;
 			else if(CurrentBlendPoint_1 < BlendPoint_1) CurrentBlendPoint_1 += TransitionRate_1;
 			else if(CurrentBlendPoint_1 > BlendPoint_1) CurrentBlendPoint_1 += TransitionRate_1*(-1);
@@ -74,6 +75,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			if(abs(CurrentBlendPoint_2-BlendPoint_2) <= Resolution_2) CurrentBlendPoint_2 = BlendPoint_2;
 			else if(CurrentBlendPoint_2 < BlendPoint_2) CurrentBlendPoint_2 += TransitionRate_2;
 			else if(CurrentBlendPoint_2 > BlendPoint_2) CurrentBlendPoint_2 += TransitionRate_2*(-1);
+
 			
 		}
 	}
@@ -121,7 +123,6 @@ void UUnitBaseAnimInstance::SetBlendPoints(AUnitBase* Unit, float Deltaseconds)
 					TransitionRate_2 = UnitAnimData->TransitionRate_2;
 					Resolution_1 = UnitAnimData->Resolution_1;
 					Resolution_2 = UnitAnimData->Resolution_2;
-					//Sound =  SpeakingUnit->SpeechBubble->BackgroundSound;
 				}
 			}
 		}

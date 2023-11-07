@@ -37,6 +37,7 @@ struct FUnitAnimData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;
+	
 };
 
 /**
@@ -49,7 +50,7 @@ class RTSUNITTEMPLATE_API UUnitBaseAnimInstance : public UAnimInstance
 
 public:
 	UUnitBaseAnimInstance();
-
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		TEnumAsByte<UnitData::EState> CharAnimState;
 	
@@ -82,10 +83,10 @@ public:
 
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;
-
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float SoundTimer = 0.f;
-
+	
 	UFUNCTION()
 	virtual void NativeInitializeAnimation() override;
 	

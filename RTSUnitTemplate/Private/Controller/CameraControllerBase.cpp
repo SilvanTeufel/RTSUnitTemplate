@@ -644,7 +644,22 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 		{
 			CameraBase->SetCameraState(CameraData::ScrollZoomOut);
 		}
-		
+
+		if(RotateBehindCharacterIfLocked)
+		{
+			float CameraYaw = FMath::Fmod(static_cast<float>(CameraBase->SpringArmRotator.Yaw) + 360.f, 360.f);
+			float ActorYaw = FMath::Fmod(static_cast<float>(SelectedUnits[Index]->GetActorRotation().Yaw) + 360.f, 360.f);
+			float DeltaYaw = FMath::Fmod(FMath::Fmod(static_cast<float>(ActorYaw + 180.f), 360.f) - CameraYaw + 540.f, 360.f) - 180.f;
+
+			if(!FMath::IsNearlyEqual(CameraYaw, ActorYaw, 10.f))
+			{
+				if(DeltaYaw > 0)
+					CameraBase->RotateCamRight(CameraBase->AddCamRotation*2);
+				else
+					CameraBase->RotateCamLeft(CameraBase->AddCamRotation*2);
+			}
+		}
+
 		if(CamIsRotatingRight)
 		{
 			CamIsRotatingLeft = false;
