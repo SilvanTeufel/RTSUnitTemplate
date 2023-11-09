@@ -16,14 +16,14 @@ class RTSUNITTEMPLATE_API USessionItem : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category="Data")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
 	FText ItemName;
 
-	UPROPERTY(BlueprintReadWrite, meta=(BindWidget))
+	UPROPERTY(BlueprintReadWrite, meta=(BindWidget), Category=RTSUnitTemplate)
 	UTextBlock* MyTextBlock;
 
 	virtual void NativeConstruct() override;
 
-	UFUNCTION(BlueprintCallable, Category="Data")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SetItemName(FText NewItemName);
 };

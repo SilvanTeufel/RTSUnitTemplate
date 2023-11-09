@@ -257,15 +257,16 @@ void UEOS_GameInstance::OnFindSessionCompleted(bool bWasSucces)
 		
 				if(SessionSearch->SearchResults.Num())
 				{
+					/*
 					for (int32 i = 0; i < SessionSearch->SearchResults.Num(); ++i)
 					{
 						SearchNames[i] = SessionSearch->SearchResults[i].GetSessionIdStr();
 						UE_LOG(LogTemp, Log, TEXT("SearchNames[i] : %s"), *SearchNames[i]);
-					}
+					}*/
 					UE_LOG(LogTemp, Warning, TEXT("SearchResult is Valid."));
 					// AFTER HERE IT IS JOIN!
-					//SessionPtrRef->OnJoinSessionCompleteDelegates.AddUObject(this, &UEOS_GameInstance::OnJoinSessionCompleted);
-					//SessionPtrRef->JoinSession(0, RTSSessionName, SessionSearch->SearchResults[0]);
+					SessionPtrRef->OnJoinSessionCompleteDelegates.AddUObject(this, &UEOS_GameInstance::OnJoinSessionCompleted);
+					SessionPtrRef->JoinSession(0, RTSSessionName, SessionSearch->SearchResults[0]);
 				}else
 				{
 					UE_LOG(LogTemp, Warning, TEXT("Create your own Session?!?!?"));

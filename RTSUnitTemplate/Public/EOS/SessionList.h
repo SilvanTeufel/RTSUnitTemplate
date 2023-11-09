@@ -17,10 +17,10 @@ class RTSUNITTEMPLATE_API USessionList : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintReadWrite, meta=(BindWidget))
+	UPROPERTY(BlueprintReadWrite, meta=(BindWidget), Category=RTSUnitTemplate)
 	UListView* MyListView;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Item Class")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	TSubclassOf<UUserWidget> ListItemClass;
 	
 	virtual void NativeConstruct() override;

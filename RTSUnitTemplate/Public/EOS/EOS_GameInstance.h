@@ -19,33 +19,33 @@ class RTSUNITTEMPLATE_API UEOS_GameInstance : public UGameInstance
 private:
 	TSharedPtr<const FUniqueNetId> StoredUserId;
 public:
-	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void LoginWithEOS(FString ID, FString Token, FString LoginType);
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category=RTSUnitTemplate)
 	FString GetPlayerUserName();
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category=RTSUnitTemplate)
 	bool IsPlayerLoggedIn();
 	
-	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void FindSessionAndJoin();
 	
-	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void DestroySession();
 	
 	TSharedPtr<FOnlineSessionSearch> SessionSearch;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category=RTSUnitTemplate)
 	TArray<FString> SearchNames;
 	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
 	FName RTSSessionName;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
 	FName RTSSessionSearchKey;
 	
-	UFUNCTION(BlueprintCallable, Category = "Session")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SetRTSSessionName(const FText& NewSessionName)
 	{
 		RTSSessionName = FName(*NewSessionName.ToString());
