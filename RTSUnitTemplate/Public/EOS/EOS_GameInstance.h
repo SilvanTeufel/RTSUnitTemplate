@@ -30,6 +30,14 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void FindSessionAndJoin();
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
+	bool SessionJoined = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
+	bool SessionCreationExecuted = false;
+	//UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
+	//bool loading = false;
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void DestroySession();
@@ -60,9 +68,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
 	void CreateEosSession(bool bIsDedicatedServer, bool bIsLanServer, int32 NumberOfPublicConnections);
 
+	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	void QuitSession();
+	
 	void LoginWithEos_Return(int32 LocalUserNum, bool bWasSuccess, const FUniqueNetId& UserId, const FString& Error);
 	void OnFindSessionCompleted(bool bWasSucces);
 	void OnCreateSessionCompleted(FName SessionName, bool bWasSuccesful);
 	void OnDestroySessionCompleted(FName SessionName, bool bWasSuccesful);
 	void OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 };

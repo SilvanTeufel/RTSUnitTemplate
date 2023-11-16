@@ -16,7 +16,7 @@ public class RTSUnitTemplate : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore",});
 		
 		// EOS dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "OnlineSubsystemEOS", "OnlineSubsystem", "OnlineSubsystemUtils" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Networking", "Sockets", "OnlineSubsystemEOS", "OnlineSubsystem", "OnlineSubsystemUtils" });
 		
 		// Ai dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "AIModule" });

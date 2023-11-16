@@ -8,13 +8,14 @@
 //#include "Core/DijkstraMatrix.h"
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"
+#include "EOS/EOS_PlayerController.h"
 #include "ControllerBase.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
+class RTSUNITTEMPLATE_API AControllerBase : public AEOS_PlayerController
 {
 	GENERATED_BODY()
 

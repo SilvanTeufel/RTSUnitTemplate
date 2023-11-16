@@ -2,7 +2,7 @@
 
 
 #include "EOS/EOS_GameMode.h"
-
+#include "EOS/EOS_GameInstance.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
 #include "OnlineSessionSettings.h"  
@@ -15,7 +15,13 @@
 void AEOS_GameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
-	UE_LOG(LogTemp, Warning, TEXT("PostLogin EOS"));
+	
+	UEOS_GameInstance* GameInstance = Cast<UEOS_GameInstance>(GetGameInstance());
+	if (GameInstance)
+	{
+		//GameInstance->SessionJoined = true;
+	}
+	// Set SessionJoined = true; from UEOS_GameInstance
 	Register(NewPlayer);
 }
 

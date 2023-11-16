@@ -137,6 +137,7 @@ void UEOS_GameInstance::CreateEosSession(bool bIsDedicatedServer, bool bIsLanSer
 
         if (SessionPtrRef)
         {
+        	
             UE_LOG(LogTemp, Warning, TEXT("SessionPtrRef found."));
             FOnlineSessionSettings SessionCreationInfo;
         	
@@ -161,7 +162,7 @@ void UEOS_GameInstance::CreateEosSession(bool bIsDedicatedServer, bool bIsLanSer
         	SessionCreationInfo.Set(RTSSessionSearchKey, RTSSessionName.ToString(), EOnlineDataAdvertisementType::ViaOnlineService);
 
             SessionPtrRef->OnCreateSessionCompleteDelegates.AddUObject(this, &UEOS_GameInstance::OnCreateSessionCompleted);
-        	
+        
         	AEOS_GameMode* EOSGameMode = Cast<AEOS_GameMode>(GetWorld()->GetAuthGameMode());
         	if (EOSGameMode)
         	{
@@ -169,6 +170,7 @@ void UEOS_GameInstance::CreateEosSession(bool bIsDedicatedServer, bool bIsLanSer
         			bool bCreationStarted = SessionPtrRef->CreateSession(0, RTSSessionName, SessionCreationInfo);
         			if (bCreationStarted)
         			{
+        				SessionCreationExecuted = true;
         				UE_LOG(LogTemp, Warning, TEXT("Session creation process started! %d"), 	SessionCreationInfo.GetID(RTSSessionSearchKey));
         			}
         			else
@@ -189,7 +191,7 @@ void UEOS_GameInstance::OnCreateSessionCompleted(FName SessionName, bool bWasSuc
 	{
 		// Convert SessionName to a string
 		FString SessionNameString = SessionName.ToString();
-
+		//SessionJoined = true;
 		// Log the SessionName
 		UE_LOG(LogTemp, Warning, TEXT("Creation was Successful! Session Name: %s"), *SessionNameString);
 		GetWorld()->ServerTravel(OpenLevelText);
@@ -198,6 +200,7 @@ void UEOS_GameInstance::OnCreateSessionCompleted(FName SessionName, bool bWasSuc
 	}else
 	{
 		UE_LOG(LogTemp, Error, TEXT("Creation went wrong!"));
+		QuitSession();
 	}
 	
 }
@@ -218,6 +221,7 @@ void UEOS_GameInstance::FindSessionAndJoin()
 		if (SessionPtrRef)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("SessionPtrRef found."));
+			SessionJoined = true;
 			SessionSearch = MakeShareable(new FOnlineSessionSearch());
 			//SessionSearch->QuerySettings.Set(TEXT("SEARCH_LOBBIES"), false, EOnlineComparisonOp::Equals);
 			//SessionSearch->QuerySettings.SearchParams.Empty();
@@ -332,5 +336,47 @@ void UEOS_GameInstance::OnJoinSessionCompleted(FName SessionName, EOnJoinSession
 				UE_LOG(LogTemp, Warning, TEXT("Failed to join session %s: Unknown error."), *SessionName.ToString());
 			}
 		break;
+	}
+}
+
+void UEOS_GameInstance::QuitSession()
+{
+	UE_LOG(LogTemp, Warning, TEXT("!QuitSession!!!"));
+	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+	if (OnlineSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!QuitSession! OnlineSubsystem"));
+		IOnlineSessionPtr Sessions = OnlineSubsystem->GetSessionInterface();
+		if (Sessions.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("!QuitSession! Sessions.IsValid()"));
+			if (Sessions->GetNamedSession(RTSSessionName))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("!QuitSession! and Destory?!?"));
+				Sessions->DestroySession(RTSSessionName, FOnDestroySessionCompleteDelegate::CreateUObject(this, &UEOS_GameInstance::OnDestroySessionComplete));
+			}else
+			{
+				SessionJoined = false;
+				SessionCreationExecuted = false;
+			}
+		}
+	}
+}
+
+void UEOS_GameInstance::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if (bWasSuccessful)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!OnDestroySessionComplete! 1?!?"));
+		SessionJoined = false;
+		SessionCreationExecuted = false;
+		// Handle successful session destruction, e.g., navigate to main menu
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!OnDestroySessionComplete! 1?!?"));
+		SessionJoined = false;
+		SessionCreationExecuted = false;
+		// Handle failed session destruction, e.g., display error message
 	}
 }
