@@ -26,21 +26,9 @@ ACameraBase::ACameraBase(const FObjectInitializer& ObjectInitializer) :Super(Obj
 	
 	CreateCameraComp();
 
-
-	//ControlWidgetComp = CreateDefaultSubobject<UWidgetComponent>(TEXT("ControlWidget"));
-	//ControlWidgetComp->SetupAttachment(RootComponent);
-	
 	ControlWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ControlWidget"));
 	ControlWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 	
-	//LoadingWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("LoadingWidget"));
-	//LoadingWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-	//if (!HasAnyFlags(RF_ClassDefaultObject))
-	//{
-
-		//USceneComponent* CurrentParent = GetCameraBaseCapsule()->GetAttachParent();
-		//GetCameraBaseCapsule()->AttachToComponent(CurrentParent, FAttachmentTransformRules::KeepRelativeTransform);
-
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockZRotation = true;
@@ -68,7 +56,7 @@ ACameraBase::ACameraBase(const FObjectInitializer& ObjectInitializer) :Super(Obj
 			CMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);  // Overlap with other pawns
 			CMesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);  // Overlap with dynamic objects
 		}
-	//}
+
 }
 
 // Called when the game starts or when spawned
@@ -456,6 +444,19 @@ bool ACameraBase::RotateCamRightTo(float Position, float Add)
 	return false;
 }
 
+bool ACameraBase::ZoomOutAutoCam(float Distance, const FVector SelectedActorPosition)
+{
+
+
+	if (SpringArm && SpringArm->TargetArmLength - SelectedActorPosition.Z < Distance)
+	{
+		SpringArm->TargetArmLength += AutoZoomSpeed/10;
+		
+		return false;
+	}
+
+	return true;
+}
 
 bool ACameraBase::ZoomOutToPosition(float Distance, const FVector SelectedActorPosition)
 {
@@ -989,8 +990,8 @@ void ACameraBase::SwitchControllerStateMachine(const FInputActionValue& InputAct
 		case 11: SetCameraState(CameraData::LockOnCharacter); break;
 		case 12: SetCameraState(CameraData::ZoomToThirdPerson); break;
 		case 14:
-			{
-				CameraControllerBase->OrbitAtLocation(FVector(1000.f, -1000.f, 500.f), 0.033f);
+			{	SetCameraState(CameraData::OrbitAndMove); break;
+				//CameraControllerBase->OrbitAtLocation(FVector(1000.f, -1000.f, 500.f), 0.033f);
 			} break;
 		case 15:
 			{

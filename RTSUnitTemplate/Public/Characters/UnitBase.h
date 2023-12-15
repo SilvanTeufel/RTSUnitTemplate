@@ -38,15 +38,24 @@ public:
 // Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
+
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Mesh")
-	class USkeletalMeshComponent* CharacterMesh;
+	UPROPERTY(Replicated, BlueprintReadWrite, ReplicatedUsing=OnRep_MeshAssetPath, Category = RTSUnitTemplate)
+	FString MeshAssetPath;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, ReplicatedUsing=OnRep_MeshMaterialPath, Category = RTSUnitTemplate)
+	FString MeshMaterialPath;
 	
-	UPROPERTY(Replicated, EditAnywhere, Category = RTSUnitTemplate)
-	FRotator MeshRotation = FRotator(0.f, -90.f, 0.f);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void OnRep_MeshAssetPath();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void OnRep_MeshMaterialPath();
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void SetMeshRotation(FRotator NewRotation);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetMeshRotationServer();
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "TeamId", Keywords = "RTSUnitTemplate IsFriendly"), Category = RTSUnitTemplate)
 		int TeamId = 1;
@@ -71,8 +80,22 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool SetUEPathfinding = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float AutoSetUEPathfindingTimer = 0.f;
+	
 // RTSHud related //////////////////////////////////////////
 public:
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerStartAttackEvent();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MultiCastStartAttackEvent();
+	
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void StartAttackEvent();
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
 	void IsAttacked(AActor* AttackingCharacter); // AActor* SelectedCharacter
 
@@ -218,7 +241,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RunLocation;
 
-	UPROPERTY( BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RandomPatrolLocation;
 /////////////////////////////
 
@@ -257,6 +280,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileScale", Keywords = "RTSUnitTemplate ProjectileScale"), Category = RTSUnitTemplate)
 	FVector ProjectileScale = FVector(1.f,1.f,1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FRotator ProjectileRotationOffset = FRotator(0.f,90.f,-90.f);
 	//////////////////////////////////////
 	
 	

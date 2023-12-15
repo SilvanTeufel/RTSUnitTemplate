@@ -1,6 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/CameraControllerBase.h"
 #include "AIController.h"
+#include "Kismet/GameplayStatics.h"
 
 
 ACameraControllerBase::ACameraControllerBase()
@@ -161,6 +162,61 @@ void ACameraControllerBase::RotateCam(float DeltaTime)
 			CameraBase->RotateFree(FVector(MouseX, MouseY, 0.f));
 		}
 	}
+}
+
+FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
+	
+	FVector SumPosition(0, 0, 0);
+	int32 UnitCount = 0;
+	TArray <AActor*> Units;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), Units);
+	
+	
+	int32 UnitsInRangeCount = 0;
+	// Count Units within the specified Radius
+	for (AActor* Unit : Units) {
+		if (Unit) {
+			FVector UnitLocation = Unit->GetActorLocation();
+			if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
+				UnitsInRangeCount++;
+			}
+		}
+	}
+
+	float UnitTimePart = UnitsInRangeCount*UnitCountOrbitTimeMultiplyer;
+	float MaxTime = OrbitTimes[0] + UnitTimePart;
+
+	if(OrbitLocationControlTimer >= MaxTime)
+	{
+		OrbitRotatorIndex++;
+		OrbitLocationControlTimer = 0.f;
+	}
+	UnitCountInRange = UnitsInRangeCount;
+	
+	if(OrbitRotatorIndex >= OrbitPositions.Num())
+		OrbitRotatorIndex = 0;
+	
+	UE_LOG(LogTemp, Log, TEXT("OrbitRotatorIndex: %d"), OrbitRotatorIndex);
+	for (AActor* Unit : Units) {
+		if (Unit) {
+			FVector UnitLocation = Unit->GetActorLocation();
+			if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
+				SumPosition += UnitLocation;
+				UnitCount++;
+			}
+		}
+	}
+	Units.Empty();
+
+	if (UnitCount == 0) return OrbitPositions[OrbitRotatorIndex];
+	return SumPosition / UnitCount;
+}
+
+void ACameraControllerBase::SetCameraAveragePosition(ACameraBase* Camera, float DeltaTime) {
+
+	FVector CameraPosition = CalculateUnitsAverage(DeltaTime);
+
+	Camera->SetActorLocation(FVector(CameraPosition.X, CameraPosition.Y, Camera->GetActorLocation().Z)); // Z-Koordinate bleibt unverändert
 }
 
 void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
@@ -523,6 +579,44 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				}
 			}
 			break;
+
+
+		case CameraData::OrbitAndMove:
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("OrbitAndMove"));
+				CamIsRotatingLeft = true;
+				CameraBase->OrbitCamLeft(CameraBase->OrbitSpeed);
+
+				CalcControlTimer += DeltaTime;
+				OrbitLocationControlTimer += DeltaTime;
+			
+				
+				if(CalcControlTimer >= OrbitAndMovePauseTime)
+				{
+					FVector CameraPosition = CalculateUnitsAverage(DeltaTime);
+					CameraBase->OrbitLocation = FVector(CameraPosition.X, CameraPosition.Y, CameraBase->GetActorLocation().Z);
+					CalcControlTimer = 0.f;
+				}
+				
+				MoveCam(DeltaTime, CameraBase->OrbitLocation);
+				
+				if(UnitCountInRange >= UnitCountToZoomOut)
+				{
+					// Log message when zooming out
+					CameraBase->ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*UnitCountInRange);
+				}
+				else{
+					// Log message when zooming in
+					CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				}
+				
+				if(AIsPressedState || DIsPressedState || WIsPressedState || SIsPressedState)
+				{
+					CamIsRotatingLeft = false;
+					CameraBase->SetCameraState(CameraData::MoveWASD);
+				}
+			}
+			break;
 		default:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("default"));
@@ -532,6 +626,8 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		}
 	}
 }
+
+
 
 void ACameraControllerBase::OrbitAtLocation(FVector Destination, float OrbitSpeed)
 {
@@ -566,6 +662,27 @@ void ACameraControllerBase::MoveCamToPosition(float DeltaSeconds, FVector Destin
 	if (Distance <= 50.f) {
 		CameraBase->SetCameraState(CameraData::OrbitAtPosition);
 	}
+}
+
+void ACameraControllerBase::MoveCam(float DeltaSeconds, FVector Destination)
+{
+	
+	
+	const FVector CamLocation = CameraBase->GetActorLocation();
+	
+	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+	
+	const float Distance = FVector::Distance(CamLocation, Destination); // Use FVector::Distance for distance calculation
+	if (Distance <= 50.f) return;
+	
+	const FVector ADirection = (Destination - CamLocation).GetSafeNormal(); // Use subtraction and GetSafeNormal for direction
+
+	if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
+		CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
+	else
+		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f; // Adjust this to control movement speed
+
+	CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
 }
 
 void ACameraControllerBase::ToggleLockCamToCharacter()

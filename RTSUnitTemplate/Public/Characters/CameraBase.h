@@ -138,7 +138,10 @@ public:
 		float ZoomSpeed = 120.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-		float FastZoomSpeed = 100.f;
+		float FastZoomSpeed = 250.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+		float AutoZoomSpeed = 25.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomAccelerationRate = 10.0f;
@@ -196,7 +199,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "JumpCamera", Keywords = "RTSUnitTemplate JumpCamera"), Category = RTSUnitTemplate)
 		void JumpCamera(FHitResult Hit);
-	
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		bool ZoomOutAutoCam(float Distance, const FVector SelectedActorPosition = FVector(0.f,0.f,0.f));
 	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = RTSUnitTemplate)
 		//FVector2D GetMousePos2D();
 

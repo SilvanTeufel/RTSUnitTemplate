@@ -2,6 +2,8 @@
 
 #include "Controller/UnitControllerBase.h"
 #include <string>
+
+#include "Landscape.h"
 #include "Characters/UnitBase.h"
 #include "Actors/Waypoint.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
@@ -154,7 +156,6 @@ void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase
 
 
 
-
 void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 {
 
@@ -176,7 +177,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::Patrol:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			
+				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -186,19 +187,31 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::PatrolRandom:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-				SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
+				if(UnitBase->SetNextUnitToChase())
+				{
+					UnitBase->SetUnitState(UnitData::Chase);
+				}else
+				{
+					SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
+				}
 
 			}
 			break;
 		case UnitData::PatrolIdle:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
-				UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
-				
-				if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+				if(UnitBase->SetNextUnitToChase())
 				{
-					UnitBase->UnitControlTimer = 0.f;
-					UnitBase->SetUnitState(UnitData::PatrolRandom);
+					UnitBase->SetUnitState(UnitData::Chase);
+				}else
+				{
+					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
+				
+					if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+					{
+						UnitBase->UnitControlTimer = 0.f;
+						UnitBase->SetUnitState(UnitData::PatrolRandom);
+					}
 				}
 			}
 			break;
@@ -383,6 +396,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     					if (IsUnitToChaseInRange(UnitBase)) {
     						if(UnitBase->UnitControlTimer >= PauseDuration)
     						{
+    							UnitBase->ServerStartAttackEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Attack);
     							CreateProjectile(UnitBase);
     						}else
@@ -490,7 +504,10 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 					UnitBase->UnitToChase->SetShield(UnitBase->UnitToChase->GetShield()-UnitBase->AttackDamage);
 				
 				if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run)
-				UnitBase->UnitToChase->SetUnitState( UnitData::IsAttacked );
+				{
+					UnitBase->UnitToChase->UnitControlTimer = 0.f;
+					UnitBase->UnitToChase->SetUnitState( UnitData::IsAttacked );
+				}
 			}
 			else if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run)
 			{
@@ -526,6 +543,7 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 		UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
 		
 		if (IsUnitToChaseInRange(UnitBase)) {
+				UnitBase->ServerStartAttackEvent_Implementation();
 				UnitBase->SetUnitState(UnitData::Attack);
 				CreateProjectile(UnitBase);
 		}else
@@ -651,8 +669,15 @@ void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
 	{
-		// If the line trace hits something, set the Z-coordinate of PatrolCloseLocation to the hit point's Z-coordinate
-		UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+		AActor* HitActor = HitResult.GetActor();
+
+		// Check if we hit the landscape
+		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
+		{
+			// Hit landscape
+			// Set the Z-coordinate accordingly
+			UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+		}
 	}
 }
 

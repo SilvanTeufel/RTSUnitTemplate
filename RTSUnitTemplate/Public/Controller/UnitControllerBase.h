@@ -63,7 +63,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SightConfig", Keywords = "RTSUnitTemplate SightConfig"), Category = RTSUnitTemplate)
 		class UAISenseConfig_Sight* SightConfig;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "DistanceToUnitToChase", Keywords = "RTSUnitTemplate DistanceToUnitToChase"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DistanceToUnitToChase", Keywords = "RTSUnitTemplate DistanceToUnitToChase"), Category = RTSUnitTemplate)
 		float DistanceToUnitToChase = 0.0f;
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "DetectFriendlyUnits", Keywords = "RTSUnitTemplate DetectFriendlyUnits"), Category = RTSUnitTemplate)

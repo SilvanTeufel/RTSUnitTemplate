@@ -34,18 +34,18 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 
 	float LowestHealth = 999999.f;
 
-	int IndexShortestDistance = 0;
+	int IndexLowestHealth = 0;
 	for(int i = 0; i < UnitsToChase.Num(); i++)
 	{
 		if(UnitsToChase[i] && UnitsToChase[i]->GetUnitState() != UnitData::Dead)
 		{
-			DistanceToUnitToChase = GetDistanceTo(UnitsToChase[i]);
+			//DistanceToUnitToChase = GetDistanceTo(UnitsToChase[i]);
 
 			if(
 				UnitsToChase[i]->GetHealth() < UnitsToChase[i]->GetMaxHealth() &&
 				UnitsToChase[i]->GetHealth() < LowestHealth )
 			{
-				IndexShortestDistance = i;
+				IndexLowestHealth = i;
 				//UnitToChase = UnitsToChase[i];
 				LowestHealth = UnitsToChase[i]->GetHealth();
 				RValue =  true;
@@ -53,7 +53,7 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 		}
 	}
 
-	if(UnitsToChase[IndexShortestDistance])UnitToChase = UnitsToChase[IndexShortestDistance];
+	if(UnitsToChase[IndexLowestHealth])UnitToChase = UnitsToChase[IndexLowestHealth];
 
 	TArray <AUnitBase*> UnitsToDelete = UnitsToChase;
 	
@@ -65,6 +65,21 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 		}
 	}
 
-	//UE_LOG(LogTemp, Warning, TEXT("return Value: %d"), RValue);
+
 	return RValue;
+}
+
+void AHealingUnit::ServerStartHealingEvent_Implementation()
+{
+	MultiCastStartHealingEvent();
+}
+
+bool AHealingUnit::ServerStartHealingEvent_Validate()
+{
+	return true;
+}
+
+void AHealingUnit::MultiCastStartHealingEvent_Implementation()
+{
+	StartHealingEvent();
 }

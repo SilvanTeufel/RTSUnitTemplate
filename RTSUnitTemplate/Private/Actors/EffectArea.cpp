@@ -50,8 +50,8 @@ void AEffectArea::ApplyDamage()
 {
 	for(AUnitBase* UnitToHit : UnitsToHit)
 	{
-		if(UnitToHit) // Always check for null pointers before accessing
-			{
+		if(UnitToHit && !IsHealing) // Always check for null pointers before accessing
+		{
 			if(UnitToHit->GetShield() <= 0)
 				UnitToHit->SetHealth(UnitToHit->GetHealth() - Damage);
 			else
@@ -59,7 +59,10 @@ void AEffectArea::ApplyDamage()
 
 			if(UnitToHit->GetUnitState() != UnitData::Run)
 				UnitToHit->SetUnitState(UnitData::IsAttacked);
-			}
+		}else if(UnitToHit && IsHealing) // Always check for null pointers before accessing
+		{
+			UnitToHit->SetHealth(UnitToHit->GetHealth() + Damage);
+		}
 	}
 }
 
@@ -67,13 +70,15 @@ void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 {
 	if(OtherActor)
 	{
-
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
 		
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
 			UnitsToHit.Remove(UnitToHit);
-		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
+		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
+		{
+			UnitsToHit.Add(UnitToHit);
+		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
 			UnitsToHit.Add(UnitToHit);
 		}

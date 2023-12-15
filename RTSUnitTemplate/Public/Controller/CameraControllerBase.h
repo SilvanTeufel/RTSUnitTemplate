@@ -37,6 +37,45 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetCameraPanDirection", Keywords = "TopDownRTSCamLib GetCameraPanDirection"), Category = RTSUnitTemplate)
 	FVector GetCameraPanDirection();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector CalculateUnitsAverage(float DeltaTime);
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int UnitCountInRange;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int UnitCountToZoomOut = 20;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int UnitZoomScaler = 10;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCameraAveragePosition(ACameraBase* Camera, float DeltaTime);
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float CalcControlTimer;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float OrbitAndMovePauseTime = 5.f;
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float OrbitLocationControlTimer;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int OrbitRotatorIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <FVector> OrbitPositions = { FVector(0.f), FVector(3000.f, 3000.f, 0.f) };
+	
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <float> OrbitRadiuses = { 3000.f, 1000.f};
+	
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <float> OrbitTimes = { 5.f, 5.f};
+
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitCountOrbitTimeMultiplyer = 0.5f;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CameraBaseMachine", Keywords = "TopDownRTSCamLib CameraBaseMachine"), Category = RTSUnitTemplate)
 	void CameraBaseMachine(float DeltaTime);
@@ -47,6 +86,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveCamToPosition(float DeltaSeconds, FVector Destination);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveCam(float DeltaSeconds, FVector Destination);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OrbitAtLocation(FVector Destination, float OrbitSpeed);
 	

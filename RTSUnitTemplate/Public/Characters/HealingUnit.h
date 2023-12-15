@@ -31,6 +31,14 @@ public:
 	bool SetNextUnitToChaseHeal();
 	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetNextUnitToHeal", Keywords = "RTSUnitTemplate SetNextUnitToHeal"), Category = RTSUnitTemplate)
 	//bool SetNextUnitToHeal();
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerStartHealingEvent();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MultiCastStartHealingEvent();
+	
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void StartHealingEvent();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealingActorBaseClass", Keywords = "TopDownRTSTemplate HealingActorBaseClass"), Category = RTSUnitTemplate)
 	TSubclassOf<class AHealingActor> HealingActorBaseClass;

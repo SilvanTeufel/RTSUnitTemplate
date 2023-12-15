@@ -59,6 +59,8 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, MaxLifeTime);
 	DOREPLIFETIME(AProjectile, TeamId);
 	DOREPLIFETIME(AProjectile, MovementSpeed);
+	DOREPLIFETIME(AProjectile, DestructionDelayTime);
+	
 }
 
 // Called every frame
@@ -77,7 +79,16 @@ void AProjectile::Tick(float DeltaTime)
 		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead)
 		{
 			const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
-			AddActorLocalOffset(Direction*MovementSpeed);
+			//AddActorLocalOffset(Direction*MovementSpeed);
+			AddActorWorldOffset(Direction * MovementSpeed);
+			// Calculate the desired rotation towards the target
+			//FRotator TargetRotation = Direction.Rotation();
+
+			// Apply the rotation offset
+			//TargetRotation += RotationOffset;
+
+			// Rotate the mesh to face the target
+			//Mesh->SetRelativeRotation(TargetRotation);
 		}else
 		{
 			Destroy(true, false);
@@ -94,7 +105,12 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
-			Destroy(true, false);
+			// Call the impact event
+			ImpactEvent();
+
+			// Delay the destruction
+			FTimerHandle TimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
 			if(UnitToHit->GetShield() <= 0)
@@ -103,11 +119,23 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			UnitToHit->SetShield(UnitToHit->GetShield()-Damage);
 				
 			if(UnitToHit->GetUnitState() != UnitData::Run)
-			UnitToHit->SetUnitState( UnitData::IsAttacked );
+			{
+				UnitToHit->UnitControlTimer = 0.f;
+				UnitToHit->SetUnitState( UnitData::IsAttacked );
+			}
 			
-			Destroy(true, false);
+			// Call the impact event
+			ImpactEvent();
+
+			// Delay the destruction
+			FTimerHandle TimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 		}
 			
 	}
 }
 
+void AProjectile::DestroyProjectile()
+{
+	Destroy(true, false);
+}

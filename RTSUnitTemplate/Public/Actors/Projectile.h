@@ -31,7 +31,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector TargetLocation;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Damage;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -56,6 +56,13 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-	
 
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void ImpactEvent();
+
+	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	void DestroyProjectile();
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float DestructionDelayTime = 0.1f;
 };

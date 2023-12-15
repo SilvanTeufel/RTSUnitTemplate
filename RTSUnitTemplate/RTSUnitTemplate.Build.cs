@@ -10,7 +10,7 @@ public class RTSUnitTemplate : ModuleRules
 
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		// Core dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "XRBase" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape" });
 
 		// Slate dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore",});

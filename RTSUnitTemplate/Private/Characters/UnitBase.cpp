@@ -36,15 +36,15 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	Health = SpawnHealth;
 	Shield = SpawnShield;
 
-	CharacterMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("NewMeshComponent"));
-	CharacterMesh->SetupAttachment(RootComponent);
-	
+	SetReplicates(true);
+	GetMesh()->SetIsReplicated(true);
+	/*
 	if (HasAuthority())
 	{
 		bReplicates = true;
 		SetReplicateMovement(true);
 		GetMesh()->SetIsReplicated(true);
-	}
+	}*/
 	
 }
 
@@ -96,7 +96,7 @@ void AUnitBase::BeginPlay()
 	
 	if (HasAuthority())
 	{
-		SetMeshRotation(MeshRotation);
+		SetMeshRotationServer();
 	}
 
 }
@@ -117,8 +117,8 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
-	DOREPLIFETIME(AUnitBase, MeshRotation);
-	DOREPLIFETIME(AUnitBase, CharacterMesh);
+	DOREPLIFETIME(AUnitBase, MeshAssetPath);
+	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
 
 }
 
@@ -137,14 +137,66 @@ void AUnitBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 }
 
-void AUnitBase::SetMeshRotation_Implementation(FRotator NewRotation)
+void AUnitBase::OnRep_MeshAssetPath()
 {
-	if (CharacterMesh)
+	// Check if the asset path is valid
+	if (!MeshAssetPath.IsEmpty())
 	{
-		CharacterMesh->SetRelativeRotation(NewRotation);
+		// Attempt to load the mesh from the given asset path
+		USkeletalMesh* NewMesh = LoadObject<USkeletalMesh>(nullptr, *MeshAssetPath);
+			
+		// Check if the mesh is valid
+		if (NewMesh)
+		{
+			// Apply the mesh to the component
+			GetMesh()->SetSkeletalMesh(NewMesh);
+		}
 	}
 }
 
+void AUnitBase::OnRep_MeshMaterialPath()
+{
+	// Check if the material asset path is valid
+	if (!MeshMaterialPath.IsEmpty())
+	{
+		// Attempt to load the material from the given asset path
+		UMaterialInstance* NewMaterial = LoadObject<UMaterialInstance>(nullptr, *MeshMaterialPath);
+
+		// Check if the material is valid
+		if (NewMaterial)
+		{
+			// Apply the material to the first material slot
+			GetMesh()->SetMaterial(0, NewMaterial);
+		}
+	}
+}
+
+void AUnitBase::SetMeshRotationServer()
+{
+	if (GetMesh())
+	{
+		if (HasAuthority())
+		{
+			GetMesh()->SetRelativeRotation(ServerMeshRotation);
+			
+		}
+	}
+}
+
+void AUnitBase::ServerStartAttackEvent_Implementation()
+{
+	MultiCastStartAttackEvent();
+}
+
+bool AUnitBase::ServerStartAttackEvent_Validate()
+{
+	return true;
+}
+
+void AUnitBase::MultiCastStartAttackEvent_Implementation()
+{
+	StartAttackEvent();
+}
 
 // HUDBase related //////////////////////////////////////////////////
 void AUnitBase::IsAttacked(AActor* AttackingCharacter) // AActor* SelectedCharacter
@@ -289,7 +341,11 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	{
 		FTransform Transform;
 		Transform.SetLocation(GetActorLocation() + ProjectileScaleActorDirectionOffset*GetActorForwardVector() + ProjectileSpawnOffset);
-		Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
+
+		FVector Direction = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+
+		Transform.SetRotation(FQuat(InitialRotation));
 		Transform.SetScale3D(ShootingUnit->ProjectileScale);
 		
 		const auto MyProjectile = Cast<AProjectile>
@@ -300,6 +356,10 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 		
 			MyProjectile->Init(Target, Attacker);
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+
+
+			
+		
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 		}
 	}

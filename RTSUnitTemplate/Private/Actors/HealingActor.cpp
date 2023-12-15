@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Components/CapsuleComponent.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 AHealingActor::AHealingActor()
@@ -23,6 +24,20 @@ AHealingActor::AHealingActor()
 
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AHealingActor::OnOverlapBegin);
 
+	if (HasAuthority())
+	{
+		bReplicates = true;
+		SetReplicateMovement(true);
+	}
+}
+
+void AHealingActor::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AHealingActor, Mesh);
+	DOREPLIFETIME(AHealingActor, Material);
+
+	
 }
 
 void AHealingActor::Init(AUnitBase* Target, AUnitBase* Healer)

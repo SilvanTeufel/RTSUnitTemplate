@@ -5,6 +5,7 @@
 
 #include "EOS/EOS_GameInstance.h"
 #include "EOS/SessionItem.h"
+#include "TimerManager.h"
 
 void USessionList::NativeConstruct()
 {
