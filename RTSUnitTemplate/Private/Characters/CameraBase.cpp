@@ -1,7 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Characters/CameraBase.h"
+#include "Characters/Camera/CameraBase.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "Controller/Input/EnhancedInputComponentBase.h"
 #include "Controller/Input/GameplayTags.h"

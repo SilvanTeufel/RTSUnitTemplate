@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
 #include "EffectArea.generated.h"
 

@@ -4,7 +4,7 @@
 #include <string>
 
 #include "Landscape.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Actors/Waypoint.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"

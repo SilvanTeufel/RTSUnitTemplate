@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/BoxComponent.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Waypoint.generated.h"
 
 UCLASS()

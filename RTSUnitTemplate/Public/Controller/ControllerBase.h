@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Hud/PathProviderHUD.h"
-#include "Characters/CameraBase.h"
+#include "Characters/Camera/CameraBase.h"
 //#include "Core/DijkstraMatrix.h"
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"

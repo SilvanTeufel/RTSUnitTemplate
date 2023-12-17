@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Controller/ControllerBase.h"
-#include "Characters/SpeakingUnit.h"
+#include "Characters/Unit/SpeakingUnit.h"
 #include "Controller/Input/EnhancedInputComponentBase.h"
 #include "CameraControllerBase.generated.h"
 

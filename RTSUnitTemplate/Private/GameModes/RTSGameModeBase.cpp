@@ -3,7 +3,7 @@
 
 #include "GameModes/RTSGameModeBase.h"
 #include "PlayerStart/PlayerStartBase.h"
-#include "Characters/CameraBase.h"
+#include "Characters/Camera/CameraBase.h"
 #include "EngineUtils.h"
 #include "Controller/CameraControllerBase.h"
 #include "Hud/PathProviderHUD.h"

@@ -1,7 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Characters/GASUnit.h"
+#include "Characters/Unit/GASUnit.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/GameplayAbilityBase.h"

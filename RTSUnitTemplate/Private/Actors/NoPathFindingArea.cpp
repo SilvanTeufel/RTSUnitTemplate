@@ -4,7 +4,7 @@
 
 #include "Actors/Projectile.h"
 #include "Components/CapsuleComponent.h"
-#include "Characters/PathSeekerBase.h"
+#include "Characters/Unit/PathSeekerBase.h"
 // Sets default values
 ANoPathFindingArea::ANoPathFindingArea()
 {

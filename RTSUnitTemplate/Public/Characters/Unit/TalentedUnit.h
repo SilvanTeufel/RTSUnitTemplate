@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Characters/HealingUnit.h"
+#include "Characters/Unit/HealingUnit.h"
 #include "Core/Talents.h"
 #include "Core/TalentSaveGame.h"
 #include "TalentedUnit.generated.h"

@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Characters/SpeakingUnit.h"
+#include "Characters/Unit/SpeakingUnit.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound\SoundCue.h"

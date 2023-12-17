@@ -3,9 +3,9 @@
 
 #include "Animations/UnitBaseAnimInstance.h"
 
-#include "Characters/SpeakingUnit.h"
-#include "Characters/UnitBase.h"
-#include "Characters/SpeakingUnit.h"
+#include "Characters/Unit/SpeakingUnit.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/SpeakingUnit.h"
 #include "Core/UnitData.h"
 #include "Net/UnrealNetwork.h"
 

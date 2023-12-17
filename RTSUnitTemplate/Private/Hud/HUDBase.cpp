@@ -4,7 +4,7 @@
 #include "Hud/HUDBase.h"
 #include "Blueprint/UserWidget.h"
 #include "DrawDebugHelpers.h"
-#include "Characters/HealingUnit.h"
+#include "Characters/Unit/HealingUnit.h"
 #include "Components/CapsuleComponent.h"
 #include "Elements/Actor/ActorElementData.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"

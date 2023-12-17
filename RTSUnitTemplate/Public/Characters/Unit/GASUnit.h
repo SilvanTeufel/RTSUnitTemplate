@@ -54,5 +54,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
+
+
 	
 };

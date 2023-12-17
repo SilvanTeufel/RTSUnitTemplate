@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Characters/HealingUnit.h"
+#include "Characters/Unit/HealingUnit.h"
 #include "Actors/HealingActor.h"
 #include "Kismet/GameplayStatics.h"
 

@@ -1,5 +1,5 @@
 
-#include "Characters/ExtendedCameraBase.h"
+#include "Characters/Camera/ExtendedCameraBase.h"
 
 #include "Controller/CameraControllerBase.h"
 #include "GAS/GAS.h"

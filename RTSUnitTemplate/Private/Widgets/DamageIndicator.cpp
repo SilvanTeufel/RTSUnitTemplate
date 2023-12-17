@@ -2,7 +2,7 @@
 
 
 #include "Widgets/DamageIndicator.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 //#include "Fonts/FontFaceInterface.h"
 //#include "SlateCore.h"
 

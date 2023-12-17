@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "HealingUnit.generated.h"
 
 /**

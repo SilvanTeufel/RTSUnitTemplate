@@ -25,7 +25,7 @@ public:
 	UAttributeSetBase();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
+	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	// Health //
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_Health)
 	FGameplayAttributeData Health;
@@ -39,11 +39,11 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_MaxHealth)
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxHealth);
-
+	
 	UFUNCTION()
 	virtual void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
 	// MaxHealth //
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAttributeHealth(float NewHealth);
 
@@ -76,6 +76,7 @@ public:
 	UFUNCTION()
 	virtual void OnRep_AttackDamage(const FGameplayAttributeData& OldAttackDamage);
 	// AttackDamage //
+
 	
 	// Range //
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_Range)

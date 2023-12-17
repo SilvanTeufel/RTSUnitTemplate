@@ -1,8 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
-#include "Characters/TalentedUnit.h"
+#include "Characters/Unit/TalentedUnit.h"
 
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 //#include "Widgets/UnitTimerWidget.h"
@@ -56,22 +56,22 @@ void ATalentedUnit::CreateTalentData()
 			TalentData.Talents = *ClassTalents;
 
 			// Create a new FWeaponTalentPoints instance and initialize its properties
-			FClassTalentPoints TalentPoints;
-			TalentPoints.ClassId = ClassId; //ClassTalents->ClassIds;
-			TalentPoints.RangeOffset = 0;
-			TalentPoints.WalkSpeedOffset = 0;
-			TalentPoints.AttackSpeedScaler = 0;
-			TalentPoints.PiercedTargetsOffset = 0;
-			TalentPoints.ProjectileScaler = 0;
-			TalentPoints.ProjectileSpeedScaler = 0;
-			TalentPoints.ProjectileCount = 0;
-			TalentPoints.HealthReg = 0;
-			TalentPoints.ShieldReg = 0;
-			TalentPoints.Ultimate = 0;
+			FClassTalentPoints TalentPointsA;
+			TalentPointsA.ClassId = ClassId; //ClassTalents->ClassIds;
+			TalentPointsA.RangeOffset = 0;
+			TalentPointsA.WalkSpeedOffset = 0;
+			TalentPointsA.AttackSpeedScaler = 0;
+			TalentPointsA.PiercedTargetsOffset = 0;
+			TalentPointsA.ProjectileScaler = 0;
+			TalentPointsA.ProjectileSpeedScaler = 0;
+			TalentPointsA.ProjectileCount = 0;
+			TalentPointsA.HealthReg = 0;
+			TalentPointsA.ShieldReg = 0;
+			TalentPointsA.Ultimate = 0;
 			// Assign other properties similarly
 
 			// Assign the TalentPoints to the TalentPoints property
-			TalentData.TalentPoints = TalentPoints;
+			TalentData.TalentPoints = TalentPointsA;
 			TalentDataArray.Add(TalentData);
 
 

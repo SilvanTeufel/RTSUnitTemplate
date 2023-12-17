@@ -4,7 +4,7 @@
 #include "Actors/Projectile.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Controller/UnitControllerBase.h"
 #include "Net/UnrealNetwork.h"
 

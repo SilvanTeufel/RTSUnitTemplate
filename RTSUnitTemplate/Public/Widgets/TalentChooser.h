@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Core/Talents.h"
-#include "Characters/TalentedUnit.h"
+#include "Characters/Unit/TalentedUnit.h"
 #include "TalentChooser.generated.h"
 
 UCLASS()

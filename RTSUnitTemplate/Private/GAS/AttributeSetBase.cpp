@@ -24,6 +24,23 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileScaleActorDirectionOffset, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileSpeed, COND_None, REPNOTIFY_Always);
 }
+/*
+void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+	if(Attribute == GetStaminaAttribute())
+	{
+		// Assuming you have a scale factor for how much Stamina affects Health
+		float NewHealth = NewValue * GetHealthPerStaminaPoint();
+		SetHealth(NewHealth);
+	}
+	else if(Attribute == GetAttackPowerAttribute())
+	{
+		// Assuming you have a scale factor for how much AttackPower affects AttackDamage
+		float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
+		SetAttackDamage(NewAttackDamage);
+	}
+}*/
 
 void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)
 {
@@ -34,8 +51,6 @@ void UAttributeSetBase::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHeal
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxHealth, OldMaxHealth);
 }
-
-
 
 void UAttributeSetBase::SetAttributeHealth(float NewHealth)
 {

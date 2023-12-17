@@ -2,9 +2,9 @@
 
 
 #include "Actors/Selectable.h"
-#include "Characters/TalentedUnit.h"
+#include "Characters/Unit/TalentedUnit.h"
 #include "Components/CapsuleComponent.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 
 // Sets default values
 ASelectable::ASelectable()

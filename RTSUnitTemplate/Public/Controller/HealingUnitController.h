@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Controller/SpeakingUnitControllerBase.h"
-#include "Characters/HealingUnit.h"
+#include "Characters/Unit/HealingUnit.h"
 #include "HealingUnitController.generated.h"
 
 /**

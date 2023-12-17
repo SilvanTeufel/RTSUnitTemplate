@@ -1,7 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Characters/PathSeekerBase.h"
+#include "Characters/Unit/PathSeekerBase.h"
 #include "Components/CapsuleComponent.h"
 
 

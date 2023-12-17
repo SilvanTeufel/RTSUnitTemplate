@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GASUnit.h"
+#include "LevelUnit.h"
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
@@ -10,7 +11,7 @@
 #include "PathSeekerBase.generated.h"
 
 UCLASS()
-class RTSUNITTEMPLATE_API APathSeekerBase : public AGASUnit
+class RTSUNITTEMPLATE_API APathSeekerBase : public ALevelUnit
 {
 	GENERATED_BODY()
 

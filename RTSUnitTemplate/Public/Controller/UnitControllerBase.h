@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
-#include "Characters/UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Hud/HUDBase.h"
 #include "Hud/PathProviderHUD.h"
 #include "UnitControllerBase.generated.h"
