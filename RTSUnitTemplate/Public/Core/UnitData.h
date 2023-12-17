@@ -98,6 +98,17 @@ struct FSpeechData_Texts : public FTableRowBase
 	
 };
 
+UENUM()
+namespace SelectableData
+{
+	enum SelectableType
+	{
+		Health     UMETA(DisplayName = "Health"),
+		Shield   UMETA(DisplayName = "Shield "),
+		WeaponTalentPoint UMETA(DisplayName = "WeaponTalentPoint"),
+	};
+}
+
 USTRUCT(BlueprintType)
 struct FSpeechData_Buttons : public FTableRowBase
 {

@@ -8,6 +8,7 @@
 #include "Materials/MaterialInstance.h"
 #include "Core/UnitData.h"
 #include "GameFramework/GameModeBase.h"
+#include "GameplayEffect.h"
 #include "RTSGameModeBase.generated.h"
 
 /**
@@ -69,6 +70,8 @@ struct FUnitSpawnParameter : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	TSubclassOf<class UGameplayEffect> Attributes;
 };
 
 USTRUCT(BlueprintType)

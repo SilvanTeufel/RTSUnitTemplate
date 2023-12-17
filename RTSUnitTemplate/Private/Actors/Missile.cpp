@@ -58,10 +58,10 @@ void AMissile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Other
 			Destroy(true, false);
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
-			if(UnitToHit->GetShield() <= 0)
-				UnitToHit->SetHealth(UnitToHit->GetHealth()-Damage);
+			if(UnitToHit->Attributes->GetShield() <= 0)
+				UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-Damage);
 			else
-				UnitToHit->SetShield(UnitToHit->GetShield()-Damage);
+				UnitToHit->Attributes->SetShield(UnitToHit->Attributes->GetShield()-Damage);
 
 			
 			if(UnitToHit->GetUnitState() != UnitData::Run)

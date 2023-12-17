@@ -134,7 +134,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 		break;
 	}
 
-	if (UnitBase->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
+	if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
 		KillUnitBase(UnitBase);
 		UnitBase->UnitControlTimer = 0.f;
 	}
@@ -149,7 +149,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
 						UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 					
 					}else if (UnitBase->UnitToChase) {
-    				UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+    				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
     				
     				RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
     				DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
@@ -158,7 +158,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
 
     					if (IsUnitToChaseInRange(UnitBase)) {
 
-    						if(!bHealActorSpawned && UnitBase->UnitControlTimer >= PauseDuration && UnitBase->UnitToChase->GetHealth() < UnitBase->UnitToChase->GetMaxHealth())
+    						if(!bHealActorSpawned && UnitBase->UnitControlTimer >= PauseDuration && UnitBase->UnitToChase->Attributes->GetHealth() < UnitBase->UnitToChase->Attributes->GetMaxHealth())
     						{
     							UnitBase->SpawnHealActor(UnitBase->UnitToChase);
     							UnitBase->ServerStartHealingEvent_Implementation();
@@ -186,7 +186,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     						}
     						const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
     						
-    						UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+    						UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
     					}
     
     					if (DistanceToUnitToChase > LoseSightRadius) {
@@ -241,7 +241,7 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 		RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 		UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	
-		if(UnitBase->UnitToChase && (UnitBase->UnitToChase->GetUnitState() == UnitData::Dead || UnitBase->UnitToChase->GetHealth() == UnitBase->UnitToChase->GetMaxHealth())) {
+		if(UnitBase->UnitToChase && (UnitBase->UnitToChase->GetUnitState() == UnitData::Dead || UnitBase->UnitToChase->Attributes->GetHealth() == UnitBase->UnitToChase->Attributes->GetMaxHealth())) {
 
 			if(!UnitBase->SetNextUnitToChaseHeal())
 			{
@@ -262,7 +262,7 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 				UnitBase->SetUnitState(UnitData::Healing);
 			}else if(!IsUnitToChaseInRange(UnitBase) && UnitBase->GetUnitState() != UnitData::Run)
 			{
-				UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 				UnitBase->SetUnitState(UnitData::Chase);
 			}
 		
@@ -281,7 +281,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		}
 	}
 				
-	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 		
@@ -291,7 +291,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 	}
 	
 	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, UnitBase->RunLocation);
-	UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+	UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 	
@@ -314,7 +314,7 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		}
 	}
 	
-	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
@@ -326,7 +326,7 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 
 void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSeconds)
 {
-	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 				
 	if(UnitBase->SetNextUnitToChaseHeal())
 	{
@@ -338,7 +338,7 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 			UnitBase->SetUnitState(UnitData::Healing);
 		}else if(!IsUnitToChaseInRange(UnitBase))
 		{
-			UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 			UnitBase->SetUnitState(UnitData::Chase);
 		}
 
@@ -355,11 +355,11 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 		if(UnitBase->FollowPath)
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitBase->RunLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}else
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), WaypointLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->RunSpeedScale);
+			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}
 	}
 	else
@@ -371,7 +371,7 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 
 void AHealingUnitController::HealPatrolUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
-	UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
 				
 	if(UnitBase->SetNextUnitToChaseHeal())
 	{

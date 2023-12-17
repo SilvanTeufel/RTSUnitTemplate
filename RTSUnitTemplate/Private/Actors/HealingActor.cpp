@@ -43,7 +43,7 @@ void AHealingActor::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & Out
 void AHealingActor::Init(AUnitBase* Target, AUnitBase* Healer)
 {
 	HealingUnit = Healer;
-	Target->SetHealth(Target->GetHealth() + MainHeal);
+	Target->SetHealth(Target->Attributes->GetHealth() + MainHeal);
 }
 
 // Called when the game starts or when spawned
@@ -67,7 +67,7 @@ void AHealingActor::Tick(float DeltaTime)
 		for (int32 i = 0; i < Actors.Num(); i++)
 		{
 			if(Actors[i])
-			Actors[i]->SetHealth(Actors[i]->GetHealth() + IntervalHeal);
+			Actors[i]->SetHealth(Actors[i]->Attributes->GetHealth() + IntervalHeal);
 		}
 	}
 }

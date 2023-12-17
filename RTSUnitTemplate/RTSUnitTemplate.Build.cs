@@ -12,6 +12,9 @@ public class RTSUnitTemplate : ModuleRules
 		// Core dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape" });
 
+		// Gameplay Ability System
+		PublicDependencyModuleNames.AddRange(new string[] { "GameplayAbilities", "GameplayTags", "GameplayTasks"});
+		
 		// Slate dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore",});
 		

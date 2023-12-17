@@ -98,7 +98,7 @@ void ACameraBase::Tick(float DeltaTime)
 	//if(ShowControlWidgetAtStart) ShowControlWidget();
 }
 
-
+/*
 void ACameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -169,7 +169,7 @@ void ACameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 
 	
 }
-
+*/
 void ACameraBase::CreateCameraComp()
 {
 	RootScene = RootComponent;
@@ -629,7 +629,7 @@ TEnumAsByte<CameraData::CameraState> ACameraBase::GetCameraState()
 {
 	return CameraState;
 }
-
+/*
 void ACameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
 {
 	if(BlockControls) return;
@@ -679,12 +679,12 @@ void ACameraBase::Input_A_Pressed(const FInputActionValue& InputActionValue, int
 {
 	if(BlockControls) return;
 
-	/*
-	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-	if(CameraControllerBase)
-	{
-		CameraControllerBase->TPressed();
-	}*/
+	
+	//ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+	//if(CameraControllerBase)
+	//{
+		//CameraControllerBase->TPressed();
+	//}
 }
 
 void ACameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
@@ -746,7 +746,7 @@ void ACameraBase::Input_Shift_Released(const FInputActionValue& InputActionValue
 		CameraControllerBase->ShiftReleased();
 	}
 }
-
+*/
 void ACameraBase::JumpCamera(FHitResult Hit)
 {
 	FVector ActorLocation = GetActorLocation();
@@ -858,7 +858,7 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 
 	AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
 }
-
+/*
 void ACameraBase::SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState)
 {
 	if(BlockControls) return;
@@ -872,18 +872,7 @@ void ACameraBase::SwitchControllerStateMachine(const FInputActionValue& InputAct
 			{
 		case 0:
 			{
-				//CameraControllerBase->WIsPressed = false;
-				//CameraControllerBase->SIsPressed = false;
-				//CameraControllerBase->AIsPressed = false;
-				//CameraControllerBase->DIsPressed = false;
-				/*
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					CameraControllerBase->CamIsZoomingIn = false;
-					CameraControllerBase->CamIsZoomingOut = false;
-				}*/
-				//else
-					//SetCameraState(CameraData::UseScreenEdges);
+
 			}
 				break;
 		case 1:
@@ -1171,3 +1160,4 @@ void ACameraBase::SwitchControllerStateMachine(const FInputActionValue& InputAct
 	}
 
 }
+*/

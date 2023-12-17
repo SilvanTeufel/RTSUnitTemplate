@@ -3,6 +3,7 @@
 
 #include "Characters/UnitBase.h"
 
+#include "AbilitySystemComponent.h"
 #include "NavCollision.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Components/CapsuleComponent.h"
@@ -33,8 +34,8 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
-	Health = SpawnHealth;
-	Shield = SpawnShield;
+	//Health = SpawnHealth;
+	//Shield = SpawnShield;
 
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
@@ -45,7 +46,12 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 		SetReplicateMovement(true);
 		GetMesh()->SetIsReplicated(true);
 	}*/
+
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
+	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 	
+	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
 }
 
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -80,8 +86,8 @@ void AUnitBase::BeginPlay()
 		GetMesh()->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
 		GetMesh()->SetRelativeLocation(FVector(0, 0, -75), false, 0, ETeleportType::None);
 		SpawnSelectedIcon();
-		Health = SpawnHealth;
-		Shield = SpawnShield;
+		//Health = SpawnHealth;
+		//Shield = SpawnShield;
 		//Health = MaxHealth;
 
 	
@@ -108,12 +114,12 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, UnitState);
 	DOREPLIFETIME(AUnitBase, UnitStatePlaceholder);
 	DOREPLIFETIME(AUnitBase, TeamId)
-	DOREPLIFETIME(AUnitBase, Shield);
-	DOREPLIFETIME(AUnitBase, MaxShield);
-	DOREPLIFETIME(AUnitBase, SpawnShield);
-	DOREPLIFETIME(AUnitBase, Health);
-	DOREPLIFETIME(AUnitBase, MaxHealth);
-	DOREPLIFETIME(AUnitBase, SpawnHealth);
+	//DOREPLIFETIME(AUnitBase, Shield);
+	//DOREPLIFETIME(AUnitBase, MaxShield);
+	//DOREPLIFETIME(AUnitBase, SpawnShield);
+	//DOREPLIFETIME(AUnitBase, Health);
+	//DOREPLIFETIME(AUnitBase, MaxHealth);
+	//DOREPLIFETIME(AUnitBase, SpawnHealth);
 	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
@@ -178,7 +184,6 @@ void AUnitBase::SetMeshRotationServer()
 		if (HasAuthority())
 		{
 			GetMesh()->SetRelativeRotation(ServerMeshRotation);
-			
 		}
 	}
 }
@@ -202,7 +207,7 @@ void AUnitBase::MultiCastStartAttackEvent_Implementation()
 void AUnitBase::IsAttacked(AActor* AttackingCharacter) // AActor* SelectedCharacter
 {
 	SetUnitState(UnitData::IsAttacked);
-	SetWalkSpeed(IsAttackedSpeed);
+	SetWalkSpeed(Attributes->GetIsAttackedSpeed());
 
 }
 void AUnitBase::SetRunLocation_Implementation(FVector Location)
@@ -239,7 +244,7 @@ TEnumAsByte<UnitData::EState> AUnitBase::GetUnitState()
 	return UnitState;
 }
 
-// Enemy_Healthbar related //////////////////////////////////////////////////
+/*
 float AUnitBase::GetHealth()
 {
 	return Health;
@@ -269,9 +274,24 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 float AUnitBase::GetMaxHealth()
 {
 	return MaxHealth;
+}*/
+
+void AUnitBase::SetHealth_Implementation(float NewHealth)
+{
+	Attributes->SetAttributeHealth(NewHealth);
+
+	if(NewHealth <= 0.f)
+	{
+		SetWalkSpeed(0);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		SetActorEnableCollision(false);
+		SetDeselected();
+		SetUnitState(UnitData::Dead);
+		UnitControlTimer = 0.f;
+	}
 }
 
-
+/*
 float AUnitBase::GetShield()
 {
 	return Shield;
@@ -295,7 +315,7 @@ void AUnitBase::SetShield(float NewShield)
 float AUnitBase::GetMaxShield()
 {
 	return MaxShield;
-}
+}*/
 /////////////////////////////////////////////////////////////////////
 
 
@@ -340,7 +360,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	if(ShootingUnit)
 	{
 		FTransform Transform;
-		Transform.SetLocation(GetActorLocation() + ProjectileScaleActorDirectionOffset*GetActorForwardVector() + ProjectileSpawnOffset);
+		Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
 
 		FVector Direction = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
 		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;

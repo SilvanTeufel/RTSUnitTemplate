@@ -47,6 +47,7 @@ public:
 	UInputConfig* InputConfig;
 	
 	/** Handles Enhanced Keyboard Inputs */
+	/*
 	void Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_RightClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
@@ -58,10 +59,11 @@ public:
 	void Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
+	*/
 	/** Handles Enhanced Keyboard Inputs */
 
 	
-	void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
+	//void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
 
 	bool BlockControls = true;
 public:
@@ -69,7 +71,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	//virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetActorBasicLocation();

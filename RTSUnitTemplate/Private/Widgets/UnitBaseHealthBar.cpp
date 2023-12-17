@@ -13,16 +13,16 @@ void UUnitBaseHealthBar::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		return;
 
 	// Update Health values
-	HealthBar->SetPercent(OwnerCharacter->GetHealth() / OwnerCharacter->GetMaxHealth());
+	HealthBar->SetPercent(OwnerCharacter->Attributes->GetHealth() / OwnerCharacter->Attributes->GetMaxHealth());
 	FNumberFormattingOptions Opts;
 	Opts.SetMaximumFractionalDigits(0);
-	CurrentHealthLabel->SetText(FText::AsNumber(OwnerCharacter->GetHealth(), &Opts));
-	MaxHealthLabel->SetText(FText::AsNumber(OwnerCharacter->GetMaxHealth(), &Opts));
+	CurrentHealthLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetHealth(), &Opts));
+	MaxHealthLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxHealth(), &Opts));
 	
 	// Update Shield values
-	float CurrentShieldValue = OwnerCharacter->GetShield();
-	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->GetMaxShield());
+	float CurrentShieldValue = OwnerCharacter->Attributes->GetShield();
+	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
 	CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
-	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->GetMaxShield(), &Opts));
+	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
 	
 }

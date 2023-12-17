@@ -42,12 +42,12 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 			//DistanceToUnitToChase = GetDistanceTo(UnitsToChase[i]);
 
 			if(
-				UnitsToChase[i]->GetHealth() < UnitsToChase[i]->GetMaxHealth() &&
-				UnitsToChase[i]->GetHealth() < LowestHealth )
+				UnitsToChase[i]->Attributes->GetHealth() < UnitsToChase[i]->Attributes->GetMaxHealth() &&
+				UnitsToChase[i]->Attributes->GetHealth() < LowestHealth )
 			{
 				IndexLowestHealth = i;
 				//UnitToChase = UnitsToChase[i];
-				LowestHealth = UnitsToChase[i]->GetHealth();
+				LowestHealth = UnitsToChase[i]->Attributes->GetHealth();
 				RValue =  true;
 			}
 		}

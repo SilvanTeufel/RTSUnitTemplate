@@ -34,9 +34,9 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(ShootingActor);
 	if(ShootingUnit)
 	{
-		Damage = ShootingUnit->AttackDamage;
+		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
-		MovementSpeed = ShootingUnit->ProjectileSpeed;
+		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
 	}
 }
 
@@ -113,10 +113,10 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
-			if(UnitToHit->GetShield() <= 0)
-			UnitToHit->SetHealth(UnitToHit->GetHealth()-Damage);
+			if(UnitToHit->Attributes->GetShield() <= 0)
+			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-Damage);
 			else
-			UnitToHit->SetShield(UnitToHit->GetShield()-Damage);
+			UnitToHit->Attributes->SetShield(UnitToHit->Attributes->GetShield()-Damage);
 				
 			if(UnitToHit->GetUnitState() != UnitData::Run)
 			{

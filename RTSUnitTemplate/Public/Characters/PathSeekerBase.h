@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GASUnit.h"
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
@@ -9,7 +10,7 @@
 #include "PathSeekerBase.generated.h"
 
 UCLASS()
-class RTSUNITTEMPLATE_API APathSeekerBase : public ACharacter
+class RTSUNITTEMPLATE_API APathSeekerBase : public AGASUnit
 {
 	GENERATED_BODY()
 

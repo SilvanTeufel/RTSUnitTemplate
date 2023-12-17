@@ -246,9 +246,16 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		}
 		UnitBase->UnitState = SpawnParameter.State;
 		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
+		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
+		if(SpawnParameter.Attributes)
+		{
+			UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
+		}
+		
+		UnitBase->InitializeAttributes();
+		
 		return UnitBase;
 	}
 
@@ -333,9 +340,15 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			}
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
-			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 			
+			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
+			if(SpawnParameter.Attributes)
+			{
+				UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
+			}
+		
+			UnitBase->InitializeAttributes();
 			
 			FUnitSpawnData UnitSpawnDataSet;
 			UnitSpawnDataSet.Id = SpawnParameter.Id;
