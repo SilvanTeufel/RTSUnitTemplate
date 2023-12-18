@@ -59,6 +59,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetWidgets(int Index);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	

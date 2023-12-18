@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Core/Talents.h"
-#include "Characters/Unit/TalentedUnit.h"
+//#include "Core/Talents.h"
+#include "Characters/Unit/LevelUnit.h"
 #include "TalentChooser.generated.h"
 
 UCLASS()
@@ -13,11 +13,22 @@ class RTSUNITTEMPLATE_API UTalentChooser : public UUserWidget
 {
 	GENERATED_BODY()
     
-protected:
+public:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-    
+
+	UFUNCTION()
+	void UpdateProgressBars();
+	
+	TArray<FGameplayAttributeData*> Attributes;
+
+	// Function to initialize the Attributes array
+	void InitializeAttributes();
+
 	UPROPERTY()
-	TWeakObjectPtr<ATalentedUnit> OwnerUnitBase;
+	TArray<FString> AttributeNames = {"Stamina", "Attack Power", "Willpower", "Haste", "Armor", "MagicResistance"};
+	
+	UPROPERTY()
+	TWeakObjectPtr<ALevelUnit> OwnerUnitBase;
 
 	// Dynamic arrays for UI elements
 	UPROPERTY(meta = (BindWidget))
@@ -30,34 +41,46 @@ protected:
 	TArray<class UTextBlock*> ClassNames;
 
 	// Functions to dynamically create UI elements
+	UFUNCTION()
+	void UpdateExperience();
+
+	UFUNCTION()
+	void UpdateLevelAndTalents();
+	
+	UFUNCTION()
 	void CreateClassUIElements();
 
-	// Handlers for button clicks
-	// Handlers for button clicks
-	//UFUNCTION()
-	//void OnClassButtonClicked();
+	UFUNCTION()
+	void InitializeLevelAndTalentUI();
 
-	//void ButtonClicked(int32 ButtonIndex);
+	UPROPERTY(meta = (BindWidget))
+	UProgressBar* ExperienceProgressBar;
+	
+	UPROPERTY(meta = (BindWidget))
+	class UTextBlock*  CurrentLevel;
 
+	UPROPERTY(meta = (BindWidget))
+	class UButton* LevelUpButton;
+	
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock*  AvailableTalents;
 
 	UPROPERTY(meta = (BindWidget))
-	class UButton*  ResetButton;
-
-	UFUNCTION()
-	void ResetClass();
+	class UButton*  ResetTalentsButton;
 
 	UFUNCTION()
 	void HandleTalentButtonClicked(int32 ButtonIndex);
-	
-	//UFUNCTION()
-	//void SetupButtons();
 
+	UFUNCTION()
+	void OnLevelUpClicked();
+
+	UFUNCTION()
+	void OnResetTalentsClicked();
+	
 public:
 	virtual void NativeConstruct() override;
 
-	void SetOwnerActor(ATalentedUnit* Unit) {
+	void SetOwnerActor(ALevelUnit* Unit) {
 		OwnerUnitBase = Unit;
 	}
 

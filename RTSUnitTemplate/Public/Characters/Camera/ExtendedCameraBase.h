@@ -15,6 +15,9 @@ class RTSUNITTEMPLATE_API AExtendedCameraBase : public ACameraBase
 	GENERATED_BODY()
 
 public:
+
+	AExtendedCameraBase(const FObjectInitializer& ObjectInitializer);
+	
 	// Override the BeginPlay function
 	virtual void BeginPlay() override;
 
@@ -47,7 +50,7 @@ public:
 	class UWidgetComponent* TalentChooser;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	FVector2D TalentChooserLocation = FVector2D(0.75f, 0.75f );
+	FVector2D TalentChooserLocation = FVector2D(0.35f, 0.5f );
 
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 		void SpawnTalentChooser();
@@ -55,6 +58,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 		void SetTalentChooserLocation();
 
+	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
+		void SetUserWidget(AUnitBase* SelectedActor);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float WidgetDistance = 50.f;
 	// Talents /////

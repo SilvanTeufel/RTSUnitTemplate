@@ -53,7 +53,7 @@ void ASelectable::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 		 			break;
 		 			case SelectableData::Shield:
 		 				{
-		 					UnitBase->Attributes->SetShield(UnitBase->Attributes->GetShield() + Amount);
+		 					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
 		 				}
 		 				break;
 		 			case SelectableData::WeaponTalentPoint:

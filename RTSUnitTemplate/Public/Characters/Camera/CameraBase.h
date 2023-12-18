@@ -31,7 +31,7 @@ class RTSUNITTEMPLATE_API ACameraBase : public ACharacter
 
 public:
 	// Sets default values for this character's properties
-	ACameraBase(const FObjectInitializer& ObjectInitializer);
+	//ACameraBase(const FObjectInitializer& ObjectInitializer);
 
 	UCapsuleComponent* GetCameraBaseCapsule() const {
 		return GetCapsuleComponent();
@@ -45,34 +45,12 @@ protected:
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputConfig* InputConfig;
-	
-	/** Handles Enhanced Keyboard Inputs */
-	/*
-	void Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_RightClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_G_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_A_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Ctrl_Released(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
-	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
-	*/
-	/** Handles Enhanced Keyboard Inputs */
-
-	
-	//void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
 
 	bool BlockControls = true;
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	
-	// Called to bind functionality to input
-	//virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetActorBasicLocation();
 	
@@ -90,9 +68,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraComp", Keywords = "RTSUnitTemplate CameraComp"), Category = RTSUnitTemplate)
 		UCameraComponent* CameraComp;
-
-	//UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "PC", Keywords = "RTSUnitTemplate PC"), Category = RTSUnitTemplate)
-		//APlayerController* PC;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "MappingContext", Keywords = "TopDownRTSCamLib MappingContext"), Category = TopDownRTSCamLib)
 		UInputMappingContext* MappingContext;
@@ -204,8 +179,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool ZoomOutAutoCam(float Distance, const FVector SelectedActorPosition = FVector(0.f,0.f,0.f));
-	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = RTSUnitTemplate)
-		//FVector2D GetMousePos2D();
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ZoomOutToPosition", Keywords = "RTSUnitTemplate ZoomOutToPosition"), Category = RTSUnitTemplate)
 		bool ZoomOutToPosition(float Distance, const FVector SelectedActorPosition = FVector(0.f,0.f,0.f));
@@ -292,14 +265,6 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "StartTime", Keywords = "TopDownRTSCamLib StartTime"), Category = RTSUnitTemplate)
 		float StartTime = 0.f;
-
-	/*
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void DeccelerateCamToLeft(float DeltaTime);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void DeccelerateCamToRight(float DeltaTime);
-*/
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraState", Keywords = "TopDownRTSTemplate CameraState"), Category = RTSUnitTemplate)
 		TEnumAsByte<CameraData::CameraState> CameraState = CameraData::UseScreenEdges;

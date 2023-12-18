@@ -24,5 +24,23 @@ void UUnitBaseHealthBar::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
 	CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
 	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
-	
+	CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->CharacterLevel, &Opts));
+	UpdateExperience();
+}
+
+void UUnitBaseHealthBar::UpdateExperience()
+{
+	if(!OwnerCharacter.IsValid()) return;
+    
+	if(ExperienceProgressBar)
+	{
+		// Ensure Experience and CharacterLevel are not causing division by zero
+		if (OwnerCharacter->Experience && OwnerCharacter->CharacterLevel)
+		{
+			float N = (float)(OwnerCharacter->ExperiencePerLevel * OwnerCharacter->CharacterLevel);
+			float Z = (float)OwnerCharacter->Experience;
+			//if(N > 0 && Z > 0 && Z < N)
+			ExperienceProgressBar->SetPercent(Z / N);
+		}
+	}
 }

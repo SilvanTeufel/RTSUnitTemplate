@@ -16,13 +16,14 @@ UCLASS()
 class RTSUNITTEMPLATE_API AGASUnit : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
+	
 public:
 	//AGASUnit();
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAbilitySystemComponentBase* AbilitySystemComponent;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAttributeSetBase* Attributes;
 	
 //protected:

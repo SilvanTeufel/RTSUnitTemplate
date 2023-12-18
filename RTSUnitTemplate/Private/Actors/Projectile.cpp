@@ -31,7 +31,8 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 {
 	Target = TargetActor;
 
-	AUnitBase* ShootingUnit = Cast<AUnitBase>(ShootingActor);
+	Shooter = ShootingActor;
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
 	{
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
@@ -113,17 +114,25 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
+			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+
+			float NewDamage = Damage - UnitToHit->Attributes->GetArmor();
+			
+			if(ShootingUnit->IsDoingMagicDamage)
+				NewDamage = Damage - UnitToHit->Attributes->GetMagicResistance();
+			
 			if(UnitToHit->Attributes->GetShield() <= 0)
-			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-Damage);
+			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-NewDamage);
 			else
-			UnitToHit->Attributes->SetShield(UnitToHit->Attributes->GetShield()-Damage);
+			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 				
 			if(UnitToHit->GetUnitState() != UnitData::Run)
 			{
 				UnitToHit->UnitControlTimer = 0.f;
 				UnitToHit->SetUnitState( UnitData::IsAttacked );
 			}
-			
+
+			ShootingUnit->Experience++;
 			// Call the impact event
 			ImpactEvent();
 

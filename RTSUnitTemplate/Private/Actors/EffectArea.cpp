@@ -53,9 +53,9 @@ void AEffectArea::ApplyDamage()
 		if(UnitToHit && !IsHealing) // Always check for null pointers before accessing
 		{
 			if(UnitToHit->Attributes->GetShield() <= 0)
-				UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth() - Damage);
+				UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth() - (Damage - UnitToHit->Attributes->GetMagicResistance()));
 			else
-				UnitToHit->Attributes->SetShield(UnitToHit->Attributes->GetShield() - Damage);
+				UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield() - (Damage - UnitToHit->Attributes->GetMagicResistance()));
 
 			if(UnitToHit->GetUnitState() != UnitData::Run)
 				UnitToHit->SetUnitState(UnitData::IsAttacked);

@@ -64,12 +64,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "FlyHeight", Keywords = "RTSUnitTemplate FlyHeight"), Category = RTSUnitTemplate)
 		float FlyHeight = 500.f;
-	
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "Range", Keywords = "RTSUnitTemplate Range"), Category = RTSUnitTemplate)
-		//float Range = 300.f;
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopChaseAtDistance", Keywords = "RTSUnitTemplate StopChaseAtDistance"), Category = RTSUnitTemplate)
-		//float StopChaseAtDistance = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool UEPathfindingUsed = false;
@@ -104,16 +98,6 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
 	void SetWalkSpeed(float Speed);
 	
-/*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "MaxRunSpeed", Keywords = "RTSUnitTemplate MaxRunSpeed"), Category = RTSUnitTemplate)
-		float MaxRunSpeed = 400.f; 
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "IsAttackedSpeed", Keywords = "RTSUnitTemplate IsAttackedSpeed"), Category = RTSUnitTemplate)
-		float IsAttackedSpeed = 200.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "RunSpeedScale", Keywords = "RTSUnitTemplate RunSpeedScale"), Category = RTSUnitTemplate)
-		float RunSpeedScale = 4.f;
-	*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunTolerance", Keywords = "RTSUnitTemplate StopRunTolerance"), Category = RTSUnitTemplate)
 		float StopRunTolerance = 100.f;
 
@@ -126,9 +110,6 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
 	float UnitControlTimer = 0.0f; // This Timer is used in UnitControllerBase Statemachine
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "AttackDamage", Keywords = "RTSUnitTemplate AttackDamage"), Category = RTSUnitTemplate)
-	//float AttackDamage = 40.0f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;
@@ -164,9 +145,7 @@ public:
 // Set Unit States  //////////////////////////////////////////
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
-	//void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
-	//virtual void SetUnitState_Implementation(TEnumAsByte<UnitData::EState> NewUnitState);
-	
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> GetUnitState();
 
@@ -182,49 +161,10 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);
-	/*
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetHealth", Keywords = "RTSUnitTemplate GetHealth"), Category = RTSUnitTemplate)
-	float GetHealth();
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
-	void SetHealth(float NewHealth);
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMaxHealth", Keywords = "RTSUnitTemplate GetMaxHealth"), Category = RTSUnitTemplate)
-	float GetMaxHealth();
-	*//*
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	float GetShield();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetShield(float NewShield);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	float GetMaxShield();
-	*/
 protected:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealthWidgetComp", Keywords = "RTSUnitTemplate HealthWidgetComp"), Category = RTSUnitTemplate)
 		class UWidgetComponent* HealthWidgetComp;
-	/*
-	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Health", Keywords = "RTSUnitTemplate Health"), Category = RTSUnitTemplate)
-		float Shield;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float MaxShield = 200.f;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float SpawnShield = 60.f;
-	*/
-	
-	/*
-	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Health", Keywords = "RTSUnitTemplate Health"), Category = RTSUnitTemplate)
-		float Health;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "MaxHealth", Keywords = "RTSUnitTemplate MaxHealth"), Category = RTSUnitTemplate)
-		float MaxHealth = 120;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpawnHealth", Keywords = "RTSUnitTemplate SpawnHealth"), Category = RTSUnitTemplate)
-		float SpawnHealth = 120;
-	*/
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealthWidgetCompLocation", Keywords = "RTSUnitTemplate HealthWidgetCompLocation"), Category = RTSUnitTemplate)
 		FVector HealthWidgetCompLocation = FVector (0.f, 0.f, 180.f);
@@ -278,13 +218,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileSpawnOffset", Keywords = "RTSUnitTemplate ProjectileSpawnOffset"), Category = RTSUnitTemplate)
 	FVector ProjectileSpawnOffset = FVector(0.f,0.f,0.f);
-/*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileScaleActorDirectionOffset", Keywords = "RTSUnitTemplate ProjectileScaleActorDirectionOffset"), Category = RTSUnitTemplate)
-	float ProjectileScaleActorDirectionOffset = 50.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileSpeed", Keywords = "RTSUnitTemplate ProjectileSpeed"), Category = RTSUnitTemplate)
-	float ProjectileSpeed = 50.f;
-*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileScale", Keywords = "RTSUnitTemplate ProjectileScale"), Category = RTSUnitTemplate)
 	FVector ProjectileScale = FVector(1.f,1.f,1.f);
 
@@ -299,12 +233,6 @@ public:
 	bool DestroyAfterDeath = true;
 ///////////////////////////////////////////////////////////////////
 	
-	/*
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "TriggerCapsule", Keywords = "RTSUnitTemplate TriggerCapsule"), Category = RTSUnitTemplate)
-	class UCapsuleComponent* TriggerCapsule;
-
-	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);*/
 };
 
 

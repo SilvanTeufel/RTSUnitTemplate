@@ -494,14 +494,20 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 		if(!UnitBase->UseProjectile )
 		{
 			// Attack without Projectile
-		
 			if(IsUnitToChaseInRange(UnitBase))
 			{
+
+				float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
+			
+				if(UnitBase->IsDoingMagicDamage)
+					NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetMagicResistance();
 				
 				if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
-					UnitBase->UnitToChase->SetHealth(UnitBase->UnitToChase->Attributes->GetHealth()-UnitBase->Attributes->GetAttackDamage());
+					UnitBase->UnitToChase->SetHealth(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
 				else
-					UnitBase->UnitToChase->Attributes->SetShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+					UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+
+				UnitBase->Experience++;
 				
 				if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run)
 				{

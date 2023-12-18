@@ -7,6 +7,7 @@
 #include "AIController.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
+#include "Characters/Camera/ExtendedCameraBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -230,6 +231,27 @@ void AControllerBase::LeftClickReleased()
 	LeftClickIsPressed = false;
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
+	SetWidgets(0);
+}
+
+
+void AControllerBase::SetWidgets(int Index)
+{
+	SelectedUnits = HUDBase->SelectedUnits;
+	
+	if (SelectedUnits.Num()) {
+	
+		AUnitBase* UnitBase = Cast<AUnitBase>(SelectedUnits[Index]);
+		AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
+		
+		if(UnitBase && ExtendedCameraBase)
+		{
+			ExtendedCameraBase->SetUserWidget(UnitBase);
+		}else
+		{
+			ExtendedCameraBase->SetUserWidget(nullptr);
+		}
+	}
 }
 
 void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)

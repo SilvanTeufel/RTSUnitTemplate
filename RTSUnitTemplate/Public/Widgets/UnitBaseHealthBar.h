@@ -29,6 +29,9 @@ public:
 //private:	
 	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	UFUNCTION()
+	void UpdateExperience();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate) // EditAnywhere, BlueprintReadWrite, 
 	TWeakObjectPtr<AUnitBase> OwnerCharacter;
 
@@ -49,6 +52,12 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	    class UTextBlock* MaxShieldLabel;
+
+	UPROPERTY(meta = (BindWidget))
+		class UTextBlock* CharacterLevel;
+
+	UPROPERTY(meta = (BindWidget))
+	UProgressBar* ExperienceProgressBar;
 
 //private:
 	float PreviousShieldValue = -1.0f;

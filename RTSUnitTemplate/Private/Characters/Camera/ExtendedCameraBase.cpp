@@ -3,6 +3,54 @@
 
 #include "Controller/CameraControllerBase.h"
 #include "GAS/GAS.h"
+#include "Widgets/TalentChooser.h"
+
+AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
+{
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	if (RootComponent == nullptr) {
+		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
+	}
+	
+	CreateCameraComp();
+
+	ControlWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ControlWidget"));
+	ControlWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+
+	TalentChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("TalentChooser"));
+	TalentChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+	
+		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
+		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
+		GetCameraBaseCapsule()->BodyInstance.bLockZRotation = true;
+	
+		GetMesh()->AttachToComponent(GetCameraBaseCapsule(), FAttachmentTransformRules::KeepRelativeTransform);
+
+
+		UCapsuleComponent* CComponent = GetCapsuleComponent();
+		if (CComponent)
+		{
+			CComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);  // Enable both physics and overlap query
+			CComponent->SetCollisionResponseToAllChannels(ECR_Ignore);  // Start by ignoring all channels
+			CComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);  // Block other pawns (this can be adjusted based on your requirements)
+			CComponent->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);  // Important: Block WorldStatic so it can walk on static objects like ground, walls, etc.
+			CComponent->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);  // ECR_Overlap Overlap with dynamic objects (adjust as needed)
+		}
+
+	
+		UMeshComponent* CMesh = GetMesh();
+		if(CMesh)
+		{
+	
+			CMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);  // Typically, we use the capsule for physics and mesh for simple queries like overlap
+			CMesh->SetCollisionResponseToAllChannels(ECR_Ignore);  // Start by ignoring all channels
+			CMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);  // Overlap with other pawns
+			CMesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);  // Overlap with dynamic objects
+		}
+
+}
 
 // BeginPlay implementation
 void AExtendedCameraBase::BeginPlay()
@@ -11,6 +59,7 @@ void AExtendedCameraBase::BeginPlay()
 	Super::BeginPlay();
 
 	SpawnTalentChooser();
+	//SetTalentChooserLocation();
 	// Your custom BeginPlay logic here
 }
 
@@ -139,6 +188,25 @@ void AExtendedCameraBase::SetTalentChooserLocation()
 	TalentChooser->SetWorldRotation(NewRotation);
 }
 
+void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
+{
+
+	UTalentChooser* TalentBar= Cast<UTalentChooser>(TalentChooser->GetUserWidgetObject());
+	if(SelectedActor)
+	{
+		if (TalentBar) {
+			TalentBar->SetVisibility(ESlateVisibility::Visible);
+			TalentBar->SetOwnerActor(SelectedActor);
+			TalentBar->CreateClassUIElements();
+		}
+		
+	}else
+	{
+		TalentBar->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+}
+
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit)
 {
 	if(SelectedUnit)
@@ -201,12 +269,12 @@ void AExtendedCameraBase::Input_A_Pressed(const FInputActionValue& InputActionVa
 {
 	if(BlockControls) return;
 
-	/*
+	
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->TPressed();
-	}*/
+	}
 }
 
 void AExtendedCameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
@@ -282,18 +350,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			{
 		case 0:
 			{
-				//CameraControllerBase->WIsPressed = false;
-				//CameraControllerBase->SIsPressed = false;
-				//CameraControllerBase->AIsPressed = false;
-				//CameraControllerBase->DIsPressed = false;
-				/*
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					CameraControllerBase->CamIsZoomingIn = false;
-					CameraControllerBase->CamIsZoomingOut = false;
-				}*/
-				//else
-					//SetCameraState(CameraData::UseScreenEdges);
+
 			}
 				break;
 		case 1:
@@ -315,31 +372,26 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 		case 222:
 			{
 				CameraControllerBase->SIsPressedState = 2;
-				//CameraControllerBase->SWasPressed = true;
 			} break;
 		case 3:
 			{
 				CameraControllerBase->AIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
-				//SetCameraState(CameraData::MoveLeft);
 			} break;
 		case 333:
 			{
 				CameraControllerBase->AIsPressedState = 2;
-				//CameraControllerBase->AWasPressed = true;
 			} break;
 		case 4:
 			{
 				CameraControllerBase->DIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
-				//SetCameraState(CameraData::MoveRight);
 			} break;
 		case 444:
 			{
 				CameraControllerBase->DIsPressedState = 2;
-				//CameraControllerBase->DWasPressed = true;
 			} break;
 		case 5:
 			{

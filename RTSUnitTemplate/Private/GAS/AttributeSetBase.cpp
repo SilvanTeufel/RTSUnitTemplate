@@ -3,10 +3,10 @@
 
 #include "GAS/AttributeSetBase.h"
 #include "Net/UnrealNetwork.h"
-
+/*
 UAttributeSetBase::UAttributeSetBase()
 {
-}
+}*/
 
 void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -23,6 +23,12 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedScale, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileScaleActorDirectionOffset, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileSpeed, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, HealthRegeneration, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ShieldRegeneration, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Willpower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Haste, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Armor, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MagicResistance, COND_None, REPNOTIFY_Always);
 }
 /*
 void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -50,6 +56,11 @@ void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)
 void UAttributeSetBase::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxHealth, OldMaxHealth);
+}
+
+void UAttributeSetBase::OnRep_HealthRegeneration(const FGameplayAttributeData& OldHealthRegeneration)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, HealthRegeneration, OldHealthRegeneration);
 }
 
 void UAttributeSetBase::SetAttributeHealth(float NewHealth)
@@ -82,6 +93,11 @@ void UAttributeSetBase::OnRep_Shield(const FGameplayAttributeData& OldShield)
 void UAttributeSetBase::OnRep_MaxShield(const FGameplayAttributeData& OldMaxShield)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxShield, OldMaxShield);
+}
+
+void UAttributeSetBase::OnRep_ShieldRegeneration(const FGameplayAttributeData& OldShieldRegeneration)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, ShieldRegeneration, OldShieldRegeneration);
 }
 
 void UAttributeSetBase::SetAttributeShield(float NewShield)
@@ -144,4 +160,24 @@ void UAttributeSetBase::OnRep_Stamina(const FGameplayAttributeData& OldStamina)
 void UAttributeSetBase::OnRep_AttackPower(const FGameplayAttributeData& OldAttackPower)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, AttackPower, OldAttackPower);
+}
+
+void UAttributeSetBase::OnRep_Willpower(const FGameplayAttributeData& OldWillpower)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Willpower, OldWillpower);
+}
+
+void UAttributeSetBase::OnRep_Haste(const FGameplayAttributeData& OldHaste)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Haste, OldHaste);
+}
+
+void UAttributeSetBase::OnRep_Armor(const FGameplayAttributeData& OldArmor)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Armor, OldArmor);
+}
+
+void UAttributeSetBase::OnRep_MagicResistance(const FGameplayAttributeData& OldMagicResistance)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MagicResistance, OldMagicResistance);
 }

@@ -16,13 +16,13 @@ GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 /**
  * 
  */
-UCLASS()
+UCLASS(BlueprintType)
 class RTSUNITTEMPLATE_API UAttributeSetBase : public UAttributeSet
 {
 	GENERATED_BODY()
 	
 public:
-	UAttributeSetBase();
+	//UAttributeSetBase();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
@@ -43,6 +43,16 @@ public:
 	UFUNCTION()
 	virtual void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
 	// MaxHealth //
+
+	// HealthRegeneration //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_HealthRegeneration)
+	FGameplayAttributeData HealthRegeneration;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, HealthRegeneration);
+
+	UFUNCTION()
+	virtual void OnRep_HealthRegeneration(const FGameplayAttributeData& OldHealthRegeneration);
+	// HealthRegeneration //
+
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAttributeHealth(float NewHealth);
@@ -64,6 +74,16 @@ public:
 	UFUNCTION()
 	virtual void OnRep_MaxShield(const FGameplayAttributeData& OldMaxShield);
 	// MaxShield //
+
+
+	// Shield //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_ShieldRegeneration)
+	FGameplayAttributeData ShieldRegeneration;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, ShieldRegeneration);
+
+	UFUNCTION()
+	virtual void OnRep_ShieldRegeneration(const FGameplayAttributeData& OldShieldRegeneration);
+	// Shield //
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAttributeShield(float NewShield);
@@ -151,4 +171,42 @@ public:
 	UFUNCTION()
 	virtual void OnRep_AttackPower(const FGameplayAttributeData& OldAttackPower);
 	// AttackPower //
+
+	// Willpower //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_Willpower)
+	FGameplayAttributeData Willpower;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Willpower);
+
+	UFUNCTION()
+	virtual void OnRep_Willpower(const FGameplayAttributeData& OldWillpower);
+	// Willpower //
+
+	// Haste //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_Haste)
+	FGameplayAttributeData Haste;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Haste);
+
+	UFUNCTION()
+	virtual void OnRep_Haste(const FGameplayAttributeData& OldHaste);
+	// Haste //
+
+	// Armor //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_Armor)
+	FGameplayAttributeData Armor;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Armor);
+
+	UFUNCTION()
+	virtual void OnRep_Armor(const FGameplayAttributeData& OldArmor);
+	// Armor //
+
+	// MagicResistence //
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing= OnRep_MagicResistance)
+	FGameplayAttributeData MagicResistance;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MagicResistance);
+
+	UFUNCTION()
+	virtual void OnRep_MagicResistance(const FGameplayAttributeData& OldMagicResistance);
+	// MagicResistence //
+
 };
+

@@ -10,16 +10,12 @@ void UTalentChooser::NativeConstruct()
 {
     Super::NativeConstruct();
 
+    // Initialize level and talent-related UI elements
+    // Initialize attributes
+    
+    InitializeLevelAndTalentUI();
+    
     CreateClassUIElements();
-
-    // Assuming you have a separate setup function for buttons
-    //SetupButtons();
-
-    // Bind Reset button click event
-    if (ResetButton)
-    {
-        ResetButton->OnClicked.AddDynamic(this, &UTalentChooser::ResetClass);
-    }
 
     SetVisibility(ESlateVisibility::Hidden);
 }
@@ -28,179 +24,206 @@ void UTalentChooser::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
 
-    // Update logic for the dynamic elements (if necessary)
-    // ...
+    UpdateProgressBars();
+    UpdateExperience();
+    UpdateLevelAndTalents();
+}
+
+
+void UTalentChooser::UpdateProgressBars()
+{
+    // Check if OwnerUnitBase and its Attributes are valid
+    if (!OwnerUnitBase.IsValid() || !OwnerUnitBase->Attributes)
+    {
+        return;
+    }
+
+    for (int32 Index = 0; Index < Attributes.Num() && Index < ClassProgressBars.Num(); ++Index)
+    {
+        if (ClassProgressBars[Index])
+        {
+            float CurrentValue = Attributes[Index]->GetCurrentValue();
+            float MaxValue = OwnerUnitBase->MaxTalentsPerStat; // Replace with actual max value if available
+            
+            ClassProgressBars[Index]->SetPercent(CurrentValue / MaxValue);
+        }
+
+    }
+}
+
+
+void UTalentChooser::InitializeAttributes()
+{
+    if (OwnerUnitBase.IsValid() && OwnerUnitBase->Attributes)
+    {
+        // Clear the existing array
+        Attributes.Empty();
+
+        // Add attributes to the array
+        Attributes.Add(&OwnerUnitBase->Attributes->Stamina);
+        Attributes.Add(&OwnerUnitBase->Attributes->AttackPower);
+        Attributes.Add(&OwnerUnitBase->Attributes->Willpower);
+        Attributes.Add(&OwnerUnitBase->Attributes->Haste);
+        Attributes.Add(&OwnerUnitBase->Attributes->Armor);
+        Attributes.Add(&OwnerUnitBase->Attributes->MagicResistance);
+    }
+}
+
+void UTalentChooser::UpdateExperience()
+{
+    if(!OwnerUnitBase.IsValid()) return;
+    
+    if(ExperienceProgressBar)
+    {
+        // Ensure Experience and CharacterLevel are not causing division by zero
+        if (OwnerUnitBase->Experience && OwnerUnitBase->CharacterLevel)
+        {
+            float N = (float)(OwnerUnitBase->ExperiencePerLevel * OwnerUnitBase->CharacterLevel);
+            float Z = (float)OwnerUnitBase->Experience;
+            //if(N > 0 && Z > 0 && Z < N)
+                ExperienceProgressBar->SetPercent(Z / N);
+        }
+    }
+}
+
+void UTalentChooser::UpdateLevelAndTalents()
+{
+    if(!OwnerUnitBase.IsValid()) return;
+        
+
+    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
+    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
 }
 
 void UTalentChooser::CreateClassUIElements()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Creating Class UI Elements"));
+
+    if (!OwnerUnitBase.IsValid() || !OwnerUnitBase->Attributes)
+    {
+        // Handle the invalid case, perhaps by logging an error or setting up default values
+        return;
+    }
+    
+    InitializeLevelAndTalentUI();
+    InitializeAttributes();
     // Clear existing elements
     ClassProgressBars.Empty();
     ClassButtons.Empty();
     ClassNames.Empty();
 
-    // Check if OwnerUnitBase is valid and has talent data
-    if (OwnerUnitBase.IsValid() && OwnerUnitBase->TalentDataArray.Num() > 0)
+    for (int32 Index = 0; Index < Attributes.Num(); ++Index)
     {
-        UE_LOG(LogTemp, Warning, TEXT("OwnerUnitBase is valid and has talent data"));
-        for (const FClassTalentData& TalentData : OwnerUnitBase->TalentDataArray)
+        // Fetch and initialize ProgressBar
+        FString ProgressBarName = FString::Printf(TEXT("ProgressBar_%d"), Index);
+        UProgressBar* ProgressBar = Cast<UProgressBar>(GetWidgetFromName(FName(*ProgressBarName)));
+        if (ProgressBar)
         {
-            // Assuming FClassTalentData has a FClassTalentPoints field
-            FClassTalentPoints TalentPoints = TalentData.TalentPoints;
+            ProgressBar->SetPercent(Attributes[Index]->GetCurrentValue() / OwnerUnitBase->MaxTalentsPerStat); // Attributes[Index]->GetBaseValue()
+            ClassProgressBars.Add(ProgressBar);
+        }
 
-            UE_LOG(LogTemp, Warning, TEXT("Processing TalentData for ClassId: %d"), TalentPoints.ClassId);
-            // Array of properties to create UI elements for
-            TArray<int32> Properties = {
-                TalentPoints.ClassId,
-                TalentPoints.RangeOffset,
-                TalentPoints.WalkSpeedOffset,
-                TalentPoints.AttackSpeedScaler,
-                TalentPoints.PiercedTargetsOffset,
-                TalentPoints.ProjectileScaler,
-                TalentPoints.ProjectileSpeedScaler,
-                TalentPoints.ProjectileCount,
-                TalentPoints.HealthReg,
-                TalentPoints.ShieldReg,
-                TalentPoints.Ultimate
-            };
+        // Fetch and initialize Button
+        FString ButtonName = FString::Printf(TEXT("Button_%d"), Index);
+        UTalentButton* Button = Cast<UTalentButton>(GetWidgetFromName(FName(*ButtonName)));
+ 
+        if (Button)
+        {
+            // You may want to bind a handler to each button
+            Button->SetupButton(Index);
+            // Bind to the button's OnTalentButtonClicked delegate
+            Button->OnTalentButtonClicked.AddDynamic(this, &UTalentChooser::HandleTalentButtonClicked);
 
-            // Names for each property, used for text blocks
-            TArray<FString> PropertyNames = {
-                TEXT("Class ID"), 
-                TEXT("Range Offset"), 
-                TEXT("Walk Speed Offset"), 
-                TEXT("Attack Speed Scaler"), 
-                TEXT("Pierced Targets Offset"), 
-                TEXT("Projectile Scaler"), 
-                TEXT("Projectile Speed Scaler"), 
-                TEXT("Projectile Count"), 
-                TEXT("Health Regeneration"), 
-                TEXT("Shield Regeneration"), 
-                TEXT("Ultimate")
-            };
+            ClassButtons.Add(Button);
+        }
 
-            // Assuming 'this' is a UUserWidget or derived from UUserWidget
-            if (UVerticalBox* VBox = Cast<UVerticalBox>(GetWidgetFromName(TEXT("VerticalBox"))))
-            {
-                for (int32 i = 0; i < Properties.Num(); ++i)
-                {
-                    UProgressBar* NewProgressBar = NewObject<UProgressBar>(VBox);
-                    if (NewProgressBar)
-                    {
-                        NewProgressBar->SetPercent(0.5f); // Example setting
-                        VBox->AddChildToVerticalBox(NewProgressBar);
-                    }
-
-                    UTalentButton* NewButton = NewObject<UTalentButton>(VBox);
-                    if (NewButton)
-                    {
-                        NewButton->SetupButton(i);
-                        NewButton->OnTalentButtonClicked.AddDynamic(this, &UTalentChooser::HandleTalentButtonClicked);
-                        VBox->AddChildToVerticalBox(NewButton);
-                    }
-
-                    UTextBlock* NewTextBlock = NewObject<UTextBlock>(VBox);
-                    if (NewTextBlock)
-                    {
-                        NewTextBlock->SetText(FText::FromString(PropertyNames[i]));
-                        VBox->AddChildToVerticalBox(NewTextBlock);
-                    }
-
-                    UE_LOG(LogTemp, Warning, TEXT("Created UI elements for property: %s"), *PropertyNames[i]);
-                }
-            }
+        // Fetch and initialize TextBlock
+        FString TextBlockName = FString::Printf(TEXT("TextBlock_%d"), Index);
+        UTextBlock* TextBlock = Cast<UTextBlock>(GetWidgetFromName(FName(*TextBlockName)));
+        if (TextBlock)
+        {
+            TextBlock->SetText(FText::FromString(AttributeNames[Index]));
+            ClassNames.Add(TextBlock);
         }
     }
 }
 
-/*
- 
- void UTalentChooser::CreateClassUIElements()
- {
-     // Clear existing elements
-     ClassProgressBars.Empty();
-     ClassButtons.Empty();
-     ClassNames.Empty();
- 
-     // Check if OwnerUnitBase is valid and has talent data
-     if (OwnerUnitBase.IsValid() && OwnerUnitBase->TalentDataArray.Num() > 0)
-     {
-         for (int32 Index = 0; Index < OwnerUnitBase->TalentDataArray.Num(); ++Index)
-         {
-             // Assuming FClassTalentData has a FClassTalentPoints field
-             FClassTalentPoints TalentPoints = OwnerUnitBase->TalentDataArray[Index].TalentPoints;
- 
-             // Fetch and initialize ProgressBar
-             FString ProgressBarName = FString::Printf(TEXT("ProgressBar_%d"), Index);
-             UProgressBar* ProgressBar = Cast<UProgressBar>(GetWidgetFromName(FName(*ProgressBarName)));
-             if (ProgressBar)
-             {
-                 // Initialize ProgressBar here, for example:
-                 ProgressBar->SetPercent( percentage based on TalentPoints );
-                 ClassProgressBars.Add(ProgressBar);
-             }
- 
-             // Fetch and initialize Button
-             FString ButtonName = FString::Printf(TEXT("Button_%d"), Index);
-             UButton* Button = Cast<UButton>(GetWidgetFromName(FName(*ButtonName)));
-             if (Button)
-             {
-                 // Initialize Button here
-                 ClassButtons.Add(Button);
-             }
- 
-             // Fetch and initialize TextBlock
-             FString TextBlockName = FString::Printf(TEXT("TextBlock_%d"), Index);
-             UTextBlock* TextBlock = Cast<UTextBlock>(GetWidgetFromName(FName(*TextBlockName)));
-             if (TextBlock)
-             {
-                 // Set TextBlock text here, for example:
-                 TextBlock->SetText(FText::FromString( appropriate string from PropertyNames ));
-                 ClassNames.Add(TextBlock);
-             }
-         }
-     }
- }
 
- */
+
+void UTalentChooser::InitializeLevelAndTalentUI()
+{
+    if(!OwnerUnitBase.IsValid()) return;
+    
+
+    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
+    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
+    
+    // Bind LevelUp and ResetTalents buttons to their respective handlers
+    if (LevelUpButton)
+    {
+        LevelUpButton->OnClicked.AddDynamic(this, &UTalentChooser::OnLevelUpClicked);
+    }
+
+    if (ResetTalentsButton)
+    {
+        ResetTalentsButton->OnClicked.AddDynamic(this, &UTalentChooser::OnResetTalentsClicked);
+    }
+}
+
 
 // Handler function for the button's click event
 void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
 {
     if (OwnerUnitBase.IsValid())
     {
-        // Assuming each button corresponds to a specific talent point in order
-        for (FClassTalentData& TalentData : OwnerUnitBase->TalentDataArray)
+        switch (ButtonIndex)
         {
-            switch (ButtonIndex)
-            {
-                    case 0: TalentData.TalentPoints.ClassId++; break;
-                    case 1: TalentData.TalentPoints.RangeOffset++; break;
-                    case 2: TalentData.TalentPoints.WalkSpeedOffset++; break;
-                    case 3: TalentData.TalentPoints.AttackSpeedScaler++; break;
-                    case 4: TalentData.TalentPoints.PiercedTargetsOffset++; break;
-                    case 5: TalentData.TalentPoints.ProjectileScaler++; break;
-                    case 6: TalentData.TalentPoints.ProjectileSpeedScaler++; break;
-                    case 7: TalentData.TalentPoints.ProjectileCount++; break;
-                    case 8: TalentData.TalentPoints.HealthReg++; break;
-                    case 9: TalentData.TalentPoints.ShieldReg++; break;
-                    case 10: TalentData.TalentPoints.Ultimate++; break;
-                    default: break;
-
-                // Optionally, update the UI to reflect the changes
-                // ...
-            }
+        case 0: OwnerUnitBase->InvestPointIntoStamina(); break;
+        case 1: OwnerUnitBase->InvestPointIntoAttackPower(); break;
+        case 2: OwnerUnitBase->InvestPointIntoWillPower(); break;
+        case 3: OwnerUnitBase->InvestPointIntoHaste(); break;
+        case 4: OwnerUnitBase->InvestPointIntoArmor(); break;
+        case 5: OwnerUnitBase->InvestPointIntoMagicResistance(); break;
+            // Add cases for additional attributes
+            default: break;
         }
+
+        if (AvailableTalents)
+        {
+            int32 TalentPoints = OwnerUnitBase->TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
+            AvailableTalents->SetText(FText::AsNumber(TalentPoints));
+        }
+        // Update UI here if needed
     }
 }
 
 
-void UTalentChooser::ResetClass()
-{
-    if (!OwnerUnitBase.IsValid())
-        return;
 
-    // Reset logic for the class
-    // ...
+void UTalentChooser::OnResetTalentsClicked()
+{
+    if (OwnerUnitBase.IsValid())
+    {
+        // Implement logic to reset talents here
+        // For example, resetting the talent points and updating the UI
+        OwnerUnitBase->ResetTalents();
+        // Update UI if necessary
+        if (AvailableTalents)
+        {
+            int32 TalentPoints = OwnerUnitBase->TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
+            AvailableTalents->SetText(FText::AsNumber(TalentPoints));
+        }
+    }
+}
+
+void UTalentChooser::OnLevelUpClicked()
+{
+    if (OwnerUnitBase.IsValid())
+    {
+        OwnerUnitBase->LevelUp();
+        
+        // Update UI to reflect new level and available talent points
+        CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
+        AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
+
+        // Optionally, refresh other parts of the UI
+    }
 }

@@ -2,7 +2,7 @@
 
 
 #include "Characters/Unit/UnitBase.h"
-
+#include "GAS/AttributeSetBase.h"
 #include "AbilitySystemComponent.h"
 #include "NavCollision.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -33,9 +33,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-
-	//Health = SpawnHealth;
-	//Shield = SpawnShield;
 
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
@@ -86,11 +83,7 @@ void AUnitBase::BeginPlay()
 		GetMesh()->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
 		GetMesh()->SetRelativeLocation(FVector(0, 0, -75), false, 0, ETeleportType::None);
 		SpawnSelectedIcon();
-		//Health = SpawnHealth;
-		//Shield = SpawnShield;
-		//Health = MaxHealth;
 
-	
 		GetCharacterMovement()->GravityScale = 1;
 		
 		if(IsFlying)
@@ -114,12 +107,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, UnitState);
 	DOREPLIFETIME(AUnitBase, UnitStatePlaceholder);
 	DOREPLIFETIME(AUnitBase, TeamId)
-	//DOREPLIFETIME(AUnitBase, Shield);
-	//DOREPLIFETIME(AUnitBase, MaxShield);
-	//DOREPLIFETIME(AUnitBase, SpawnShield);
-	//DOREPLIFETIME(AUnitBase, Health);
-	//DOREPLIFETIME(AUnitBase, MaxHealth);
-	//DOREPLIFETIME(AUnitBase, SpawnHealth);
 	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
@@ -203,8 +190,8 @@ void AUnitBase::MultiCastStartAttackEvent_Implementation()
 	StartAttackEvent();
 }
 
-// HUDBase related //////////////////////////////////////////////////
-void AUnitBase::IsAttacked(AActor* AttackingCharacter) // AActor* SelectedCharacter
+
+void AUnitBase::IsAttacked(AActor* AttackingCharacter) 
 {
 	SetUnitState(UnitData::IsAttacked);
 	SetWalkSpeed(Attributes->GetIsAttackedSpeed());
@@ -226,7 +213,6 @@ void AUnitBase::SetWalkSpeed(float Speed)
 		MovementPtr->MaxWalkSpeed = Speed;
 	}
 }
-/////////////////////////////////////////////////////////////////////
 
 
 void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
@@ -244,38 +230,6 @@ TEnumAsByte<UnitData::EState> AUnitBase::GetUnitState()
 	return UnitState;
 }
 
-/*
-float AUnitBase::GetHealth()
-{
-	return Health;
-}
-
-void AUnitBase::SetHealth_Implementation(float NewHealth)
-{
-	if(NewHealth > MaxHealth)
-	{
-		Health = MaxHealth;
-	}else
-	{
-		Health = NewHealth;
-	}
-
-	if(NewHealth <= 0.f)
-	{
-		SetWalkSpeed(0);
-		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		SetActorEnableCollision(false);
-		SetDeselected();
-		SetUnitState(UnitData::Dead);
-		UnitControlTimer = 0.f;
-	}
-}
-
-float AUnitBase::GetMaxHealth()
-{
-	return MaxHealth;
-}*/
-
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	Attributes->SetAttributeHealth(NewHealth);
@@ -291,35 +245,6 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	}
 }
 
-/*
-float AUnitBase::GetShield()
-{
-	return Shield;
-}
-
-void AUnitBase::SetShield(float NewShield)
-{
-	if(NewShield <= 0)
-	{
-		Shield = 0;
-		SetHealth(GetHealth()+NewShield);
-	}else if(NewShield > MaxShield)
-	{
-		Shield = MaxShield;
-	}else
-	{
-		Shield = NewShield;
-	}
-}
-
-float AUnitBase::GetMaxShield()
-{
-	return MaxShield;
-}*/
-/////////////////////////////////////////////////////////////////////
-
-
-// HUDBase related //////////////////////////////////////////////////
 void AUnitBase::SetSelected()
 {
 	if(SelectedIcon)
@@ -435,4 +360,4 @@ bool AUnitBase::SetNextUnitToChase()
 
 	return RValue;
 }
-/////////////////////////////////////////////////////////////////////
+
