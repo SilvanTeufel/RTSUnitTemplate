@@ -4,6 +4,7 @@
 
 #include "Core/TalentSaveGame.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 /*
 ALevelUnit::ALevelUnit()
 {
@@ -24,9 +25,10 @@ void ALevelUnit::Tick(float DeltaTime)
 		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
 		RegenerationTimer = 0.f;
 
-		if(AutoLeveling) AutoLevelUp();
+		if(AutoLeveling && HasAuthority()) AutoLevelUp();
+		//SetOwner(GetController());
+		//if(HasAuthority())HandleInvestment(CurrentInvestmentState);
 	}
-
 	
 }
 
@@ -35,7 +37,23 @@ void ALevelUnit::BeginPlay()
 	Super::BeginPlay();
 }
 
-void ALevelUnit::LevelUp()
+void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	
+	DOREPLIFETIME(ALevelUnit, LevelData);
+	DOREPLIFETIME(ALevelUnit, LevelUpData);
+	DOREPLIFETIME(ALevelUnit, StaminaInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, AttackPowerInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, WillpowerInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, HasteInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, ArmorInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, CurrentInvestmentState);
+}
+
+
+void ALevelUnit::LevelUp_Implementation()
 {
 	if(LevelData.CharacterLevel < LevelUpData.MaxCharacterLevel && LevelData.Experience > LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel)
 	{
@@ -49,11 +67,17 @@ void ALevelUnit::LevelUp()
 void ALevelUnit::AutoLevelUp()
 {
 	LevelUp();
-	InvestPointIntoStamina();
-	InvestPointIntoAttackPower();
-	InvestPointIntoWillPower();
-	InvestPointIntoHaste();
-	InvestPointIntoArmor();
+	HandleInvestment(UInvestmentData::Stamina);
+	HandleInvestment(UInvestmentData::AttackPower);
+	HandleInvestment(UInvestmentData::WillPower);
+	HandleInvestment(UInvestmentData::Haste);
+	HandleInvestment(UInvestmentData::Armor);
+	
+	//InvestPointIntoStamina();
+	//InvestPointIntoAttackPower();
+	//InvestPointIntoWillPower();
+	//InvestPointIntoHaste();
+	//InvestPointIntoArmor();
 }
 
 void ALevelUnit::SetLevel(int32 CharLevel)
@@ -84,6 +108,12 @@ void ALevelUnit::InvestPointIntoStamina()
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
+	//UE_LOG(LogTemp, Warning, TEXT("Stamina! %d"), Attributes->GetStamina());
+}
+//Attributes->SetStamina(4);
+void ALevelUnit::ServerInvestPointIntoStamina_Implementation()
+{
+	InvestPointIntoStamina();
 }
 
 void ALevelUnit::InvestPointIntoAttackPower()
@@ -136,11 +166,72 @@ void ALevelUnit::InvestPointIntoMagicResistance()
 	}
 }
 
+void ALevelUnit::HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State)
+{
+	UE_LOG(LogTemp, Warning, TEXT("HandleInvestment!"));
+	switch (State)
+	{
+	case UInvestmentData::Stamina:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Stamina"));
+			Attributes->SetStamina(Attributes->GetStamina()+1);
+			//InvestPointIntoStamina();
+		}
+		break;
+	case UInvestmentData::AttackPower:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
+			Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
+			//InvestPointIntoAttackPower();
+		}
+		break;
+	case UInvestmentData::WillPower:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WillPower"));
+			Attributes->SetWillpower(Attributes->GetWillpower()+1);
+			//InvestPointIntoWillPower();
+		}
+		break;
+	case UInvestmentData::Haste:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Haste"));
+			Attributes->SetHaste(Attributes->GetHaste()+1);
+			//InvestPointIntoHaste();
+		}
+		break;
+	case UInvestmentData::Armor:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Armor"));
+			Attributes->SetArmor(Attributes->GetArmor()+1);
+			//InvestPointIntoArmor();
+		}
+		break;
+	case UInvestmentData::MagicResistance:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
+			Attributes->SetMagicResistance(Attributes->GetMagicResistance()+1);
+			//InvestPointIntoMagicResistance();
+		}
+		break;
+	case UInvestmentData::None:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("None"));
+		}
+		break;
+	default:
+		break;
+	}
+	
+	
+	CurrentInvestmentState = UInvestmentData::None;
+}
+
 void ALevelUnit::ResetTalents()
 {
 	LevelData.TalentPoints = LevelData.TalentPoints+LevelData.UsedTalentPoints;
 	LevelData.UsedTalentPoints = 0;
 	InitializeAttributes();
+	
 	Attributes->SetStamina(0);
 	Attributes->SetAttackPower(0);
 	Attributes->SetWillpower(0);
@@ -165,8 +256,10 @@ void ALevelUnit::ResetLevel()
 
 void ALevelUnit::ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect)
 {
+	UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!"));
 	if (AbilitySystemComponent && InvestmentEffect)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!2"));
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(InvestmentEffect.GetDefaultObject(), 1, AbilitySystemComponent->MakeEffectContext());
 	}
 }
@@ -211,7 +304,7 @@ void ALevelUnit::UpdateAttributes(UAttributeSetBase* LoadedAttributes)
 		Attributes->SetShieldRegeneration(LoadedAttributes->GetShieldRegeneration());
 		Attributes->SetAttackDamage(LoadedAttributes->GetAttackDamage());
 		Attributes->SetRange(LoadedAttributes->GetRange());
-		Attributes->SetMaxRunSpeed(LoadedAttributes->GetMaxRunSpeed());
+		Attributes->SetRunSpeed(LoadedAttributes->GetRunSpeed());
 		Attributes->SetIsAttackedSpeed(LoadedAttributes->GetIsAttackedSpeed());
 		Attributes->SetRunSpeedScale(LoadedAttributes->GetRunSpeedScale());
 		Attributes->SetProjectileScaleActorDirectionOffset(LoadedAttributes->GetProjectileScaleActorDirectionOffset());

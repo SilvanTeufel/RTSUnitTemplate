@@ -3,10 +3,11 @@
 
 #include "GAS/AttributeSetBase.h"
 #include "Net/UnrealNetwork.h"
-/*
+
 UAttributeSetBase::UAttributeSetBase()
 {
-}*/
+	
+}
 
 void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -18,7 +19,7 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Stamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Range, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxRunSpeed, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, IsAttackedSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedScale, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileScaleActorDirectionOffset, COND_None, REPNOTIFY_Always);
@@ -29,24 +30,42 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Haste, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Armor, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MagicResistance, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxHealthPerStamina, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedPerHaste, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseAttackDamage, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseRunSpeed, COND_None, REPNOTIFY_Always);
 }
-/*
+
 void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
+
+	UE_LOG(LogTemp, Warning, TEXT("PreAttributeChange!"));
+	// Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma
 	if(Attribute == GetStaminaAttribute())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("PreAttributeChange Add Health!"));
 		// Assuming you have a scale factor for how much Stamina affects Health
-		float NewHealth = NewValue * GetHealthPerStaminaPoint();
-		SetHealth(NewHealth);
+		//float NewHealth = NewValue * GetHealthPerStaminaPoint();
+		//SetStamina()
+		UE_LOG(LogTemp, Warning, TEXT("GetStaminaAttribute: %f"), GetStamina());
+		SetMaxHealth(GetBaseHealth()+GetStamina()*GetMaxHealthPerStamina());
 	}
 	else if(Attribute == GetAttackPowerAttribute())
 	{
 		// Assuming you have a scale factor for how much AttackPower affects AttackDamage
-		float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
-		SetAttackDamage(NewAttackDamage);
+		//float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
+		SetAttackDamage(GetBaseAttackDamage()+GetBaseAttackDamage()*GetAttackPower());
+	}else if(Attribute == GetHasteAttribute())
+	{
+		// Assuming you have a scale factor for how much AttackPower affects AttackDamage
+		//float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
+		SetRunSpeed(GetBaseRunSpeed()+GetHaste()*GetRunSpeedPerHaste());
 	}
-}*/
+}
+
 
 void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)
 {
@@ -125,9 +144,9 @@ void UAttributeSetBase::OnRep_Range(const FGameplayAttributeData& OldRange)
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Range, OldRange);
 }
 
-void UAttributeSetBase::OnRep_MaxRunSpeed(const FGameplayAttributeData& OldMaxRunSpeed)
+void UAttributeSetBase::OnRep_RunSpeed(const FGameplayAttributeData& OldRunSpeed)
 {
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxRunSpeed, OldMaxRunSpeed);
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeed, OldRunSpeed);
 }
 
 void UAttributeSetBase::OnRep_IsAttackedSpeed(const FGameplayAttributeData& OldIsAttackedSpeed)
@@ -181,3 +200,34 @@ void UAttributeSetBase::OnRep_MagicResistance(const FGameplayAttributeData& OldM
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MagicResistance, OldMagicResistance);
 }
+
+void UAttributeSetBase::OnRep_MaxHealthPerStamina(const FGameplayAttributeData& OldMaxHealthPerStamina)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxHealthPerStamina, OldMaxHealthPerStamina);
+}
+
+void UAttributeSetBase::OnRep_AttackDamagePerAttackPower(const FGameplayAttributeData& OldAttackDamagePerAttackPower)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, OldAttackDamagePerAttackPower);
+}
+
+void UAttributeSetBase::OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeedPerHaste, OldRunSpeedPerHaste);
+}
+
+void UAttributeSetBase::OnRep_BaseHealth(const FGameplayAttributeData& OldBaseHealth)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, BaseHealth, OldBaseHealth);
+}
+
+void UAttributeSetBase::OnRep_BaseAttackDamage(const FGameplayAttributeData& OldBaseAttackDamage)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, BaseAttackDamage, OldBaseAttackDamage);
+}
+
+void UAttributeSetBase::OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBaseRunSpeed)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, BaseRunSpeed, OldBaseRunSpeed);
+}
+

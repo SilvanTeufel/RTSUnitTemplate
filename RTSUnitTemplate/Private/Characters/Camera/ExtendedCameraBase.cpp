@@ -140,10 +140,15 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Middle_Mouse_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 16);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Middle_Mouse_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 17);
 
-		
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_1_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 21);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_2_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 22);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_3_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 23);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_4_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 24);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_5_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 25);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_6_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 26);
+
 	}
 
-	
 }
 
 void AExtendedCameraBase::SpawnTalentChooser()
@@ -467,6 +472,30 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 		case 17:
 			{
 				CameraControllerBase->MiddleMouseIsPressed = false;
+			} break;
+		case 21:
+			{
+				CameraControllerBase->InvestStamina();
+			} break;
+		case 22:
+			{
+				CameraControllerBase->HandleInvestment(UInvestmentData::AttackPower);
+			} break;
+		case 23:
+			{
+				CameraControllerBase->HandleInvestment(UInvestmentData::WillPower);
+			} break;
+		case 24:
+			{
+				CameraControllerBase->HandleInvestment(UInvestmentData::Haste);
+			} break;
+		case 25:
+			{
+				CameraControllerBase->HandleInvestment(UInvestmentData::Armor);
+			} break;
+		case 26:
+			{
+				CameraControllerBase->HandleInvestment(UInvestmentData::MagicResistance);
 			} break;
 		default:
 			{

@@ -44,11 +44,14 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 		GetMesh()->SetIsReplicated(true);
 	}*/
 
+	bReplicates = true;
+	
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
+	
 }
 
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -112,7 +115,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, RunLocation);
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
 	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
-
 }
 
 

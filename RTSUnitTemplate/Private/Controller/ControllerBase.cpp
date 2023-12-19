@@ -88,6 +88,9 @@ void AControllerBase::Tick(float DeltaSeconds)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 	}
 
+	//for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		//HandleInvestment(SelectedUnits[i]);
+
 	TArray<FPathPoint> PathPoints;
 
 	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
@@ -581,6 +584,20 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location)
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
 	
+}
+
+void AControllerBase::HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State)
+{
+	
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		SelectedUnits[i]->HandleInvestment(State);
+}
+
+void AControllerBase::InvestStamina_Implementation()
+{
+	UE_LOG(LogTemp, Warning, TEXT("InvestStamina_Implementation!"));
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		SelectedUnits[i]->ServerInvestPointIntoStamina();
 }
 
 

@@ -76,6 +76,14 @@ void FGameplayTags::AddAllTags(UGameplayTagsManager& Manager)
 	
 	AddTag(InputTag_Middle_Mouse_Pressed, "InputTag.Middle_Mouse_Pressed", "Middle_Mouse_Pressed");
 	AddTag(InputTag_Middle_Mouse_Released, "InputTag.Middle_Mouse_Released", "Middle_Mouse_Released");
+
+	AddTag(InputTag_1_Pressed, "InputTag.1_Pressed", "1_Pressed");
+	AddTag(InputTag_2_Pressed, "InputTag.2_Pressed", "2_Pressed");
+	AddTag(InputTag_3_Pressed, "InputTag.3_Pressed", "3_Pressed");
+	AddTag(InputTag_4_Pressed, "InputTag.4_Pressed", "4_Pressed");
+	AddTag(InputTag_5_Pressed, "InputTag.5_Pressed", "5_Pressed");
+	AddTag(InputTag_6_Pressed, "InputTag.6_Pressed", "6_Pressed");
+	
 }
 
 void FGameplayTags::AddTag(FGameplayTag& OutTag, const ANSICHAR* TagName, const ANSICHAR* TagComment)

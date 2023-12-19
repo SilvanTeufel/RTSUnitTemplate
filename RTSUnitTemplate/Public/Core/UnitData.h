@@ -72,6 +72,21 @@ namespace CameraData
 	};
 }
 
+UENUM()
+namespace UInvestmentData
+{
+	enum InvestmentState
+	{
+		None UMETA(DisplayName = "None"),
+	   Stamina UMETA(DisplayName = "Stamina"),
+	   AttackPower UMETA(DisplayName = "AttackPower"),
+	   WillPower UMETA(DisplayName = "WillPower"),
+	   Haste UMETA(DisplayName = "Haste"),
+	   Armor UMETA(DisplayName = "Armor"),
+	   MagicResistance UMETA(DisplayName = "MagicResistance")
+	};
+
+}
 
 USTRUCT(BlueprintType)
 struct FSpeechData_Texts : public FTableRowBase

@@ -4,6 +4,8 @@
 #include <Components/Button.h>
 #include "Blueprint/UserWidget.h"
 #include "Components/VerticalBox.h"
+#include "Controller/ControllerBase.h"
+#include "GameFramework/GameSession.h"
 #include "Widgets/TalentButton.h"
 
 void UTalentChooser::NativeConstruct()
@@ -33,7 +35,7 @@ void UTalentChooser::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 void UTalentChooser::UpdateProgressBars()
 {
     // Check if OwnerUnitBase and its Attributes are valid
-    if (!OwnerUnitBase.IsValid() || !OwnerUnitBase->Attributes)
+    if (!OwnerUnitBase || !OwnerUnitBase->Attributes)
     {
         return;
     }
@@ -54,7 +56,7 @@ void UTalentChooser::UpdateProgressBars()
 
 void UTalentChooser::InitializeAttributes()
 {
-    if (OwnerUnitBase.IsValid() && OwnerUnitBase->Attributes)
+    if (OwnerUnitBase && OwnerUnitBase->Attributes)
     {
         // Clear the existing array
         Attributes.Empty();
@@ -71,7 +73,7 @@ void UTalentChooser::InitializeAttributes()
 
 void UTalentChooser::UpdateExperience()
 {
-    if(!OwnerUnitBase.IsValid()) return;
+    if(!OwnerUnitBase) return;
     
     if(ExperienceProgressBar)
     {
@@ -88,7 +90,7 @@ void UTalentChooser::UpdateExperience()
 
 void UTalentChooser::UpdateLevelAndTalents()
 {
-    if(!OwnerUnitBase.IsValid()) return;
+    if(!OwnerUnitBase) return;
         
 
     CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
@@ -98,7 +100,7 @@ void UTalentChooser::UpdateLevelAndTalents()
 void UTalentChooser::CreateClassUIElements()
 {
 
-    if (!OwnerUnitBase.IsValid() || !OwnerUnitBase->Attributes)
+    if (!OwnerUnitBase || !OwnerUnitBase->Attributes)
     {
         // Handle the invalid case, perhaps by logging an error or setting up default values
         return;
@@ -151,7 +153,7 @@ void UTalentChooser::CreateClassUIElements()
 
 void UTalentChooser::InitializeLevelAndTalentUI()
 {
-    if(!OwnerUnitBase.IsValid()) return;
+    if(!OwnerUnitBase) return;
     
 
     CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
@@ -173,16 +175,31 @@ void UTalentChooser::InitializeLevelAndTalentUI()
 // Handler function for the button's click event
 void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
 {
-    if (OwnerUnitBase.IsValid())
+    
+    UE_LOG(LogTemp, Warning, TEXT("HandleTalentButtonClicked!"));
+ 
+    
+    if (OwnerUnitBase)
     {
+        UE_LOG(LogTemp, Warning, TEXT("ButtonIndex: %d!"), ButtonIndex);
+
         switch (ButtonIndex)
         {
+           
+        case 0: OwnerUnitBase->HandleInvestment(UInvestmentData::Stamina); break;
+        case 1: OwnerUnitBase->HandleInvestment(UInvestmentData::AttackPower); break;
+        case 2: OwnerUnitBase->HandleInvestment(UInvestmentData::WillPower); break;
+        case 3: OwnerUnitBase->HandleInvestment(UInvestmentData::Haste); break;
+        case 4: OwnerUnitBase->HandleInvestment(UInvestmentData::Armor); break;
+        case 5: OwnerUnitBase->HandleInvestment(UInvestmentData::MagicResistance); break;
+            /*
         case 0: OwnerUnitBase->InvestPointIntoStamina(); break;
         case 1: OwnerUnitBase->InvestPointIntoAttackPower(); break;
         case 2: OwnerUnitBase->InvestPointIntoWillPower(); break;
         case 3: OwnerUnitBase->InvestPointIntoHaste(); break;
         case 4: OwnerUnitBase->InvestPointIntoArmor(); break;
         case 5: OwnerUnitBase->InvestPointIntoMagicResistance(); break;
+          */  
             // Add cases for additional attributes
             default: break;
         }
@@ -200,7 +217,7 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
 
 void UTalentChooser::OnResetTalentsClicked()
 {
-    if (OwnerUnitBase.IsValid())
+    if (OwnerUnitBase)
     {
         // Implement logic to reset talents here
         // For example, resetting the talent points and updating the UI
@@ -216,7 +233,7 @@ void UTalentChooser::OnResetTalentsClicked()
 
 void UTalentChooser::OnLevelUpClicked()
 {
-    if (OwnerUnitBase.IsValid())
+    if (OwnerUnitBase)
     {
         OwnerUnitBase->LevelUp();
         

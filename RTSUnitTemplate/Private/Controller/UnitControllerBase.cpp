@@ -308,7 +308,7 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
@@ -352,7 +352,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 		}
 	}
 				
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 				
@@ -384,7 +384,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 						UnitBase->SetUEPathfinding = true;
 						UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 					}else if (UnitBase->UnitToChase) {
-    					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+    					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 
 		
     				
@@ -546,7 +546,7 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 		
 		ProjectileSpawned = false;
 		UnitBase->SetUnitState(UnitData::Chase);
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		
 		if (IsUnitToChaseInRange(UnitBase)) {
 				UnitBase->ServerStartAttackEvent_Implementation();
@@ -564,7 +564,7 @@ void AUnitControllerBase::IsAttacked(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if (UnitBase->UnitControlTimer > IsAttackedDuration) {
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->SetUnitState(UnitData::Pause);
 	}
 }
@@ -611,7 +611,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		}
 	}
 	
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
@@ -623,7 +623,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId !=  UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
@@ -735,7 +735,7 @@ void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 		if (ControllerBase != nullptr)
 		{
-			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 			// You can use the controller here
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
@@ -755,7 +755,7 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 		if (ControllerBase != nullptr)
 		{
-			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetMaxRunSpeed());
+			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 			// You can use the controller here
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;

@@ -5,7 +5,8 @@
 #include "CoreMinimal.h"
 #include "Hud/PathProviderHUD.h"
 #include "Characters/Camera/CameraBase.h"
-//#include "Core/DijkstraMatrix.h"
+
+#include "Core/UnitData.h"
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"
 #include "EOS/EOS_PlayerController.h"
@@ -182,5 +183,12 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetControlerTeamId(int Id);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void InvestStamina();
+
 };
 

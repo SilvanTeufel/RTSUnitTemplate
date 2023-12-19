@@ -19,6 +19,8 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void BeginPlay() override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	bool IsDoingMagicDamage = false;
@@ -27,10 +29,10 @@ public:
 	bool AutoLeveling = true;
 	// Properties to store the unit's level and talent points
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelData LevelData;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelUpData LevelUpData;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
@@ -40,26 +42,26 @@ public:
 	float RegenerationDelayTime = 1.f;
 
 	// Gameplay Effects for talent point investment
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> StaminaInvestmentEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> AttackPowerInvestmentEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> WillpowerInvestmentEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> HasteInvestmentEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> ArmorInvestmentEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> MagicResistanceInvestmentEffect;
 	
 	// Methods for handling leveling up and investing talent points
-	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
 	void LevelUp();
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
@@ -71,6 +73,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoStamina();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
+	void ServerInvestPointIntoStamina();
+	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoAttackPower();
 
@@ -85,6 +90,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoMagicResistance();
+
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	TEnumAsByte<UInvestmentData::InvestmentState> CurrentInvestmentState;
+	
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State);
 	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ResetTalents();
@@ -100,7 +111,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void UpdateAttributes(UAttributeSetBase* LoadedAttributes);
-protected:
+	
+//protected:
 	// Helper method to handle the actual attribute increase when a point is invested
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
 };

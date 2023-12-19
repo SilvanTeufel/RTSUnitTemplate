@@ -27,9 +27,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FString> AttributeNames = {"Stamina", "Attack Power", "Willpower", "Haste", "Armor", "MagicResistance"};
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	ALevelUnit* GetOwnerActor() {
+		return OwnerUnitBase;
+	}
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TWeakObjectPtr<ALevelUnit> OwnerUnitBase;
+	ALevelUnit* OwnerUnitBase;
 
 	// Dynamic arrays for UI elements
 	UPROPERTY(meta = (BindWidget))

@@ -22,12 +22,12 @@ class RTSUNITTEMPLATE_API UAttributeSetBase : public UAttributeSet
 	GENERATED_BODY()
 	
 public:
-	//UAttributeSetBase();
+	UAttributeSetBase();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	// Health //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Health)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Health)
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Health);
 
@@ -36,7 +36,7 @@ public:
 	// Health //
 
 	// MaxHealth //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxHealth)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxHealth)
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxHealth);
 	
@@ -45,7 +45,7 @@ public:
 	// MaxHealth //
 
 	// HealthRegeneration //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_HealthRegeneration)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_HealthRegeneration)
 	FGameplayAttributeData HealthRegeneration;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, HealthRegeneration);
 
@@ -58,7 +58,7 @@ public:
 	void SetAttributeHealth(float NewHealth);
 
 	// Shield //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Shield)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Shield)
 	FGameplayAttributeData Shield;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Shield);
 
@@ -67,7 +67,7 @@ public:
 	// Shield //
 
 	// MaxShield //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxShield)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxShield)
 	FGameplayAttributeData MaxShield;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxShield);
 
@@ -77,7 +77,7 @@ public:
 
 
 	// Shield //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ShieldRegeneration)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ShieldRegeneration)
 	FGameplayAttributeData ShieldRegeneration;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, ShieldRegeneration);
 
@@ -89,7 +89,7 @@ public:
 	void SetAttributeShield(float NewShield);
 	
 	// AttackDamage //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackDamage)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackDamage)
 	FGameplayAttributeData AttackDamage;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, AttackDamage);
 
@@ -99,7 +99,7 @@ public:
 
 	
 	// Range //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Range)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Range)
 	FGameplayAttributeData Range;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Range);
 
@@ -108,16 +108,16 @@ public:
 	// Range //
 
 	// MaxRunSpeed //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxRunSpeed)
-	FGameplayAttributeData MaxRunSpeed;
-	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxRunSpeed);
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeed)
+	FGameplayAttributeData RunSpeed;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeed);
 
 	UFUNCTION()
-	virtual void OnRep_MaxRunSpeed(const FGameplayAttributeData& OldMaxRunSpeed);
+	virtual void OnRep_RunSpeed(const FGameplayAttributeData& OldRunSpeed);
 	// MaxRunSpeed //
 
 	// IsAttackedSpeed //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_IsAttackedSpeed)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_IsAttackedSpeed)
 	FGameplayAttributeData IsAttackedSpeed;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, IsAttackedSpeed);
 
@@ -126,7 +126,7 @@ public:
 	// IsAttackedSpeed //
 
 	// RunSpeedScale //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeedScale)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeedScale)
 	FGameplayAttributeData RunSpeedScale;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeedScale);
 
@@ -135,7 +135,7 @@ public:
 	// RunSpeedScale //
 
 	// ProjectileScaleActorDirectionOffset //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ProjectileScaleActorDirectionOffset)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ProjectileScaleActorDirectionOffset)
 	FGameplayAttributeData ProjectileScaleActorDirectionOffset;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, ProjectileScaleActorDirectionOffset);
 
@@ -144,7 +144,7 @@ public:
 	// ProjectileScaleActorDirectionOffset //
 
 	// ProjectileSpeed //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ProjectileSpeed)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ProjectileSpeed)
 	FGameplayAttributeData ProjectileSpeed;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, ProjectileSpeed);
 
@@ -155,7 +155,7 @@ public:
 	// HERE WE START LEVEL ATTRIBUTES!!! //
 	
 	// Stamina //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Stamina)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Stamina)
 	FGameplayAttributeData Stamina;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Stamina);
 
@@ -164,7 +164,7 @@ public:
 	// Stamina //
 
 	// AttackPower //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackPower)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackPower)
 	FGameplayAttributeData AttackPower;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, AttackPower);
 
@@ -173,7 +173,7 @@ public:
 	// AttackPower //
 
 	// Willpower //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Willpower)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Willpower)
 	FGameplayAttributeData Willpower;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Willpower);
 
@@ -182,7 +182,7 @@ public:
 	// Willpower //
 
 	// Haste //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Haste)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Haste)
 	FGameplayAttributeData Haste;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Haste);
 
@@ -191,7 +191,7 @@ public:
 	// Haste //
 
 	// Armor //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Armor)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Armor)
 	FGameplayAttributeData Armor;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Armor);
 
@@ -200,13 +200,65 @@ public:
 	// Armor //
 
 	// MagicResistence //
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MagicResistance)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MagicResistance)
 	FGameplayAttributeData MagicResistance;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MagicResistance);
 
 	UFUNCTION()
 	virtual void OnRep_MagicResistance(const FGameplayAttributeData& OldMagicResistance);
 	// MagicResistence //
+	
+	// MaxHealthPerStamina //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxHealthPerStamina)
+	FGameplayAttributeData MaxHealthPerStamina;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxHealthPerStamina);
+
+	UFUNCTION()
+	virtual void OnRep_MaxHealthPerStamina(const FGameplayAttributeData& OldMaxHealthPerStamina);
+	// MaxHealthPerStamina //
+
+	// AttackDamagePerAttackPower //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackDamagePerAttackPower)
+	FGameplayAttributeData AttackDamagePerAttackPower;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, AttackDamagePerAttackPower);
+
+	UFUNCTION()
+	virtual void OnRep_AttackDamagePerAttackPower(const FGameplayAttributeData& OldAttackDamagePerAttackPower);
+	// AttackDamagePerAttackPower //
+	
+	// MaxWalkSpeedPerHaste //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeedPerHaste)
+	FGameplayAttributeData RunSpeedPerHaste;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeedPerHaste);
+	UFUNCTION()
+	virtual void OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste);
+	// MaxWalkSpeedPerHaste //
+	
+	// BaseHealth //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseHealth)
+	FGameplayAttributeData BaseHealth;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, BaseHealth);
+
+	UFUNCTION()
+	virtual void OnRep_BaseHealth(const FGameplayAttributeData& OldBaseHealth);
+	// BaseHealth //
+
+	// BaseAttackDamage //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseAttackDamage)
+	FGameplayAttributeData BaseAttackDamage;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, BaseAttackDamage);
+
+	UFUNCTION()
+	virtual void OnRep_BaseAttackDamage(const FGameplayAttributeData& OldBaseAttackDamage);
+	// BaseAttackDamage //
+	
+	// BaseMaxWalkSpeed //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseRunSpeed)
+	FGameplayAttributeData BaseRunSpeed;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, BaseRunSpeed);
+	UFUNCTION()
+	virtual void OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBaseRunSpeed);
+	// BaseMaxWalkSpeed //
 
 };
 

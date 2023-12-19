@@ -7,6 +7,9 @@
 #include "GAS/GameplayAbilityBase.h"
 #include <GameplayEffectTypes.h>
 
+#include "Characters/Unit/LevelUnit.h"
+#include "Net/UnrealNetwork.h"
+
 /*
 AGASUnit::AGASUnit()
 {
@@ -21,6 +24,13 @@ AGASUnit::AGASUnit()
 void AGASUnit::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AGASUnit, AbilitySystemComponent);
+	DOREPLIFETIME(AGASUnit, Attributes);
 }
 
 // Called every frame

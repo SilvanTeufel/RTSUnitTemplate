@@ -66,6 +66,13 @@ public:
 	
 	FGameplayTag InputTag_Middle_Mouse_Pressed;
 	FGameplayTag InputTag_Middle_Mouse_Released;
+
+	FGameplayTag InputTag_1_Pressed;
+	FGameplayTag InputTag_2_Pressed;
+	FGameplayTag InputTag_3_Pressed;
+	FGameplayTag InputTag_4_Pressed;
+	FGameplayTag InputTag_5_Pressed;
+	FGameplayTag InputTag_6_Pressed;
 protected:
 	//Registers all of the tags with the GameplayTags Manager
 	void AddAllTags(UGameplayTagsManager& Manager);

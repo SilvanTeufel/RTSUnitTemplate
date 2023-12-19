@@ -20,16 +20,17 @@ class RTSUNITTEMPLATE_API AGASUnit : public ACharacter, public IAbilitySystemInt
 public:
 	//AGASUnit();
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAbilitySystemComponentBase* AbilitySystemComponent;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAttributeSetBase* Attributes;
 	
 //protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
