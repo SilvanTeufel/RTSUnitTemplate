@@ -69,6 +69,8 @@ void AExtendedCameraBase::Tick(float DeltaTime)
 	// Call the base class Tick
 	Super::Tick(DeltaTime);
 
+	if(AutoAdjustTalentChooserPosition)
+	SetTalentChooserLocation();
 	// Your custom Tick logic here
 }
 
@@ -213,10 +215,6 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 	{
 		UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
 		SelectedUnit->ActivateAbilityByInputID(InputID);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: No unit selected for ability ID %d"), static_cast<int32>(InputID));
 	}
 }
 

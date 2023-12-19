@@ -132,7 +132,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 				UnitToHit->SetUnitState( UnitData::IsAttacked );
 			}
 
-			ShootingUnit->Experience++;
+			ShootingUnit->LevelData.Experience++;
 			// Call the impact event
 			ImpactEvent();
 

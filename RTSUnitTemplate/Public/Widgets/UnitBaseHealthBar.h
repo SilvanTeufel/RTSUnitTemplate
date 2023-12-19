@@ -20,8 +20,9 @@ public:
 	void SetOwnerActor(AUnitBase* Enemy) {
 		OwnerCharacter = Enemy;
 	}
-
-	TWeakObjectPtr<AUnitBase> GetOwnerActor(AUnitBase* Enemy) {
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AUnitBase* GetOwnerActor() {
 		return OwnerCharacter;
 	}
 
@@ -33,7 +34,7 @@ public:
 	void UpdateExperience();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate) // EditAnywhere, BlueprintReadWrite, 
-	TWeakObjectPtr<AUnitBase> OwnerCharacter;
+	AUnitBase* OwnerCharacter; //TWeakObjectPtr<AUnitBase>
 
 	UPROPERTY(meta = (BindWidget))
 		class UProgressBar* HealthBar;

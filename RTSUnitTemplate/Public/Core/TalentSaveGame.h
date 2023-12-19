@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
-#include "Core/Talents.h"
+#include "Core/UnitData.h"
 #include "TalentSaveGame.generated.h"
 
 /**
@@ -16,9 +16,12 @@ class RTSUNITTEMPLATE_API UTalentSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(VisibleAnywhere, Category = "SaveGame")
-	TArray<FClassTalentData> WeaponTalentDataArray;
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	FLevelData LevelData;
 
-	UPROPERTY(VisibleAnywhere, Category = "SaveGame")
-	TArray<int> AvailableTalentPoints;
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	FLevelUpData LevelUpData;
+	
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	UAttributeSetBase* Attributes;
 };

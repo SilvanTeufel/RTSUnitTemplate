@@ -507,7 +507,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 				else
 					UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
-				UnitBase->Experience++;
+				UnitBase->LevelData.Experience++;
 				
 				if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run)
 				{

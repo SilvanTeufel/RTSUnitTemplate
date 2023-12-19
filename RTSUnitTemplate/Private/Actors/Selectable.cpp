@@ -2,7 +2,6 @@
 
 
 #include "Actors/Selectable.h"
-#include "Characters/Unit/TalentedUnit.h"
 #include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
 
@@ -56,13 +55,13 @@ void ASelectable::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 		 					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
 		 				}
 		 				break;
-		 			case SelectableData::WeaponTalentPoint:
+		 			/*case SelectableData::TalentPoint:
 		 			{
-		 					ATalentedUnit* TalentedUnit = Cast<ATalentedUnit>(UnitBase);
+		 					AUnitBase* AUnitBase = Cast<ATalentedUnit>(UnitBase);
 		 					if(TalentedUnit)
 		 					TalentedUnit->AddTalentPoint(Amount);
 		 			}
-		 			break;
+		 			break;*/
 		 			default:
 		 				{
 		 					

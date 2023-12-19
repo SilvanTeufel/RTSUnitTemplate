@@ -25,9 +25,7 @@ void UEOS_GameInstance::LoginWithEOS(FString ID, FString Token, FString LoginTyp
 			AccountDetails.Id = ID;
 			AccountDetails.Token = Token;
 			AccountDetails.Type = LoginType;
-			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!Set Delegate for Login!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 			IdentityPointerRef->OnLoginCompleteDelegates->AddUObject(this, &UEOS_GameInstance::LoginWithEos_Return);
-			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!Try to Login!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 			IdentityPointerRef->AutoLogin(0);
 			IdentityPointerRef->Login(0, AccountDetails);
 		}

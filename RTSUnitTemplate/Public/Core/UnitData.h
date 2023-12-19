@@ -130,6 +130,51 @@ struct FSpeechData_Buttons : public FTableRowBase
 	USoundBase* ButtonSound;
 };
 
+
+USTRUCT(BlueprintType)
+struct FLevelData
+{
+	GENERATED_BODY()
+
+	// Experience points of the character
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 Experience = 0;
+
+	// Current level of the character
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 CharacterLevel = 1;
+
+	// Talent points available to the character
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 TalentPoints = 0;
+
+	// Talent points already used
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 UsedTalentPoints = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FLevelUpData
+{
+	GENERATED_BODY()
+
+	// Experience points required per level
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 ExperiencePerLevel = 2;
+
+	// Maximum level the character can achieve
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 MaxCharacterLevel = 10;
+
+	// Talent points awarded per level
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 TalentPointsPerLevel = 5;
+
+	// Maximum talents per stat
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 MaxTalentsPerStat = 15;
+};
+
 inline float CheckAngle(FVector Vector, float Angle) {
 
 	float X = Vector.X;

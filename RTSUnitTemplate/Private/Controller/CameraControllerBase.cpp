@@ -15,8 +15,6 @@ void ACameraControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UE_LOG(LogTemp, Warning, TEXT("BeginPlay ACameraControllerBase!"));
-	
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
 	CameraBase = Cast<ACameraBase>(GetPawn());
 
@@ -196,7 +194,6 @@ FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
 	if(OrbitRotatorIndex >= OrbitPositions.Num())
 		OrbitRotatorIndex = 0;
 	
-	UE_LOG(LogTemp, Log, TEXT("OrbitRotatorIndex: %d"), OrbitRotatorIndex);
 	for (AActor* Unit : Units) {
 		if (Unit) {
 			FVector UnitLocation = Unit->GetActorLocation();

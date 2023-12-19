@@ -17,7 +17,6 @@
 void ARTSGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
-	UE_LOG(LogTemp, Error, TEXT("Begin Play ARTSGameModeBase!"));
 
 	FTimerHandle TimerHandle;
 	SetTeamIds();

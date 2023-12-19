@@ -16,18 +16,19 @@ class RTSUNITTEMPLATE_API UTalentChooser : public UUserWidget
 public:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateProgressBars();
 	
 	TArray<FGameplayAttributeData*> Attributes;
 
 	// Function to initialize the Attributes array
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitializeAttributes();
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FString> AttributeNames = {"Stamina", "Attack Power", "Willpower", "Haste", "Armor", "MagicResistance"};
 	
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TWeakObjectPtr<ALevelUnit> OwnerUnitBase;
 
 	// Dynamic arrays for UI elements
@@ -41,16 +42,16 @@ public:
 	TArray<class UTextBlock*> ClassNames;
 
 	// Functions to dynamically create UI elements
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateExperience();
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateLevelAndTalents();
 	
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CreateClassUIElements();
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitializeLevelAndTalentUI();
 
 	UPROPERTY(meta = (BindWidget))
@@ -68,13 +69,13 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	class UButton*  ResetTalentsButton;
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleTalentButtonClicked(int32 ButtonIndex);
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnLevelUpClicked();
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnResetTalentsClicked();
 	
 public:

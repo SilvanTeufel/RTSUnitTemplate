@@ -18,42 +18,27 @@ public:
 	//ALevelUnit();
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void BeginPlay() override;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	bool IsDoingMagicDamage = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	bool AutoLeveling = true;
 	// Properties to store the unit's level and talent points
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 Experience = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 ExperiencePerLevel = 2;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 CharacterLevel = 1;
+	FLevelData LevelData;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 MaxCharacterLevel = 10;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 TalentPoints = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 TalentPointsPerLevel = 5;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 MaxTalentsPerStat = 15;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 UsedTalentPoints = 0;
+	FLevelUpData LevelUpData;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	float RegenerationTimer = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	float RegenerationDelayTime = 1.f;
-	
+
 	// Gameplay Effects for talent point investment
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> StaminaInvestmentEffect;
@@ -106,6 +91,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ResetLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void SaveLevelDataAndAttributes(const FString& SlotName);
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void LoadLevelDataAndAttributes(const FString& SlotName);
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void UpdateAttributes(UAttributeSetBase* LoadedAttributes);
 protected:
 	// Helper method to handle the actual attribute increase when a point is invested
 	void ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);

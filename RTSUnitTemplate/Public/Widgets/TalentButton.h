@@ -14,16 +14,19 @@ public:
 	UTalentButton();
 
 	// Delegate for button click event
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTalentButtonClickedDelegate OnTalentButtonClicked;
 
 	// Method to set up the button's properties
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupButton(int32 InButtonId);
 
-private:
+//private:
 	// The button's unique identifier
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 ButtonId;
 
 	// Handler for the button click event
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnClick();
 };

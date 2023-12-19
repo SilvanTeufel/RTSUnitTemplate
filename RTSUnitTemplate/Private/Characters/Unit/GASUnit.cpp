@@ -21,7 +21,6 @@ AGASUnit::AGASUnit()
 void AGASUnit::BeginPlay()
 {
 	Super::BeginPlay();
-
 }
 
 // Called every frame
@@ -121,13 +120,11 @@ static_cast<int32>(EGASAbilityInputID::Cancel)
 
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID)
 {
-	UE_LOG(LogTemp, Log, TEXT("ActivateAbilityByInputID! %d"), static_cast<int32>(InputID));
 	if(AbilitySystemComponent)
 	{
 		TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID);
 		if(AbilityToActivate != nullptr)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Activating ability for InputID %d"), static_cast<int32>(InputID));
 			AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
 		}
 	}
@@ -135,22 +132,12 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID)
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID)
 {
-	UE_LOG(LogTemp, Log, TEXT("GetAbilityForInputID! %d"), static_cast<int32>(InputID));
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::None);
-
-	// Log the calculated AbilityIndex
-	UE_LOG(LogTemp, Log, TEXT("Calculated AbilityIndex: %d"), AbilityIndex);
 
 	// Check if the AbilityIndex is valid in the DefaultAbilities array
 	if (DefaultAbilities.IsValidIndex(AbilityIndex))
 	{
-		UE_LOG(LogTemp, Log, TEXT("Found ability at index %d for InputID %d"), AbilityIndex, static_cast<int32>(InputID));
 		return DefaultAbilities[AbilityIndex];
-	}
-	else
-	{
-		// Log a warning if the index is not valid
-		UE_LOG(LogTemp, Warning, TEXT("Invalid index: %d for InputID %d"), AbilityIndex, static_cast<int32>(InputID));
 	}
 
 	return nullptr;

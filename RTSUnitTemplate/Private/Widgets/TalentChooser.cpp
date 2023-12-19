@@ -43,7 +43,7 @@ void UTalentChooser::UpdateProgressBars()
         if (ClassProgressBars[Index])
         {
             float CurrentValue = Attributes[Index]->GetCurrentValue();
-            float MaxValue = OwnerUnitBase->MaxTalentsPerStat; // Replace with actual max value if available
+            float MaxValue = OwnerUnitBase->LevelUpData.MaxTalentsPerStat; // Replace with actual max value if available
             
             ClassProgressBars[Index]->SetPercent(CurrentValue / MaxValue);
         }
@@ -76,10 +76,10 @@ void UTalentChooser::UpdateExperience()
     if(ExperienceProgressBar)
     {
         // Ensure Experience and CharacterLevel are not causing division by zero
-        if (OwnerUnitBase->Experience && OwnerUnitBase->CharacterLevel)
+        if (OwnerUnitBase->LevelData.Experience && OwnerUnitBase->LevelData.CharacterLevel)
         {
-            float N = (float)(OwnerUnitBase->ExperiencePerLevel * OwnerUnitBase->CharacterLevel);
-            float Z = (float)OwnerUnitBase->Experience;
+            float N = (float)(OwnerUnitBase->LevelUpData.ExperiencePerLevel * OwnerUnitBase->LevelData.CharacterLevel);
+            float Z = (float)OwnerUnitBase->LevelData.Experience;
             //if(N > 0 && Z > 0 && Z < N)
                 ExperienceProgressBar->SetPercent(Z / N);
         }
@@ -91,8 +91,8 @@ void UTalentChooser::UpdateLevelAndTalents()
     if(!OwnerUnitBase.IsValid()) return;
         
 
-    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
-    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
+    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
+    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->LevelData.TalentPoints));
 }
 
 void UTalentChooser::CreateClassUIElements()
@@ -118,7 +118,7 @@ void UTalentChooser::CreateClassUIElements()
         UProgressBar* ProgressBar = Cast<UProgressBar>(GetWidgetFromName(FName(*ProgressBarName)));
         if (ProgressBar)
         {
-            ProgressBar->SetPercent(Attributes[Index]->GetCurrentValue() / OwnerUnitBase->MaxTalentsPerStat); // Attributes[Index]->GetBaseValue()
+            ProgressBar->SetPercent(Attributes[Index]->GetCurrentValue() / OwnerUnitBase->LevelUpData.MaxTalentsPerStat); // Attributes[Index]->GetBaseValue()
             ClassProgressBars.Add(ProgressBar);
         }
 
@@ -154,8 +154,8 @@ void UTalentChooser::InitializeLevelAndTalentUI()
     if(!OwnerUnitBase.IsValid()) return;
     
 
-    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
-    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
+    CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
+    AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->LevelData.TalentPoints));
     
     // Bind LevelUp and ResetTalents buttons to their respective handlers
     if (LevelUpButton)
@@ -189,7 +189,7 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
 
         if (AvailableTalents)
         {
-            int32 TalentPoints = OwnerUnitBase->TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
+            int32 TalentPoints = OwnerUnitBase->LevelData.TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
             AvailableTalents->SetText(FText::AsNumber(TalentPoints));
         }
         // Update UI here if needed
@@ -208,7 +208,7 @@ void UTalentChooser::OnResetTalentsClicked()
         // Update UI if necessary
         if (AvailableTalents)
         {
-            int32 TalentPoints = OwnerUnitBase->TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
+            int32 TalentPoints = OwnerUnitBase->LevelData.TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
             AvailableTalents->SetText(FText::AsNumber(TalentPoints));
         }
     }
@@ -221,8 +221,8 @@ void UTalentChooser::OnLevelUpClicked()
         OwnerUnitBase->LevelUp();
         
         // Update UI to reflect new level and available talent points
-        CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->CharacterLevel));
-        AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->TalentPoints));
+        CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
+        AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->LevelData.TalentPoints));
 
         // Optionally, refresh other parts of the UI
     }

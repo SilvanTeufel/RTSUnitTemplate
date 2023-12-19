@@ -50,7 +50,7 @@ public:
 	class UWidgetComponent* TalentChooser;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	FVector2D TalentChooserLocation = FVector2D(0.35f, 0.5f );
+	FVector2D TalentChooserLocation = FVector2D(0.15f, 0.5f );
 
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 		void SpawnTalentChooser();
@@ -67,4 +67,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	bool AutoAdjustTalentChooserPosition = true;
 };

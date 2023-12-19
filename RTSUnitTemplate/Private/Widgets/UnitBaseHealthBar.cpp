@@ -9,7 +9,7 @@ void UUnitBaseHealthBar::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!OwnerCharacter.IsValid())
+	if (!OwnerCharacter)
 		return;
 
 	// Update Health values
@@ -24,21 +24,21 @@ void UUnitBaseHealthBar::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
 	CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
 	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
-	CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->CharacterLevel, &Opts));
+	CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->LevelData.CharacterLevel, &Opts));
 	UpdateExperience();
 }
 
 void UUnitBaseHealthBar::UpdateExperience()
 {
-	if(!OwnerCharacter.IsValid()) return;
+	if(!OwnerCharacter) return;
     
 	if(ExperienceProgressBar)
 	{
 		// Ensure Experience and CharacterLevel are not causing division by zero
-		if (OwnerCharacter->Experience && OwnerCharacter->CharacterLevel)
+		if (OwnerCharacter->LevelData.Experience && OwnerCharacter->LevelData.CharacterLevel)
 		{
-			float N = (float)(OwnerCharacter->ExperiencePerLevel * OwnerCharacter->CharacterLevel);
-			float Z = (float)OwnerCharacter->Experience;
+			float N = (float)(OwnerCharacter->LevelUpData.ExperiencePerLevel * OwnerCharacter->LevelData.CharacterLevel);
+			float Z = (float)OwnerCharacter->LevelData.Experience;
 			//if(N > 0 && Z > 0 && Z < N)
 			ExperienceProgressBar->SetPercent(Z / N);
 		}
