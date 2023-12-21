@@ -23,14 +23,14 @@ void ALevelUnit::Tick(float DeltaTime)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("GetHealthRegeneration! %f"), Attributes->GetHealthRegeneration());
 		//UE_LOG(LogTemp, Warning, TEXT("GetWillpower! %f"), Attributes->GetWillpower());
-		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration()*Attributes->GetWillpower());
-		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration()*Attributes->GetWillpower());
+		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
+		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
 		RegenerationTimer = 0.f;
 		//if(HasAuthority())UE_LOG(LogTemp, Warning, TEXT("SERVER LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
 		//if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("CLIENT LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
 
 
-		//if(AutoLeveling && HasAuthority()) AutoLevelUp();
+		if(AutoLeveling && HasAuthority()) AutoLevelUp();
 		//SetOwner(GetController());
 		//if(HasAuthority())HandleInvestment(CurrentInvestmentState);
 	}
@@ -54,7 +54,12 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, HasteInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, ArmorInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
-	DOREPLIFETIME(ALevelUnit, CurrentInvestmentState);
+	DOREPLIFETIME(ALevelUnit, UnitIndex);
+}
+
+void ALevelUnit::SetUnitIndex(int32 NewIndex)
+{
+	UnitIndex = NewIndex;
 }
 
 
@@ -72,17 +77,24 @@ void ALevelUnit::LevelUp_Implementation()
 void ALevelUnit::AutoLevelUp()
 {
 	LevelUp();
-	HandleInvestment(UInvestmentData::Stamina);
-	HandleInvestment(UInvestmentData::AttackPower);
-	HandleInvestment(UInvestmentData::WillPower);
-	HandleInvestment(UInvestmentData::Haste);
-	HandleInvestment(UInvestmentData::Armor);
+
+	for(int i = 0; i < AutolevelConfig[0]; i++)
+		InvestPointIntoStamina();
 	
-	//InvestPointIntoStamina();
-	//InvestPointIntoAttackPower();
-	//InvestPointIntoWillPower();
-	//InvestPointIntoHaste();
-	//InvestPointIntoArmor();
+	for(int i = 0; i < AutolevelConfig[1]; i++)
+		InvestPointIntoAttackPower();
+	
+	for(int i = 0; i < AutolevelConfig[2]; i++)
+		InvestPointIntoWillPower();
+	
+	for(int i = 0; i < AutolevelConfig[3]; i++)
+		InvestPointIntoHaste();
+	
+	for(int i = 0; i < AutolevelConfig[4]; i++)
+		InvestPointIntoArmor();
+
+	for(int i = 0; i < AutolevelConfig[5]; i++)
+		InvestPointIntoMagicResistance();
 }
 
 void ALevelUnit::SetLevel(int32 CharLevel)
@@ -194,112 +206,6 @@ void ALevelUnit::InvestAttackPower_Implementation()
 	
 }
 
-void ALevelUnit::HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State)
-{
-	UE_LOG(LogTemp, Warning, TEXT("HandleInvestment!"));
-
-	switch (State)
-	{
-	case UInvestmentData::Stamina:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Stamina"));
-			InvestPointIntoStamina();
-			//AbilitySystemComponent->ForceReplication();
-			//if (LevelData.TalentPoints > 0 && Attributes->GetStamina() < LevelUpData.MaxTalentsPerStat && !HasAuthority())
-			//{
-				//Attributes->SetStamina(Attributes->GetStamina()+1);
-				//InvestPointIntoStamina();
-				//float NewHealth = Attributes->GetBaseHealth()+Attributes->GetStamina()*Attributes->GetMaxHealthPerStamina();
-				//Attributes->SetMaxHealth(NewHealth);
-				//--LevelData.TalentPoints; // Deduct a talent point
-				//LevelData.UsedTalentPoints++;
-			//}
-			//InvestPointIntoStamina();
-		}
-		break;
-	case UInvestmentData::AttackPower:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
-			//InvestAttackPower();
-			/*
-			if (LevelData.TalentPoints > 0 && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
-			{
-				Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
-				float NewAttackDamage = Attributes->GetBaseAttackDamage()+Attributes->GetAttackDamagePerAttackPower()*Attributes->GetAttackPower();
-				Attributes->SetAttackDamage(NewAttackDamage);
-				--LevelData.TalentPoints; // Deduct a talent point
-				LevelData.UsedTalentPoints++;
-			}*/
-			InvestPointIntoAttackPower();
-		}
-		break;
-	case UInvestmentData::WillPower:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("WillPower"));
-			//InvestPointIntoWillPower();
-			if (LevelData.TalentPoints > 0 && Attributes->GetWillpower() < LevelUpData.MaxTalentsPerStat && !HasAuthority())
-			{
-				Attributes->SetWillpower(Attributes->GetWillpower()+1);
-				//--LevelData.TalentPoints; // Deduct a talent point
-				//LevelData.UsedTalentPoints++;
-				AbilitySystemComponent->ForceReplication();
-			}
-			//InvestPointIntoWillPower();
-		}
-		break;
-	case UInvestmentData::Haste:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Haste"));
-			InvestPointIntoHaste();
-			/*
-			if (LevelData.TalentPoints > 0 && Attributes->GetHaste() < LevelUpData.MaxTalentsPerStat)
-			{
-				Attributes->SetHaste(Attributes->GetHaste()+1);
-				float NewHaste = Attributes->GetBaseRunSpeed()+Attributes->GetHaste()*Attributes->GetRunSpeedPerHaste();
-				Attributes->SetRunSpeed(NewHaste);
-				--LevelData.TalentPoints; // Deduct a talent point
-				LevelData.UsedTalentPoints++;
-			}*/
-			//InvestPointIntoHaste();
-		}
-		break;
-	case UInvestmentData::Armor:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Armor"));
-			if (LevelData.TalentPoints > 0 && Attributes->GetArmor() < LevelUpData.MaxTalentsPerStat)
-			{
-				Attributes->SetArmor(Attributes->GetArmor()+1);
-				--LevelData.TalentPoints; // Deduct a talent point
-				LevelData.UsedTalentPoints++;
-			}
-			//InvestPointIntoArmor();
-		}
-		break;
-	case UInvestmentData::MagicResistance:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
-			if (LevelData.TalentPoints > 0 && Attributes->GetMagicResistance() < LevelUpData.MaxTalentsPerStat)
-			{
-				Attributes->SetMagicResistance(Attributes->GetMagicResistance()+1);
-				--LevelData.TalentPoints; // Deduct a talent point
-				LevelData.UsedTalentPoints++;
-			}
-			//InvestPointIntoMagicResistance();
-		}
-		break;
-	case UInvestmentData::None:
-		{
-			UE_LOG(LogTemp, Warning, TEXT("None"));
-		}
-		break;
-	default:
-		break;
-	}
-	
-	
-	CurrentInvestmentState = UInvestmentData::None;
-}
-
 void ALevelUnit::ResetTalents()
 {
 	LevelData.TalentPoints = LevelData.TalentPoints+LevelData.UsedTalentPoints;
@@ -332,14 +238,17 @@ void ALevelUnit::ResetLevel()
 	Attributes->SetRunSpeed(Attributes->GetBaseRunSpeed());
 	Attributes->SetArmor(0);
 	Attributes->SetMagicResistance(0);
+
+	Attributes->SetHealthRegeneration(0);
+	Attributes->SetShieldRegeneration(0);
 }
 
 void ALevelUnit::ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!"));
+	//UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!"));
 	if (AbilitySystemComponent && InvestmentEffect)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!2"));
+		//UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!2"));
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(InvestmentEffect.GetDefaultObject(), 1, AbilitySystemComponent->MakeEffectContext());
 	}
 }

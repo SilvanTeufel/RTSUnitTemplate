@@ -30,6 +30,8 @@ public:
 
 	void BeginPlay() override;
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void AddUnitsToArray();
 
@@ -66,7 +68,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "FriendlyUnits", Keywords = "RTSUnitTemplate FriendlyUnits"), Category = RTSUnitTemplate)
 		TArray <AUnitBase*> FriendlyUnits;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "AllUnits", Keywords = "RTSUnitTemplate AllUnits"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AllUnits", Keywords = "RTSUnitTemplate AllUnits"), Category = RTSUnitTemplate)
 		TArray <AActor*> AllUnits;
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "EnemyUnitBases", Keywords = "RTSUnitTemplate EnemyUnitBases"), Category = RTSUnitTemplate)

@@ -161,6 +161,11 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpecificUnitID)
 		// Assuming AUnitBase has a method to check if the unit is dead
 		if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead)
 		{
+			// Check if the index is not already in the array
+			if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
+			{
+				AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
+			}
 			UnitSpawnDataSets.RemoveAt(i);
 		}
 		else if (UnitData.Id == SpecificUnitID)
@@ -245,6 +250,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		UnitBase->UnitState = SpawnParameter.State;
 		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 		
+		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
 		if(SpawnParameter.Attributes)
@@ -253,6 +259,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		}
 		
 		UnitBase->InitializeAttributes();
+		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 		
 		return UnitBase;
 	}
@@ -263,8 +270,14 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 
 void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
-
+	
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
+
+	// Assuming UnitIndexArray is populated
+	for (int32 Index : AvailableUnitIndexArray)
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("Unit Index: %d"), Index);
+	}
 	
 	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
 	for(int i = 0; i < SpawnParameter.UnitCount; i++)
@@ -325,8 +338,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			UnitBase->SetReplicateMovement(true);
 			SetReplicates(true);
 			UnitBase->GetMesh()->SetIsReplicated(true);
-
-			// Does this have to be replicated?
+			
 			UnitBase->SetMeshRotationServer();
 			
 			AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
@@ -338,6 +350,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			}
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
 			
 			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
@@ -347,6 +360,33 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			}
 		
 			UnitBase->InitializeAttributes();
+
+			// Give Unit ID + Add to AllUnits
+				/*
+				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+				if(PlayerController)
+				{
+					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+					if(HUD)
+					{
+						if(!AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[0])
+						{
+							HUD->AssignNewHighestIndex(UnitBase);
+							HUD->AllUnits.Add(UnitBase);
+						}else
+						{
+				
+							UnitBase->SetUnitIndex(AvailableUnitIndexArray[0]);
+							AvailableUnitIndexArray.RemoveAt(0);
+							HUD->AllUnits.Add(UnitBase);
+						}
+						//UE_LOG(LogTemp, Warning, TEXT("Assigned new ID! %d"), UnitBase->UnitIndex);
+					}
+				}*/
+			AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+			// Give Unit ID + Add to AllUnits
+			
 			
 			FUnitSpawnData UnitSpawnDataSet;
 			UnitSpawnDataSet.Id = SpawnParameter.Id;
@@ -358,6 +398,31 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		
 	}
 	// Enemyspawn
+}
+
+void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
+{
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+	if(PlayerController)
+	{
+		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+		if(HUD)
+		{
+			if(!AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[0])
+			{
+				HUD->AssignNewHighestIndex(UnitBase);
+				HUD->AllUnits.Add(UnitBase);
+			}else
+			{
+				
+				UnitBase->SetUnitIndex(AvailableUnitIndexArray[0]);
+				AvailableUnitIndexArray.RemoveAt(0);
+				HUD->AllUnits.Add(UnitBase);
+			}
+			//UE_LOG(LogTemp, Warning, TEXT("Assigned new ID! %d"), UnitBase->UnitIndex);
+		}
+	}
 }
 
 void ARTSGameModeBase::AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag)

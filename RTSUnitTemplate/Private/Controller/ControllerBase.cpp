@@ -732,6 +732,7 @@ void AControllerBase::LevelUpUnit_Implementation(const int32 UnitIndex)
 
 void AControllerBase::ResetTalentsUnit_Implementation(const int32 UnitIndex)
 {
+	UE_LOG(LogTemp, Warning, TEXT("ResetTalentsUnit_Implementation-INDEX!!!!!!!!!!!!!!!!!!!! %d"), UnitIndex);
 	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);

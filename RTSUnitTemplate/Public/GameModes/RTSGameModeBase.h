@@ -131,10 +131,16 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* SpawnSingleUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<int32> AvailableUnitIndexArray;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag);
 	

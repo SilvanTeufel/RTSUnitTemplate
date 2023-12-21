@@ -22,8 +22,11 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int UnitIndex = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, VisibleAnywhere, Category = "Leveling")
+	int32 UnitIndex;
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void SetUnitIndex(int32 NewIndex);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	bool IsDoingMagicDamage = false;
@@ -69,6 +72,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void AutoLevelUp();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	TArray<int32> AutolevelConfig = {1, 1, 1, 1, 1, 0};
 	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void SetLevel(int32 CharLevel);
@@ -99,13 +105,7 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
 	void InvestAttackPower();
-	
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
-	TEnumAsByte<UInvestmentData::InvestmentState> CurrentInvestmentState;
-	
-	UFUNCTION(BlueprintCallable, Category = "Leveling")
-	void HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State);
-	
+
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ResetTalents();
 

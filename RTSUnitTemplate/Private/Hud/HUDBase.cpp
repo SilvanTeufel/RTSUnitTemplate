@@ -11,6 +11,7 @@
 #include "Components/WidgetSwitcher.h"
 #include "Controller/CameraControllerBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 
 void AHUDBase::DrawHUD()
@@ -150,6 +151,12 @@ void AHUDBase::BeginPlay()
 	
 }
 
+void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AHUDBase, AllUnits);
+}
+
 void AHUDBase::AddUnitsToArray()
 {
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
@@ -158,7 +165,9 @@ void AHUDBase::AddUnitsToArray()
 		HighestUnitIndex++;
 	
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		Unit->UnitIndex = HighestUnitIndex;
+		Unit->SetUnitIndex(HighestUnitIndex);
+		
+		//UE_LOG(LogTemp, Warning, TEXT("AddUnitsToArray UnitBase-INDEX!!!!!!!!!!!!!!!!!!!! %d"), Unit->UnitIndex);
 		
 		if(Unit->TeamId)
 			FriendlyUnits.Add(Unit);
@@ -174,7 +183,8 @@ void AHUDBase::AddUnitsToArray()
 void AHUDBase::AssignNewHighestIndex(AUnitBase* Unit)
 {
 	HighestUnitIndex++;
-	Unit->UnitIndex = HighestUnitIndex;
+	Unit->SetUnitIndex(HighestUnitIndex);
+	//UE_LOG(LogTemp, Warning, TEXT("Assigned UnitINDEX! %d"), Unit->UnitIndex);
 }
 
 
