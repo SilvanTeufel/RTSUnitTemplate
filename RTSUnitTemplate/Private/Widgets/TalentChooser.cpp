@@ -6,7 +6,6 @@
 #include "Components/VerticalBox.h"
 #include "Controller/ControllerBase.h"
 #include "GameFramework/GameSession.h"
-#include "Widgets/TalentButton.h"
 
 void UTalentChooser::NativeConstruct()
 {
@@ -73,7 +72,7 @@ void UTalentChooser::InitializeAttributes()
 
 void UTalentChooser::UpdateExperience()
 {
-    if(!OwnerUnitBase) return;
+    if(!OwnerUnitBase || !OwnerUnitBase->Attributes) return;
     
     if(ExperienceProgressBar)
     {
@@ -90,7 +89,7 @@ void UTalentChooser::UpdateExperience()
 
 void UTalentChooser::UpdateLevelAndTalents()
 {
-    if(!OwnerUnitBase) return;
+    if(!OwnerUnitBase || !OwnerUnitBase->Attributes) return;
         
 
     CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
@@ -126,14 +125,14 @@ void UTalentChooser::CreateClassUIElements()
 
         // Fetch and initialize Button
         FString ButtonName = FString::Printf(TEXT("Button_%d"), Index);
-        UTalentButton* Button = Cast<UTalentButton>(GetWidgetFromName(FName(*ButtonName)));
+        UButton* Button = Cast<UButton>(GetWidgetFromName(FName(*ButtonName)));
  
         if (Button)
         {
             // You may want to bind a handler to each button
-            Button->SetupButton(Index);
+            //Button->SetupButton(Index);
             // Bind to the button's OnTalentButtonClicked delegate
-            Button->OnTalentButtonClicked.AddDynamic(this, &UTalentChooser::HandleTalentButtonClicked);
+            //Button->OnTalentButtonClicked.AddDynamic(this, &UTalentChooser::HandleTalentButtonClicked);
 
             ClassButtons.Add(Button);
         }
@@ -160,6 +159,7 @@ void UTalentChooser::InitializeLevelAndTalentUI()
     AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->LevelData.TalentPoints));
     
     // Bind LevelUp and ResetTalents buttons to their respective handlers
+    /*
     if (LevelUpButton)
     {
         LevelUpButton->OnClicked.AddDynamic(this, &UTalentChooser::OnLevelUpClicked);
@@ -168,7 +168,7 @@ void UTalentChooser::InitializeLevelAndTalentUI()
     if (ResetTalentsButton)
     {
         ResetTalentsButton->OnClicked.AddDynamic(this, &UTalentChooser::OnResetTalentsClicked);
-    }
+    }*/
 }
 
 
@@ -178,7 +178,7 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
     
     UE_LOG(LogTemp, Warning, TEXT("HandleTalentButtonClicked!"));
  
-    
+    /*
     if (OwnerUnitBase)
     {
         UE_LOG(LogTemp, Warning, TEXT("ButtonIndex: %d!"), ButtonIndex);
@@ -192,14 +192,14 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
         case 3: OwnerUnitBase->HandleInvestment(UInvestmentData::Haste); break;
         case 4: OwnerUnitBase->HandleInvestment(UInvestmentData::Armor); break;
         case 5: OwnerUnitBase->HandleInvestment(UInvestmentData::MagicResistance); break;
-            /*
-        case 0: OwnerUnitBase->InvestPointIntoStamina(); break;
-        case 1: OwnerUnitBase->InvestPointIntoAttackPower(); break;
-        case 2: OwnerUnitBase->InvestPointIntoWillPower(); break;
-        case 3: OwnerUnitBase->InvestPointIntoHaste(); break;
-        case 4: OwnerUnitBase->InvestPointIntoArmor(); break;
-        case 5: OwnerUnitBase->InvestPointIntoMagicResistance(); break;
-          */  
+          
+        //case 0: OwnerUnitBase->InvestPointIntoStamina(); break;
+        //case 1: OwnerUnitBase->InvestPointIntoAttackPower(); break;
+        //case 2: OwnerUnitBase->InvestPointIntoWillPower(); break;
+        //case 3: OwnerUnitBase->InvestPointIntoHaste(); break;
+        //case 4: OwnerUnitBase->InvestPointIntoArmor(); break;
+        //case 5: OwnerUnitBase->InvestPointIntoMagicResistance(); break;
+         
             // Add cases for additional attributes
             default: break;
         }
@@ -210,7 +210,7 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
             AvailableTalents->SetText(FText::AsNumber(TalentPoints));
         }
         // Update UI here if needed
-    }
+    }*/
 }
 
 

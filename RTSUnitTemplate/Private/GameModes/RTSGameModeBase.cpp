@@ -20,8 +20,7 @@ void ARTSGameModeBase::BeginPlay()
 
 	FTimerHandle TimerHandle;
 	SetTeamIds();
-
-	SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
+	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 
 }
 

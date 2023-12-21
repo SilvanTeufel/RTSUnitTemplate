@@ -4,6 +4,7 @@
 #include "Controller/ControllerBase.h"
 #include "NavigationSystem.h" // Include this for navigation functions
 #include "Controller/CameraControllerBase.h"
+#include "Core/UnitData.h"
 #include "AIController.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
@@ -87,9 +88,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 		if(SelectedUnits[i] && SelectedUnits[i]->GetUnitState() == UnitData::Idle && SelectedUnits[i]->ToggleUnitDetection)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 	}
-
-	//for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		//HandleInvestment(SelectedUnits[i]);
 
 	TArray<FPathPoint> PathPoints;
 
@@ -586,22 +584,217 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location)
 	
 }
 
-void AControllerBase::HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State)
-{
-	
-	for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		SelectedUnits[i]->HandleInvestment(State);
-}
-
-void AControllerBase::InvestStamina_Implementation()
-{
-	UE_LOG(LogTemp, Warning, TEXT("InvestStamina_Implementation!"));
-	for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		SelectedUnits[i]->ServerInvestPointIntoStamina();
-}
-
 
 void AControllerBase::SetControlerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
+}
+
+void AControllerBase::LoadLevel_Implementation(const FString& SlotName)
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if (SelectedUnits[i] && IsLocalController())
+		{
+			SelectedUnits[i]->LoadLevelDataAndAttributes(SlotName);
+			
+		}
+	}
+}
+
+void AControllerBase::SaveLevel_Implementation(const FString& SlotName)
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if (SelectedUnits[i] && IsLocalController())
+		{
+			SelectedUnits[i]->SaveLevelDataAndAttributes(SlotName);
+		}
+	}
+}
+
+void AControllerBase::LevelUp_Implementation()
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if (SelectedUnits[i] && IsLocalController())
+		{
+			SelectedUnits[i]->LevelUp();
+		}
+	}
+}
+
+
+
+void AControllerBase::ResetTalents_Implementation()
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if (SelectedUnits[i] && IsLocalController())
+		{
+			SelectedUnits[i]->ResetTalents();
+		}
+	}
+}
+
+void AControllerBase::HandleInvestment_Implementation(int32 InvestmentState)
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if (SelectedUnits[i] && IsLocalController())
+		{
+			switch (InvestmentState)
+			{
+			case 0:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Stamina"));
+					SelectedUnits[i]->InvestPointIntoStamina();
+				}
+				break;
+			case 1:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
+					SelectedUnits[i]->InvestPointIntoAttackPower();
+				}
+				break;
+			case 2:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("WillPower"));
+					SelectedUnits[i]->InvestPointIntoWillPower();
+				}
+				break;
+			case 3:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Haste"));
+					SelectedUnits[i]->InvestPointIntoHaste();
+				}
+				break;
+			case 4:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Armor"));
+					SelectedUnits[i]->InvestPointIntoArmor();
+				}
+				break;
+			case 5:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
+					SelectedUnits[i]->InvestPointIntoMagicResistance();
+				}
+				break;
+			case 6:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("None"));
+				}
+				break;
+			default:
+				break;
+				}
+		}
+	}
+}
+
+void AControllerBase::SaveLevelUnit_Implementation(const int32 UnitIndex, const FString& SlotName)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->SaveLevelDataAndAttributes(SlotName);
+		}
+	}
+}
+
+void AControllerBase::LoadLevelUnit_Implementation(const int32 UnitIndex, const FString& SlotName)
+{
+
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if(Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+			Unit->LoadLevelDataAndAttributes(SlotName);
+	}
+
+
+}
+
+void AControllerBase::LevelUpUnit_Implementation(const int32 UnitIndex)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->LevelUp();
+		}
+	}
+}
+
+void AControllerBase::ResetTalentsUnit_Implementation(const int32 UnitIndex)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->ResetTalents();
+		}
+	}
+}
+
+void AControllerBase::HandleInvestmentUnit_Implementation(const int32 UnitIndex, int32 InvestmentState)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			switch (InvestmentState)
+			{
+			case 0:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Stamina"));
+					Unit->InvestPointIntoStamina();
+				}
+				break;
+			case 1:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
+					Unit->InvestPointIntoAttackPower();
+				}
+				break;
+			case 2:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("WillPower"));
+					Unit->InvestPointIntoWillPower();
+				}
+				break;
+			case 3:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Haste"));
+					Unit->InvestPointIntoHaste();
+				}
+				break;
+			case 4:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Armor"));
+					Unit->InvestPointIntoArmor();
+				}
+				break;
+			case 5:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
+					Unit->InvestPointIntoMagicResistance();
+				}
+				break;
+			case 6:
+				{
+					UE_LOG(LogTemp, Warning, TEXT("None"));
+				}
+				break;
+			default:
+				break;
+			}
+		}
+	}
 }

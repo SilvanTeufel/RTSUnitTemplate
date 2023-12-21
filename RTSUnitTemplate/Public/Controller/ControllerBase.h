@@ -184,11 +184,36 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetControlerTeamId(int Id);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State);
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SaveLevel(const FString& SlotName);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void InvestStamina();
+		void LoadLevel(const FString& SlotName);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LevelUp();
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void ResetTalents();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void HandleInvestment(int32 InvestmentState);
+
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SaveLevelUnit(const int32 UnitIndex, const FString& SlotName);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LoadLevelUnit(const int32 UnitIndex, const FString& SlotName);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void LevelUpUnit(const int32 UnitIndex);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void ResetTalentsUnit(const int32 UnitIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void HandleInvestmentUnit(const int32 UnitIndex, int32 InvestmentState);
+	
 };
 

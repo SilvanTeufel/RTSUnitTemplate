@@ -204,7 +204,7 @@ void AUnitBase::SetRunLocation_Implementation(FVector Location)
 	RunLocation = Location;
 }
 
-void AUnitBase::SetWalkSpeed(float Speed)
+void AUnitBase::SetWalkSpeed_Implementation(float Speed)
 {
 	UCharacterMovementComponent* MovementPtr = GetCharacterMovement();
 	if(Speed == 0.f)

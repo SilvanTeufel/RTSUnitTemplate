@@ -10,7 +10,9 @@
 void APathProviderHUD::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	if(StopLoading) return;
+	/*
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
 
 	for(int i = 0; i < AllUnits.Num(); i++)
@@ -26,7 +28,7 @@ void APathProviderHUD::BeginPlay()
 			SpeakingUnits.Add(SpeakingUnit);
 		
 		AllUnitBases.Add(Unit);
-	}
+	}*/
 
 	/*
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ASpeakingUnit::StaticClass(), AllUnits);

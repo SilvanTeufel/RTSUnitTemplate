@@ -16,11 +16,11 @@ void AEOS_GameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
 	
-	UEOS_GameInstance* GameInstance = Cast<UEOS_GameInstance>(GetGameInstance());
-	if (GameInstance)
-	{
+	//UEOS_GameInstance* GameInstance = Cast<UEOS_GameInstance>(GetGameInstance());
+	//if (GameInstance)
+	//{
 		//GameInstance->SessionJoined = true;
-	}
+	//}
 	// Set SessionJoined = true; from UEOS_GameInstance
 	Register(NewPlayer);
 }

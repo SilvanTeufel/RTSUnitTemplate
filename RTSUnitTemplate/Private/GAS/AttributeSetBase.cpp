@@ -17,7 +17,7 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Shield, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxShield, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Stamina, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Range, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, IsAttackedSpeed, COND_None, REPNOTIFY_Always);
@@ -36,8 +36,9 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseAttackDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseRunSpeed, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
 }
-
+/*
 void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
@@ -46,25 +47,36 @@ void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, 
 	// Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma
 	if(Attribute == GetStaminaAttribute())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PreAttributeChange Add Health!"));
-		// Assuming you have a scale factor for how much Stamina affects Health
-		//float NewHealth = NewValue * GetHealthPerStaminaPoint();
-		//SetStamina()
-		UE_LOG(LogTemp, Warning, TEXT("GetStaminaAttribute: %f"), GetStamina());
-		SetMaxHealth(GetBaseHealth()+GetStamina()*GetMaxHealthPerStamina());
+		UE_LOG(LogTemp, Warning, TEXT("Stamina NewValue! %f"), NewValue);
+		//SetStamina(NewValue);
+	}
+	else if(Attribute == GetMaxHealthAttribute())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MaxHealth NewValue! %f"), NewValue);
+		//SetMaxHealth(NewValue);
 	}
 	else if(Attribute == GetAttackPowerAttribute())
 	{
-		// Assuming you have a scale factor for how much AttackPower affects AttackDamage
-		//float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
-		SetAttackDamage(GetBaseAttackDamage()+GetBaseAttackDamage()*GetAttackPower());
-	}else if(Attribute == GetHasteAttribute())
-	{
-		// Assuming you have a scale factor for how much AttackPower affects AttackDamage
-		//float NewAttackDamage = NewValue * GetDamagePerAttackPowerPoint();
-		SetRunSpeed(GetBaseRunSpeed()+GetHaste()*GetRunSpeedPerHaste());
+		UE_LOG(LogTemp, Warning, TEXT("AttackPower NewValue! %f"), NewValue);
+		//SetAttackDamage(NewValue);
 	}
-}
+	else if(Attribute == GetAttackDamageAttribute() && NewValue)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AttackDamage NewValue! %f"), NewValue);
+		UE_LOG(LogTemp, Warning, TEXT("GetAttackDamage ! %f"), GetAttackDamage());		
+			// Ensure no recursive calls are made
+		if (GetAttackDamage() != NewValue)
+		{
+			//SetAttackDamage(NewValue);
+			AttackDamage.SetBaseValue(NewValue);
+			AttackDamage.SetCurrentValue(NewValue);
+		}
+	}
+	else if(Attribute == GetHasteAttribute() &&  GetBaseRunSpeed() > 0)
+	{
+		//SetRunSpeed(NewValue);
+	}
+}*/
 
 
 void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)

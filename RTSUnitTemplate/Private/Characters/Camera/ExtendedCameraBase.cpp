@@ -58,7 +58,7 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
-	SpawnTalentChooser();
+	//SpawnTalentChooser();
 	//SetTalentChooserLocation();
 	// Your custom BeginPlay logic here
 }
@@ -69,8 +69,8 @@ void AExtendedCameraBase::Tick(float DeltaTime)
 	// Call the base class Tick
 	Super::Tick(DeltaTime);
 
-	if(AutoAdjustTalentChooserPosition)
-	SetTalentChooserLocation();
+	//if(AutoAdjustTalentChooserPosition)
+	//SetTalentChooserLocation();
 	// Your custom Tick logic here
 }
 
@@ -199,6 +199,8 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 {
 
 	UTalentChooser* TalentBar= Cast<UTalentChooser>(TalentChooser->GetUserWidgetObject());
+	if(!TalentBar) return;
+
 	if(SelectedActor)
 	{
 		if (TalentBar) {
@@ -475,27 +477,27 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
-				CameraControllerBase->InvestStamina();
+				
 			} break;
 		case 22:
 			{
-				CameraControllerBase->HandleInvestment(UInvestmentData::AttackPower);
+				
 			} break;
 		case 23:
 			{
-				CameraControllerBase->HandleInvestment(UInvestmentData::WillPower);
+				
 			} break;
 		case 24:
 			{
-				CameraControllerBase->HandleInvestment(UInvestmentData::Haste);
+				
 			} break;
 		case 25:
 			{
-				CameraControllerBase->HandleInvestment(UInvestmentData::Armor);
+				
 			} break;
 		case 26:
 			{
-				CameraControllerBase->HandleInvestment(UInvestmentData::MagicResistance);
+				
 			} break;
 		default:
 			{

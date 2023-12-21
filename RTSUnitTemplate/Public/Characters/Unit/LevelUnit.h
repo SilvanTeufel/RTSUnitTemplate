@@ -21,6 +21,9 @@ public:
 	virtual void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int UnitIndex = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	bool IsDoingMagicDamage = false;
@@ -79,6 +82,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoAttackPower();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
+	void ServerInvestPointIntoAttackPower();
+	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoWillPower();
 
@@ -91,6 +97,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoMagicResistance();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
+	void InvestAttackPower();
+	
 	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TEnumAsByte<UInvestmentData::InvestmentState> CurrentInvestmentState;
 	

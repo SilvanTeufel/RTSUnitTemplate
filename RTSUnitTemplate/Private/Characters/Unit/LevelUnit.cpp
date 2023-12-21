@@ -21,11 +21,16 @@ void ALevelUnit::Tick(float DeltaTime)
 
 	if(RegenerationTimer >= RegenerationDelayTime)
 	{
-		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
-		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
+		//UE_LOG(LogTemp, Warning, TEXT("GetHealthRegeneration! %f"), Attributes->GetHealthRegeneration());
+		//UE_LOG(LogTemp, Warning, TEXT("GetWillpower! %f"), Attributes->GetWillpower());
+		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration()*Attributes->GetWillpower());
+		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration()*Attributes->GetWillpower());
 		RegenerationTimer = 0.f;
+		//if(HasAuthority())UE_LOG(LogTemp, Warning, TEXT("SERVER LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
+		//if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("CLIENT LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
 
-		if(AutoLeveling && HasAuthority()) AutoLevelUp();
+
+		//if(AutoLeveling && HasAuthority()) AutoLevelUp();
 		//SetOwner(GetController());
 		//if(HasAuthority())HandleInvestment(CurrentInvestmentState);
 	}
@@ -126,6 +131,16 @@ void ALevelUnit::InvestPointIntoAttackPower()
 	}
 }
 
+void ALevelUnit::ServerInvestPointIntoAttackPower_Implementation()
+{
+	if (LevelData.TalentPoints > 0 && AttackPowerInvestmentEffect && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
+	{
+		ApplyTalentPointInvestmentEffect(AttackPowerInvestmentEffect);
+		--LevelData.TalentPoints; // Deduct a talent point
+		LevelData.UsedTalentPoints++;
+	}
+}
+
 void ALevelUnit::InvestPointIntoWillPower()
 {
 	if (LevelData.TalentPoints > 0 && WillpowerInvestmentEffect && Attributes->GetWillpower() < LevelUpData.MaxTalentsPerStat)
@@ -166,50 +181,109 @@ void ALevelUnit::InvestPointIntoMagicResistance()
 	}
 }
 
+void ALevelUnit::InvestAttackPower_Implementation()
+{
+	if (LevelData.TalentPoints > 0 && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
+	{
+		Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
+		float NewAttackDamage = Attributes->GetBaseAttackDamage()+Attributes->GetAttackDamagePerAttackPower()*Attributes->GetAttackPower();
+		Attributes->SetAttackDamage(NewAttackDamage);
+		--LevelData.TalentPoints; // Deduct a talent point
+		LevelData.UsedTalentPoints++;
+	}
+	
+}
+
 void ALevelUnit::HandleInvestment(TEnumAsByte<UInvestmentData::InvestmentState> State)
 {
 	UE_LOG(LogTemp, Warning, TEXT("HandleInvestment!"));
+
 	switch (State)
 	{
 	case UInvestmentData::Stamina:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Stamina"));
-			Attributes->SetStamina(Attributes->GetStamina()+1);
+			InvestPointIntoStamina();
+			//AbilitySystemComponent->ForceReplication();
+			//if (LevelData.TalentPoints > 0 && Attributes->GetStamina() < LevelUpData.MaxTalentsPerStat && !HasAuthority())
+			//{
+				//Attributes->SetStamina(Attributes->GetStamina()+1);
+				//InvestPointIntoStamina();
+				//float NewHealth = Attributes->GetBaseHealth()+Attributes->GetStamina()*Attributes->GetMaxHealthPerStamina();
+				//Attributes->SetMaxHealth(NewHealth);
+				//--LevelData.TalentPoints; // Deduct a talent point
+				//LevelData.UsedTalentPoints++;
+			//}
 			//InvestPointIntoStamina();
 		}
 		break;
 	case UInvestmentData::AttackPower:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
-			Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
-			//InvestPointIntoAttackPower();
+			//InvestAttackPower();
+			/*
+			if (LevelData.TalentPoints > 0 && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
+			{
+				Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
+				float NewAttackDamage = Attributes->GetBaseAttackDamage()+Attributes->GetAttackDamagePerAttackPower()*Attributes->GetAttackPower();
+				Attributes->SetAttackDamage(NewAttackDamage);
+				--LevelData.TalentPoints; // Deduct a talent point
+				LevelData.UsedTalentPoints++;
+			}*/
+			InvestPointIntoAttackPower();
 		}
 		break;
 	case UInvestmentData::WillPower:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("WillPower"));
-			Attributes->SetWillpower(Attributes->GetWillpower()+1);
+			//InvestPointIntoWillPower();
+			if (LevelData.TalentPoints > 0 && Attributes->GetWillpower() < LevelUpData.MaxTalentsPerStat && !HasAuthority())
+			{
+				Attributes->SetWillpower(Attributes->GetWillpower()+1);
+				//--LevelData.TalentPoints; // Deduct a talent point
+				//LevelData.UsedTalentPoints++;
+				AbilitySystemComponent->ForceReplication();
+			}
 			//InvestPointIntoWillPower();
 		}
 		break;
 	case UInvestmentData::Haste:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Haste"));
-			Attributes->SetHaste(Attributes->GetHaste()+1);
+			InvestPointIntoHaste();
+			/*
+			if (LevelData.TalentPoints > 0 && Attributes->GetHaste() < LevelUpData.MaxTalentsPerStat)
+			{
+				Attributes->SetHaste(Attributes->GetHaste()+1);
+				float NewHaste = Attributes->GetBaseRunSpeed()+Attributes->GetHaste()*Attributes->GetRunSpeedPerHaste();
+				Attributes->SetRunSpeed(NewHaste);
+				--LevelData.TalentPoints; // Deduct a talent point
+				LevelData.UsedTalentPoints++;
+			}*/
 			//InvestPointIntoHaste();
 		}
 		break;
 	case UInvestmentData::Armor:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Armor"));
-			Attributes->SetArmor(Attributes->GetArmor()+1);
+			if (LevelData.TalentPoints > 0 && Attributes->GetArmor() < LevelUpData.MaxTalentsPerStat)
+			{
+				Attributes->SetArmor(Attributes->GetArmor()+1);
+				--LevelData.TalentPoints; // Deduct a talent point
+				LevelData.UsedTalentPoints++;
+			}
 			//InvestPointIntoArmor();
 		}
 		break;
 	case UInvestmentData::MagicResistance:
 		{
 			UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
-			Attributes->SetMagicResistance(Attributes->GetMagicResistance()+1);
+			if (LevelData.TalentPoints > 0 && Attributes->GetMagicResistance() < LevelUpData.MaxTalentsPerStat)
+			{
+				Attributes->SetMagicResistance(Attributes->GetMagicResistance()+1);
+				--LevelData.TalentPoints; // Deduct a talent point
+				LevelData.UsedTalentPoints++;
+			}
 			//InvestPointIntoMagicResistance();
 		}
 		break;
@@ -230,12 +304,15 @@ void ALevelUnit::ResetTalents()
 {
 	LevelData.TalentPoints = LevelData.TalentPoints+LevelData.UsedTalentPoints;
 	LevelData.UsedTalentPoints = 0;
-	InitializeAttributes();
+	//InitializeAttributes();
 	
 	Attributes->SetStamina(0);
+	Attributes->SetMaxHealth(Attributes->GetBaseHealth());
 	Attributes->SetAttackPower(0);
+	Attributes->SetAttackDamage(Attributes->GetBaseAttackDamage());
 	Attributes->SetWillpower(0);
 	Attributes->SetHaste(0);
+	Attributes->SetRunSpeed(Attributes->GetBaseRunSpeed());
 	Attributes->SetArmor(0);
 	Attributes->SetMagicResistance(0);
 }
@@ -245,11 +322,14 @@ void ALevelUnit::ResetLevel()
 	LevelData.CharacterLevel = 1;
 	LevelData.TalentPoints = 0;
 	LevelData.UsedTalentPoints = 0;
-	InitializeAttributes();
+	//InitializeAttributes();
 	Attributes->SetStamina(0);
+	Attributes->SetMaxHealth(Attributes->GetBaseHealth());
 	Attributes->SetAttackPower(0);
+	Attributes->SetAttackDamage(Attributes->GetBaseAttackDamage());
 	Attributes->SetWillpower(0);
 	Attributes->SetHaste(0);
+	Attributes->SetRunSpeed(Attributes->GetBaseRunSpeed());
 	Attributes->SetArmor(0);
 	Attributes->SetMagicResistance(0);
 }

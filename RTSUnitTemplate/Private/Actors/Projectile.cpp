@@ -52,6 +52,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AProjectile, Target);
+	DOREPLIFETIME(AProjectile, Shooter);
 	DOREPLIFETIME(AProjectile, Mesh);
 	DOREPLIFETIME(AProjectile, Material);
 	DOREPLIFETIME(AProjectile, TargetLocation);
@@ -116,10 +117,12 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 
-			float NewDamage = Damage - UnitToHit->Attributes->GetArmor();
+			UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
+			
+			float NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
 			
 			if(ShootingUnit->IsDoingMagicDamage)
-				NewDamage = Damage - UnitToHit->Attributes->GetMagicResistance();
+				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
 			
 			if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-NewDamage);

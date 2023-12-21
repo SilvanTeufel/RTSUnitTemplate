@@ -30,8 +30,17 @@ public:
 
 	void BeginPlay() override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void AddUnitsToArray();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void AssignNewHighestIndex(AUnitBase* Unit);
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		int32 HighestUnitIndex = 0;
+	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "bSelectFriendly", Keywords = "TopDownRTSTemplate bSelectFriendly"), Category = TopDownRTSTemplate)
-	bool bSelectFriendly = false;
+		bool bSelectFriendly = false;
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "InitialPoint", Keywords = "RTSUnitTemplate InitialPoint"), Category = RTSUnitTemplate)
 		FVector2D InitialPoint; // Position of mouse on screen when pressed;

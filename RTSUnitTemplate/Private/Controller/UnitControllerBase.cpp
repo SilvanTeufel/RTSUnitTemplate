@@ -160,7 +160,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 {
 
 		AUnitBase* UnitBase = Cast<AUnitBase>(GetPawn());
-
+		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		switch (UnitBase->UnitState)
 		{
 		case UnitData::None:

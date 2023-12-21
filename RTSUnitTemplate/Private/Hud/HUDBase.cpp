@@ -146,19 +146,37 @@ void AHUDBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	AddUnitsToArray();
+	
+}
+
+void AHUDBase::AddUnitsToArray()
+{
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
 	for(int i = 0; i < AllUnits.Num(); i++)
 	{
+		HighestUnitIndex++;
+	
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		Unit->UnitIndex = HighestUnitIndex;
+		
 		if(Unit->TeamId)
 			FriendlyUnits.Add(Unit);
+		if(!Unit->TeamId)
+			EnemyUnitBases.Add(Unit);
 
 		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(AllUnits[i]);
 		if(SpeakingUnit)
 			SpeakingUnits.Add(SpeakingUnit);
 	}
-	
 }
+
+void AHUDBase::AssignNewHighestIndex(AUnitBase* Unit)
+{
+	HighestUnitIndex++;
+	Unit->UnitIndex = HighestUnitIndex;
+}
+
 
 FVector2D AHUDBase::GetMousePos2D()
 {

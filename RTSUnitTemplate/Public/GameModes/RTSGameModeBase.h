@@ -102,6 +102,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TimerIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DisableSpawn = true;
 //public:
 	virtual void BeginPlay() override;
 
