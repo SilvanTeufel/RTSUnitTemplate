@@ -670,6 +670,30 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			{
 				CameraControllerBase->MiddleMouseIsPressed = false;
 			} break;
+		case 21:
+			{
+				
+			} break;
+		case 22:
+			{
+				
+			} break;
+		case 23:
+			{
+				
+			} break;
+		case 24:
+			{
+				
+			} break;
+		case 25:
+			{
+				
+			} break;
+		case 26:
+			{
+				
+			} break;
 		}
 	}
 

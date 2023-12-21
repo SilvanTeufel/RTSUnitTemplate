@@ -208,7 +208,7 @@ public:
 	UFUNCTION()
 	virtual void OnRep_MagicResistance(const FGameplayAttributeData& OldMagicResistance);
 	// MagicResistence //
-	
+	/*
 	// MaxHealthPerStamina //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxHealthPerStamina)
 	FGameplayAttributeData MaxHealthPerStamina;
@@ -233,7 +233,7 @@ public:
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeedPerHaste);
 	UFUNCTION()
 	virtual void OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste);
-	// MaxWalkSpeedPerHaste //
+	// MaxWalkSpeedPerHaste //*/
 	
 	// BaseHealth //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseHealth)

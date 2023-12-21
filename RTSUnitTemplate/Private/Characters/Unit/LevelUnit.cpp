@@ -125,12 +125,7 @@ void ALevelUnit::InvestPointIntoStamina()
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
-	//UE_LOG(LogTemp, Warning, TEXT("Stamina! %d"), Attributes->GetStamina());
-}
-//Attributes->SetStamina(4);
-void ALevelUnit::ServerInvestPointIntoStamina_Implementation()
-{
-	InvestPointIntoStamina();
+	
 }
 
 void ALevelUnit::InvestPointIntoAttackPower()
@@ -143,15 +138,6 @@ void ALevelUnit::InvestPointIntoAttackPower()
 	}
 }
 
-void ALevelUnit::ServerInvestPointIntoAttackPower_Implementation()
-{
-	if (LevelData.TalentPoints > 0 && AttackPowerInvestmentEffect && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
-	{
-		ApplyTalentPointInvestmentEffect(AttackPowerInvestmentEffect);
-		--LevelData.TalentPoints; // Deduct a talent point
-		LevelData.UsedTalentPoints++;
-	}
-}
 
 void ALevelUnit::InvestPointIntoWillPower()
 {
@@ -193,18 +179,6 @@ void ALevelUnit::InvestPointIntoMagicResistance()
 	}
 }
 
-void ALevelUnit::InvestAttackPower_Implementation()
-{
-	if (LevelData.TalentPoints > 0 && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
-	{
-		Attributes->SetAttackPower(Attributes->GetAttackPower()+1);
-		float NewAttackDamage = Attributes->GetBaseAttackDamage()+Attributes->GetAttackDamagePerAttackPower()*Attributes->GetAttackPower();
-		Attributes->SetAttackDamage(NewAttackDamage);
-		--LevelData.TalentPoints; // Deduct a talent point
-		LevelData.UsedTalentPoints++;
-	}
-	
-}
 
 void ALevelUnit::ResetTalents()
 {

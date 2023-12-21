@@ -30,9 +30,9 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Haste, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Armor, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MagicResistance, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxHealthPerStamina, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedPerHaste, COND_None, REPNOTIFY_Always);
+	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxHealthPerStamina, COND_None, REPNOTIFY_Always);
+	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, COND_None, REPNOTIFY_Always);
+	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedPerHaste, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseAttackDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseRunSpeed, COND_None, REPNOTIFY_Always);
@@ -212,7 +212,7 @@ void UAttributeSetBase::OnRep_MagicResistance(const FGameplayAttributeData& OldM
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MagicResistance, OldMagicResistance);
 }
-
+/*
 void UAttributeSetBase::OnRep_MaxHealthPerStamina(const FGameplayAttributeData& OldMaxHealthPerStamina)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxHealthPerStamina, OldMaxHealthPerStamina);
@@ -226,7 +226,7 @@ void UAttributeSetBase::OnRep_AttackDamagePerAttackPower(const FGameplayAttribut
 void UAttributeSetBase::OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeedPerHaste, OldRunSpeedPerHaste);
-}
+}*/
 
 void UAttributeSetBase::OnRep_BaseHealth(const FGameplayAttributeData& OldBaseHealth)
 {

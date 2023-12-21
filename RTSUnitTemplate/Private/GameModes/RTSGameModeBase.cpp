@@ -166,6 +166,16 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpecificUnitID)
 			{
 				AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
 			}
+			APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+			if(PlayerController)
+			{
+				AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+				if(HUD)
+				{
+					HUD->AllUnits.Remove(UnitData.UnitBase);
+				}
+			}
 			UnitSpawnDataSets.RemoveAt(i);
 		}
 		else if (UnitData.Id == SpecificUnitID)
@@ -361,31 +371,9 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		
 			UnitBase->InitializeAttributes();
 
-			// Give Unit ID + Add to AllUnits
-				/*
-				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-
-				if(PlayerController)
-				{
-					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-					if(HUD)
-					{
-						if(!AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[0])
-						{
-							HUD->AssignNewHighestIndex(UnitBase);
-							HUD->AllUnits.Add(UnitBase);
-						}else
-						{
-				
-							UnitBase->SetUnitIndex(AvailableUnitIndexArray[0]);
-							AvailableUnitIndexArray.RemoveAt(0);
-							HUD->AllUnits.Add(UnitBase);
-						}
-						//UE_LOG(LogTemp, Warning, TEXT("Assigned new ID! %d"), UnitBase->UnitIndex);
-					}
-				}*/
+		
 			AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-			// Give Unit ID + Add to AllUnits
+		
 			
 			
 			FUnitSpawnData UnitSpawnDataSet;

@@ -81,15 +81,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoStamina();
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
-	void ServerInvestPointIntoStamina();
 	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoAttackPower();
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
-	void ServerInvestPointIntoAttackPower();
 	
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoWillPower();
@@ -102,9 +96,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void InvestPointIntoMagicResistance();
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
-	void InvestAttackPower();
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ResetTalents();
