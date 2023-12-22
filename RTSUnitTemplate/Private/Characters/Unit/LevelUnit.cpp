@@ -54,7 +54,10 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, HasteInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, ArmorInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
+	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
+
+	
 }
 
 void ALevelUnit::SetUnitIndex(int32 NewIndex)
@@ -121,7 +124,7 @@ void ALevelUnit::InvestPointIntoStamina()
 {
 	if (LevelData.TalentPoints > 0 && StaminaInvestmentEffect && Attributes->GetStamina() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(StaminaInvestmentEffect);
+		ApplyInvestmentEffect(StaminaInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -132,7 +135,7 @@ void ALevelUnit::InvestPointIntoAttackPower()
 {
 	if (LevelData.TalentPoints > 0 && AttackPowerInvestmentEffect && Attributes->GetAttackPower() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(AttackPowerInvestmentEffect);
+		ApplyInvestmentEffect(AttackPowerInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -143,7 +146,7 @@ void ALevelUnit::InvestPointIntoWillPower()
 {
 	if (LevelData.TalentPoints > 0 && WillpowerInvestmentEffect && Attributes->GetWillpower() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(WillpowerInvestmentEffect);
+		ApplyInvestmentEffect(WillpowerInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -153,7 +156,7 @@ void ALevelUnit::InvestPointIntoHaste()
 {
 	if (LevelData.TalentPoints > 0 && HasteInvestmentEffect && Attributes->GetHaste() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(HasteInvestmentEffect);
+		ApplyInvestmentEffect(HasteInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -163,7 +166,7 @@ void ALevelUnit::InvestPointIntoArmor()
 {
 	if (LevelData.TalentPoints > 0 && ArmorInvestmentEffect && Attributes->GetArmor() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(ArmorInvestmentEffect);
+		ApplyInvestmentEffect(ArmorInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -173,7 +176,7 @@ void ALevelUnit::InvestPointIntoMagicResistance()
 {
 	if (LevelData.TalentPoints > 0 && MagicResistanceInvestmentEffect && Attributes->GetMagicResistance() < LevelUpData.MaxTalentsPerStat)
 	{
-		ApplyTalentPointInvestmentEffect(MagicResistanceInvestmentEffect);
+		ApplyInvestmentEffect(MagicResistanceInvestmentEffect);
 		--LevelData.TalentPoints; // Deduct a talent point
 		LevelData.UsedTalentPoints++;
 	}
@@ -217,7 +220,7 @@ void ALevelUnit::ResetLevel()
 	Attributes->SetShieldRegeneration(0);
 }
 
-void ALevelUnit::ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect)
+void ALevelUnit::ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!"));
 	if (AbilitySystemComponent && InvestmentEffect)

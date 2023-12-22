@@ -41,20 +41,25 @@ public:
 	
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	UFUNCTION(BlueprintCallable, Category = "GAS")
 	virtual void InitializeAttributes();
+
+	UFUNCTION(BlueprintCallable, Category = "Gas")
 	virtual void GiveAbilities();
 
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_PlayerState() override;
 
+	UFUNCTION(BlueprintCallable, Category = "GAS")
 	void ActivateAbilityByInputID(EGASAbilityInputID InputID);
-	
+
+	UFUNCTION(BlueprintCallable, Category = "GAS")
 	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID);
 	
-	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;
 
-	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
 
 

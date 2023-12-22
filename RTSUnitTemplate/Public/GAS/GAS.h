@@ -8,5 +8,10 @@ enum class EGASAbilityInputID : uint8
 	None,
 	Confirm,
 	Cancel,
-	Punch
+	AbilityOne,
+	AbilityTwo,
+	AbilityThree,
+	AbilityFour,
+	AbilityFive,
+	AbilitySix
 };

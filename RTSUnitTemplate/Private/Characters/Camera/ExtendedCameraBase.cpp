@@ -653,14 +653,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 		case 15:
 			{
 				UE_LOG(LogTemp, Warning, TEXT("15 pressed!"));
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating Punch ability for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::Punch, SelectedUnit);
-					}
-				}
+
 			} break;
 		case 16:
 			{
@@ -672,27 +665,69 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityOne for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityOne, SelectedUnit);
+					}
+				}
 			} break;
 		case 22:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityTwo for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, SelectedUnit);
+					}
+				}
 			} break;
 		case 23:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityThree for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityThree, SelectedUnit);
+					}
+				}
 			} break;
 		case 24:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFour for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityFour, SelectedUnit);
+					}
+				}
 			} break;
 		case 25:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFive for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityFive, SelectedUnit);
+					}
+				}
 			} break;
 		case 26:
 			{
-				
+				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
+				{
+					if (SelectedUnit)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Activating AbilitySix for unit: %s"), *SelectedUnit->GetName());
+						OnAbilityInputDetected(EGASAbilityInputID::AbilitySix, SelectedUnit);
+					}
+				}
 			} break;
 		}
 	}

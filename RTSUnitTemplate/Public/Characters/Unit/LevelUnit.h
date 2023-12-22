@@ -48,13 +48,13 @@ public:
 	float RegenerationDelayTime = 1.f;
 
 	// Gameplay Effects for talent point investment
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> StaminaInvestmentEffect;
 
 	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> AttackPowerInvestmentEffect;
 
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> WillpowerInvestmentEffect;
 
 	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
@@ -65,6 +65,10 @@ public:
 
 	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> MagicResistanceInvestmentEffect;
+
+	// Array of Custom Effects
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	TArray<TSubclassOf<UGameplayEffect>> CustomEffects;
 	
 	// Methods for handling leveling up and investing talent points
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
@@ -115,5 +119,5 @@ public:
 //protected:
 	// Helper method to handle the actual attribute increase when a point is invested
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
-	void ApplyTalentPointInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
+	void ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
 };

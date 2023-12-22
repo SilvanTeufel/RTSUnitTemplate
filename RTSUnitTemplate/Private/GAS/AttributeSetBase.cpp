@@ -212,21 +212,6 @@ void UAttributeSetBase::OnRep_MagicResistance(const FGameplayAttributeData& OldM
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MagicResistance, OldMagicResistance);
 }
-/*
-void UAttributeSetBase::OnRep_MaxHealthPerStamina(const FGameplayAttributeData& OldMaxHealthPerStamina)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxHealthPerStamina, OldMaxHealthPerStamina);
-}
-
-void UAttributeSetBase::OnRep_AttackDamagePerAttackPower(const FGameplayAttributeData& OldAttackDamagePerAttackPower)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, OldAttackDamagePerAttackPower);
-}
-
-void UAttributeSetBase::OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeedPerHaste, OldRunSpeedPerHaste);
-}*/
 
 void UAttributeSetBase::OnRep_BaseHealth(const FGameplayAttributeData& OldBaseHealth)
 {
@@ -242,4 +227,105 @@ void UAttributeSetBase::OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBase
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, BaseRunSpeed, OldBaseRunSpeed);
 }
+
+void UAttributeSetBase::SetAttributeMaxHealth(float NewValue)
+{
+    SetMaxHealth(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeHealthRegeneration(float NewValue)
+{
+    SetHealthRegeneration(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeMaxShield(float NewValue)
+{
+    SetMaxShield(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeShieldRegeneration(float NewValue)
+{
+    SetShieldRegeneration(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeAttackDamage(float NewValue)
+{
+    SetAttackDamage(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeRange(float NewValue)
+{
+    SetRange(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeRunSpeed(float NewValue)
+{
+    SetRunSpeed(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeIsAttackedSpeed(float NewValue)
+{
+    SetIsAttackedSpeed(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeRunSpeedScale(float NewValue)
+{
+    SetRunSpeedScale(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeProjectileScaleActorDirectionOffset(float NewValue)
+{
+    SetProjectileScaleActorDirectionOffset(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeProjectileSpeed(float NewValue)
+{
+    SetProjectileSpeed(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeStamina(float NewValue)
+{
+    SetStamina(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeAttackPower(float NewValue)
+{
+    SetAttackPower(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeWillpower(float NewValue)
+{
+    SetWillpower(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeHaste(float NewValue)
+{
+    SetHaste(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeArmor(float NewValue)
+{
+    SetArmor(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeMagicResistance(float NewValue)
+{
+    SetMagicResistance(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeBaseHealth(float NewValue)
+{
+    SetBaseHealth(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeBaseAttackDamage(float NewValue)
+{
+    SetBaseAttackDamage(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeBaseRunSpeed(float NewValue)
+{
+    SetBaseRunSpeed(NewValue);
+}
+
 

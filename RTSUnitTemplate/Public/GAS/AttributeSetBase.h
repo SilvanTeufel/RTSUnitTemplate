@@ -208,32 +208,6 @@ public:
 	UFUNCTION()
 	virtual void OnRep_MagicResistance(const FGameplayAttributeData& OldMagicResistance);
 	// MagicResistence //
-	/*
-	// MaxHealthPerStamina //
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxHealthPerStamina)
-	FGameplayAttributeData MaxHealthPerStamina;
-	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxHealthPerStamina);
-
-	UFUNCTION()
-	virtual void OnRep_MaxHealthPerStamina(const FGameplayAttributeData& OldMaxHealthPerStamina);
-	// MaxHealthPerStamina //
-
-	// AttackDamagePerAttackPower //
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_AttackDamagePerAttackPower)
-	FGameplayAttributeData AttackDamagePerAttackPower;
-	ATTRIBUTE_ACCESSORS(UAttributeSetBase, AttackDamagePerAttackPower);
-
-	UFUNCTION()
-	virtual void OnRep_AttackDamagePerAttackPower(const FGameplayAttributeData& OldAttackDamagePerAttackPower);
-	// AttackDamagePerAttackPower //
-	
-	// MaxWalkSpeedPerHaste //
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeedPerHaste)
-	FGameplayAttributeData RunSpeedPerHaste;
-	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeedPerHaste);
-	UFUNCTION()
-	virtual void OnRep_RunSpeedPerHaste(const FGameplayAttributeData& OldRunSpeedPerHaste);
-	// MaxWalkSpeedPerHaste //*/
 	
 	// BaseHealth //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseHealth)
@@ -261,5 +235,65 @@ public:
 	virtual void OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBaseRunSpeed);
 	// BaseMaxWalkSpeed //
 
+	// BlueprintCallable setters for each attribute with "Attribute" as a prefix
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeMaxHealth(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeHealthRegeneration(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeMaxShield(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeShieldRegeneration(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeAttackDamage(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeRange(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeRunSpeed(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeIsAttackedSpeed(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeRunSpeedScale(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeProjectileScaleActorDirectionOffset(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeProjectileSpeed(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeStamina(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeAttackPower(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeWillpower(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeHaste(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeArmor(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeMagicResistance(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeBaseHealth(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeBaseAttackDamage(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeBaseRunSpeed(float NewValue);
 };
 
