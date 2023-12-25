@@ -75,6 +75,9 @@ struct FUnitSpawnParameter : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool LoadLevelAfterSpawn = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SkipTimerAfterDeath = false;
 };
 
 USTRUCT(BlueprintType)
@@ -91,6 +94,20 @@ struct FUnitSpawnData : public FTableRowBase
 	FUnitSpawnParameter SpawnParameter;
 };
 
+USTRUCT(BlueprintType)
+struct FTimerHandleMapping
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, Category = "Timer")
+	int32 Id;
+
+	UPROPERTY(VisibleAnywhere, Category = "Timer")
+	FTimerHandle Timer;
+
+	UPROPERTY(VisibleAnywhere, Category = "Timer")
+	bool SkipTimer = false;
+};
 UCLASS()
 class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 {
@@ -100,9 +117,13 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	// Timer handle for spawning units
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TArray<FTimerHandle> SpawnTimerHandles;
+	//UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//TArray<FTimerHandle> SpawnTimerHandles;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<FTimerHandleMapping> SpawnTimerHandleMap;
+	//TMap<int32, FTimerHandle> SpawnTimerHandleMap;
+	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TimerIndex = 0;
 
@@ -121,13 +142,18 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerFromDataTable(FVector Location, AUnitBase* UnitToChase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FTimerHandleMapping GetTimerHandleMappingById(int32 SearchId);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetSkipTimerMappingById(int32 SearchId, bool Value);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* SpawnSingleUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
-
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 CheckAndRemoveDeadUnits(int32 SpawnParaId);

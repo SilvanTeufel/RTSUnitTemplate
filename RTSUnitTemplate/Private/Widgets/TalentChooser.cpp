@@ -158,17 +158,7 @@ void UTalentChooser::InitializeLevelAndTalentUI()
     CurrentLevel->SetText(FText::AsNumber(OwnerUnitBase->LevelData.CharacterLevel));
     AvailableTalents->SetText(FText::AsNumber(OwnerUnitBase->LevelData.TalentPoints));
     
-    // Bind LevelUp and ResetTalents buttons to their respective handlers
-    /*
-    if (LevelUpButton)
-    {
-        LevelUpButton->OnClicked.AddDynamic(this, &UTalentChooser::OnLevelUpClicked);
-    }
 
-    if (ResetTalentsButton)
-    {
-        ResetTalentsButton->OnClicked.AddDynamic(this, &UTalentChooser::OnResetTalentsClicked);
-    }*/
 }
 
 
@@ -177,40 +167,7 @@ void UTalentChooser::HandleTalentButtonClicked(int32 ButtonIndex)
 {
     
     UE_LOG(LogTemp, Warning, TEXT("HandleTalentButtonClicked!"));
- 
-    /*
-    if (OwnerUnitBase)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ButtonIndex: %d!"), ButtonIndex);
 
-        switch (ButtonIndex)
-        {
-           
-        case 0: OwnerUnitBase->HandleInvestment(UInvestmentData::Stamina); break;
-        case 1: OwnerUnitBase->HandleInvestment(UInvestmentData::AttackPower); break;
-        case 2: OwnerUnitBase->HandleInvestment(UInvestmentData::WillPower); break;
-        case 3: OwnerUnitBase->HandleInvestment(UInvestmentData::Haste); break;
-        case 4: OwnerUnitBase->HandleInvestment(UInvestmentData::Armor); break;
-        case 5: OwnerUnitBase->HandleInvestment(UInvestmentData::MagicResistance); break;
-          
-        //case 0: OwnerUnitBase->InvestPointIntoStamina(); break;
-        //case 1: OwnerUnitBase->InvestPointIntoAttackPower(); break;
-        //case 2: OwnerUnitBase->InvestPointIntoWillPower(); break;
-        //case 3: OwnerUnitBase->InvestPointIntoHaste(); break;
-        //case 4: OwnerUnitBase->InvestPointIntoArmor(); break;
-        //case 5: OwnerUnitBase->InvestPointIntoMagicResistance(); break;
-         
-            // Add cases for additional attributes
-            default: break;
-        }
-
-        if (AvailableTalents)
-        {
-            int32 TalentPoints = OwnerUnitBase->LevelData.TalentPoints; // Assuming TalentPoints is a property of ALevelUnit
-            AvailableTalents->SetText(FText::AsNumber(TalentPoints));
-        }
-        // Update UI here if needed
-    }*/
 }
 
 

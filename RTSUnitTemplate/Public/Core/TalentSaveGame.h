@@ -21,7 +21,7 @@ class RTSUNITTEMPLATE_API UTalentSaveGame : public USaveGame
 	
 
 public:
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void PopulateAttributeSaveData(UAttributeSetBase* AttributeSet);
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)

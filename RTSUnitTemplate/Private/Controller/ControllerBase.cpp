@@ -647,37 +647,31 @@ void AControllerBase::HandleInvestment_Implementation(int32 InvestmentState)
 			{
 			case 0:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Stamina"));
 					SelectedUnits[i]->InvestPointIntoStamina();
 				}
 				break;
 			case 1:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
 					SelectedUnits[i]->InvestPointIntoAttackPower();
 				}
 				break;
 			case 2:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("WillPower"));
 					SelectedUnits[i]->InvestPointIntoWillPower();
 				}
 				break;
 			case 3:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Haste"));
 					SelectedUnits[i]->InvestPointIntoHaste();
 				}
 				break;
 			case 4:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Armor"));
 					SelectedUnits[i]->InvestPointIntoArmor();
 				}
 				break;
 			case 5:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
 					SelectedUnits[i]->InvestPointIntoMagicResistance();
 				}
 				break;
@@ -732,7 +726,6 @@ void AControllerBase::LevelUpUnit_Implementation(const int32 UnitIndex)
 
 void AControllerBase::ResetTalentsUnit_Implementation(const int32 UnitIndex)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ResetTalentsUnit_Implementation-INDEX!!!!!!!!!!!!!!!!!!!! %d"), UnitIndex);
 	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
@@ -754,37 +747,31 @@ void AControllerBase::HandleInvestmentUnit_Implementation(const int32 UnitIndex,
 			{
 			case 0:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Stamina"));
 					Unit->InvestPointIntoStamina();
 				}
 				break;
 			case 1:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("AttackPower"));
 					Unit->InvestPointIntoAttackPower();
 				}
 				break;
 			case 2:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("WillPower"));
 					Unit->InvestPointIntoWillPower();
 				}
 				break;
 			case 3:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Haste"));
 					Unit->InvestPointIntoHaste();
 				}
 				break;
 			case 4:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Armor"));
 					Unit->InvestPointIntoArmor();
 				}
 				break;
 			case 5:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("MagicResistance"));
 					Unit->InvestPointIntoMagicResistance();
 				}
 				break;

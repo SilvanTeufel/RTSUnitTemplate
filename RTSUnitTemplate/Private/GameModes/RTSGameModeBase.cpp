@@ -33,7 +33,7 @@ void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ARTSGameModeBase, SpawnTimerHandles);
+	//DOREPLIFETIME(ARTSGameModeBase, SpawnTimerHandleMap);
 	DOREPLIFETIME(ARTSGameModeBase, TimerIndex);
 	
 }
@@ -117,8 +117,14 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 					};
 					
 					FTimerHandle TimerHandle;
-					SpawnTimerHandles.Add(TimerHandle);
-					GetWorld()->GetTimerManager().SetTimer(SpawnTimerHandles[TimerIndex], TimerCallback, SpawnParameter.LoopTime, true);
+					//SpawnTimerHandles.Add(TimerHandle);
+					GetWorld()->GetTimerManager().SetTimer(TimerHandle, TimerCallback, SpawnParameter.LoopTime, true);
+
+					FTimerHandleMapping TimerMap;
+					TimerMap.Id = SpawnParameter.Id;
+					TimerMap.Timer = TimerHandle;
+					TimerMap.SkipTimer = false;
+					SpawnTimerHandleMap.Add(TimerMap);
 					TimerIndex++;
 				}
 
@@ -128,7 +134,29 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 		}
 	}
 }
+FTimerHandleMapping ARTSGameModeBase::GetTimerHandleMappingById(int32 SearchId)
+{
+	for (FTimerHandleMapping& TimerMap : SpawnTimerHandleMap)
+	{
+		if (TimerMap.Id == SearchId)
+		{
+			return TimerMap; // Return a pointer to the struct
+		}
+	}
 
+	return FTimerHandleMapping(); // Return nullptr if not found
+}
+
+void ARTSGameModeBase::SetSkipTimerMappingById(int32 SearchId, bool Value)
+{
+	for (FTimerHandleMapping& TimerMap : SpawnTimerHandleMap)
+	{
+		if (TimerMap.Id == SearchId)
+		{
+			TimerMap.SkipTimer = Value; // Return a pointer to the struct
+		}
+	}
+}
 
 void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
@@ -169,7 +197,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Locati
 int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 {
 	int32 CountOfSpecificID = 0;
-
+	bool FoundDeadUnit = false;
 	
 	for (int32 i = UnitSpawnDataSets.Num() - 1; i >= 0; --i)
 	{
@@ -185,6 +213,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 					UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
 					AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
 					SpawnParameterIdArray.Add(SpawnParaId);
+					FoundDeadUnit = true;
 				}
 				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 
@@ -203,6 +232,11 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 				CountOfSpecificID++;
 			}
 		}
+	}
+
+	if(CountOfSpecificID == 0 && FoundDeadUnit)
+	{
+		SetSkipTimerMappingById(SpawnParaId, true);
 	}
 
 	return CountOfSpecificID;
@@ -309,6 +343,12 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	for (int32 Index : AvailableUnitIndexArray)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("Unit Index: %d"), Index);
+	}
+
+	FTimerHandleMapping TimerMap = GetTimerHandleMappingById(SpawnParameter.Id);
+	if(UnitCount < SpawnParameter.MaxUnitSpawnCount && TimerMap.SkipTimer && SpawnParameter.SkipTimerAfterDeath){
+		SetSkipTimerMappingById(SpawnParameter.Id, false);
+		return;
 	}
 	
 	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
