@@ -239,7 +239,7 @@ void ALevelUnit::SaveLevelDataAndAttributes(const FString& SlotName)
 	{
 		SaveGameInstance->LevelData = LevelData;
 		SaveGameInstance->LevelUpData = LevelUpData;
-		SaveGameInstance->Attributes = Attributes;
+		SaveGameInstance->PopulateAttributeSaveData(Attributes);
 		UGameplayStatics::SaveGameToSlot(SaveGameInstance, SlotName, 0);
 	}
 }
@@ -253,36 +253,9 @@ void ALevelUnit::LoadLevelDataAndAttributes(const FString& SlotName)
 	{
 		LevelData = SaveGameInstance->LevelData;
 		LevelUpData = SaveGameInstance->LevelUpData;
-		UpdateAttributes(SaveGameInstance->Attributes);
+		
+		Attributes->UpdateAttributes(SaveGameInstance->AttributeSaveData);
 	}
 	
 }
 
-void ALevelUnit::UpdateAttributes(UAttributeSetBase* LoadedAttributes)
-{
-	if (LoadedAttributes && Attributes)
-	{
-		Attributes->SetHealth(LoadedAttributes->GetHealth());
-		Attributes->SetMaxHealth(LoadedAttributes->GetMaxHealth());
-		Attributes->SetHealthRegeneration(LoadedAttributes->GetHealthRegeneration());
-		Attributes->SetShield(LoadedAttributes->GetShield());
-		Attributes->SetMaxShield(LoadedAttributes->GetMaxShield());
-		Attributes->SetShieldRegeneration(LoadedAttributes->GetShieldRegeneration());
-		Attributes->SetAttackDamage(LoadedAttributes->GetAttackDamage());
-		Attributes->SetRange(LoadedAttributes->GetRange());
-		Attributes->SetRunSpeed(LoadedAttributes->GetRunSpeed());
-		Attributes->SetIsAttackedSpeed(LoadedAttributes->GetIsAttackedSpeed());
-		Attributes->SetRunSpeedScale(LoadedAttributes->GetRunSpeedScale());
-		Attributes->SetProjectileScaleActorDirectionOffset(LoadedAttributes->GetProjectileScaleActorDirectionOffset());
-		Attributes->SetProjectileSpeed(LoadedAttributes->GetProjectileSpeed());
-		Attributes->SetStamina(LoadedAttributes->GetStamina());
-		Attributes->SetAttackPower(LoadedAttributes->GetAttackPower());
-		Attributes->SetWillpower(LoadedAttributes->GetWillpower());
-		Attributes->SetHaste(LoadedAttributes->GetHaste());
-		Attributes->SetArmor(LoadedAttributes->GetArmor());
-		Attributes->SetMagicResistance(LoadedAttributes->GetMagicResistance());
-
-		// Notify the Ability System Component about the attribute changes
-		AbilitySystemComponent->ForceReplication();
-	}
-}

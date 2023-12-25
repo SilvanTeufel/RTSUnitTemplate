@@ -275,6 +275,7 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
 					Units[i]->RunLocation = Units[i]->RunLocationArray[Units[i]->RunLocationArrayIterator];
+					Units[i]->SetUEPathfinding = true;
 					Units[i]->SetUnitState(UnitData::Patrol);
 				}
 				else {

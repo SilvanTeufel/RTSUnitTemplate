@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Talents.h"
 #include "AbilitySystemComponent.h"
 #include "AttributeSet.h"
 #include "AttributeSetBase.generated.h"
@@ -26,6 +27,8 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void UpdateAttributes(const FAttributeSaveData SourceData);
 	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	// Health //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Health)

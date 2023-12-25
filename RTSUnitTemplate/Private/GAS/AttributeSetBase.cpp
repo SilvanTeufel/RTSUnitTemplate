@@ -30,54 +30,37 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Haste, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Armor, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MagicResistance, COND_None, REPNOTIFY_Always);
-	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxHealthPerStamina, COND_None, REPNOTIFY_Always);
-	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackDamagePerAttackPower, COND_None, REPNOTIFY_Always);
-	//DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedPerHaste, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseAttackDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseRunSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
 }
-/*
-void UAttributeSetBase::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+
+void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 {
-	Super::PreAttributeChange(Attribute, NewValue);
-
-	UE_LOG(LogTemp, Warning, TEXT("PreAttributeChange!"));
-	// Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma
-	if(Attribute == GetStaminaAttribute())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Stamina NewValue! %f"), NewValue);
-		//SetStamina(NewValue);
-	}
-	else if(Attribute == GetMaxHealthAttribute())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MaxHealth NewValue! %f"), NewValue);
-		//SetMaxHealth(NewValue);
-	}
-	else if(Attribute == GetAttackPowerAttribute())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AttackPower NewValue! %f"), NewValue);
-		//SetAttackDamage(NewValue);
-	}
-	else if(Attribute == GetAttackDamageAttribute() && NewValue)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AttackDamage NewValue! %f"), NewValue);
-		UE_LOG(LogTemp, Warning, TEXT("GetAttackDamage ! %f"), GetAttackDamage());		
-			// Ensure no recursive calls are made
-		if (GetAttackDamage() != NewValue)
-		{
-			//SetAttackDamage(NewValue);
-			AttackDamage.SetBaseValue(NewValue);
-			AttackDamage.SetCurrentValue(NewValue);
-		}
-	}
-	else if(Attribute == GetHasteAttribute() &&  GetBaseRunSpeed() > 0)
-	{
-		//SetRunSpeed(NewValue);
-	}
-}*/
-
+	SetAttributeMaxHealth(SourceData.MaxHealth);
+	SetAttributeHealth(SourceData.MaxHealth);
+	SetAttributeHealthRegeneration(SourceData.HealthRegeneration);
+	SetAttributeMaxShield(SourceData.MaxShield);
+	SetAttributeShield(SourceData.MaxShield);
+	SetAttributeShieldRegeneration(SourceData.ShieldRegeneration);
+	SetAttributeAttackDamage(SourceData.AttackDamage);
+	SetAttributeRange(SourceData.Range);
+	SetAttributeRunSpeed(SourceData.RunSpeed);
+	SetAttributeIsAttackedSpeed(SourceData.IsAttackedSpeed);
+	SetAttributeRunSpeedScale(SourceData.RunSpeedScale);
+	SetAttributeProjectileScaleActorDirectionOffset(SourceData.ProjectileScaleActorDirectionOffset);
+	SetAttributeProjectileSpeed(SourceData.ProjectileSpeed);
+	SetAttributeStamina(SourceData.Stamina);
+	SetAttributeAttackPower(SourceData.AttackPower);
+	SetAttributeWillpower(SourceData.Willpower);
+	SetAttributeHaste(SourceData.Haste);
+	SetAttributeArmor(SourceData.Armor);
+	SetAttributeMagicResistance(SourceData.MagicResistance);
+	SetAttributeBaseHealth(SourceData.BaseHealth);
+	SetAttributeBaseAttackDamage(SourceData.BaseAttackDamage);
+	SetAttributeBaseRunSpeed(SourceData.BaseRunSpeed);
+}
 
 void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)
 {

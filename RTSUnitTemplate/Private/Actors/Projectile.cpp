@@ -73,24 +73,18 @@ void AProjectile::Tick(float DeltaTime)
 
 	if(LifeTime > MaxLifeTime)
 	{
+		Impact(Target);
 		Destroy(true, false);
 	}else if(Target)
 	{
 		AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
 		
-		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead)
+		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead) 
 		{
 			const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
-			//AddActorLocalOffset(Direction*MovementSpeed);
+
 			AddActorWorldOffset(Direction * MovementSpeed);
-			// Calculate the desired rotation towards the target
-			//FRotator TargetRotation = Direction.Rotation();
 
-			// Apply the rotation offset
-			//TargetRotation += RotationOffset;
-
-			// Rotate the mesh to face the target
-			//Mesh->SetRelativeRotation(TargetRotation);
 		}else
 		{
 			Destroy(true, false);
@@ -98,6 +92,29 @@ void AProjectile::Tick(float DeltaTime)
 	}
 	
 }
+
+void AProjectile::Impact_Implementation(AActor* ImpactTarget)
+{
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
+	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
+	if(UnitToHit && UnitToHit->TeamId != TeamId)
+	{
+		float NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
+			
+		if(ShootingUnit->IsDoingMagicDamage)
+			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
+			
+		if(UnitToHit->Attributes->GetShield() <= 0)
+			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-NewDamage);
+		else
+			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
+
+		ShootingUnit->LevelData.Experience++;
+	}			
+}
+
+
 
 void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -115,27 +132,14 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
-			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
-
-			//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
+			Impact(Target);
 			
-			float NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
-			
-			if(ShootingUnit->IsDoingMagicDamage)
-				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
-			
-			if(UnitToHit->Attributes->GetShield() <= 0)
-			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-NewDamage);
-			else
-			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
-				
 			if(UnitToHit->GetUnitState() != UnitData::Run)
 			{
 				UnitToHit->UnitControlTimer = 0.f;
 				UnitToHit->SetUnitState( UnitData::IsAttacked );
 			}
-
-			ShootingUnit->LevelData.Experience++;
+		
 			// Call the impact event
 			ImpactEvent();
 

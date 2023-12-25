@@ -238,6 +238,9 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 
 	if(NewHealth <= 0.f)
 	{
+		//if(UnitIndex > 0)
+			//SaveLevelDataAndAttributes(FString::FromInt(UnitIndex));
+		
 		SetWalkSpeed(0);
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		SetActorEnableCollision(false);

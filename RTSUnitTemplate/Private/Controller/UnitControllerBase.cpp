@@ -84,6 +84,9 @@ FRotator AUnitControllerBase::GetControlRotation() const
 
 void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 {
+	//if(UnitBase->UnitIndex > 0)
+	//UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitBase->UnitIndex));
+	
 	UnitBase->SetWalkSpeed(0);
 	UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	UnitBase->SetActorEnableCollision(false);
@@ -161,6 +164,8 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 
 		AUnitBase* UnitBase = Cast<AUnitBase>(GetPawn());
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
+		if(!UnitBase) return;
+	
 		switch (UnitBase->UnitState)
 		{
 		case UnitData::None:
@@ -210,6 +215,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 					if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
 					{
 						UnitBase->UnitControlTimer = 0.f;
+						UnitBase->SetUEPathfinding = true;
 						UnitBase->SetUnitState(UnitData::PatrolRandom);
 					}
 				}
@@ -592,10 +598,12 @@ void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSe
 		{
 			UnitBase->UnitControlTimer = 0.f;
 			UnitBase->NextWaypoint->RandomTime = FMath::FRandRange(UnitBase->NextWaypoint->PatrolCloseMinInterval, UnitBase->NextWaypoint->PatrolCloseMaxInterval);
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::PatrolRandom);
 		}else
 		{
 			UnitBase->UnitControlTimer = 0.f;
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Patrol);
 		}
 	}

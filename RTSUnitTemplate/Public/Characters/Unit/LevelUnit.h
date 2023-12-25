@@ -48,26 +48,26 @@ public:
 	float RegenerationDelayTime = 1.f;
 
 	// Gameplay Effects for talent point investment
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> StaminaInvestmentEffect;
 
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> AttackPowerInvestmentEffect;
 
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> WillpowerInvestmentEffect;
 
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> HasteInvestmentEffect;
 
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> ArmorInvestmentEffect;
 
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TSubclassOf<UGameplayEffect> MagicResistanceInvestmentEffect;
 
 	// Array of Custom Effects
-	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TArray<TSubclassOf<UGameplayEffect>> CustomEffects;
 	
 	// Methods for handling leveling up and investing talent points
@@ -112,9 +112,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void LoadLevelDataAndAttributes(const FString& SlotName);
-
-	UFUNCTION(BlueprintCallable, Category = "Leveling")
-	void UpdateAttributes(UAttributeSetBase* LoadedAttributes);
 	
 //protected:
 	// Helper method to handle the actual attribute increase when a point is invested

@@ -38,6 +38,22 @@ void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & 
 	
 }
 
+int32 FindMatchingIndex(const TArray<int32>& IdArray, int32 SearchId)
+{
+	int32 Index = INDEX_NONE; // Initialize Index with an invalid value
+
+	for (int32 i = 0; i < IdArray.Num(); ++i)
+	{
+		if (IdArray[i] == SearchId)
+		{
+			Index = i;
+			break;
+		}
+	}
+
+	return Index; // Return the found index, or INDEX_NONE if not found
+}
+
 void ARTSGameModeBase::SetTeamId_Implementation(int Id, ACameraControllerBase* CameraControllerBase)
 {
 
@@ -150,37 +166,42 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Locati
 	return nullptr;
 }
 
-int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpecificUnitID)
+int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 {
 	int32 CountOfSpecificID = 0;
 
+	
 	for (int32 i = UnitSpawnDataSets.Num() - 1; i >= 0; --i)
 	{
 		FUnitSpawnData& UnitData = UnitSpawnDataSets[i];
-
-		// Assuming AUnitBase has a method to check if the unit is dead
-		if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead)
+		if(UnitData.Id == SpawnParaId)
 		{
-			// Check if the index is not already in the array
-			if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
+			// Assuming AUnitBase has a method to check if the unit is dead
+			if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead)
 			{
-				AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
-			}
-			APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-
-			if(PlayerController)
-			{
-				AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-				if(HUD)
+				// Check if the index is not already in the array
+				if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
 				{
-					HUD->AllUnits.Remove(UnitData.UnitBase);
+					UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
+					AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
+					SpawnParameterIdArray.Add(SpawnParaId);
 				}
+				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+				if(PlayerController)
+				{
+					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+					if(HUD)
+					{
+						HUD->AllUnits.Remove(UnitData.UnitBase);
+					}
+				}
+				UnitSpawnDataSets.RemoveAt(i);
 			}
-			UnitSpawnDataSets.RemoveAt(i);
-		}
-		else if (UnitData.Id == SpecificUnitID)
-		{
-			CountOfSpecificID++;
+			else //if (UnitData.Id == SpawnParaId)
+			{
+				CountOfSpecificID++;
+			}
 		}
 	}
 
@@ -269,6 +290,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		}
 		
 		UnitBase->InitializeAttributes();
+		
 		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 		
 		return UnitBase;
@@ -371,10 +393,8 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		
 			UnitBase->InitializeAttributes();
 
-		
-			AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-		
-			
+			int32 Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
+			AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
 			
 			FUnitSpawnData UnitSpawnDataSet;
 			UnitSpawnDataSet.Id = SpawnParameter.Id;
@@ -388,6 +408,9 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	// Enemyspawn
 }
 
+
+
+
 void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
@@ -397,21 +420,41 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
 		if(HUD)
 		{
-			if(!AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[0])
+				HUD->AssignNewHighestIndex(UnitBase);
+				HUD->AllUnits.Add(UnitBase);
+		}
+	}
+}
+
+void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter)
+{
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+	if(PlayerController)
+	{
+		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+		if(HUD)
+		{
+			if(Index == INDEX_NONE || !AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[Index])
 			{
 				HUD->AssignNewHighestIndex(UnitBase);
 				HUD->AllUnits.Add(UnitBase);
 			}else
 			{
+				UnitBase->SetUnitIndex(AvailableUnitIndexArray[Index]);
+
+				if(SpawnParameter.LoadLevelAfterSpawn)
+				UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
 				
-				UnitBase->SetUnitIndex(AvailableUnitIndexArray[0]);
-				AvailableUnitIndexArray.RemoveAt(0);
+				AvailableUnitIndexArray.RemoveAt(Index);
+				SpawnParameterIdArray.RemoveAt(Index);
 				HUD->AllUnits.Add(UnitBase);
 			}
-			//UE_LOG(LogTemp, Warning, TEXT("Assigned new ID! %d"), UnitBase->UnitIndex);
+			
 		}
 	}
 }
+
 
 void ARTSGameModeBase::AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag)
 {

@@ -72,6 +72,9 @@ struct FUnitSpawnParameter : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect> Attributes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool LoadLevelAfterSpawn = false;
 };
 
 USTRUCT(BlueprintType)
@@ -127,19 +130,26 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	int32 CheckAndRemoveDeadUnits(int32 SpecificUnitID);
+	int32 CheckAndRemoveDeadUnits(int32 SpawnParaId);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* SpawnSingleUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<int32> AvailableUnitIndexArray;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<int32> SpawnParameterIdArray;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter);
+
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag);

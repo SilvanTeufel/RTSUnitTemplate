@@ -87,6 +87,7 @@ void AWaypoint::OnPlayerEnter_Implementation(UPrimitiveComponent* OverlapCompone
 			{
 				//SetupTimerFunction();
 				RandomTime = FMath::FRandRange(PatrolCloseMinInterval, PatrolCloseMaxInterval);
+				ActualCharacter->SetUEPathfinding = true;
 				ActualCharacter->SetUnitState(UnitData::PatrolRandom);
 			}
 			else if(NextWaypoint)

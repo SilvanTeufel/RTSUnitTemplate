@@ -74,6 +74,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 				if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
 				{
 					UnitBase->UnitControlTimer = 0.f;
+					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::PatrolRandom);
 				}
 			}

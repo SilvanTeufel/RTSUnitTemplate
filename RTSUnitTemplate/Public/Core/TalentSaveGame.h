@@ -4,8 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
+#include "GAS/AttributeSetBase.h"
 #include "Core/UnitData.h"
+#include "Core/Talents.h"
 #include "TalentSaveGame.generated.h"
+
 
 /**
  * 
@@ -15,7 +18,12 @@ class RTSUNITTEMPLATE_API UTalentSaveGame : public USaveGame
 {
 	GENERATED_BODY()
 
+	
+
 public:
+	UFUNCTION(BlueprintCallable)
+	void PopulateAttributeSaveData(UAttributeSetBase* AttributeSet);
+	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	FLevelData LevelData;
 
@@ -23,5 +31,5 @@ public:
 	FLevelUpData LevelUpData;
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	UAttributeSetBase* Attributes;
+	FAttributeSaveData AttributeSaveData;
 };
