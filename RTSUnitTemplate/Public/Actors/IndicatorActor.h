@@ -36,7 +36,7 @@ public:
 	FVector DamageIndicatorCompLocation = FVector (0.f, 0.f, 50.f);
 	
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-	void SpawnDamageIndicator(float Damage);
+	void SpawnDamageIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float LifeTime = 0.f;

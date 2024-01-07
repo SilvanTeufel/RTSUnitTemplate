@@ -249,7 +249,9 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 	const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
 
 	FTransform EnemyTransform;
-	EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, 100.f));
+	
+	EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, SpawnParameter.UnitOffset.Z));
+		
 		
 	const auto UnitBase = Cast<AUnitBase>
 		(UGameplayStatics::BeginDeferredActorSpawnFromClass
@@ -314,18 +316,28 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		}
 		UnitBase->UnitState = SpawnParameter.State;
 		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-		
+
+
+		if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
+		{
+			FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
+			UnitBase->SetActorLocation(NewLocation);
+		}
+
 		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
 
 		if(SpawnParameter.Attributes)
 		{
 			UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
 		}
-		
+
 		UnitBase->InitializeAttributes();
+
 		
 		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+		
 		
 		return UnitBase;
 	}
@@ -358,7 +370,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
 
 		FTransform EnemyTransform;
-		 EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, 100.f));
+		EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, SpawnParameter.UnitOffset.Z));
 		
 		const auto UnitBase = Cast<AUnitBase>
 			(UGameplayStatics::BeginDeferredActorSpawnFromClass
@@ -423,9 +435,14 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 
-			
-			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+			if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
+			{
+				FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
+				UnitBase->SetActorLocation(NewLocation);
+			}
 
+			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+			
 			if(SpawnParameter.Attributes)
 			{
 				UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;

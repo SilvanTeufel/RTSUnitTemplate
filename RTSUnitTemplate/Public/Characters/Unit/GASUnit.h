@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -41,19 +41,19 @@ public:
 	
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
-	UFUNCTION(BlueprintCallable, Category = "GAS")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void InitializeAttributes();
 
-	UFUNCTION(BlueprintCallable, Category = "Gas")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void GiveAbilities();
 
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_PlayerState() override;
 
-	UFUNCTION(BlueprintCallable, Category = "GAS")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ActivateAbilityByInputID(EGASAbilityInputID InputID);
 
-	UFUNCTION(BlueprintCallable, Category = "GAS")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID);
 	
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
@@ -62,6 +62,13 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID OffensiveAbilityID;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID DefensiveAbilityID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID AttackAbilityID;
 	
 };

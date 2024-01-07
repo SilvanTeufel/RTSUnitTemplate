@@ -10,9 +10,6 @@
 void UTalentChooser::NativeConstruct()
 {
     Super::NativeConstruct();
-
-    // Initialize level and talent-related UI elements
-    // Initialize attributes
     
     InitializeLevelAndTalentUI();
     

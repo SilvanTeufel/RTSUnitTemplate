@@ -111,6 +111,8 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 
 		ShootingUnit->LevelData.Experience++;
+		
+		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID);
 	}			
 }
 
@@ -133,8 +135,10 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
 			Impact(Target);
-			
-			if(UnitToHit->GetUnitState() != UnitData::Run)
+
+			if(UnitToHit->GetUnitState() != UnitData::Run &&
+				UnitToHit->GetUnitState() != UnitData::Attack &&
+				UnitToHit->GetUnitState() != UnitData::Pause)
 			{
 				UnitToHit->UnitControlTimer = 0.f;
 				UnitToHit->SetUnitState( UnitData::IsAttacked );

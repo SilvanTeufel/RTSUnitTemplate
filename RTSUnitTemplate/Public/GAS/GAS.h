@@ -1,3 +1,5 @@
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -5,13 +7,13 @@
 UENUM(BlueprintType)
 enum class EGASAbilityInputID : uint8
 {
-	None,
-	Confirm,
-	Cancel,
 	AbilityOne,
 	AbilityTwo,
 	AbilityThree,
 	AbilityFour,
 	AbilityFive,
-	AbilitySix
+	AbilitySix,
+	Confirm,
+	Cancel,
+	None,
 };

@@ -78,6 +78,9 @@ struct FUnitSpawnParameter : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool SkipTimerAfterDeath = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SpawnAtWaypoint = false;
 };
 
 USTRUCT(BlueprintType)

@@ -34,39 +34,6 @@ void AWaypoint::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 }
-/*
-void AWaypoint::TimerFunction_Implementation()
-{
-	//AUnitBase* ActualCharacter = ...;  // Obtain a reference to ActualCharacter however you need to.
-	if(ActualCharacter)
-	{
-		if(ActualCharacter->UnitState == UnitData::Attack ||
-			ActualCharacter->UnitState == UnitData::Chase ||
-			ActualCharacter->UnitState == UnitData::IsAttacked ||
-			ActualCharacter->UnitState == UnitData::Pause ||
-			ActualCharacter->UnitState == UnitData::Run)
-		{
-			// Stop Timer here
-			GetWorld()->GetTimerManager().ClearTimer(TimerHandle);
-		}
-		else {
-			ActualCharacter->SetUEPathfinding = true;
-		}
-	}
-}
-
-
-void AWaypoint::SetupTimerFunction_Implementation()
-{
-	if(PatrolCloseToWaypoint)
-	{
-		ActualCharacter->SetUEPathfinding = true;
-		
-		float RandomInterval = FMath::FRandRange(PatrolCloseMinInterval, PatrolCloseMaxInterval);
-		// Set the timer to call the function that sets ActualCharacter->SetUEPathfinding = true;
-		GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AWaypoint::TimerFunction, RandomInterval, true);
-	}
-}*/
 
 void AWaypoint::OnPlayerEnter_Implementation(UPrimitiveComponent* OverlapComponent,
 	AActor* OtherActor, UPrimitiveComponent* OtherComponent,

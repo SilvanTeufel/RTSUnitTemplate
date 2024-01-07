@@ -20,6 +20,13 @@ public:
 		Damage = NewDamage;
 	}
 
+	void SetColour(FLinearColor HighColor, FLinearColor LowColor, float COffset)
+	{
+		HighDamageColor = HighColor;
+		LowDamageColor = LowColor;
+		ColorOffset = COffset;
+	}
+	
 protected:
 	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
@@ -33,16 +40,19 @@ protected:
 	class UTextBlock* Indicator;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
-	float MaxDamage = 1000.f;
+	float MaxDamage = 100.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
-	float MinDamage = 100.f;
+	float MinDamage = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
-	float MaxTextSize = 24.f;
+	float ColorOffset = 0.f;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
+	float MaxTextSize = 50.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
-	float MinTextSize = 8.f;
+	float MinTextSize = 24.f;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Damage Indicator")
 	FLinearColor HighDamageColor = FLinearColor::Red;

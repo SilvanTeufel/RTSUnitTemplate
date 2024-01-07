@@ -26,16 +26,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation);
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CheckSpeakingUnits", Keywords = "TopDownRTSCamLib CheckSpeakingUnits"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool CheckSpeakingUnits();
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetCameraState", Keywords = "TopDownRTSCamLib SetCameraState"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetCameraState(TEnumAsByte<CameraData::CameraState> NewCameraState);
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetViewPortScreenSizes", Keywords = "TopDownRTSCamLib GetViewPortScreenSizes"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetViewPortScreenSizes(int x);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetCameraPanDirection", Keywords = "TopDownRTSCamLib GetCameraPanDirection"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector GetCameraPanDirection();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -77,7 +77,7 @@ public:
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float UnitCountOrbitTimeMultiplyer = 0.5f;
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CameraBaseMachine", Keywords = "TopDownRTSCamLib CameraBaseMachine"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CameraBaseMachine(float DeltaTime);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -1,11 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Widgets/DamageIndicator.h"
 #include "Characters/Unit/UnitBase.h"
-//#include "Fonts/FontFaceInterface.h"
-//#include "SlateCore.h"
-
 
 void UDamageIndicator::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
@@ -57,6 +53,13 @@ FLinearColor UDamageIndicator::CalculateTextColor()
 {
 	// Calculate the text color based on the damage value
 	float ClampedDamage = FMath::Clamp(Damage, MinDamage, MaxDamage);
-	float Alpha = (ClampedDamage - MinDamage) / (MaxDamage - MinDamage);
+	float Alpha = (ClampedDamage - MinDamage) / (MaxDamage - MinDamage); 
+
+	// Apply ColorOffset
+	Alpha += ColorOffset;
+
+	// Ensure Alpha stays within the 0 to 1 range
+	Alpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	
 	return FLinearColor::LerpUsingHSV(LowDamageColor, HighDamageColor, Alpha);
 }

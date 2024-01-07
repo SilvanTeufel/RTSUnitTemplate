@@ -560,7 +560,7 @@ void AControllerBase::SpawnMissileRain(int TeamId, FVector Location) // FVector 
 	
 }
 
-void AControllerBase::SpawnEffectArea(int TeamId, FVector Location)
+void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass)
 {
 
 	FTransform Transform;
@@ -570,15 +570,16 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location)
 		
 	const auto MyEffectArea = Cast<AEffectArea>
 						(UGameplayStatics::BeginDeferredActorSpawnFromClass
-						(this, EffectAreaClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+						(this, EAClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 	
 	if (MyEffectArea != nullptr)
 	{
 		MyEffectArea->TeamId = TeamId;
-	
 		MyEffectArea->Mesh->OnComponentBeginOverlap.AddDynamic(MyEffectArea, &AEffectArea::OnOverlapBegin);
-		MyEffectArea->Mesh->OnComponentEndOverlap.AddDynamic(MyEffectArea, &AEffectArea::OnOverlapEnd);
 
+		// Apply scale to the Mesh
+		MyEffectArea->Mesh->SetWorldScale3D(Scale);
+		
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
 	

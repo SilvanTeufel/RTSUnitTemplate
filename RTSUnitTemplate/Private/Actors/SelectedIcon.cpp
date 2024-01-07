@@ -13,8 +13,9 @@ ASelectedIcon::ASelectedIcon()
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
     PrimaryActorTick.bCanEverTick = true;
     IconMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SphereMesh"));
+    RootComponent = IconMesh;
     IconMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // QueryAndPhysics
-    IconMesh->SetupAttachment(RootComponent);
+    //IconMesh->SetupAttachment(RootComponent);
     static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Plane"));
     if (SphereMeshAsset.Succeeded())
     {

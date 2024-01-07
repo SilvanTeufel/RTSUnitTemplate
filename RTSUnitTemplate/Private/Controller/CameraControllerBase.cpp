@@ -182,7 +182,7 @@ FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
 	}
 
 	float UnitTimePart = UnitsInRangeCount*UnitCountOrbitTimeMultiplyer;
-	float MaxTime = OrbitTimes[0] + UnitTimePart;
+	float MaxTime = OrbitTimes[OrbitRotatorIndex] + UnitTimePart;
 
 	if(OrbitLocationControlTimer >= MaxTime)
 	{

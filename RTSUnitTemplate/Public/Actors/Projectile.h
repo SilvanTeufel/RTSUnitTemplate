@@ -16,7 +16,8 @@ public:
 	AProjectile();
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-	
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void Init(AActor* TargetActor, AActor* ShootingActor);
 
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)

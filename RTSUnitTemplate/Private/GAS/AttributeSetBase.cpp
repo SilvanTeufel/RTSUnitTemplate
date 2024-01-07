@@ -1,7 +1,10 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/AttributeSetBase.h"
+
+#include "Actors/IndicatorActor.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 UAttributeSetBase::UAttributeSetBase()
@@ -34,6 +37,8 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseAttackDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, BaseRunSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, EffectDamage, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, EffectShield, COND_None, REPNOTIFY_Always);
 }
 
 void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
@@ -60,6 +65,91 @@ void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 	SetAttributeBaseHealth(SourceData.BaseHealth);
 	SetAttributeBaseAttackDamage(SourceData.BaseAttackDamage);
 	SetAttributeBaseRunSpeed(SourceData.BaseRunSpeed);
+}
+
+void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
+{
+	if(Data.EvaluatedData.Attribute == GetEffectDamageAttribute())
+	{
+
+		// Assume DamageAmount is the amount of damage to apply
+		float DamageAmount = Data.EvaluatedData.Magnitude;
+
+		// Check and apply damage to Shield first
+		if(DamageAmount < 0)
+		{
+			if(GetShield() > 0)
+			{
+				float OldShield = GetShield();
+
+				SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
+				SetAttributeShield(GetShield() + DamageAmount);
+				
+				if(OldShield < DamageAmount)
+				{
+					DamageAmount = DamageAmount - (OldShield - GetShield());
+				}
+				else
+				{
+					DamageAmount = 0;
+				}
+			}
+
+			SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
+			SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
+		}else
+		{
+			SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
+			SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
+		}
+	}
+
+	if(Data.EvaluatedData.Attribute == GetEffectShieldAttribute())
+	{
+		float ShieldAmount = Data.EvaluatedData.Magnitude;
+		SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
+		SetAttributeShield(GetShield() + ShieldAmount);
+	}
+
+	
+	// Call the superclass version for other attributes
+	Super::PostGameplayEffectExecute(Data);
+	
+	
+}
+
+
+void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset) // FVector TargetLocation
+{
+
+	AActor* UnitBase = GetOwningActor();
+	
+	if(Damage > 0 && IndicatorBaseClass)
+	{
+		
+		FTransform Transform;
+		Transform.SetLocation(UnitBase->GetActorLocation());
+		Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
+
+		const auto MyIndicator = Cast<AIndicatorActor>
+							(UGameplayStatics::BeginDeferredActorSpawnFromClass
+							(this, IndicatorBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+		if (MyIndicator != nullptr)
+		{
+			UGameplayStatics::FinishSpawningActor(MyIndicator, Transform);
+			MyIndicator->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
+		}
+	}
+}
+
+void UAttributeSetBase::OnRep_EffectDamage(const FGameplayAttributeData& OldEffectDamage)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, EffectDamage, OldEffectDamage);
+}
+
+void UAttributeSetBase::OnRep_EffectShield(const FGameplayAttributeData& OldEffectShield)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, EffectShield, OldEffectShield);
 }
 
 void UAttributeSetBase::OnRep_Health(const FGameplayAttributeData& OldHealth)

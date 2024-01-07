@@ -1,5 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Camera/CameraBase.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"

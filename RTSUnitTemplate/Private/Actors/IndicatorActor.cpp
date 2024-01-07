@@ -10,8 +10,8 @@ AIndicatorActor::AIndicatorActor(const FObjectInitializer& ObjectInitializer):Su
 	PrimaryActorTick.bCanEverTick = true;
 
 	DamageIndicatorComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("DamageIndicator"));
-	DamageIndicatorComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-	
+	//DamageIndicatorComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
+	RootComponent = DamageIndicatorComp;
 }
 
 // Called when the game starts or when spawned
@@ -19,7 +19,7 @@ AIndicatorActor::AIndicatorActor(const FObjectInitializer& ObjectInitializer):Su
 void AIndicatorActor::BeginPlay()
 {
 	Super::BeginPlay();
-	SpawnDamageIndicator(555.f);
+	//SpawnDamageIndicator(555.f);
 }
 
 // Called every frame
@@ -41,7 +41,7 @@ void AIndicatorActor::Tick(float DeltaTime)
 }
 
 
-void AIndicatorActor::SpawnDamageIndicator(float Damage)
+void AIndicatorActor::SpawnDamageIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset)
 {
 
 	if (DamageIndicatorComp) {
@@ -52,6 +52,7 @@ void AIndicatorActor::SpawnDamageIndicator(float Damage)
 		{
 			LastDamage = Damage;
 			DamageIndicator->SetDamage(Damage);
+			DamageIndicator->SetColour(HighColor, LowColor, ColorOffset);
 		}
 
 	}

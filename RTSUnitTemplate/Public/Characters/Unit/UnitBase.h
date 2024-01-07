@@ -28,7 +28,16 @@ protected:
 // Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+
+private:
+	FTimerHandle AccelerationTimerHandle;
+	FVector TargetVelocity;
+	FVector CurrentVelocity;
+	float AccelerationRate;
+	FVector ChargeDestination;
+	float RequiredDistanceToStart;
 	
+	void Accelerate();
 public:	
 // Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -37,7 +46,13 @@ public:
 	
 // Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void TeleportToValidLocation(const FVector& Destination);
+
+	UFUNCTION(BlueprintCallable)
+	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
 	
@@ -74,6 +89,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool SetUEPathfinding = true;
 
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		//bool ReCalcRandomLocation = true;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float AutoSetUEPathfindingTimer = 0.f;
 	
@@ -88,6 +106,16 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void StartAttackEvent();
+
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerMeeleImpactEvent();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MultiCastMeeleImpactEvent();
+	
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void MeeleImpactEvent();
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
 	void IsAttacked(AActor* AttackingCharacter); // AActor* SelectedCharacter
@@ -234,6 +262,8 @@ public:
 ///////////////////////////////////////////////////////////////////
 	
 };
+
+
 
 
 

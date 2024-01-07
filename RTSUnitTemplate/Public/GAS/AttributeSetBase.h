@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -6,6 +6,10 @@
 #include "Core/Talents.h"
 #include "AbilitySystemComponent.h"
 #include "AttributeSet.h"
+#include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
+#include "GameplayEffectExtension.h"
+#include "Actors/IndicatorActor.h"
 #include "AttributeSetBase.generated.h"
 
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
@@ -30,6 +34,37 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void UpdateAttributes(const FAttributeSaveData SourceData);
 	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
+
+//protected:
+	//AIndicatorActor* IndicatorActorRef;
+
+	
+public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SpawnIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);
+	
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	TSubclassOf<class AIndicatorActor> IndicatorBaseClass;
+	
+	// EffectDamage //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_EffectDamage)
+	FGameplayAttributeData EffectDamage;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, EffectDamage);
+
+	UFUNCTION()
+	virtual void OnRep_EffectDamage(const FGameplayAttributeData& OldEffectDamage);
+	// EffectDamage //
+
+	// EffectHeal //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_EffectShield)
+	FGameplayAttributeData EffectShield;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, EffectShield);
+
+	UFUNCTION()
+	virtual void OnRep_EffectShield(const FGameplayAttributeData& OldEffectShield);
+	// EffectHeal //
+	
 	// Health //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Health)
 	FGameplayAttributeData Health;
@@ -299,4 +334,3 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeBaseRunSpeed(float NewValue);
 };
-

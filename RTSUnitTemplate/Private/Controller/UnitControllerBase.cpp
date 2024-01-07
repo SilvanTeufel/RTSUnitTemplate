@@ -84,9 +84,6 @@ FRotator AUnitControllerBase::GetControlRotation() const
 
 void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 {
-	//if(UnitBase->UnitIndex > 0)
-	//UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitBase->UnitIndex));
-	
 	UnitBase->SetWalkSpeed(0);
 	UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	UnitBase->SetActorEnableCollision(false);
@@ -425,6 +422,8 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     						{
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
+
+    						UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->OffensiveAbilityID);
     						
     						UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
@@ -514,8 +513,20 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 					UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
 				UnitBase->LevelData.Experience++;
+
+				UnitBase->ServerMeeleImpactEvent();
+				UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID);
 				
-				if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run)
+				if (!UnitBase->UnitToChase->UnitsToChase.Contains(UnitBase))
+				{
+					// If not, add UnitBase to the array
+					UnitBase->UnitToChase->UnitsToChase.Emplace(UnitBase);
+					UnitBase->UnitToChase->SetNextUnitToChase();
+				}
+				
+				if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run &&
+					UnitBase->UnitToChase->GetUnitState() != UnitData::Attack &&
+					UnitBase->UnitToChase->GetUnitState() != UnitData::Pause)
 				{
 					UnitBase->UnitToChase->UnitControlTimer = 0.f;
 					UnitBase->UnitToChase->SetUnitState( UnitData::IsAttacked );
@@ -668,29 +679,32 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 
 void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 {
-
-	UnitBase->RandomPatrolLocation = UnitBase->NextWaypoint->GetActorLocation()
-	+ FMath::RandPointInBox(FBox(FVector(-UnitBase->NextWaypoint->PatrolCloseOffset.X, -UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0),
-	FVector(UnitBase->NextWaypoint->PatrolCloseOffset.X, UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0)));
-
-	// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
-	const FVector Start = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
-	const FVector End = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
-
-	FHitResult HitResult;
-	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
-
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
+	while(true)
 	{
-		AActor* HitActor = HitResult.GetActor();
+		UnitBase->RandomPatrolLocation = UnitBase->NextWaypoint->GetActorLocation()
+		+ FMath::RandPointInBox(FBox(FVector(-UnitBase->NextWaypoint->PatrolCloseOffset.X, -UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0),
+		FVector(UnitBase->NextWaypoint->PatrolCloseOffset.X, UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0)));
 
-		// Check if we hit the landscape
-		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
+		// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
+		const FVector Start = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
+		const FVector End = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
+
+		FHitResult HitResult;
+		FCollisionQueryParams CollisionParams;
+		CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
 		{
-			// Hit landscape
-			// Set the Z-coordinate accordingly
-			UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+			AActor* HitActor = HitResult.GetActor();
+
+			// Check if we hit the landscape
+			if (HitActor && HitActor->IsA(ALandscape::StaticClass()) )
+			{
+				// Hit landscape
+				// Set the Z-coordinate accordingly
+				UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+				return;
+			}
 		}
 	}
 }
@@ -698,9 +712,7 @@ void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase ||  !UnitBase->NextWaypoint) return;
-	
 
-	
 	FVector ActorLocation = UnitBase->GetActorLocation();
 	FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
 	
@@ -715,6 +727,7 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 		}
 		
 		UnitBase->UnitControlTimer = 0.f;
+		//UnitBase->ReCalcRandomLocation = true;
 		UnitBase->SetUEPathfinding = true;
 		
 	}
@@ -727,7 +740,8 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	
 	if(!UnitBase->SetUEPathfinding)
 		return;
-
+	
+	//if(UnitBase->ReCalcRandomLocation)
 	SetPatrolCloseLocation(UnitBase);
 	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RandomPatrolLocation);
 }
@@ -745,6 +759,8 @@ void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		{
 			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 			// You can use the controller here
+
+			
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
 			ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);

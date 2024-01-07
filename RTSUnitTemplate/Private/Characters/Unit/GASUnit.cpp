@@ -1,5 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/GASUnit.h"
 #include "GAS/AttributeSetBase.h"
@@ -142,7 +141,7 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID)
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID)
 {
-	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::None);
+	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 
 	// Check if the AbilityIndex is valid in the DefaultAbilities array
 	if (DefaultAbilities.IsValidIndex(AbilityIndex))

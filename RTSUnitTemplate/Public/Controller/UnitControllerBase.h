@@ -137,7 +137,5 @@ public:
 
 	UPROPERTY(BlueprintReadWrite,  Category = RTSUnitTemplate)
 		bool ProjectileSpawned = false;
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DisableBaseConstructor", Keywords = "RTSUnitTemplate DisableBaseConstructor"), Category = RTSUnitTemplate)
-	//bool DisableBaseConstructor = false;
 };
 

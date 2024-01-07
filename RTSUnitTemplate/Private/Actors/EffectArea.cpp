@@ -1,7 +1,8 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EffectArea.h"
+
+#include "Net/UnrealNetwork.h"
 
 
 // Sets default values
@@ -21,18 +22,8 @@ AEffectArea::AEffectArea()
 void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
-
-
-	GetWorld()->GetTimerManager().SetTimer(DamageTimerHandle, this, &AEffectArea::ApplyDamage, DamageIntervalTime, true);
 }
 
-void AEffectArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	Super::EndPlay(EndPlayReason);
-
-	// Clear the timer when the actor is destroyed or gameplay ends
-	GetWorld()->GetTimerManager().ClearTimer(DamageTimerHandle);
-}
 // Called every frame
 void AEffectArea::Tick(float DeltaTime)
 {
@@ -46,56 +37,30 @@ void AEffectArea::Tick(float DeltaTime)
 	
 }
 
-void AEffectArea::ApplyDamage()
+void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	for(AUnitBase* UnitToHit : UnitsToHit)
-	{
-		if(UnitToHit && !IsHealing) // Always check for null pointers before accessing
-		{
-			if(UnitToHit->Attributes->GetShield() <= 0)
-				UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth() - (Damage - UnitToHit->Attributes->GetMagicResistance()));
-			else
-				UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield() - (Damage - UnitToHit->Attributes->GetMagicResistance()));
-
-			if(UnitToHit->GetUnitState() != UnitData::Run)
-				UnitToHit->SetUnitState(UnitData::IsAttacked);
-		}else if(UnitToHit && IsHealing) // Always check for null pointers before accessing
-		{
-			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth() + Damage);
-		}
-	}
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AEffectArea, AreaEffect);
 }
+
+
 
 void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if(OtherActor)
 	{
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
-		
+
+
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
-			UnitsToHit.Remove(UnitToHit);
+			// Do Nothing
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
-			UnitsToHit.Add(UnitToHit);
+			UnitToHit->ApplyInvestmentEffect(AreaEffect);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
-			UnitsToHit.Add(UnitToHit);
-		}
-			
-	}
-}
-
-void AEffectArea::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-	if(OtherActor)
-	{
-		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
-
-		// If the unit is in the UnitsToHit array, remove it
-		if(UnitToHit)
-		{
-			UnitsToHit.Remove(UnitToHit);
+			UnitToHit->ApplyInvestmentEffect(AreaEffect);
 		}
 	}
 }

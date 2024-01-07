@@ -465,7 +465,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 
 				CameraControllerBase->SpawnMissileRain(4, FVector(1000.f, -1000.f, 1000.f));
 
-				CameraControllerBase->SpawnEffectArea(3, FVector(1000.f, -1000.f, 10.f));
+				CameraControllerBase->SpawnEffectArea(3, FVector(1000.f, -1000.f, 10.f), FVector(5), CameraControllerBase->EffectAreaClass);
 			} break;
 		case 16:
 			{

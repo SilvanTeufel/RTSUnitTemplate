@@ -1,17 +1,10 @@
-// LevelUnit.cpp
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/LevelUnit.h"
 
 #include "Core/TalentSaveGame.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
-/*
-ALevelUnit::ALevelUnit()
-{
-	// Initialize default values
-	CharacterLevel = 1; // Start at level 1
-	TalentPoints = 0; // Initial talent points can be set here or through another method
-}*/
 
 void ALevelUnit::Tick(float DeltaTime)
 {
@@ -21,18 +14,13 @@ void ALevelUnit::Tick(float DeltaTime)
 
 	if(RegenerationTimer >= RegenerationDelayTime)
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("GetHealthRegeneration! %f"), Attributes->GetHealthRegeneration());
-		//UE_LOG(LogTemp, Warning, TEXT("GetWillpower! %f"), Attributes->GetWillpower());
+
 		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
 		RegenerationTimer = 0.f;
-		//if(HasAuthority())UE_LOG(LogTemp, Warning, TEXT("SERVER LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
-		//if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("CLIENT LevelUnitBase->Attributes! %f"), Attributes->GetAttackDamage());
-
 
 		if(AutoLeveling && HasAuthority()) AutoLevelUp();
-		//SetOwner(GetController());
-		//if(HasAuthority())HandleInvestment(CurrentInvestmentState);
+
 	}
 	
 }
@@ -198,6 +186,9 @@ void ALevelUnit::ResetTalents()
 	Attributes->SetRunSpeed(Attributes->GetBaseRunSpeed());
 	Attributes->SetArmor(0);
 	Attributes->SetMagicResistance(0);
+
+	Attributes->SetHealthRegeneration(0);
+	Attributes->SetShieldRegeneration(0);
 }
 
 void ALevelUnit::ResetLevel()
@@ -205,6 +196,7 @@ void ALevelUnit::ResetLevel()
 	LevelData.CharacterLevel = 1;
 	LevelData.TalentPoints = 0;
 	LevelData.UsedTalentPoints = 0;
+	LevelData.Experience = 0;
 	//InitializeAttributes();
 	Attributes->SetStamina(0);
 	Attributes->SetMaxHealth(Attributes->GetBaseHealth());

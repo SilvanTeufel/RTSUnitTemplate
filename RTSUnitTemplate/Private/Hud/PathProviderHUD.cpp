@@ -12,34 +12,6 @@ void APathProviderHUD::BeginPlay()
 	Super::BeginPlay();
 
 	if(StopLoading) return;
-	/*
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
-
-	for(int i = 0; i < AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		if(Unit->TeamId)
-			FriendlyUnits.Add(Unit);
-		if(!Unit->TeamId)
-			EnemyUnitBases.Add(Unit);
-
-		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(AllUnits[i]);
-		if(SpeakingUnit)
-			SpeakingUnits.Add(SpeakingUnit);
-		
-		AllUnitBases.Add(Unit);
-	}*/
-
-	/*
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ASpeakingUnit::StaticClass(), AllUnits);
-	for(int i = 0; i < AllUnits.Num(); i++)
-	{
-		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(AllUnits[i]);
-		
-		if(SpeakingUnit)
-			SpeakingUnits.Add(SpeakingUnit);
-	}*/
-
 	
 	TArray<AActor*> NoPathFindingAreasActors;
 	
