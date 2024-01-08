@@ -110,6 +110,12 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 		else
 			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 
+
+		if(UnitToHit && UnitToHit->TeamId != TeamId && UnitToHit->GetUnitState() != UnitData::Dead)
+		{
+			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
+		}
+		
 		ShootingUnit->LevelData.Experience++;
 		
 		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID);

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilityUnit.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
@@ -11,7 +12,7 @@
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AUnitBase : public APathSeekerBase
+class RTSUNITTEMPLATE_API AUnitBase : public AAbilityUnit
 {
 	GENERATED_BODY()
 	
@@ -29,15 +30,7 @@ protected:
 	virtual void BeginPlay() override;
 
 
-private:
-	FTimerHandle AccelerationTimerHandle;
-	FVector TargetVelocity;
-	FVector CurrentVelocity;
-	float AccelerationRate;
-	FVector ChargeDestination;
-	float RequiredDistanceToStart;
-	
-	void Accelerate();
+
 public:	
 // Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -47,12 +40,7 @@ public:
 // Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void TeleportToValidLocation(const FVector& Destination);
-
-	UFUNCTION(BlueprintCallable)
-	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
-
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
 	
@@ -170,19 +158,7 @@ public:
 	void SetWaypoint(class AWaypoint* NewNextWaypoint);
 ///////////////////////////////////////////////////////////////////
 
-// Set Unit States  //////////////////////////////////////////
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> GetUnitState();
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitState", Keywords = "RTSUnitTemplate UnitState"), Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> UnitState = UnitData::Idle;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitStatePlaceholder", Keywords = "RTSUnitTemplate UnitStatePlaceholder"), Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Patrol;
-///////////////////////////////////////////////////////////////////
 
 // related to Healthbar  //////////////////////////////////////////
 public:
@@ -240,6 +216,9 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SpawnProjectile", Keywords = "RTSUnitTemplate SpawnProjectile"), Category = RTSUnitTemplate)
 	void SpawnProjectile(AActor* Target, AActor* Attacker);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SpawnProjectileFromClass(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;

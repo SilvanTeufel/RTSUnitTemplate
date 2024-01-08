@@ -16,6 +16,12 @@ AEffectArea::AEffectArea()
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
+	
+	if (HasAuthority())
+	{
+		bReplicates = true;
+		SetReplicateMovement(true);
+	}
 }
 
 // Called when the game starts or when spawned
@@ -41,6 +47,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEffectArea, AreaEffect);
+	DOREPLIFETIME(AEffectArea, Mesh);
 }
 
 

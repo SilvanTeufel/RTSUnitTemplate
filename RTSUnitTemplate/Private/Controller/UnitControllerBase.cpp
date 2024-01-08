@@ -401,6 +401,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     						{
     							UnitBase->ServerStartAttackEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Attack);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID);
     							CreateProjectile(UnitBase);
     						}else
     						{
@@ -422,9 +423,8 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     						{
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
-
-    						UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->OffensiveAbilityID);
     						
+    						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID);
     						UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
     	
@@ -501,7 +501,8 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 			// Attack without Projectile
 			if(IsUnitToChaseInRange(UnitBase))
 			{
-
+				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID);
+				
 				float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
 			
 				if(UnitBase->IsDoingMagicDamage)

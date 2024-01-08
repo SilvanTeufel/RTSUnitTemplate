@@ -50,6 +50,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MovementSpeed = 50.f;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UGameplayEffect> ProjectileEffect;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
