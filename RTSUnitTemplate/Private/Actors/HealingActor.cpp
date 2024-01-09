@@ -15,7 +15,6 @@ AHealingActor::AHealingActor()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // QueryAndPhysics
-	//Mesh->SetupAttachment(RootComponent);
 	Mesh->SetMaterial(0, Material);
 	Mesh->SetSimulatePhysics(false);
 	

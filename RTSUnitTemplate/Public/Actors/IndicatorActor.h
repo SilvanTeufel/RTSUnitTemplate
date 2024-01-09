@@ -17,6 +17,8 @@ public:
 	// Sets default values for this actor's properties
 	AIndicatorActor(const FObjectInitializer& ObjectInitializer);
 
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -26,31 +28,35 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	// DamageIndicator related /////////
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	class UWidgetComponent* DamageIndicatorComp;
 
-	UPROPERTY(BlueprintReadWrite,  Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite,  Category = TopDownRTSTemplate)
 	float LastDamage;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	FVector DamageIndicatorCompLocation = FVector (0.f, 0.f, 50.f);
 	
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 	void SpawnDamageIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float LifeTime = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float MaxLifeTime = 3.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float MinDrift = -10.f;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float MaxDrift = 10.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float ZDrift = 10.f;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_UpdateWidget(float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);
+
 	///////////////////////////////////////////////////////////////////
 };

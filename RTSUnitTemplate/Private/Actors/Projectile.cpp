@@ -18,7 +18,6 @@ AProjectile::AProjectile()
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
-	//Mesh->SetupAttachment(RootComponent);
 
 	if (HasAuthority())
 	{

@@ -30,7 +30,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TeleportToValidLocation(const FVector& Destination);
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
 
 	// Set Unit States  //////////////////////////////////////////

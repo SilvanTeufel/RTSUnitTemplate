@@ -35,13 +35,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
-	/*
-	if (HasAuthority())
-	{
-		bReplicates = true;
-		SetReplicateMovement(true);
-		GetMesh()->SetIsReplicated(true);
-	}*/
 
 	bReplicates = true;
 	
@@ -50,6 +43,15 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
+
+	/*
+	if (HasAuthority())
+	{
+		bReplicates = true;
+		SetReplicateMovement(true);
+		GetMesh()->SetIsReplicated(true);
+	}
+	*/
 	
 }
 
