@@ -46,4 +46,13 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitStatePlaceholder", Keywords = "RTSUnitTemplate UnitStatePlaceholder"), Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Patrol;
 	///////////////////////////////////////////////////////////////////
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID OffensiveAbilityID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID DefensiveAbilityID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID AttackAbilityID;
 };

@@ -576,8 +576,19 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				}
 			}
 			break;
-
-
+		case CameraData::MoveToClick:
+			{
+				UE_LOG(LogTemp, Warning, TEXT("MoveToClick"));
+				if(ClickedActor)
+					MoveCamToClick(DeltaTime, ClickedActor->GetActorLocation());
+			}
+			break;
+		case CameraData::LockOnActor:
+			{
+				UE_LOG(LogTemp, Warning, TEXT("LockOnActor"));
+				CameraBase->LockOnActor(ClickedActor);
+			}
+			break;
 		case CameraData::OrbitAndMove:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("OrbitAndMove"));
@@ -658,6 +669,29 @@ void ACameraControllerBase::MoveCamToPosition(float DeltaSeconds, FVector Destin
 	
 	if (Distance <= 50.f) {
 		CameraBase->SetCameraState(CameraData::OrbitAtPosition);
+	}
+}
+
+void ACameraControllerBase::MoveCamToClick(float DeltaSeconds, FVector Destination)
+{
+    
+	const FVector CamLocation = CameraBase->GetActorLocation();
+	
+	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+	
+	const float Distance = FVector::Distance(CamLocation, Destination); // Use FVector::Distance for distance calculation
+	const FVector ADirection = (Destination - CamLocation).GetSafeNormal(); // Use subtraction and GetSafeNormal for direction
+
+	//if (Distance <= 1000.f && CameraBase->CamSpeed+400.f > 200.f)
+		//CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 100.f : 0.f;
+	//else
+		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 2000.0f? 200.f : 0.f; // Adjust this to control movement speed
+
+	CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
+
+	
+	if (Distance <= 50.f) {
+		CameraBase->SetCameraState(CameraData::LockOnActor);
 	}
 }
 

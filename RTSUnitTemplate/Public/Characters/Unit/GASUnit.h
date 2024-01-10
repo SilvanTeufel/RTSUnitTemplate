@@ -34,10 +34,6 @@ public:
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
 	
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
@@ -61,14 +57,5 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	EGASAbilityInputID OffensiveAbilityID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	EGASAbilityInputID DefensiveAbilityID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	EGASAbilityInputID AttackAbilityID;
 	
 };

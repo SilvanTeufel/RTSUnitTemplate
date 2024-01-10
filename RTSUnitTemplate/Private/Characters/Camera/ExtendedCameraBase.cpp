@@ -220,7 +220,7 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 {
 	if(SelectedUnit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
+		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
 		SelectedUnit->ActivateAbilityByInputID(InputID);
 	}
 }
@@ -234,6 +234,11 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	{
 		CameraControllerBase->LeftClickPressed();
 		CameraControllerBase->JumpCamera();
+	}
+
+	if(CameraControllerBase && CameraControllerBase->IsShiftPressed)
+	{
+		SetCameraState(CameraData::MoveToClick);
 	}
 }
 
@@ -356,10 +361,15 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 		case 0:
 			{
 
-			}
-				break;
+			}break;
 		case 1:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->WIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -370,6 +380,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 2:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->SIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -380,6 +396,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 3:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->AIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -390,6 +412,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 4:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->DIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -510,6 +538,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 		{
 		case 1:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->WIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -520,6 +554,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 2:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->SIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -530,6 +570,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 3:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->AIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);
@@ -540,6 +586,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 4:
 			{
+				if(GetCameraState() == CameraData::OrbitAndMove)
+				{
+					CameraControllerBase->CamIsRotatingLeft = false;
+					CameraControllerBase->CamIsRotatingRight = false;
+				}
+				
 				CameraControllerBase->DIsPressedState = 1;
 				CameraControllerBase->LockCameraToUnit = false;
 				SetCameraState(CameraData::MoveWASD);

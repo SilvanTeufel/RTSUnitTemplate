@@ -9,16 +9,7 @@
 #include "Characters/Unit/LevelUnit.h"
 #include "Net/UnrealNetwork.h"
 
-/*
-AGASUnit::AGASUnit()
-{
-	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
-	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
-	
-	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
-}
-*/
+
 // Called when the game starts or when spawned
 void AGASUnit::BeginPlay()
 {
@@ -36,28 +27,8 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 void AGASUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 
-void AGASUnit::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	// I guess this has to be done in the CameraBase
-	/*
-	if(AbilitySystemComponent && InputComponent)
-	{
-		const FGameplayAbilityInputBinds Binds(
-"Confirm", 
-"Cancel",
-"EGASAbilityInputID",
-static_cast<int32>(EGASAbilityInputID::Confirm),
-static_cast<int32>(EGASAbilityInputID::Cancel)
-		);
-
-		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
-	}*/
-}
 
 UAbilitySystemComponent* AGASUnit::GetAbilitySystemComponent() const
 {

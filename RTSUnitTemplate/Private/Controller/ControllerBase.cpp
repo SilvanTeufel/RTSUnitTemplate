@@ -6,6 +6,7 @@
 #include "Controller/CameraControllerBase.h"
 #include "Core/UnitData.h"
 #include "AIController.h"
+#include "Landscape.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
@@ -41,7 +42,6 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, AttackToggled);
 	DOREPLIFETIME(AControllerBase, IsStrgPressed);
 	DOREPLIFETIME(AControllerBase, IsSpacePressed);
-
 	DOREPLIFETIME(AControllerBase, AltIsPressed);
 	DOREPLIFETIME(AControllerBase, LeftClickIsPressed);
 	DOREPLIFETIME(AControllerBase, LockCameraToUnit);
@@ -51,7 +51,6 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, SIsPressedState);
 	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
 	DOREPLIFETIME(AControllerBase, SelectableTeamId);
-	
 }
 
 void AControllerBase::SetupInputComponent() {
@@ -71,16 +70,12 @@ void AControllerBase::Tick(float DeltaSeconds)
 		CameraBase->BlockControls = false;
 		CameraBase->DeSpawnLoadingWidget();
 	}
-
-	if(LeftClickIsPressed)
-	{
-		FHitResult Hit_CPoint;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit_CPoint);
-		HUDBase->CPoint = Hit_CPoint.Location;
-	}
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+	
+	//if(IsShiftPressed)
+		//ClickLocation = Hit.Location;
 	
 	if(AttackToggled)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
@@ -207,6 +202,13 @@ void AControllerBase::LeftClickPressed()
 		
 		if (Hit_Pawn.bBlockingHit && HUDBase)
 		{
+			AActor* HitActor = Hit_Pawn.GetActor();
+			
+			if(!HitActor->IsA(ALandscape::StaticClass()))
+				ClickedActor = Hit_Pawn.GetActor();
+			else
+				ClickedActor = nullptr;
+			
 			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
 			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
 			

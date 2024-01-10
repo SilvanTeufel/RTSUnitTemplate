@@ -87,6 +87,9 @@ public:
 	void MoveCamToPosition(float DeltaSeconds, FVector Destination);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveCamToClick(float DeltaSeconds, FVector Destination);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveCam(float DeltaSeconds, FVector Destination);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

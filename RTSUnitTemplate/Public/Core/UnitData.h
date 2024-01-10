@@ -53,6 +53,8 @@ namespace CameraData
 		RotateToStart  UMETA(DisplayName = "RotateToStart"),
 		MoveToPosition  UMETA(DisplayName = "MoveToPosition"),
 		OrbitAtPosition  UMETA(DisplayName = "OrbitAtPosition"),
+		MoveToClick  UMETA(DisplayName = "MoveToClick"),
+		LockOnActor  UMETA(DisplayName = "LockOnActor"),
 		OrbitAndMove UMETA(DisplayName = "OrbitAndMove"),
 		ZoomIn  UMETA(DisplayName = "ZoomIn"),
 		ZoomOut  UMETA(DisplayName = "ZoomOut"),

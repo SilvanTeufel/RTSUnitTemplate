@@ -385,6 +385,22 @@ void ACameraBase::LockOnUnit(AUnitBase* Unit)
 	}
 }
 
+void ACameraBase::LockOnActor(AActor* Actor)
+{
+	if (Actor) {
+		FVector ActorLocation = Actor->GetActorLocation();
+
+		float ZLocation = GetActorLocation().Z;
+
+		if(abs(ZLocation-ActorLocation.Z) >= 100.f) ZLocation = ActorLocation.Z;
+		
+		SetActorLocation(FVector(ActorLocation.X, ActorLocation.Y, ZLocation));
+	}else
+	{
+		SetCameraState(CameraData::UseScreenEdges);
+	}
+}
+
 bool ACameraBase::IsCharacterDistanceTooLow(float Distance, const FVector SelectedActorPosition)
 {
 	if (!SpringArm) return false;

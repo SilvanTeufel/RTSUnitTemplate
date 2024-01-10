@@ -33,6 +33,12 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ACameraBase* CameraBase;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	AActor* ClickedActor;
+
+	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	//FVector ClickLocation = FVector(0.0f, 0.0f, 0.0f);
 	
 	void Tick(float DeltaSeconds);
 	

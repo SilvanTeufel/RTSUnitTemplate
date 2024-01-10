@@ -189,6 +189,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LockOnUnit", Keywords = "RTSUnitTemplate LockOnUnit"), Category = RTSUnitTemplate)
 		void LockOnUnit(AUnitBase* Unit);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void LockOnActor(AActor* Actor);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ZoomOutPosition", Keywords = "RTSUnitTemplate ZoomOutPosition"), Category = RTSUnitTemplate)
 		float ZoomOutPosition = 10000.f;
 
@@ -295,7 +298,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MovePositionCamSpeed = 1.0f;
-	
 	// Control Widget
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetComp", Keywords = "RTSUnitTemplate ControlWidgetComp"), Category = RTSUnitTemplate)
