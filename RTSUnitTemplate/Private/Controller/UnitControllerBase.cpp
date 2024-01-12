@@ -395,13 +395,13 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     				DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
     
     					AUnitBase* UnitToChase = UnitBase->UnitToChase;
- 
+					
     					if (IsUnitToChaseInRange(UnitBase)) {
     						if(UnitBase->UnitControlTimer >= PauseDuration)
     						{
     							UnitBase->ServerStartAttackEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Attack);
-    							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
     							CreateProjectile(UnitBase);
     						}else
     						{
@@ -424,7 +424,8 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
     						
-    						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID);
+    						UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+    						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
     						UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
     	
@@ -501,7 +502,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 			// Attack without Projectile
 			if(IsUnitToChaseInRange(UnitBase))
 			{
-				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID);
+				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
 				
 				float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
 			
@@ -516,7 +517,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 				UnitBase->LevelData.Experience++;
 
 				UnitBase->ServerMeeleImpactEvent();
-				UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID);
+				UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID, UnitBase->UnitToChase->DefensiveAbilities);
 				
 				if (!UnitBase->UnitToChase->UnitsToChase.Contains(UnitBase))
 				{

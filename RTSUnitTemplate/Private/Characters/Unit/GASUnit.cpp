@@ -98,11 +98,12 @@ static_cast<int32>(EGASAbilityInputID::Cancel)
 	
 }
 
-void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID)
+
+void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	if(AbilitySystemComponent)
 	{
-		TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID);
+		TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 		if(AbilityToActivate != nullptr)
 		{
 			AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
@@ -110,16 +111,15 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID)
 	}
 }
 
-TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID)
+TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 
-	// Check if the AbilityIndex is valid in the DefaultAbilities array
-	if (DefaultAbilities.IsValidIndex(AbilityIndex))
+	// Check if the AbilityIndex is valid in the AbilitiesArray
+	if (AbilitiesArray.IsValidIndex(AbilityIndex))
 	{
-		return DefaultAbilities[AbilityIndex];
+		return AbilitiesArray[AbilityIndex];
 	}
 
 	return nullptr;
 }
-

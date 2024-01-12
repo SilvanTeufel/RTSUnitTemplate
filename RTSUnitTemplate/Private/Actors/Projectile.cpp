@@ -61,7 +61,8 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, TeamId);
 	DOREPLIFETIME(AProjectile, MovementSpeed);
 	DOREPLIFETIME(AProjectile, DestructionDelayTime);
-	
+	DOREPLIFETIME(AProjectile, RotateMesh);
+	DOREPLIFETIME(AProjectile, RotationSpeed);
 }
 
 // Called every frame
@@ -70,6 +71,19 @@ void AProjectile::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	LifeTime += DeltaTime;
 
+	if(RotateMesh)
+	{
+		// Calculate rotation amount based on DeltaTime and RotationSpeed
+	
+		FRotator NewRotation = FRotator(RotationSpeed.X * DeltaTime, RotationSpeed.Y * DeltaTime, RotationSpeed.Z * DeltaTime);
+
+		// Apply rotation to the mesh
+		if (Mesh) // Assuming your mesh component is named MeshComponent
+		{
+			Mesh->AddLocalRotation(NewRotation);
+		}
+	}
+	
 	if(LifeTime > MaxLifeTime)
 	{
 		Impact(Target);
@@ -117,7 +131,7 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 		
 		ShootingUnit->LevelData.Experience++;
 		
-		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID);
+		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
 	}			
 }
 

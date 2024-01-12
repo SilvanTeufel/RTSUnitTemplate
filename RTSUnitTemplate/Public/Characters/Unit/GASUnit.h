@@ -47,10 +47,10 @@ public:
 	virtual void OnRep_PlayerState() override;
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void ActivateAbilityByInputID(EGASAbilityInputID InputID);
+	void ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID);
+	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 	
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;

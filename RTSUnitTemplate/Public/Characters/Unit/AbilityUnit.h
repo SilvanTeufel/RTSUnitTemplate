@@ -47,6 +47,18 @@ public:
 	TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Patrol;
 	///////////////////////////////////////////////////////////////////
 
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>OffensiveAbilities;
+	
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>DefensiveAbilities;
+	
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>AttackAbilities;
+	
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>ThrowAbilities;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EGASAbilityInputID OffensiveAbilityID;
 
@@ -55,4 +67,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EGASAbilityInputID AttackAbilityID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EGASAbilityInputID ThrowAbilityID;
 };

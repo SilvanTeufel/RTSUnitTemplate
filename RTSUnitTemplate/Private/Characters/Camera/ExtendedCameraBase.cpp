@@ -216,12 +216,12 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 
 }
 
-void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit)
+void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	if(SelectedUnit)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
-		SelectedUnit->ActivateAbilityByInputID(InputID);
+		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray);
 	}
 }
 
@@ -722,7 +722,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityOne for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityOne, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityOne, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;
@@ -733,7 +733,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityTwo for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;
@@ -744,7 +744,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityThree for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityThree, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityThree, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;
@@ -755,7 +755,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFour for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityFour, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityFour, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;
@@ -766,7 +766,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFive for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityFive, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilityFive, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;
@@ -777,7 +777,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 					if (SelectedUnit)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("Activating AbilitySix for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilitySix, SelectedUnit);
+						OnAbilityInputDetected(EGASAbilityInputID::AbilitySix, SelectedUnit, SelectedUnit->DefaultAbilities);
 					}
 				}
 			} break;

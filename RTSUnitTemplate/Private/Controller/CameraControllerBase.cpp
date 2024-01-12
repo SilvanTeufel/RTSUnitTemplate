@@ -307,7 +307,6 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		case CameraData::ScrollZoomIn:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("ScrollZoomIn %f"), ScrollZoomCount);
-				//CameraBase->ZoomIn(0.5f);
 				if(ScrollZoomCount > 0.f)
 				{
 					CameraBase->ZoomIn(1.f);

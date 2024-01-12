@@ -66,7 +66,7 @@ public:
 	// Talents /////
 
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit);
+	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	bool AutoAdjustTalentChooserPosition = true;

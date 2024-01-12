@@ -157,6 +157,9 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     
     					AUnitBase* UnitToChase = UnitBase->UnitToChase;
 
+						if(UnitToChase)
+							UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+						
     					if (IsUnitToChaseInRange(UnitBase)) {
 
     						if(!bHealActorSpawned && UnitBase->UnitControlTimer >= PauseDuration && UnitBase->UnitToChase->Attributes->GetHealth() < UnitBase->UnitToChase->Attributes->GetMaxHealth())
@@ -164,6 +167,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     							UnitBase->SpawnHealActor(UnitBase->UnitToChase);
     							UnitBase->ServerStartHealingEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Healing);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
     							bHealActorSpawned = true;
     						}else
     						{
@@ -185,9 +189,12 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     						{
     							UnitToChaseLocation =  FVector(UnitToChaseLocation.X, UnitToChaseLocation.Y, UnitBase->FlyHeight);
     						}
-    						const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
-    						
-    						UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+
+    						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+    						UnitBase->SetUEPathfinding = true;
+    						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
+    						//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
+    						//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
     					}
     
     					if (DistanceToUnitToChase > LoseSightRadius) {

@@ -392,9 +392,9 @@ void ACameraBase::LockOnActor(AActor* Actor)
 
 		float ZLocation = GetActorLocation().Z;
 
-		if(abs(ZLocation-ActorLocation.Z) >= 100.f) ZLocation = ActorLocation.Z;
+		//if(abs(ZLocation-ActorLocation.Z) >= 100.f) ZLocation = ActorLocation.Z;
 		
-		SetActorLocation(FVector(ActorLocation.X, ActorLocation.Y, ZLocation));
+		SetActorLocation(FVector(ActorLocation.X, ActorLocation.Y, GetActorLocation().Z));
 	}else
 	{
 		SetCameraState(CameraData::UseScreenEdges);
