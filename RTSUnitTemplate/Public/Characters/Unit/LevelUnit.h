@@ -41,6 +41,12 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelUpData LevelUpData;
 
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	int GetCharacterLevel() const
+	{
+		return LevelData.CharacterLevel;
+	}
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	float RegenerationTimer = 0;
 

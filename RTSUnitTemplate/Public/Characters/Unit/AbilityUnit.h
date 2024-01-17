@@ -20,18 +20,24 @@ private:
 	float RequiredDistanceToStart;
 	
 	void Accelerate();
-
+	void AccelerateFrom();
 
 public:	
-
+	
+	virtual void Tick(float DeltaTime) override;
+	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
+	virtual void PossessedBy(AController* NewController) override;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TeleportToValidLocation(const FVector& Destination);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StartAcceleratingFromDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
 
 	// Set Unit States  //////////////////////////////////////////
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -40,6 +46,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> GetUnitState();
 
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	virtual void GetAbilitiesArrays();
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitState", Keywords = "RTSUnitTemplate UnitState"), Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitState = UnitData::Idle;
 	
@@ -70,4 +79,25 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EGASAbilityInputID ThrowAbilityID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool AutoApplyAbility = true;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int Ability);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int32 DetermineAbilityID(int32 Level);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AutoAbility();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddAbilitPoint();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SaveAbilityData(const FString& SlotName);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LoadAbilityData(const FString& SlotName);
 };

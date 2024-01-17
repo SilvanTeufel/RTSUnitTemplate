@@ -17,10 +17,11 @@ void ALevelUnit::Tick(float DeltaTime)
 
 		Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 		Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
-		RegenerationTimer = 0.f;
+		//RegenerationTimer = 0.f;
 
 		if(AutoLeveling && HasAuthority()) AutoLevelUp();
 
+		//UE_LOG(LogTemp, Log, TEXT("ALevelUnit LevelData.CharacterLevel: %d"), LevelData.CharacterLevel);
 	}
 	
 }
@@ -56,6 +57,8 @@ void ALevelUnit::SetUnitIndex(int32 NewIndex)
 
 void ALevelUnit::LevelUp_Implementation()
 {
+	//UE_LOG(LogTemp, Log, TEXT("Before Level Up: Level %d, Experience %d"), LevelData.CharacterLevel, LevelData.Experience);
+
 	if(LevelData.CharacterLevel < LevelUpData.MaxCharacterLevel && LevelData.Experience > LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel)
 	{
 		LevelData.CharacterLevel++;
@@ -63,6 +66,8 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
 		// Trigger any additional level-up effects or logic here
 	}
+
+	//UE_LOG(LogTemp, Log, TEXT("After Level Up: Level %d, Experience %d"), LevelData.CharacterLevel, LevelData.Experience);
 }
 
 void ALevelUnit::AutoLevelUp()
@@ -250,4 +255,3 @@ void ALevelUnit::LoadLevelDataAndAttributes(const FString& SlotName)
 	}
 	
 }
-

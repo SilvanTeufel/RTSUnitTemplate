@@ -53,7 +53,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MovementSpeed = 50.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

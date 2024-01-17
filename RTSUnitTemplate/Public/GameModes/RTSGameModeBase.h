@@ -119,13 +119,10 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 	// Timer handle for spawning units
-	//UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	//TArray<FTimerHandle> SpawnTimerHandles;
-
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FTimerHandleMapping> SpawnTimerHandleMap;
-	//TMap<int32, FTimerHandle> SpawnTimerHandleMap;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TimerIndex = 0;

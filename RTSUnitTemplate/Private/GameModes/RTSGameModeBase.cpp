@@ -211,6 +211,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 				if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
 				{
 					UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
+					UnitData.UnitBase->SaveAbilityData(FString::FromInt(UnitData.UnitBase->UnitIndex));
 					AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
 					SpawnParameterIdArray.Add(SpawnParaId);
 					FoundDeadUnit = true;
@@ -501,8 +502,10 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 				UnitBase->SetUnitIndex(AvailableUnitIndexArray[Index]);
 
 				if(SpawnParameter.LoadLevelAfterSpawn)
-				UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
-				
+				{
+					UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
+					UnitBase->LoadAbilityData(FString::FromInt(AvailableUnitIndexArray[Index]));
+				}
 				AvailableUnitIndexArray.RemoveAt(Index);
 				SpawnParameterIdArray.RemoveAt(Index);
 				HUD->AllUnits.Add(UnitBase);

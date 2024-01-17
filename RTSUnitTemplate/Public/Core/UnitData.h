@@ -168,6 +168,14 @@ struct FLevelData
 	// Talent points already used
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	int32 UsedTalentPoints = 0;
+
+	// Talent points available to the character
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 AbilityPoints = 0;
+
+	// Talent points already used
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 UsedAbilityPoints = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -181,7 +189,7 @@ struct FLevelUpData
 
 	// Maximum level the character can achieve
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 MaxCharacterLevel = 10;
+	int32 MaxCharacterLevel = 20;
 
 	// Talent points awarded per level
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
@@ -189,7 +197,15 @@ struct FLevelUpData
 
 	// Maximum talents per stat
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
-	int32 MaxTalentsPerStat = 15;
+	int32 MaxTalentsPerStat = 100;
+
+	// Talent points awarded per level
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32  AbilityPointsEveryXLevel = 5;
+
+	// Maximum talents per stat
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	int32 MaxAbilityPointsPerAbility = 1;
 };
 
 inline float CheckAngle(FVector Vector, float Angle) {

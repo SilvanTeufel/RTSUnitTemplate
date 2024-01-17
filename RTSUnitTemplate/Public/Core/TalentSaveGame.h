@@ -7,6 +7,7 @@
 #include "GAS/AttributeSetBase.h"
 #include "Core/UnitData.h"
 #include "Core/Talents.h"
+#include "GAS/GAS.h"
 #include "TalentSaveGame.generated.h"
 
 
@@ -32,4 +33,16 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	FAttributeSaveData AttributeSaveData;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	EGASAbilityInputID OffensiveAbilityID;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	EGASAbilityInputID DefensiveAbilityID;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	EGASAbilityInputID AttackAbilityID;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	EGASAbilityInputID ThrowAbilityID;
 };

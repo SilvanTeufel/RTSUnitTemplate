@@ -600,7 +600,7 @@ void AControllerBase::LoadLevel_Implementation(const FString& SlotName)
 		if (SelectedUnits[i] && IsLocalController())
 		{
 			SelectedUnits[i]->LoadLevelDataAndAttributes(SlotName);
-			
+			SelectedUnits[i]->LoadAbilityData(SlotName);
 		}
 	}
 }
@@ -612,6 +612,7 @@ void AControllerBase::SaveLevel_Implementation(const FString& SlotName)
 		if (SelectedUnits[i] && IsLocalController())
 		{
 			SelectedUnits[i]->SaveLevelDataAndAttributes(SlotName);
+			SelectedUnits[i]->SaveAbilityData(SlotName);
 		}
 	}
 }
@@ -698,6 +699,7 @@ void AControllerBase::SaveLevelUnit_Implementation(const int32 UnitIndex, const 
 		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
 		{
 			Unit->SaveLevelDataAndAttributes(SlotName);
+			Unit->SaveAbilityData(SlotName);
 		}
 	}
 }
@@ -710,6 +712,7 @@ void AControllerBase::LoadLevelUnit_Implementation(const int32 UnitIndex, const 
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
 		if(Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
 			Unit->LoadLevelDataAndAttributes(SlotName);
+			Unit->LoadAbilityData(SlotName);
 	}
 
 
