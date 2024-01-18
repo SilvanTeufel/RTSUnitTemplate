@@ -85,6 +85,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	int32 AutoAbilitySequence[4] = {0, 1, 2, 3};
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAutoAbilitySequence(int Index, int32 Value);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoApplyAbility = true;

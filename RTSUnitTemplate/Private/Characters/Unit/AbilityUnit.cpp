@@ -194,6 +194,11 @@ TEnumAsByte<UnitData::EState> AAbilityUnit::GetUnitState()
 	return UnitState;
 }
 
+void AAbilityUnit::SetAutoAbilitySequence(int Index, int32 Value)
+{
+	AutoAbilitySequence[Index] = Value;
+}
+
 void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 {
 	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), Ability);
