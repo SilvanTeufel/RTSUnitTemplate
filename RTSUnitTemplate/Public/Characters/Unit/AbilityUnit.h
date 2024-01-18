@@ -6,6 +6,9 @@
 #include "PathSeekerBase.h"
 #include "AbilityUnit.generated.h"
 
+
+
+
 UCLASS()
 class RTSUNITTEMPLATE_API AAbilityUnit : public APathSeekerBase
 {
@@ -80,6 +83,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EGASAbilityInputID ThrowAbilityID;
 
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	int32 AutoAbilitySequence[4] = {0, 1, 2, 3};
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoApplyAbility = true;
 	

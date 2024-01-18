@@ -141,8 +141,8 @@ void AAbilityUnit::Tick(float DeltaTime)
 		if (AutoApplyAbility && HasAuthority()) 
 		{
 			AutoAbility(); // Assuming AutoAbility is called here
-			RegenerationTimer = 0.f;
 		}
+		RegenerationTimer = 0.f;
 	}
 	
 
@@ -200,7 +200,6 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 
 	if (LevelData.AbilityPoints <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Attempted to spend ability points when none are available."));
 		return;
 	}
 
@@ -212,26 +211,21 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 	{
 	case 0:
 		OffensiveAbilityID = AbilityID;
-		UE_LOG(LogTemp, Log, TEXT("Offensive ability assigned: %d"), static_cast<int32>(AbilityID));
 		break;
 		
 	case 1:
 		DefensiveAbilityID = AbilityID;
-		UE_LOG(LogTemp, Log, TEXT("Defensive ability assigned: %d"), static_cast<int32>(AbilityID));
 		break;
 
 	case 2:
 		AttackAbilityID = AbilityID;
-		UE_LOG(LogTemp, Log, TEXT("Attack ability assigned: %d"), static_cast<int32>(AbilityID));
 		break;
 
 	case 3:
 		ThrowAbilityID = AbilityID;
-		UE_LOG(LogTemp, Log, TEXT("Throw ability assigned: %d"), static_cast<int32>(AbilityID));
 		break;
 
 	default:
-		UE_LOG(LogTemp, Warning, TEXT("Invalid ability type: %d"), Ability);
 		break;
 	}
 }
@@ -239,31 +233,25 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 
 int32 AAbilityUnit::DetermineAbilityID(int32 Level)
 {
-	
-	const int32 X = LevelUpData.AbilityPointsEveryXLevel; // The interval for determining abilities
 
+	int returnState = 99;
+	const int32 X = LevelUpData.AbilityPointsEveryXLevel; // The interval for determining abilities
 	if (Level % X == 0 && Level / X > 0)
 	{
-		return (Level / X) - 1;
+		returnState =  (Level / X) - 1;
+	
+		return AutoAbilitySequence[returnState];
 	}
 
-	return 99; // Default case if no match
+	return returnState;
 }
 
 
 void AAbilityUnit::AutoAbility()
 {
-	//int CurrentCharacterLevel = GetCharacterLevel();
-	
-	//UE_LOG(LogTemp, Log, TEXT("AutoAbility: %d"), 1);
-	
-	//UE_LOG(LogTemp, Log, TEXT("LevelData.CharacterLevel: %d"), LevelData.CharacterLevel);
-	//UE_LOG(LogTemp, Log, TEXT("LevelUpData.AbilityPointsEveryXLevel: %d"), LevelUpData.AbilityPointsEveryXLevel);
 	if((LevelData.CharacterLevel % LevelUpData.AbilityPointsEveryXLevel) == 0) // Every 5 levels
 	{
 		int Ability = DetermineAbilityID(LevelData.CharacterLevel);
-		
-		//UE_LOG(LogTemp, Log, TEXT("Ability: %d"), Ability);
 		SpendAbilityPoints(EGASAbilityInputID::AbilityOne, Ability);
 	}
 }
