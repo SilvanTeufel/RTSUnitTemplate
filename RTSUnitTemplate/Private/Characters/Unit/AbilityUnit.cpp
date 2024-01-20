@@ -25,6 +25,14 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 	AutoAbility();
 }
 
+void AAbilityUnit::LevelUp_Implementation()
+{
+	Super::LevelUp_Implementation();
+	
+	if(HasAuthority())
+		AddAbilitPoint();
+}
+
 void AAbilityUnit::TeleportToValidLocation(const FVector& Destination)
 {
 	FVector Start = Destination + FVector(0.f, 0.f, 1000.f);
@@ -135,9 +143,6 @@ void AAbilityUnit::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	if (RegenerationTimer >= RegenerationDelayTime)
 	{
-		if(HasAuthority())
-			AddAbilitPoint();
-		
 		if (AutoApplyAbility && HasAuthority()) 
 		{
 			AutoAbility(); // Assuming AutoAbility is called here
@@ -199,40 +204,70 @@ void AAbilityUnit::SetAutoAbilitySequence(int Index, int32 Value)
 	AutoAbilitySequence[Index] = Value;
 }
 
+bool AAbilityUnit::IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability)
+{
+	switch (AbilityID)
+	{
+	case EGASAbilityInputID::AbilityOne:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 0;
+	case EGASAbilityInputID::AbilityTwo:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 1;
+	case EGASAbilityInputID::AbilityThree:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 2;
+	case EGASAbilityInputID::AbilityFour:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 3;
+	case EGASAbilityInputID::AbilityFive:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 4;
+	case EGASAbilityInputID::AbilitySix:
+		return LevelData.UsedAbilityPointsArray[Ability] >= 5;
+	default:
+		return false;
+	}
+}
+
 void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 {
-	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), Ability);
 
-	if (LevelData.AbilityPoints <= 0)
+	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), Ability);
+	
+	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, Ability))
 	{
+		return;
+	}
+	
+	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
+	
+	switch (Ability)
+	{
+	case 0:
+		if(OffensiveAbilityID == AbilityID) return;
+		OffensiveAbilityID = AbilityID;
+		break;
+            
+	case 1:
+		if(DefensiveAbilityID == AbilityID) return;
+		DefensiveAbilityID = AbilityID;
+		break;
+
+	case 2:
+		if(AttackAbilityID == AbilityID) return;
+		AttackAbilityID = AbilityID;
+		break;
+
+	case 3:
+		if(ThrowAbilityID == AbilityID) return;
+		ThrowAbilityID = AbilityID;
+		break;
+
+	default:
 		return;
 	}
 
 	LevelData.AbilityPoints--;
 	LevelData.UsedAbilityPoints++;
-	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
 
-	switch (Ability)
-	{
-	case 0:
-		OffensiveAbilityID = AbilityID;
-		break;
-		
-	case 1:
-		DefensiveAbilityID = AbilityID;
-		break;
-
-	case 2:
-		AttackAbilityID = AbilityID;
-		break;
-
-	case 3:
-		ThrowAbilityID = AbilityID;
-		break;
-
-	default:
-		break;
-	}
+	if(Ability <= 3 && Ability >= 0)
+		LevelData.UsedAbilityPointsArray[Ability]++;
 }
 
 

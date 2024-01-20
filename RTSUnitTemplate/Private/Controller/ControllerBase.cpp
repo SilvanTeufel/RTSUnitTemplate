@@ -587,7 +587,6 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 	
 }
 
-
 void AControllerBase::SetControlerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
@@ -789,6 +788,19 @@ void AControllerBase::HandleInvestmentUnit_Implementation(const int32 UnitIndex,
 			default:
 				break;
 			}
+		}
+	}
+}
+
+
+void AControllerBase::SpendAbilityPoints_Implementation(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->SpendAbilityPoints(AbilityID, Ability);
 		}
 	}
 }

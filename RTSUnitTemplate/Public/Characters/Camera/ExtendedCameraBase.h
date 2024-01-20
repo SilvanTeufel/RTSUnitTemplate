@@ -43,26 +43,14 @@ public:
 	/** Handles Enhanced Keyboard Inputs */
 	
 	// Talents /////
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ActionWidgetRotation", Keywords = "TopDownRTSTemplate ActionWidgetRotation"), Category = TopDownRTSTemplate)
-	FRotator TalentChooserRotation = FRotator(0.f, 0.f, 0.f);
-	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = TopDownRTSTemplate)
 	class UWidgetComponent* TalentChooser;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	FVector2D TalentChooserLocation = FVector2D(0.15f, 0.5f );
-
-	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-		void SpawnTalentChooser();
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = TopDownRTSTemplate)
+	class UWidgetComponent* AbilityChooser;
 	
-	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-		void SetTalentChooserLocation();
-
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 		void SetUserWidget(AUnitBase* SelectedActor);
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float WidgetDistance = 50.f;
 	// Talents /////
 
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)

@@ -3,6 +3,7 @@
 
 #include "Controller/CameraControllerBase.h"
 #include "GAS/GAS.h"
+#include "Widgets/AbilityChooser.h"
 #include "Widgets/TalentChooser.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
@@ -21,6 +22,9 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 
 	TalentChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("TalentChooser"));
 	TalentChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+	
+	AbilityChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("AbilityChooser"));
+	AbilityChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
@@ -151,54 +155,12 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 }
 
-void AExtendedCameraBase::SpawnTalentChooser()
-{
-	if (TalentChooser) {
-		FRotator NewRotation = TalentChooserRotation;
-		FQuat QuatRotation = FQuat(NewRotation);
-		TalentChooser->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
-	}
-}
-
-void AExtendedCameraBase::SetTalentChooserLocation()
-{
-	if (!TalentChooser || !GetWorld()) return;
-
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if (!PlayerController) return;
-	
-	FVector2d ScreenPosition = TalentChooserLocation;
-	
-	FIntPoint ViewportSize;
-	PlayerController->GetViewportSize(ViewportSize.X, ViewportSize.Y);
-
-	// Ensure ScreenPosition is in the range [0, 1] representing percentage of screen width and height.
-	FVector2D ClampedScreenPosition = FMath::Clamp(ScreenPosition, FVector2D(0, 0), FVector2D(1, 1));
-    
-	// Convert it to actual screen pixel coordinates
-	FVector2D PixelPosition = FVector2D(ViewportSize.X * ClampedScreenPosition.X, ViewportSize.Y * ClampedScreenPosition.Y);
-	
-	FVector WorldPosition;
-	FVector WorldDirection;
-
-	// Convert screen position to a world space ray
-	PlayerController->DeprojectScreenPositionToWorld(PixelPosition.X, PixelPosition.Y, WorldPosition, WorldDirection);
-    
-	// Set the widget position in front of the camera by a fixed distance, say 200 units.
-	FVector NewLocation = WorldPosition + WorldDirection * SpringArm->TargetArmLength * WidgetDistance;
-	TalentChooser->SetWorldLocation(NewLocation);
-
-	// Optionally, make the TalentChooser face the camera.
-	FVector CameraLocation = this->GetActorLocation();
-	FVector DirectionToCamera = (CameraLocation - NewLocation).GetSafeNormal();
-	FRotator NewRotation = DirectionToCamera.Rotation();
-	TalentChooser->SetWorldRotation(NewRotation);
-}
-
 void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 {
 
 	UTalentChooser* TalentBar= Cast<UTalentChooser>(TalentChooser->GetUserWidgetObject());
+	UAbilityChooser* AbilityBar= Cast<UAbilityChooser>(AbilityChooser->GetUserWidgetObject());
+	
 	if(!TalentBar) return;
 
 	if(SelectedActor)
@@ -208,10 +170,21 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 			TalentBar->SetOwnerActor(SelectedActor);
 			TalentBar->CreateClassUIElements();
 		}
+
+		if (AbilityBar) {
+			AbilityBar->SetVisibility(ESlateVisibility::Visible);
+			AbilityBar->SetOwnerActor(SelectedActor);
+			AbilityBar->UsedAbilityPointsTextArray.Empty();
+			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[0], AbilityBar->OffensiveAbilityButtons);
+			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[1], AbilityBar->DefensiveAbilityButtons);
+			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[2], AbilityBar->AttackAbilityButtons);
+			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[3], AbilityBar->ThrowAbilityButtons);
+		}
 		
 	}else
 	{
 		TalentBar->SetVisibility(ESlateVisibility::Collapsed);
+		AbilityBar->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 }

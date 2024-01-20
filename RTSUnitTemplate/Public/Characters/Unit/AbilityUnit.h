@@ -32,6 +32,8 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
 	virtual void PossessedBy(AController* NewController) override;
+
+	virtual void LevelUp_Implementation() override;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TeleportToValidLocation(const FVector& Destination);
@@ -91,6 +93,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoApplyAbility = true;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int Ability);

@@ -176,6 +176,9 @@ struct FLevelData
 	// Talent points already used
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	int32 UsedAbilityPoints = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	TArray<int32> UsedAbilityPointsArray = { 0, 0, 0, 0, 0 };
 };
 
 USTRUCT(BlueprintType)
