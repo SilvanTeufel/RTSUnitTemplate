@@ -562,7 +562,7 @@ void AControllerBase::SpawnMissileRain(int TeamId, FVector Location) // FVector 
 	
 }
 
-void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass)
+void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
 {
 
 	FTransform Transform;
@@ -581,6 +581,11 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 
 		// Apply scale to the Mesh
 		MyEffectArea->Mesh->SetWorldScale3D(Scale);
+
+		if(ActorToLockOn)
+		{
+			MyEffectArea->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("rootSocket"));
+		}
 		
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
@@ -598,8 +603,8 @@ void AControllerBase::LoadLevel_Implementation(const FString& SlotName)
 	{
 		if (SelectedUnits[i] && IsLocalController())
 		{
-			SelectedUnits[i]->LoadLevelDataAndAttributes(SlotName);
-			SelectedUnits[i]->LoadAbilityData(SlotName);
+			//SelectedUnits[i]->LoadLevelDataAndAttributes(SlotName);
+			SelectedUnits[i]->LoadAbilityAndLevelData(SlotName);
 		}
 	}
 }
@@ -610,8 +615,8 @@ void AControllerBase::SaveLevel_Implementation(const FString& SlotName)
 	{
 		if (SelectedUnits[i] && IsLocalController())
 		{
-			SelectedUnits[i]->SaveLevelDataAndAttributes(SlotName);
-			SelectedUnits[i]->SaveAbilityData(SlotName);
+			//SelectedUnits[i]->SaveLevelDataAndAttributes(SlotName);
+			SelectedUnits[i]->SaveAbilityAndLevelData(SlotName);
 		}
 	}
 }
@@ -697,8 +702,8 @@ void AControllerBase::SaveLevelUnit_Implementation(const int32 UnitIndex, const 
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
 		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
 		{
-			Unit->SaveLevelDataAndAttributes(SlotName);
-			Unit->SaveAbilityData(SlotName);
+			//Unit->SaveLevelDataAndAttributes(SlotName);
+			Unit->SaveAbilityAndLevelData(SlotName);
 		}
 	}
 }
@@ -710,8 +715,8 @@ void AControllerBase::LoadLevelUnit_Implementation(const int32 UnitIndex, const 
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
 		if(Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
-			Unit->LoadLevelDataAndAttributes(SlotName);
-			Unit->LoadAbilityData(SlotName);
+			//Unit->LoadLevelDataAndAttributes(SlotName);
+			Unit->LoadAbilityAndLevelData(SlotName);
 	}
 
 
@@ -801,6 +806,42 @@ void AControllerBase::SpendAbilityPoints_Implementation(EGASAbilityInputID Abili
 		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
 		{
 			Unit->SpendAbilityPoints(AbilityID, Ability);
+		}
+	}
+}
+
+void AControllerBase::ResetAbility_Implementation(const int32 UnitIndex)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->ResetAbility();
+		}
+	}
+}
+
+void AControllerBase::SaveAbility_Implementation(const int32 UnitIndex, const FString& SlotName)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->SaveAbilityAndLevelData(SlotName);
+		}
+	}
+}
+
+void AControllerBase::LoadAbility_Implementation(const int32 UnitIndex, const FString& SlotName)
+{
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->LoadAbilityAndLevelData(SlotName);
 		}
 	}
 }

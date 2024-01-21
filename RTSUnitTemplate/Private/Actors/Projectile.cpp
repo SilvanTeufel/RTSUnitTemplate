@@ -29,14 +29,43 @@ AProjectile::AProjectile()
 void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 {
 	Target = TargetActor;
-
 	Shooter = ShootingActor;
+
+	if(TargetLocation.IsZero())
+		TargetLocation = TargetActor->GetActorLocation();
+
+	
+	if(ShootingActor)
+		ShooterLocation = ShootingActor->GetActorLocation();
+	
+	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
 	{
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
+	}
+}
+
+void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
+{
+	Target = TargetActor;
+	Shooter = ShootingActor;
+
+	if(TargetLocation.IsZero())
+		TargetLocation = TargetActor->GetActorLocation();
+
+	
+	if(ShootingActor)
+		ShooterLocation = ShootingActor->GetActorLocation();
+	
+	
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	if(ShootingUnit)
+	{
+		Damage = ShootingUnit->Attributes->GetAttackDamage();
+		TeamId = ShootingUnit->TeamId;
 	}
 }
 
@@ -54,7 +83,6 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, Shooter);
 	DOREPLIFETIME(AProjectile, Mesh);
 	DOREPLIFETIME(AProjectile, Material);
-	DOREPLIFETIME(AProjectile, TargetLocation);
 	DOREPLIFETIME(AProjectile, Damage);
 	DOREPLIFETIME(AProjectile, LifeTime);
 	DOREPLIFETIME(AProjectile, MaxLifeTime);
@@ -63,6 +91,11 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, DestructionDelayTime);
 	DOREPLIFETIME(AProjectile, RotateMesh);
 	DOREPLIFETIME(AProjectile, RotationSpeed);
+	DOREPLIFETIME(AProjectile, TargetLocation);
+	DOREPLIFETIME(AProjectile, ShooterLocation);
+	DOREPLIFETIME(AProjectile, FollowTarget);
+	DOREPLIFETIME(AProjectile, MaxPiercedTargets);
+	DOREPLIFETIME(AProjectile, PiercedTargets);
 }
 
 // Called every frame
@@ -94,9 +127,15 @@ void AProjectile::Tick(float DeltaTime)
 		
 		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead) 
 		{
-			const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
-
-			AddActorWorldOffset(Direction * MovementSpeed);
+			if(FollowTarget)
+			{
+				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
+				AddActorWorldOffset(Direction * MovementSpeed);
+			}else
+			{
+				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+				AddActorWorldOffset(Direction * MovementSpeed);
+			}
 
 		}else
 		{
@@ -166,9 +205,12 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			// Call the impact event
 			ImpactEvent();
 
-			// Delay the destruction
-			FTimerHandle TimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
+			PiercedTargets += 1;
+			if(PiercedTargets >= MaxPiercedTargets)
+			{
+				FTimerHandle TimerHandle;
+				GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
+			}
 		}
 			
 	}

@@ -20,12 +20,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void Init(AActor* TargetActor, AActor* ShootingActor);
 
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void InitForAbility(AActor* TargetActor, AActor* ShootingActor);
+
+	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)
 	AActor* Target;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)
 	AActor* Shooter;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector TargetLocation;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ShooterLocation;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool FollowTarget = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxPiercedTargets = 1;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	int PiercedTargets = 0;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool RotateMesh = false;
 	
@@ -37,9 +56,6 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* Material;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector TargetLocation;
 
 	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Damage;

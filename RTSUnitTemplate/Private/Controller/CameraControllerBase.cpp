@@ -577,14 +577,14 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 			break;
 		case CameraData::MoveToClick:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("MoveToClick"));
+				//UE_LOG(LogTemp, Warning, TEXT("MoveToClick"));
 				if(ClickedActor)
 					MoveCamToClick(DeltaTime, ClickedActor->GetActorLocation());
 			}
 			break;
 		case CameraData::LockOnActor:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("LockOnActor"));
+				//UE_LOG(LogTemp, Warning, TEXT("LockOnActor"));
 				CameraBase->LockOnActor(ClickedActor);
 			}
 			break;

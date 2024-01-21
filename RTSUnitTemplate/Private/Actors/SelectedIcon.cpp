@@ -16,14 +16,14 @@ ASelectedIcon::ASelectedIcon()
     RootComponent = IconMesh;
     IconMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // QueryAndPhysics
     //IconMesh->SetupAttachment(RootComponent);
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Plane"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(*SphereMeshAssetPath);
     if (SphereMeshAsset.Succeeded())
     {
         IconMesh->SetStaticMesh(SphereMeshAsset.Object);
         IconMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -40.0f));
 
-        static ConstructorHelpers::FObjectFinder<UMaterial>MaterialBlue(_T("Material'/RTSUnitTemplate/RTSUnitTemplate/Materials/M_Ring_Aura.M_Ring_Aura'"));
-        static ConstructorHelpers::FObjectFinder<UMaterial>MaterialAction(_T("Material'/RTSUnitTemplate/RTSUnitTemplate/Materials/M_Ring_Aura_Red.M_Ring_Aura_Red'"));
+        static ConstructorHelpers::FObjectFinder<UMaterial> MaterialBlue(*MaterialBluePath);
+        static ConstructorHelpers::FObjectFinder<UMaterial> MaterialAction(*MaterialActionPath);
 
         if (MaterialBlue.Object != NULL)
         {

@@ -174,11 +174,11 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 		if (AbilityBar) {
 			AbilityBar->SetVisibility(ESlateVisibility::Visible);
 			AbilityBar->SetOwnerActor(SelectedActor);
-			AbilityBar->UsedAbilityPointsTextArray.Empty();
-			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[0], AbilityBar->OffensiveAbilityButtons);
-			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[1], AbilityBar->DefensiveAbilityButtons);
-			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[2], AbilityBar->AttackAbilityButtons);
-			AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[3], AbilityBar->ThrowAbilityButtons);
+			//AbilityBar->UsedAbilityPointsTextArray.Empty();
+			//AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[0], AbilityBar->OffensiveAbilityButtons);
+			//AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[1], AbilityBar->DefensiveAbilityButtons);
+			//AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[2], AbilityBar->AttackAbilityButtons);
+			//AbilityBar->InitializeButtonArray(AbilityBar->ButtonPreFixes[3], AbilityBar->ThrowAbilityButtons);
 		}
 		
 	}else

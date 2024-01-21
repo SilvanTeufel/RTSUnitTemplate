@@ -210,8 +210,8 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 				// Check if the index is not already in the array
 				if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
 				{
-					UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
-					UnitData.UnitBase->SaveAbilityData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+					//UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
+					UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
 					AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
 					SpawnParameterIdArray.Add(SpawnParaId);
 					FoundDeadUnit = true;
@@ -503,8 +503,8 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 
 				if(SpawnParameter.LoadLevelAfterSpawn)
 				{
-					UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
-					UnitBase->LoadAbilityData(FString::FromInt(AvailableUnitIndexArray[Index]));
+					//UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
+					UnitBase->LoadAbilityAndLevelData(FString::FromInt(AvailableUnitIndexArray[Index]));
 				}
 				AvailableUnitIndexArray.RemoveAt(Index);
 				SpawnParameterIdArray.RemoveAt(Index);

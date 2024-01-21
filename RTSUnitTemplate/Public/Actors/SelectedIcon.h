@@ -18,17 +18,27 @@ public:
 	// Sets default values for this actor's properties
 	ASelectedIcon();
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UStaticMeshComponent* IconMesh;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UMaterialInterface* BlueMaterial;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UMaterialInterface* ActionMaterial;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UMaterialInstanceDynamic* DynMaterial;
+
+	// Global string definitions
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	FString SphereMeshAssetPath = TEXT("/Engine/BasicShapes/Plane");
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	FString MaterialBluePath = TEXT("Material'/RTSUnitTemplate/RTSUnitTemplate/Materials/M_Ring_Aura.M_Ring_Aura'");
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	FString MaterialActionPath = TEXT("Material'/RTSUnitTemplate/RTSUnitTemplate/Materials/M_Ring_Aura_Red.M_Ring_Aura_Red'");
 
 protected:
 	// Called when the game starts or when spawned

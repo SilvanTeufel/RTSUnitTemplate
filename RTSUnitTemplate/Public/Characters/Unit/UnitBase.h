@@ -201,6 +201,9 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedCharacterIcon", Keywords = "RTSUnitTemplate SelectedCharacterIcon"), Category = TopDownRTSTemplate)
 	class ASelectedIcon* SelectedIcon;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class ASelectedIcon> SelectedIconBaseClass;
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SpawnSelectedIcon", Keywords = "RTSUnitTemplate SpawnSelectedIcon"), Category = TopDownRTSTemplate)
 	void SpawnSelectedIcon();
 //////////////////////////////////////
@@ -218,7 +221,7 @@ public:
 	void SpawnProjectile(AActor* Target, AActor* Attacker);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnProjectileFromClass(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass);
+	void SpawnProjectileFromClass(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, float ZOffset);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;

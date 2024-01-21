@@ -43,7 +43,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
-
+	SelectedIconBaseClass = ASelectedIcon::StaticClass();
 	/*
 	if (HasAuthority())
 	{
@@ -281,7 +281,8 @@ void AUnitBase::SpawnSelectedIcon()
 	FTransform SpellTransform;
 	SpellTransform.SetLocation(FVector(500, 0, 0));
 	SpellTransform.SetRotation(FQuat(FRotator::ZeroRotator));
-	SelectedIcon = GetWorld()->SpawnActor<ASelectedIcon>(ASelectedIcon::StaticClass(), SpellTransform, SpawnParams);
+	
+	SelectedIcon = GetWorld()->SpawnActor<ASelectedIcon>(SelectedIconBaseClass, SpellTransform, SpawnParams);
 	if (SelectedIcon) {
 		SelectedIcon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("rootSocket"));
 		SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
@@ -308,7 +309,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 							(this, ProjectileBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 		if (MyProjectile != nullptr)
 		{
-		
+			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 
@@ -320,38 +321,53 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	}
 }
 
-void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass) // FVector TargetLocation
+void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, float ZOffset) // FVector TargetLocation
 {
 
 	if(!Target || !Attacker || !ProjectileClass)
 		return;
-	
+
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
+	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
+	
 
-	if(ShootingUnit)
-	{
-		FTransform Transform;
-		Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
-
-		FVector Direction = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
-
-		Transform.SetRotation(FQuat(InitialRotation));
-		Transform.SetScale3D(ShootingUnit->ProjectileScale);
+	FVector TargetBoxSize = TargetUnit->GetComponentsBoundingBox().GetSize();
+	
+	for(int Count = 0; Count < ProjectileCount; Count++){
 		
-		const auto MyProjectile = Cast<AProjectile>
-							(UGameplayStatics::BeginDeferredActorSpawnFromClass
-							(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-		if (MyProjectile != nullptr)
+		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
+		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(Attacker->GetActorForwardVector());//ShootingUnit->GetActorForwardVector() + Offset;
+		
+		FVector LocationToShoot = Target->GetActorForwardVector()+ShootOffset*Spread;
+		LocationToShoot.Z += TargetBoxSize.Z/2+ZOffset;
+		
+		if(ShootingUnit)
 		{
-		
-			MyProjectile->Init(Target, Attacker);
-			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+			FTransform Transform;
+			Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
 
+			FVector Direction = (LocationToShoot - GetActorLocation()).GetSafeNormal(); // Target->GetActorLocation()
+			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
 
+			Transform.SetRotation(FQuat(InitialRotation));
+			Transform.SetScale3D(ShootingUnit->ProjectileScale);
 			
-		
-			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+			const auto MyProjectile = Cast<AProjectile>
+								(UGameplayStatics::BeginDeferredActorSpawnFromClass
+								(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+			if (MyProjectile != nullptr)
+			{
+
+				MyProjectile->TargetLocation = LocationToShoot;
+				MyProjectile->InitForAbility(Target, Attacker);
+				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
+				MyProjectile->FollowTarget = FollowTarget;
+
+				
+			
+				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+			}
 		}
 	}
 }

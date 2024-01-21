@@ -3,6 +3,17 @@
 
 #include "Controller/ControllerBase.h"
 
+void UAbilityChooser::NativeConstruct()
+{
+    Super::NativeConstruct();
+   UsedAbilityPointsTextArray.Empty();
+    InitializeButtonArray(ButtonPreFixes[0], OffensiveAbilityButtons);
+    InitializeButtonArray(ButtonPreFixes[1], DefensiveAbilityButtons);
+    InitializeButtonArray(ButtonPreFixes[2], AttackAbilityButtons);
+    InitializeButtonArray(ButtonPreFixes[3], ThrowAbilityButtons);
+    SetVisibility(ESlateVisibility::Hidden);
+}
+
 void UAbilityChooser::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
@@ -48,14 +59,10 @@ void UAbilityChooser::UpdateAbilityDisplay()
         // Update UsedAbilityPointsTextArray
         for (int32 Index = 0; Index < UsedAbilityPointsTextArray.Num(); Index++)
         {
-            UE_LOG(LogTemp, Log, TEXT("UsedAbilityPointsTextArray.Num(): %d"), UsedAbilityPointsTextArray.Num());
-            UE_LOG(LogTemp, Log, TEXT("Ability Index: %d"), Index);
             if (UsedAbilityPointsTextArray[Index])
             {
-               
                 int32 UsedPoints = OwnerAbilityUnit->LevelData.UsedAbilityPointsArray.IsValidIndex(Index) ? OwnerAbilityUnit->LevelData.UsedAbilityPointsArray[Index] : 0;
                 UsedAbilityPointsTextArray[Index]->SetText(FText::AsNumber(UsedPoints));
-                UE_LOG(LogTemp, Log, TEXT("Ability Index: %d, Used Points: %d"), Index, UsedPoints);
             }
         }
     }

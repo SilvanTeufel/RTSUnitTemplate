@@ -27,10 +27,17 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 
 void AAbilityUnit::LevelUp_Implementation()
 {
-	Super::LevelUp_Implementation();
-	
-	if(HasAuthority())
-		AddAbilitPoint();
+	//Super::LevelUp_Implementation();
+
+	if(LevelData.CharacterLevel < LevelUpData.MaxCharacterLevel && LevelData.Experience > LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel)
+	{
+		LevelData.CharacterLevel++;
+		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
+		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
+		// Trigger any additional level-up effects or logic here
+		if(HasAuthority())
+			AddAbilityPoint();
+	}
 }
 
 void AAbilityUnit::TeleportToValidLocation(const FVector& Destination)
@@ -209,17 +216,17 @@ bool AAbilityUnit::IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability)
 	switch (AbilityID)
 	{
 	case EGASAbilityInputID::AbilityOne:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 0;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	case EGASAbilityInputID::AbilityTwo:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 1;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	case EGASAbilityInputID::AbilityThree:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 2;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	case EGASAbilityInputID::AbilityFour:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 3;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	case EGASAbilityInputID::AbilityFive:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 4;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	case EGASAbilityInputID::AbilitySix:
-		return LevelData.UsedAbilityPointsArray[Ability] >= 5;
+		return LevelData.UsedAbilityPointsArray[Ability] < 1;
 	default:
 		return false;
 	}
@@ -229,11 +236,10 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 {
 
 	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), Ability);
-	
-	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, Ability))
-	{
-		return;
-	}
+
+	int32 AbilityIDIndex = static_cast<int32>(AbilityID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+	int32 AbilityCost = (1 + AbilityCostIncreaser*AbilityIDIndex);
+	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, Ability) || LevelData.AbilityPoints < AbilityCost) return;
 	
 	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
 	
@@ -263,11 +269,11 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 		return;
 	}
 
-	LevelData.AbilityPoints--;
-	LevelData.UsedAbilityPoints++;
+	LevelData.AbilityPoints -= AbilityCost;
+	LevelData.UsedAbilityPoints += AbilityCost;
 
 	if(Ability <= 3 && Ability >= 0)
-		LevelData.UsedAbilityPointsArray[Ability]++;
+		LevelData.UsedAbilityPointsArray[Ability] += AbilityCost;
 }
 
 
@@ -298,7 +304,7 @@ void AAbilityUnit::AutoAbility()
 
 
 
-void AAbilityUnit::AddAbilitPoint()
+void AAbilityUnit::AddAbilityPoint()
 {
 	if((LevelData.CharacterLevel % LevelUpData.AbilityPointsEveryXLevel) == 0) // Every 5 levels
 	{
@@ -307,7 +313,7 @@ void AAbilityUnit::AddAbilitPoint()
 }
 
 
-void AAbilityUnit::SaveAbilityData(const FString& SlotName)
+void AAbilityUnit::SaveAbilityAndLevelData(const FString& SlotName)
 {
 	UTalentSaveGame* SaveGameInstance = Cast<UTalentSaveGame>(UGameplayStatics::CreateSaveGameObject(UTalentSaveGame::StaticClass()));
 
@@ -317,11 +323,16 @@ void AAbilityUnit::SaveAbilityData(const FString& SlotName)
 		SaveGameInstance->DefensiveAbilityID = DefensiveAbilityID;
 		SaveGameInstance->AttackAbilityID = AttackAbilityID;
 		SaveGameInstance->ThrowAbilityID = ThrowAbilityID;
+		/// LEVEL DATA ///
+		SaveGameInstance->LevelData = LevelData;
+		SaveGameInstance->LevelUpData = LevelUpData;
+		SaveGameInstance->PopulateAttributeSaveData(Attributes);
+		/////////////////////
 		UGameplayStatics::SaveGameToSlot(SaveGameInstance, SlotName+"Ability", 0);
 	}
 }
 
-void AAbilityUnit::LoadAbilityData(const FString& SlotName)
+void AAbilityUnit::LoadAbilityAndLevelData(const FString& SlotName)
 {
 
 	FString LoadSlot = SlotName+"Ability";
@@ -333,6 +344,20 @@ void AAbilityUnit::LoadAbilityData(const FString& SlotName)
 		DefensiveAbilityID = SaveGameInstance->DefensiveAbilityID;
 		AttackAbilityID = SaveGameInstance->AttackAbilityID;
 		ThrowAbilityID = SaveGameInstance->ThrowAbilityID;
+		LevelData = SaveGameInstance->LevelData;
+		LevelUpData = SaveGameInstance->LevelUpData;
+		Attributes->UpdateAttributes(SaveGameInstance->AttributeSaveData);
 	}
 	
+}
+
+void AAbilityUnit::ResetAbility()
+{
+	OffensiveAbilityID = EGASAbilityInputID::None;
+	DefensiveAbilityID = EGASAbilityInputID::None;
+	AttackAbilityID = EGASAbilityInputID::None;
+	ThrowAbilityID = EGASAbilityInputID::None;
+	LevelData.AbilityPoints = LevelData.UsedAbilityPoints+LevelData.AbilityPoints-AbilityResetPenalty;
+	LevelData.UsedAbilityPoints = 0;
+	LevelData.UsedAbilityPointsArray = { 0, 0, 0, 0, 0 };
 }

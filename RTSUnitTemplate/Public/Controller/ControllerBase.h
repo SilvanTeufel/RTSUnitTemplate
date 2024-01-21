@@ -143,7 +143,7 @@ public:
 		TSubclassOf<class AEffectArea> EffectAreaClass;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass);
+		void SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn = nullptr);
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 		bool IsShiftPressed = false;
@@ -223,7 +223,15 @@ public:
 
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
-	
+	void SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ResetAbility(const int32 UnitIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SaveAbility(const int32 UnitIndex, const FString& SlotName);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void LoadAbility(const int32 UnitIndex, const FString& SlotName);
 };
 

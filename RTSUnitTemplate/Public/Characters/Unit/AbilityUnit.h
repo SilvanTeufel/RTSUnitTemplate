@@ -35,83 +35,92 @@ public:
 
 	virtual void LevelUp_Implementation() override;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingFromDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
 
 	// Set Unit States  //////////////////////////////////////////
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	TEnumAsByte<UnitData::EState> GetUnitState();
 
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category=Ability)
 	virtual void GetAbilitiesArrays();
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitState", Keywords = "RTSUnitTemplate UnitState"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitState = UnitData::Idle;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitStatePlaceholder", Keywords = "RTSUnitTemplate UnitStatePlaceholder"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Patrol;
 	///////////////////////////////////////////////////////////////////
 
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>OffensiveAbilities;
 	
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefensiveAbilities;
 	
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>AttackAbilities;
 	
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>ThrowAbilities;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID OffensiveAbilityID;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID DefensiveAbilityID;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID AttackAbilityID;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID ThrowAbilityID;
 
-	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, Category = Ability)
 	int32 AutoAbilitySequence[4] = {0, 1, 2, 3};
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetAutoAbilitySequence(int Index, int32 Value);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	bool AutoApplyAbility = true;
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability);
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int Ability);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	int32 DetermineAbilityID(int32 Level);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = Ability)
 	void AutoAbility();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void AddAbilitPoint();
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void AddAbilityPoint();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SaveAbilityData(const FString& SlotName);
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void SaveAbilityAndLevelData(const FString& SlotName);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void LoadAbilityData(const FString& SlotName);
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void LoadAbilityAndLevelData(const FString& SlotName);
+
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void ResetAbility();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	int AbilityResetPenalty = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	int AbilityCostIncreaser = 1;
 };
