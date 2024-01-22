@@ -28,6 +28,8 @@ AEffectArea::AEffectArea()
 void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
+
+	SetScaleTimer();
 }
 
 // Called every frame
@@ -50,6 +52,23 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, Mesh);
 }
 
+void AEffectArea::ScaleMesh()
+{
+	if (IsGettingBigger && Mesh)
+	{
+		FVector NewScale = Mesh->GetComponentScale() * BiggerScaler;
+		Mesh->SetWorldScale3D(NewScale);
+	}
+}
+
+void AEffectArea::SetScaleTimer()
+{
+	float ScaleInterval = BiggerScaleInterval; // Set this to your desired interval in seconds
+	if (IsGettingBigger)
+	{
+		GetWorld()->GetTimerManager().SetTimer(ScaleTimerHandle, this, &AEffectArea::ScaleMesh, ScaleInterval, true);
+	}
+}
 
 
 void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

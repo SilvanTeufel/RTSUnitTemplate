@@ -16,17 +16,25 @@ class RTSUNITTEMPLATE_API AEffectArea : public AActor
 public:	
 	// Sets default values for this actor's properties
 	AEffectArea();
-
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
 	FTimerHandle DamageTimerHandle;
+
+	FTimerHandle ScaleTimerHandle;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ScaleMesh();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetScaleTimer();
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
@@ -40,6 +48,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsGettingBigger = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BiggerScaler = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BiggerScaleInterval = 1.0f;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffect;
 	

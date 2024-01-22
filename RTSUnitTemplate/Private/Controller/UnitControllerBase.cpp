@@ -402,6 +402,9 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     							UnitBase->ServerStartAttackEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Attack);
     							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+    							if(UnitBase->Attributes->GetRange() >= 600.f) UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+    							
     							CreateProjectile(UnitBase);
     						}else
     						{
@@ -502,8 +505,6 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 			// Attack without Projectile
 			if(IsUnitToChaseInRange(UnitBase))
 			{
-				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
-				
 				float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
 			
 				if(UnitBase->IsDoingMagicDamage)
@@ -570,6 +571,12 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 		if (IsUnitToChaseInRange(UnitBase)) {
 				UnitBase->ServerStartAttackEvent_Implementation();
 				UnitBase->SetUnitState(UnitData::Attack);
+
+				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+				UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+				if(UnitBase->Attributes->GetRange() >= 600.f) UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+
+			
 				CreateProjectile(UnitBase);
 		}else
 		{

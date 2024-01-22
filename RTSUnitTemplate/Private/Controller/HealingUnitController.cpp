@@ -168,6 +168,9 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     							UnitBase->ServerStartHealingEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Healing);
     							UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+    							UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+
     							bHealActorSpawned = true;
     						}else
     						{
@@ -267,6 +270,11 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 				UnitBase->SpawnHealActor(UnitBase->UnitToChase);
 				bHealActorSpawned = true;
 				UnitBase->ServerStartHealingEvent_Implementation();
+				
+				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+				UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+				UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+				
 				UnitBase->SetUnitState(UnitData::Healing);
 			}else if(!IsUnitToChaseInRange(UnitBase) && UnitBase->GetUnitState() != UnitData::Run)
 			{
