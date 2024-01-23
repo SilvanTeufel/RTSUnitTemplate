@@ -321,14 +321,14 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	}
 }
 
-void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Target, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, float ZOffset) // FVector TargetLocation
+void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool DisableAutoZOffset, float ZOffset) // FVector TargetLocation
 {
 
-	if(!Target || !Attacker || !ProjectileClass)
+	if(!Aim || !Attacker || !ProjectileClass)
 		return;
 
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
-	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
+	AUnitBase* TargetUnit = Cast<AUnitBase>(Aim);
 	
 
 	FVector TargetBoxSize = TargetUnit->GetComponentsBoundingBox().GetSize();
@@ -336,10 +336,14 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Target, AActor* 
 	for(int Count = 0; Count < ProjectileCount; Count++){
 		
 		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
-		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(Attacker->GetActorForwardVector());//ShootingUnit->GetActorForwardVector() + Offset;
+		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(ShootingUnit->GetActorLocation(), TargetUnit->GetActorLocation());
+		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
 		
-		FVector LocationToShoot = Target->GetActorForwardVector()+ShootOffset*Spread;
-		LocationToShoot.Z += TargetBoxSize.Z/2+ZOffset;
+		FVector LocationToShoot = Aim->GetActorLocation()+ShootOffset*Spread;
+		
+		if(!DisableAutoZOffset)LocationToShoot.Z += TargetBoxSize.Z/2;
+		
+		LocationToShoot.Z += ZOffset;
 		
 		if(ShootingUnit)
 		{
@@ -359,7 +363,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Target, AActor* 
 			{
 
 				MyProjectile->TargetLocation = LocationToShoot;
-				MyProjectile->InitForAbility(Target, Attacker);
+				MyProjectile->InitForAbility(Aim, Attacker);
 				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
 				MyProjectile->FollowTarget = FollowTarget;

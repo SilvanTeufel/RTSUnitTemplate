@@ -137,7 +137,7 @@ void AProjectile::Tick(float DeltaTime)
 				AddActorWorldOffset(Direction * MovementSpeed);
 			}
 
-		}else
+		}else if(FollowTarget)
 		{
 			Destroy(true, false);
 		}
