@@ -125,21 +125,20 @@ void AProjectile::Tick(float DeltaTime)
 	{
 		AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
 		
-		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead) 
+		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead && FollowTarget) 
 		{
 			if(FollowTarget)
 			{
 				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
 				AddActorWorldOffset(Direction * MovementSpeed);
-			}else
-			{
-				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-				AddActorWorldOffset(Direction * MovementSpeed);
 			}
-
 		}else if(FollowTarget)
 		{
 			Destroy(true, false);
+		}else
+		{
+				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+            	AddActorWorldOffset(Direction * MovementSpeed);
 		}
 	}
 	
