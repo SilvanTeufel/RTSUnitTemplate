@@ -256,6 +256,19 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		}
 		break;
 
+		case UnitData::EvasionIdle:
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				UE_LOG(LogTemp, Warning, TEXT("EvasionIdle: %f"), UnitBase->UnitControlTimer);
+				if(	UnitBase->CollisionUnit)
+				{
+					//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
+					EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
+					UnitBase->UnitControlTimer += DeltaSeconds;
+				}
+				
+			}
+			break;
 		case UnitData::Idle:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
@@ -346,6 +359,12 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->UnitStatePlaceholder = UnitData::Run;
+		return;
+	}
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
@@ -601,11 +620,56 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 
 
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->UnitToChase = UnitBase->CollisionUnit;
+		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
+		UnitBase->CollisionUnit = nullptr;
+	}else if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->UnitStatePlaceholder = UnitData::Idle;
+		UnitBase->RunLocation = UnitBase->GetActorLocation();
+		UnitBase->SetUnitState(UnitData::EvasionIdle);
+	}
+
 	if(UnitBase->UnitsToChase.Num())
 	{
 		UnitBase->SetUnitState(UnitData::Chase);
 	}else
 		SetUnitBackToPatrol(UnitBase, DeltaSeconds);
+}
+
+void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation)
+{
+	
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
+	{
+		if(UnitBase->SetNextUnitToChase())
+		{
+			UnitBase->SetUnitState(UnitData::Chase);
+		}
+	}
+				
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+				
+	const FVector UnitLocation = UnitBase->GetActorLocation();
+				
+	if(UnitBase->IsFlying)
+	{
+		CollisionLocation = FVector(CollisionLocation.X, CollisionLocation.Y, UnitBase->FlyHeight);
+	}
+	
+	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
+	UnitBase->AddMovementInput(-1*ADirection, UnitBase->Attributes->GetRunSpeedScale());
+
+	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
+
+	if (Distance >= UnitBase->EvadeDistance) {
+		UnitBase->SetUnitState(UnitData::Run);
+		//UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		UnitBase->CollisionUnit = nullptr;
+	}
+	UnitBase->UnitControlTimer = 0.f;
 }
 
 void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSeconds)
@@ -631,6 +695,13 @@ void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSe
 
 void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->UnitStatePlaceholder = UnitData::Run;
+		return;
+	}
+	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
@@ -683,6 +754,38 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 	else
 	{
 		UnitBase->SetUnitState(UnitData::Idle);
+	}
+}
+
+FVector AUnitControllerBase::GetCloseLocation(FVector ToLocation, float Distance)
+{
+	while(true)
+	{
+		FVector RandomCloseLocation = ToLocation
+		+ FMath::RandPointInBox(FBox(FVector(-Distance, -Distance, 0),
+		FVector(Distance, Distance, 0)));
+
+		// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
+		const FVector Start = FVector(RandomCloseLocation.X, RandomCloseLocation.Y, RandomCloseLocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
+		const FVector End = FVector(RandomCloseLocation.X, RandomCloseLocation.Y, RandomCloseLocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
+
+		FHitResult HitResult;
+		FCollisionQueryParams CollisionParams;
+		CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
+		{
+			AActor* HitActor = HitResult.GetActor();
+
+			// Check if we hit the landscape
+			if (HitActor && HitActor->IsA(ALandscape::StaticClass()) )
+			{
+				// Hit landscape
+				// Set the Z-coordinate accordingly
+				RandomCloseLocation.Z = HitResult.ImpactPoint.Z;
+				return RandomCloseLocation;
+			}
+		}
 	}
 }
 

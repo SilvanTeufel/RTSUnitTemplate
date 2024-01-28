@@ -172,15 +172,32 @@ FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
 	
 	int32 UnitsInRangeCount = 0;
 	// Count Units within the specified Radius
+	
+	
 	for (AActor* Unit : Units) {
 		if (Unit) {
 			FVector UnitLocation = Unit->GetActorLocation();
-			if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
-				UnitsInRangeCount++;
+			AUnitBase* UnitBase = Cast<AUnitBase>(Unit);
+			if(AutoCamPlayerOnly)
+			{
+				if(UnitBase->IsPlayer)
+					if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
+						UnitsInRangeCount++;
+						SumPosition += UnitLocation;
+						UnitCount++;
+					}
+
+			}
+			else
+			{
+				if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
+					UnitsInRangeCount++;
+					SumPosition += UnitLocation;
+					UnitCount++;
+				}
 			}
 		}
 	}
-
 	float UnitTimePart = UnitsInRangeCount*UnitCountOrbitTimeMultiplyer;
 	float MaxTime = OrbitTimes[OrbitRotatorIndex] + UnitTimePart;
 
@@ -193,16 +210,8 @@ FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
 	
 	if(OrbitRotatorIndex >= OrbitPositions.Num())
 		OrbitRotatorIndex = 0;
+
 	
-	for (AActor* Unit : Units) {
-		if (Unit) {
-			FVector UnitLocation = Unit->GetActorLocation();
-			if (FVector::Dist(UnitLocation, OrbitPositions[OrbitRotatorIndex]) <= OrbitRadiuses[OrbitRotatorIndex]) {
-				SumPosition += UnitLocation;
-				UnitCount++;
-			}
-		}
-	}
 	Units.Empty();
 
 	if (UnitCount == 0) return OrbitPositions[OrbitRotatorIndex];

@@ -17,6 +17,10 @@ class RTSUNITTEMPLATE_API AUnitBase : public AAbilityUnit
 	GENERATED_BODY()
 	
 public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool IsPlayer = false;
+	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION()
@@ -115,7 +119,7 @@ public:
 	void SetWalkSpeed(float Speed);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunTolerance", Keywords = "RTSUnitTemplate StopRunTolerance"), Category = RTSUnitTemplate)
-		float StopRunTolerance = 100.f;
+		float StopRunTolerance = 50.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunToleranceY", Keywords = "RTSUnitTemplate StopRunToleranceY"), Category = RTSUnitTemplate)
 		float StopRunToleranceForFlying = 100.f;
@@ -194,6 +198,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RandomPatrolLocation;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float EvadeDistance = 70.f;
 /////////////////////////////
 
 // SelectedIcon related /////////
@@ -221,7 +228,7 @@ public:
 	void SpawnProjectile(AActor* Target, AActor* Attacker);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnProjectileFromClass(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool DisableAutoZOffset, float ZOffset);
+	void SpawnProjectileFromClass(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;

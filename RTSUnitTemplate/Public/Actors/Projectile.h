@@ -75,6 +75,17 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> ProjectileEffect;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsHealing = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsBouncingBack = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsBouncingNext = false;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool BouncedBack = false;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -85,16 +96,37 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Impact(AActor* ImpactTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ImpactHeal(AActor* ImpactTarget);
 	
 	UFUNCTION(Server, Reliable)
 	void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void ImpactEvent();
 
-	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DestroyWhenMaxPierced();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DestroyProjectileWithDelay();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DestroyProjectile();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetIsAttacked(AUnitBase* UnitToHit);
+	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float DestructionDelayTime = 0.1f;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetBackBouncing(AUnitBase* ShootingUnit);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetNextBouncing(AUnitBase* ShootingUnit, AUnitBase* UnitToHit);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AUnitBase* GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* UnitToHit);
 };

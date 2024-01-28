@@ -106,6 +106,10 @@ public:
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EvasionIdle(AUnitBase* UnitBase, FVector LocationToGo);
+
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -119,6 +123,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector GetCloseLocation(FVector ToLocation, float Distance);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetPatrolCloseLocation(AUnitBase* UnitBase);

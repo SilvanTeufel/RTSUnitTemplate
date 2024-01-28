@@ -321,7 +321,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	}
 }
 
-void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool DisableAutoZOffset, float ZOffset) // FVector TargetLocation
+void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset) // FVector TargetLocation
 {
 
 	if(!Aim || !Attacker || !ProjectileClass)
@@ -367,7 +367,8 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
 				MyProjectile->FollowTarget = FollowTarget;
-
+				MyProjectile->IsBouncingNext = IsBouncingNext;
+				MyProjectile->IsBouncingBack = IsBouncingBack;
 				
 			
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
