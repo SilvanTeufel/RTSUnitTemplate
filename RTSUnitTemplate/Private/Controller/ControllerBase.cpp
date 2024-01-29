@@ -70,6 +70,8 @@ void AControllerBase::Tick(float DeltaSeconds)
 		CameraBase->BlockControls = false;
 		CameraBase->DeSpawnLoadingWidget();
 	}
+
+	if(HUDBase) SelectedUnitCount = HUDBase->SelectedUnits.Num();
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
@@ -103,6 +105,17 @@ void AControllerBase::ShiftPressed()
 void AControllerBase::ShiftReleased()
 {
 	IsShiftPressed = false;
+}
+
+void AControllerBase::SelectUnit(int Index)
+{
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		if(SelectedUnits[i] && i != Index) SelectedUnits[i]->SetDeselected();
+	}
+	SelectedUnits.Empty();
+	SelectedUnits.Add(HUDBase->SelectedUnits[Index]);
+
 }
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
@@ -250,6 +263,7 @@ void AControllerBase::SetWidgets(int Index)
 		if(UnitBase && ExtendedCameraBase)
 		{
 			ExtendedCameraBase->SetUserWidget(UnitBase);
+			ExtendedCameraBase->SetSelectorWidget(Index, UnitBase);
 		}else
 		{
 			ExtendedCameraBase->SetUserWidget(nullptr);

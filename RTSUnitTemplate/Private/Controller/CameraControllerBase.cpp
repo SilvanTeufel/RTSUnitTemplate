@@ -20,7 +20,6 @@ void ACameraControllerBase::BeginPlay()
 
 	if(CameraBase)
 	GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
-	
 }
 
 void ACameraControllerBase::SetupInputComponent()

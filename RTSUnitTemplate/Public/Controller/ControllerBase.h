@@ -48,6 +48,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShiftReleased", Keywords = "RTSUnitTemplate ShiftReleased"), Category = RTSUnitTemplate)
 		void ShiftReleased();
 
+	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
+		void SelectUnit(int Index);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void LeftClickAMoveUEPF(AUnitBase* Unit, FVector Location);
 	
@@ -233,5 +236,8 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LoadAbility(const int32 UnitIndex, const FString& SlotName);
+
+	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
+	int SelectedUnitCount = 0;
 };
 

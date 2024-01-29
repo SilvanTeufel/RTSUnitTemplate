@@ -18,6 +18,9 @@ class RTSUNITTEMPLATE_API AUnitBase : public AAbilityUnit
 	
 public:
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FString Name = "Unit";
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool IsPlayer = false;
 	

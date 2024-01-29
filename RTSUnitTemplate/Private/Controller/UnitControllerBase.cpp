@@ -69,7 +69,6 @@ void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >
 void AUnitControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	
 	UnitControlStateMachine(DeltaSeconds);
 }
 
@@ -255,20 +254,18 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
-
 		case UnitData::EvasionIdle:
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			if(	UnitBase->CollisionUnit)
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-				UE_LOG(LogTemp, Warning, TEXT("EvasionIdle: %f"), UnitBase->UnitControlTimer);
-				if(	UnitBase->CollisionUnit)
-				{
-					//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
-					EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
-					UnitBase->UnitControlTimer += DeltaSeconds;
-				}
-				
+				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
+				EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
+				UnitBase->UnitControlTimer += DeltaSeconds;
 			}
-			break;
+				
+		}
+		break;
 		case UnitData::Idle:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));

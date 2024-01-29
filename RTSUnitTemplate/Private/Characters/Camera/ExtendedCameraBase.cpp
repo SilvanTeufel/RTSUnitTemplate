@@ -5,6 +5,7 @@
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"
 #include "Widgets/TalentChooser.h"
+#include "Widgets/UnitWidgetSelector.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
 {
@@ -25,6 +26,9 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	
 	AbilityChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("AbilityChooser"));
 	AbilityChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+
+	WidgetSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("WidgetSelector"));
+	WidgetSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
@@ -187,6 +191,21 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 		AbilityBar->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
+}
+
+void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
+{
+	UUnitWidgetSelector* WSelector = Cast<UUnitWidgetSelector>(WidgetSelector->GetUserWidgetObject());
+	
+	if(WSelector && SelectedActor)
+	{
+		WSelector->SetButtonColours(Id);
+		FString CharacterName = SelectedActor->Name + " / " + FString::FromInt(Id);
+		if (WSelector->Name)
+		{
+			WSelector->Name->SetText(FText::FromString(CharacterName));
+		}
+	}
 }
 
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)

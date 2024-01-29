@@ -42,20 +42,26 @@ public:
 	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	/** Handles Enhanced Keyboard Inputs */
 	
-	// Talents /////
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = TopDownRTSTemplate)
+	// Abilitys + Talents /////
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* TalentChooser;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = TopDownRTSTemplate)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* AbilityChooser;
 	
-	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUserWidget(AUnitBase* SelectedActor);
-	// Talents /////
+	// Abilitys + Talents /////
 
-	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	class UWidgetComponent* WidgetSelector;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoAdjustTalentChooserPosition = true;
 };

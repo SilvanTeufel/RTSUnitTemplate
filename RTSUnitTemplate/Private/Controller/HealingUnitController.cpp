@@ -115,12 +115,30 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
-
+	case UnitData::EvasionIdle:
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			if(	UnitBase->CollisionUnit)
+			{
+				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
+				EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
+				UnitBase->UnitControlTimer += DeltaSeconds;
+			}
+				
+		}
+		break;
 	case UnitData::Idle:
 		{
 			//if(UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 			UnitBase->SetWalkSpeed(0);
 
+			if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+			{
+				UnitBase->UnitStatePlaceholder = UnitData::Idle;
+				UnitBase->RunLocation = UnitBase->GetActorLocation();
+				UnitBase->SetUnitState(UnitData::EvasionIdle);
+			}
+			
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
@@ -288,6 +306,14 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 
 void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 {
+
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->UnitStatePlaceholder = UnitData::Run;
+		return;
+	}
+	
 	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChaseHeal())
@@ -322,6 +348,13 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
 
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->UnitStatePlaceholder = UnitData::Run;
+		return;
+	}
+	
 	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChaseHeal())
