@@ -70,13 +70,23 @@ void UAbilityChooser::UpdateAbilityDisplay()
 
 FString UAbilityChooser::GetEnumValueAsString(const FString& EnumName, int32 EnumValue)
 {
-    UEnum* Enum = FindObject<UEnum>(ANY_PACKAGE, *EnumName, true);
+    UEnum* Enum = FindObject<UEnum>(nullptr, *EnumName, true);
     if (!Enum)
     {
         return FString("Invalid");
     }
     return Enum->GetNameByValue(EnumValue).ToString();
 }
+/*
+FString UAbilityChooser::GetEnumValueAsString(const FString& EnumName, int32 EnumValue)
+{
+    UEnum* Enum = FindObject<UEnum>(ANY_PACKAGE, *EnumName, true);
+    if (!Enum)
+    {
+        return FString("Invalid");
+    }
+    return Enum->GetNameByValue(EnumValue).ToString();
+}*/
 
 void UAbilityChooser::InitializeButtonArray(const FString& ButtonPrefix, TArray<UButton*>& ButtonArray)
 {

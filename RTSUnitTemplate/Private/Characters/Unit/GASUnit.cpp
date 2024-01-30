@@ -4,8 +4,10 @@
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "GAS/Gas.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include <GameplayEffectTypes.h>
-
+#include "Engine/Engine.h"
 #include "Characters/Unit/LevelUnit.h"
 #include "Net/UnrealNetwork.h"
 
@@ -74,6 +76,40 @@ void AGASUnit::PossessedBy(AController* NewController)
 	GiveAbilities();
 }
 
+
+void AGASUnit::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+	InitializeAttributes();
+
+	if (AbilitySystemComponent && InputComponent)
+	{
+
+		const FGameplayAbilityInputBinds Binds(
+			"Confirm", 
+			"Cancel", 
+			FTopLevelAssetPath(GetPathNameSafe(UClass::TryFindTypeSlow<UEnum>("EGASAbilityInputID"))),
+			static_cast<int32>(EGASAbilityInputID::Confirm),
+			static_cast<int32>(EGASAbilityInputID::Cancel));
+		/*
+		const FGameplayAbilityInputBinds Binds(
+			"Confirm", 
+			"Cancel",
+			"EGASAbilityInputID",
+			static_cast<int32>(EGASAbilityInputID::Confirm),
+			static_cast<int32>(EGASAbilityInputID::Cancel)
+		);*/
+
+		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
+
+
+	}
+}
+
+/*
 void AGASUnit::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
@@ -97,7 +133,7 @@ static_cast<int32>(EGASAbilityInputID::Cancel)
 	}
 	
 }
-
+*/
 
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

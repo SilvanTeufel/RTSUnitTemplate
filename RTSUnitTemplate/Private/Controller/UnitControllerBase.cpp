@@ -254,7 +254,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
-		case UnitData::EvasionIdle:
+		case UnitData::Evasion:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 			if(	UnitBase->CollisionUnit)
@@ -358,7 +358,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
-		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
@@ -626,7 +626,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 	{
 		UnitBase->UnitStatePlaceholder = UnitData::Idle;
 		UnitBase->RunLocation = UnitBase->GetActorLocation();
-		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->SetUnitState(UnitData::Evasion);
 	}
 
 	if(UnitBase->UnitsToChase.Num())
@@ -694,7 +694,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 {
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
-		UnitBase->SetUnitState(UnitData::EvasionIdle);
+		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}

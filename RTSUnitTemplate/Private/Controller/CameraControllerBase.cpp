@@ -1,6 +1,8 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/CameraControllerBase.h"
 #include "AIController.h"
+#include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
+#include "Engine/Engine.h"      
 #include "Kismet/GameplayStatics.h"
 
 
@@ -78,6 +80,26 @@ void ACameraControllerBase::GetViewPortScreenSizes(int x)
 	switch (x)
 	{
 	case 1:
+		GetViewportSize(CameraBase->ScreenSizeX, CameraBase->ScreenSizeY);
+		break;
+	case 2:
+		if (GEngine && GEngine->GameViewport)
+		{
+			FViewport* Viewport = GEngine->GameViewport->Viewport;
+			FIntPoint Size = Viewport->GetSizeXY();
+			CameraBase->ScreenSizeX = Size.X;
+			CameraBase->ScreenSizeY = Size.Y;
+		}
+		break;
+	}
+}
+
+/*
+void ACameraControllerBase::GetViewPortScreenSizes(int x)
+{
+	switch (x)
+	{
+	case 1:
 		{
 			GetViewportSize(CameraBase->ScreenSizeX, CameraBase->ScreenSizeY);
 		}
@@ -89,7 +111,7 @@ void ACameraControllerBase::GetViewPortScreenSizes(int x)
 		}
 		break;
 	}
-}
+}*/
 
 
 FVector ACameraControllerBase::GetCameraPanDirection() {

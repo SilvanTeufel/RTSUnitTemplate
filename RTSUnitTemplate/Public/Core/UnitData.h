@@ -15,7 +15,7 @@ namespace UnitData
 	enum EState
 	{
 		Idle   UMETA(DisplayName = "Idle"),
-		EvasionIdle   UMETA(DisplayName = "EvasionIdle"),
+		Evasion   UMETA(DisplayName = "Evasion"),
 		Run  UMETA(DisplayName = "Run"),
 		Patrol UMETA(DisplayName = "Patrol"),
 		PatrolRandom UMETA(DisplayName = "PatrolRandom"),

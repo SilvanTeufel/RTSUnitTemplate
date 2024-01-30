@@ -115,6 +115,7 @@ void AControllerBase::SelectUnit(int Index)
 	}
 	SelectedUnits.Empty();
 	SelectedUnits.Add(HUDBase->SelectedUnits[Index]);
+	HUDBase->SelectedUnits[Index]->SetSelected();
 
 }
 
