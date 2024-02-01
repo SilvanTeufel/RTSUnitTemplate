@@ -56,4 +56,7 @@ public:
 
 	float TriggerCapsuleRadius = 300.f;
 	float TriggerCapsuleHeight = 300.f;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void ImpactEvent();
 };

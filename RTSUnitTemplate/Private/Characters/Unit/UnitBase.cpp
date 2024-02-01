@@ -108,7 +108,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(AUnitBase, TeamId)
 	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);

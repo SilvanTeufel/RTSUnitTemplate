@@ -154,52 +154,72 @@ void ACameraBase::AdjustSpringArmRotation(float Difference, float& OutRotationVa
 	}
 }
 
+
+void ACameraBase::RotateSpringArmPitchFree(bool Invert)
+{
+	if(!Invert && SpringArmRotator.Pitch <= SpringArmMinRotator && SpringArm->TargetArmLength < SpringArmStartRotator)
+	{
+		SpringArmRotator.Pitch += 1.5f;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}else if(Invert && SpringArmRotator.Pitch >= SpringArmMaxRotator)
+	{
+		SpringArmRotator.Pitch -= 1.5f;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}else
+	{
+		SpringArmRotatorSpeed = 0.f;
+	}
+	
+}
+
+void ACameraBase::RotateSpringArmYawFree(bool Invert)
+{
+	if(!Invert)
+	{
+		SpringArmRotator.Yaw += 1.5f;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}
+	else if(Invert)
+	{
+		SpringArmRotator.Yaw -= 1.5f;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}
+	else
+	{
+		SpringArmRotatorSpeed = 0.f;
+	}
+}
+
 bool ACameraBase::RotateFree(FVector MouseLocation)
 {
-    const float RotationThreshold = 50.f; // Ersetzen Sie dies durch den gewünschten Schwellenwert.
-
-	// Viewport-Größe holen
-	FVector2D ViewportSize;
-	if (GEngine && GEngine->GameViewport)
-	{
-		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	// Assume PreviousMouseLocation is a member variable that tracks the last mouse position
+	FVector Delta = MouseLocation - PreviousMouseLocation;
+	FVector Direction = Delta.GetSafeNormal();
+	// Determine rotation direction based on mouse movement
+	// Here, I assume horizontal rotation. You might need to adjust for vertical rotation
+	//RotateSpringArm(false);
+	float MindDelta = 100.f;
+	
+	if (Delta.Y > MindDelta) {
+		// Mouse moved right
+		RotateSpringArmPitchFree(false); // Rotate in one direction
+	} else if (Delta.Y < -MindDelta) {
+		// Mouse moved left
+		RotateSpringArmPitchFree(true); // Rotate in the opposite direction
 	}
 
-	// Den Mittelpunkt des Bildschirms berechnen
-	FVector2D ScreenCenter = ViewportSize / 2;
-
-	float XDifference = ScreenCenter.X -  MouseLocation.X;
-	float YDifference = MouseLocation.Y - ScreenCenter.Y;
+	if (Delta.X > MindDelta) {
+		// Mouse moved right
+		RotateSpringArmYawFree(true); // Rotate in one direction
+	} else if (Delta.X < -MindDelta) {
+		// Mouse moved left
+		RotateSpringArmYawFree(false); // Rotate in the opposite direction
+	}
 	
-    SpringArmRotator = SpringArm->GetRelativeRotation();
-    bool bRotated = false;
-
-    // Prüfen, ob die X-Differenz größer als der Schwellenwert ist und Yaw drehen.
-    if (FMath::Abs(XDifference) > RotationThreshold)
-    {
-    	float TempYaw = SpringArmRotator.Yaw;
-    	AdjustSpringArmRotation(XDifference, TempYaw);
-    	SpringArmRotator.Yaw = TempYaw;
-        bRotated = true;
-    }
-	
-    // Prüfen, ob die Y-Differenz größer als der Schwellenwert ist und Pitch drehen.
-    if (FMath::Abs(YDifference) > RotationThreshold)
-    {
-    	float TempPitch = SpringArmRotator.Pitch;
-    	AdjustSpringArmRotation(YDifference, TempPitch);
-    	SpringArmRotator.Pitch = TempPitch;
-        bRotated = true;
-    }
-	
-    // Aktualisieren der SpringArm Rotation.
-    SpringArm->SetRelativeRotation(SpringArmRotator);
-
-    // Wenn der Yaw über 360 geht, setze ihn zurück auf 0.
-    if (SpringArmRotator.Yaw >= 360) SpringArmRotator.Yaw = 0.f;
-
-    // Gibt zurück, ob eine Drehung durchgeführt wurde oder nicht.
-    return bRotated;
+	// Update the previous mouse position for the next call
+	PreviousMouseLocation += Direction;
+	// You might want to return true if rotation happened, or false otherwise
+	return Delta.X != 0;
 }
 
 

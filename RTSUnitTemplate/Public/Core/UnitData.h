@@ -123,7 +123,7 @@ namespace SelectableData
 	{
 		Health     UMETA(DisplayName = "Health"),
 		Shield   UMETA(DisplayName = "Shield "),
-		WeaponTalentPoint UMETA(DisplayName = "WeaponTalentPoint"),
+		Effect UMETA(DisplayName = "Effect"),
 	};
 }
 

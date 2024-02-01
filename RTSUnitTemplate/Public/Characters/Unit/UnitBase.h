@@ -66,8 +66,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetMeshRotationServer();
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "TeamId", Keywords = "RTSUnitTemplate IsFriendly"), Category = RTSUnitTemplate)
-		int TeamId = 1;
+//	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "TeamId", Keywords = "RTSUnitTemplate IsFriendly"), Category = RTSUnitTemplate)
+		//int TeamId = 1;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "IsFlying", Keywords = "RTSUnitTemplate IsFlying"), Category = RTSUnitTemplate)
 		bool IsFlying = false;
@@ -202,7 +202,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RandomPatrolLocation;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EvadeDistance = 70.f;
 /////////////////////////////
 

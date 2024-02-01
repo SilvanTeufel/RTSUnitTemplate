@@ -7,13 +7,15 @@
 #include "Core/UnitData.h"
 #include "AbilitySystemInterface.h"
 #include <GameplayEffectTypes.h>
+
+#include "SpawnerUnit.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "GASUnit.generated.h"
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AGASUnit : public ACharacter, public IAbilitySystemInterface
+class RTSUNITTEMPLATE_API AGASUnit : public ASpawnerUnit, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 	

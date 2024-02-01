@@ -37,6 +37,7 @@ public:
 		return GetCapsuleComponent();
 	}
 
+	FVector PreviousMouseLocation;
 	bool bLockCameraZRotation = true;
 protected:
 	// Called when the game starts or when spawned
@@ -159,6 +160,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void AdjustSpringArmRotation(float Difference, float& OutRotationValue);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void RotateSpringArmPitchFree(bool Invert);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void RotateSpringArmYawFree(bool Invert);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool RotateFree(FVector MouseLocation);
 	

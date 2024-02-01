@@ -4,6 +4,7 @@
 #include "Actors/Selectable.h"
 #include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 ASelectable::ASelectable()
@@ -17,6 +18,16 @@ ASelectable::ASelectable()
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &ASelectable::OnOverlapBegin);
 }
 
+void ASelectable::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ASelectable, PickupEffect);
+	DOREPLIFETIME(ASelectable, PickupEffectTwo);
+	DOREPLIFETIME(ASelectable, TeamId);
+	DOREPLIFETIME(ASelectable, FollowTarget);
+
+}
+
 // Called when the game starts or when spawned
 void ASelectable::BeginPlay()
 {
@@ -28,53 +39,78 @@ void ASelectable::BeginPlay()
 void ASelectable::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if(FollowTarget && Target)
+	{
+		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Target->GetActorLocation());
+		AddActorWorldOffset(Direction * MovementSpeed);
+		float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+		if(Distance <= PickUpDistance)
+		{
+			AUnitBase* UnitBase = Cast<AUnitBase>(Target);
+			
+			if(!UnitBase) return;
+			if(TeamId == UnitBase->TeamId) return;
+			
+			ImpactEvent();
+			switch (Type)
+			{
+		 	
+			case SelectableData::Health:
+				{
+					UnitBase->SetHealth(UnitBase->Attributes->GetHealth() + Amount);
+				}
+				break;
+			case SelectableData::Shield:
+				{
+					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
+				}
+				break;
+			case SelectableData::Effect:
+				{
+					UnitBase->ApplyInvestmentEffect(PickupEffect);
+					UnitBase->ApplyInvestmentEffect(PickupEffectTwo);
+				}
+				break;
+			default:
+				{
+		 					
+				}
+				break;
+			}
+
+			if(Sound)
+				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
+		 	
+			DestroySelectableWithDelay();
+		}
+	}
 
 }
 
 void ASelectable::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if(OtherActor)
+	if(OtherActor && !FollowTarget)
 	{
 
 		AUnitBase* UnitBase = Cast<AUnitBase>(OtherActor);
 		
-		 if(UnitBase)
-		{
-		 	if(UnitBase)
-		 		switch (Type)
-		 		{
-		 	
-					case SelectableData::Health:
-		 				{
-							UnitBase->SetHealth(UnitBase->Attributes->GetHealth() + Amount);
-		 				}
-		 			break;
-		 			case SelectableData::Shield:
-		 				{
-		 					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
-		 				}
-		 				break;
-		 			/*case SelectableData::TalentPoint:
-		 			{
-		 					AUnitBase* AUnitBase = Cast<ATalentedUnit>(UnitBase);
-		 					if(TalentedUnit)
-		 					TalentedUnit->AddTalentPoint(Amount);
-		 			}
-		 			break;*/
-		 			default:
-		 				{
-		 					
-		 				}
-		 			break;
-		 		}
+		if(!UnitBase) return;
+		if(TeamId == UnitBase->TeamId) return;
 
-		 	if(Sound)
-		 	UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
-		 	
-			Destroy(true, false);
-		}
+		Target = UnitBase;
+		FollowTarget = true;
 			
 	}
 }
 
+void ASelectable::DestroySelectableWithDelay()
+{
+	FTimerHandle TimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASelectable::DestroySelectable, DestructionDelayTime, false);
+}
+
+void ASelectable::DestroySelectable()
+{
+	Destroy(true, false);
+}

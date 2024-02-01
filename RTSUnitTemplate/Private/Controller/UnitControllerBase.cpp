@@ -311,7 +311,8 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
 	FVector ActorLocation = UnitBase->GetActorLocation();
-				
+
+	UnitBase->SpawnSelectablesArray();
 	//UnitBase->SetActorLocation(FVector(ActorLocation.X + 0.f,ActorLocation.Y + 0.f,ActorLocation.Z -1.f));
 
 	if (UnitBase->UnitControlTimer >= DespawnTime) {

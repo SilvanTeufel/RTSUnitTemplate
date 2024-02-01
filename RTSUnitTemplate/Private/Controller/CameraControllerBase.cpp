@@ -170,8 +170,8 @@ void ACameraControllerBase::RotateCam(float DeltaTime)
 {
 	if(!MiddleMouseIsPressed) return;
 	
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+	//FHitResult Hit;
+	//GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
 	if(CameraBase)
 	{
