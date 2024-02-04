@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 //#include "PathSeekerBase.h"
 #include "GameFramework/Character.h"
-#include "Actors/Selectable.h"
+#include "Actors/Pickup.h"
 #include "SpawnerUnit.generated.h"
 
 /**
@@ -19,7 +19,7 @@ struct FSpawnData : public FTableRowBase
 	int Id;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	TSubclassOf<ASelectable> SelectableBlueprints;
+	TSubclassOf<APickup> PickupBlueprint;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float ProbabilityArray;
@@ -45,13 +45,13 @@ public:
 	void CreateSpawnDataFromDataTable();
 	
 	UFUNCTION(BlueprintCallable, Category = Spawn)
-	ASelectable* SpawnSelectable(FVector Location, TSubclassOf<ASelectable> SelectableClass);
+	APickup* SpawnPickup(FVector Location, TSubclassOf<APickup> PickupClass);
 
 	UFUNCTION(BlueprintCallable, Category = Spawn)
-	bool SpawnSelectableWithProbability(FSpawnData Data, FVector Offset);
+	bool SpawnPickupWithProbability(FSpawnData Data, FVector Offset);
 
 	UFUNCTION(BlueprintCallable, Category = Spawn)
-	void SpawnSelectablesArray();
+	void SpawnPickupsArray();
 
 	UPROPERTY(BlueprintReadWrite, Category = Spawn)
 	bool IsSpawned = false;

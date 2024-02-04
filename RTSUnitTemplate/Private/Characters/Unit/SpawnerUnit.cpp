@@ -36,7 +36,7 @@ void ASpawnerUnit::CreateSpawnDataFromDataTable()
 	}
 }
 
-ASelectable* ASpawnerUnit::SpawnSelectable(FVector Location, TSubclassOf<ASelectable> SelectableClass)
+APickup* ASpawnerUnit::SpawnPickup(FVector Location, TSubclassOf<APickup> PickupClass)
 {
 	// Spawn a new instance of the ASelectable class
 	//ASelectable* NewSelectable = GetWorld()->SpawnActor<ASelectable>(SelectableClass, Location, FRotator::ZeroRotator);
@@ -44,42 +44,42 @@ ASelectable* ASpawnerUnit::SpawnSelectable(FVector Location, TSubclassOf<ASelect
 	//return NewSelectable;
 
 	// Spawn a new instance of the ASelectable class with deferred spawn method
-	ASelectable* NewSelectable = GetWorld()->SpawnActorDeferred<ASelectable>(SelectableClass, FTransform(FRotator::ZeroRotator, Location));
+	APickup* NewPickup = GetWorld()->SpawnActorDeferred<APickup>(PickupClass, FTransform(FRotator::ZeroRotator, Location));
 
-	if (NewSelectable)
+	if (NewPickup)
 	{
 		// Set the TeamId of the NewSelectable
-		NewSelectable->TeamId = TeamId;
+		NewPickup->TeamId = TeamId;
 
 		// Finish the spawning process after setting properties
-		NewSelectable->FinishSpawning(FTransform(FRotator::ZeroRotator, Location));
+		NewPickup->FinishSpawning(FTransform(FRotator::ZeroRotator, Location));
 	}
 
 	// Return the spawned Selectable
-	return NewSelectable;
+	return NewPickup;
 }
 
-bool ASpawnerUnit::SpawnSelectableWithProbability(FSpawnData Data, FVector Offset)
+bool ASpawnerUnit::SpawnPickupWithProbability(FSpawnData Data, FVector Offset)
 {
 	float RandomNumber = FMath::RandRange(0.f, 100.f);
 
 	if (Data.ProbabilityArray >= RandomNumber)
 	{
-		SpawnSelectable(GetActorLocation() + Offset, Data.SelectableBlueprints);
+		SpawnPickup(GetActorLocation() + Offset, Data.PickupBlueprint);
 		return true;
 	}
 
 	return false;
 }
 
-void ASpawnerUnit::SpawnSelectablesArray()
+void ASpawnerUnit::SpawnPickupsArray()
 {
 	int i = 0;
 	FVector Offset = FVector(5.f,5.f,0.f);
 	if(!IsSpawned)
 	for (const FSpawnData& Data : SpawnDataArray)
 	{
-		SpawnSelectableWithProbability(Data, Offset*i);
+		SpawnPickupWithProbability(Data, Offset*i);
 		i++;
 	}
 	IsSpawned = true;

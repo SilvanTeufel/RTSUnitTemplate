@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilityUnit.h"
+#include "WorkingUnitBase.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
@@ -12,7 +12,7 @@
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AUnitBase : public AAbilityUnit
+class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
 	

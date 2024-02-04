@@ -1,13 +1,13 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Actors/Selectable.h"
+#include "Actors/Pickup.h"
 #include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Net/UnrealNetwork.h"
 
 // Sets default values
-ASelectable::ASelectable()
+APickup::APickup()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -15,28 +15,28 @@ ASelectable::ASelectable()
 	TriggerCapsule->InitCapsuleSize(30.f, 30.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerCapsule->SetupAttachment(RootComponent);
-	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &ASelectable::OnOverlapBegin);
+	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &APickup::OnOverlapBegin);
 }
 
-void ASelectable::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ASelectable, PickupEffect);
-	DOREPLIFETIME(ASelectable, PickupEffectTwo);
-	DOREPLIFETIME(ASelectable, TeamId);
-	DOREPLIFETIME(ASelectable, FollowTarget);
+	DOREPLIFETIME(APickup, PickupEffect);
+	DOREPLIFETIME(APickup, PickupEffectTwo);
+	DOREPLIFETIME(APickup, TeamId);
+	DOREPLIFETIME(APickup, FollowTarget);
 
 }
 
 // Called when the game starts or when spawned
-void ASelectable::BeginPlay()
+void APickup::BeginPlay()
 {
 	Super::BeginPlay();
 	
 }
 
 // Called every frame
-void ASelectable::Tick(float DeltaTime)
+void APickup::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	if(FollowTarget && Target)
@@ -87,7 +87,7 @@ void ASelectable::Tick(float DeltaTime)
 
 }
 
-void ASelectable::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+void APickup::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if(OtherActor && !FollowTarget)
@@ -104,13 +104,13 @@ void ASelectable::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	}
 }
 
-void ASelectable::DestroySelectableWithDelay()
+void APickup::DestroySelectableWithDelay()
 {
 	FTimerHandle TimerHandle;
-	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASelectable::DestroySelectable, DestructionDelayTime, false);
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &APickup::DestroySelectable, DestructionDelayTime, false);
 }
 
-void ASelectable::DestroySelectable()
+void APickup::DestroySelectable()
 {
 	Destroy(true, false);
 }

@@ -8,16 +8,16 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound\SoundCue.h"
 #include "GameplayEffect.h"
-#include "Selectable.generated.h"
+#include "Pickup.generated.h"
 
 UCLASS()
-class RTSUNITTEMPLATE_API ASelectable : public AActor
+class RTSUNITTEMPLATE_API APickup : public AActor
 {
 	GENERATED_BODY()
 	
 public:	
 	// Sets default values for this actor's properties
-	ASelectable();
+	APickup();
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
