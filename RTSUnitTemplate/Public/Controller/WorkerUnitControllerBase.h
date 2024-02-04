@@ -19,7 +19,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void WorkingUnitControlStateMachine(float DeltaSeconds);
-
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EvasionWorker(AUnitBase* UnitBase, FVector CollisionLocation);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds);
 
@@ -40,6 +43,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DespawnWorkResource(AWorkResource* WorkResource);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DetachWorkResource(AWorkResource* WorkResource);
 };
 
 

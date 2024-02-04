@@ -1,7 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/WorkResource.h"
-
+#include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Net/UnrealNetwork.h"
 
@@ -17,6 +17,12 @@ AWorkResource::AWorkResource()
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
+
+	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is Pickup Capsule"));
+	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
+	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
+	TriggerCapsule->SetupAttachment(RootComponent);
+	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkResource::OnOverlapBegin);
 	
 	if (HasAuthority())
 	{
@@ -36,7 +42,28 @@ void AWorkResource::BeginPlay()
 void AWorkResource::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if(FollowTarget && Target)
+	{
+		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Target->GetActorLocation());
+		AddActorWorldOffset(Direction * MovementSpeed);
+		float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+		if(Distance <= PickUpDistance)
+		{
+			AUnitBase* UnitBase = Cast<AUnitBase>(Target);
+			
+			if(!UnitBase) return;
+			
+			ImpactEvent();
 
+			if(Sound)
+				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
+
+			
+			AttachToComponent(UnitBase->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+			FollowTarget = false;
+			IsAttached = true;
+		}
+	}
 
 	
 }
@@ -53,21 +80,16 @@ void AWorkResource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 void AWorkResource::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if(OtherActor)
+	if(OtherActor && !FollowTarget)
 	{
-		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
 
+		AWorkingUnitBase* UnitBase = Cast<AWorkingUnitBase>(OtherActor);
 		
-		/*
-		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
-		{
-			// Do Nothing
-		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
-		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
-		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
-		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
-		}*/
+		if(!UnitBase || IsAttached) return;
+		//if(TeamId == UnitBase->TeamId) return;
+
+		Target = UnitBase;
+		FollowTarget = true;
+			
 	}
 }

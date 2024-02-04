@@ -663,8 +663,8 @@ void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLoca
 	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
 
 	if (Distance >= UnitBase->EvadeDistance) {
-		UnitBase->SetUnitState(UnitData::Run);
-		//UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		//UnitBase->SetUnitState(UnitData::Run);
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 		UnitBase->CollisionUnit = nullptr;
 	}
 	UnitBase->UnitControlTimer = 0.f;

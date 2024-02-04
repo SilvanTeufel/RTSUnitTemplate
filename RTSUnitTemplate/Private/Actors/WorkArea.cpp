@@ -56,17 +56,20 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 {
 	if(OtherActor)
 	{
-		AUnitBase* UnitBase = Cast<AUnitBase>(OtherActor);
-		if(UnitBase && UnitBase->GetUnitState() == UnitData::GoToResourceExtraction)
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(OtherActor);
+		AUnitBase* UnitBase = Cast<AUnitBase>(Worker);
+		if(Worker && UnitBase &&  ( UnitBase->GetUnitState() == UnitData::GoToResourceExtraction || UnitBase->GetUnitState() == UnitData::Evasion) && !IsBase)
 		{
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUnitState(UnitData::ResourceExtraction);
+			//UnitBase->UnitStatePlaceholder = UnitData::ResourceExtraction;
 			UE_LOG(LogTemp, Warning, TEXT("Overlap switch to -> ResourceExtraction"));
-		}else if(UnitBase && UnitBase->GetUnitState() == UnitData::GoToBase && IsBase)
+		}else if(Worker && UnitBase && IsBase) // && UnitBase->GetUnitState() == UnitData::GoToBase
 		{
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
 			DespawnWorkResource(UnitBase->WorkResource);
+			//UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 			UE_LOG(LogTemp, Warning, TEXT("Overlap switch to -> GoToResourceExtraction"));
 		}

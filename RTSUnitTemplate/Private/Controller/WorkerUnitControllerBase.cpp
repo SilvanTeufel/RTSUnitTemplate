@@ -164,7 +164,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 			if(	UnitBase->CollisionUnit)
 			{
 				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
-				EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
+				EvasionWorker(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UnitBase->UnitControlTimer += DeltaSeconds;
 			}
 				
@@ -185,16 +185,41 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		}
 
 	if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
+		DetachWorkResource(UnitBase->WorkResource);
 		KillUnitBase(UnitBase);
 		UnitBase->UnitControlTimer = 0.f;
 	}
+}
+
+void AWorkerUnitControllerBase::EvasionWorker(AUnitBase* UnitBase, FVector CollisionLocation)
+{
+	
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+				
+	const FVector UnitLocation = UnitBase->GetActorLocation();
+				
+	if(UnitBase->IsFlying)
+	{
+		CollisionLocation = FVector(CollisionLocation.X, CollisionLocation.Y, UnitBase->FlyHeight);
+	}
+	
+	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
+	const FVector RotatedDirection = FRotator(0.f,60.f,0.f).RotateVector(-1*ADirection);
+	UnitBase->AddMovementInput(RotatedDirection, UnitBase->Attributes->GetRunSpeedScale());
+
+	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
+
+	if (Distance >= UnitBase->EvadeDistance) {
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		UnitBase->CollisionUnit = nullptr;
+	}
+	UnitBase->UnitControlTimer = 0.f;
 }
 
 void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase || !UnitBase->ResourcePlace) return;
 
-	//DespawnWorkResource(UnitBase->WorkResource);
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
@@ -282,6 +307,7 @@ void AWorkerUnitControllerBase::SpawnWorkResource(int TeamId, FVector Location, 
 		if(ActorToLockOn)
 		{
 			MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+			MyWorkResource->IsAttached = true;
 		}
 		
 		UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);
@@ -296,5 +322,15 @@ void AWorkerUnitControllerBase::DespawnWorkResource(AWorkResource* WorkResource)
 	{
 		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		WorkResource->Destroy();
+	}
+}
+
+void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
+{
+	if (WorkResource != nullptr)
+	{
+		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		WorkResource->Destroy();
+		WorkResource->IsAttached = false;
 	}
 }

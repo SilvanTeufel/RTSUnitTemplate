@@ -11,8 +11,8 @@ APickup::APickup()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is Selectable Capsule"));
-	TriggerCapsule->InitCapsuleSize(30.f, 30.0f);;
+	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is Pickup Capsule"));
+	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerCapsule->SetupAttachment(RootComponent);
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &APickup::OnOverlapBegin);
