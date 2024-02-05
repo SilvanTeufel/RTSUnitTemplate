@@ -40,21 +40,21 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToResourceExtraction:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
 				GoToResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::ResourceExtraction:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
+				//UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
 				ResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::GoToBase:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
 				GoToBase(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -244,7 +244,7 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
 	{
-		SpawnWorkResource(UnitBase->TeamId, UnitBase->GetActorLocation(),FVector(1.f), UnitBase->WorkResourceClass, UnitBase);
+		SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->WorkResourceClass, UnitBase);
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBase);
@@ -283,7 +283,7 @@ void AWorkerUnitControllerBase::Build(AUnitBase* UnitBase, float DeltaSeconds)
 	
 }
 
-void AWorkerUnitControllerBase::SpawnWorkResource(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
+void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
 {
 
 	FTransform Transform;
@@ -308,6 +308,7 @@ void AWorkerUnitControllerBase::SpawnWorkResource(int TeamId, FVector Location, 
 		{
 			MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
 			MyWorkResource->IsAttached = true;
+			MyWorkResource->ResourceType = ResourceType;
 		}
 		
 		UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);

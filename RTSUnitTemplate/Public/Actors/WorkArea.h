@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 //#include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
+#include "Core/WorkerData.h"
 #include "WorkArea.generated.h"
 
 UCLASS()
@@ -41,7 +42,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DespawnWorkResource(AWorkResource* WorkResource);
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsBase = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkAreaData::Primary;
 };

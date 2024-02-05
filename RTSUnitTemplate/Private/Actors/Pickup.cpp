@@ -55,17 +55,17 @@ void APickup::Tick(float DeltaTime)
 			switch (Type)
 			{
 		 	
-			case SelectableData::Health:
+			case PickUpData::Health:
 				{
 					UnitBase->SetHealth(UnitBase->Attributes->GetHealth() + Amount);
 				}
 				break;
-			case SelectableData::Shield:
+			case PickUpData::Shield:
 				{
 					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
 				}
 				break;
-			case SelectableData::Effect:
+			case PickUpData::Effect:
 				{
 					UnitBase->ApplyInvestmentEffect(PickupEffect);
 					UnitBase->ApplyInvestmentEffect(PickupEffectTwo);

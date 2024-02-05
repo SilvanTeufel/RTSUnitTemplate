@@ -122,7 +122,7 @@ struct FSpeechData_Texts : public FTableRowBase
 };
 
 UENUM()
-namespace SelectableData
+namespace PickUpData
 {
 	enum SelectableType
 	{

@@ -4,14 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "GameModes/RTSGameModeBase.h"
+#include "GameModes/ResourceGameMode.h"
 #include "EOS_GameMode.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API AEOS_GameMode : public ARTSGameModeBase
+class RTSUNITTEMPLATE_API AEOS_GameMode : public AResourceGameMode
 {
 	GENERATED_BODY()
 

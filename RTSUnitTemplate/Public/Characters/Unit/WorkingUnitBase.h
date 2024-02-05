@@ -34,6 +34,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EResourceType ExtractingWorkResourceType = EResourceType::Primary;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float ResourceExtractionTime = 2.f;

@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 //#include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
+#include "Core/WorkerData.h"
 #include "WorkResource.generated.h"
 
 UCLASS()
@@ -56,4 +57,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsAttached = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	EResourceType ResourceType = EResourceType::Primary;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float Amount = 10.f;
 };

@@ -3,6 +3,7 @@
 #include "Actors/WorkArea.h"
 
 #include "Characters/Unit/UnitBase.h"
+#include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -58,32 +59,37 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 	{
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(OtherActor);
 		AUnitBase* UnitBase = Cast<AUnitBase>(Worker);
-		if(Worker && UnitBase &&  ( UnitBase->GetUnitState() == UnitData::GoToResourceExtraction || UnitBase->GetUnitState() == UnitData::Evasion) && !IsBase)
+		if(Worker && UnitBase &&  ( UnitBase->GetUnitState() == UnitData::GoToResourceExtraction || UnitBase->GetUnitState() == UnitData::Evasion) && Type != WorkAreaData::Base)
 		{
 			UnitBase->UnitControlTimer = 0;
+			
+			switch(Type)
+			{
+			case WorkAreaData::Primary: UnitBase->ExtractingWorkResourceType = EResourceType::Primary; break;
+			case WorkAreaData::Secondary: UnitBase->ExtractingWorkResourceType = EResourceType::Secondary; break;
+			case WorkAreaData::Tertiary: UnitBase->ExtractingWorkResourceType = EResourceType::Tertiary; break;
+			case WorkAreaData::Rare: UnitBase->ExtractingWorkResourceType = EResourceType::Rare; break;
+			case WorkAreaData::Epic: UnitBase->ExtractingWorkResourceType = EResourceType::Epic; break;
+			case WorkAreaData::Legendary: UnitBase->ExtractingWorkResourceType = EResourceType::Legendary; break;
+			default: break; // Optionally handle default case
+			}
+			
 			UnitBase->SetUnitState(UnitData::ResourceExtraction);
-			//UnitBase->UnitStatePlaceholder = UnitData::ResourceExtraction;
-			UE_LOG(LogTemp, Warning, TEXT("Overlap switch to -> ResourceExtraction"));
-		}else if(Worker && UnitBase && IsBase) // && UnitBase->GetUnitState() == UnitData::GoToBase
+			
+		}else if(Worker && UnitBase && Type == WorkAreaData::Base)
 		{
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
 			DespawnWorkResource(UnitBase->WorkResource);
-			//UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-			UE_LOG(LogTemp, Warning, TEXT("Overlap switch to -> GoToResourceExtraction"));
+
+			AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+			if(!ResourceGameMode) return; // Exit if the cast fails or game mode is not set
+
+			ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount); // Assuming 1.0f as the resource amount to add
 		}
-		/*
-		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
-		{
-			// Do Nothing
-		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
-		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
-		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
-		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
-		}*/
+
+
 	}
 }
 

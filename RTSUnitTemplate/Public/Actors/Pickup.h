@@ -25,7 +25,7 @@ public:
 	class UCapsuleComponent* TriggerCapsule;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "Type", Keywords = "Type CameraState"), Category = RTSUnitTemplate)
-	TEnumAsByte<SelectableData::SelectableType> Type = SelectableData::Health;
+	TEnumAsByte<PickUpData::SelectableType> Type = PickUpData::Health;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;

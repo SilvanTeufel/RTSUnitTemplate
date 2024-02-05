@@ -39,7 +39,7 @@ public:
 	void Build(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnWorkResource(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn);
+	void SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DespawnWorkResource(AWorkResource* WorkResource);
