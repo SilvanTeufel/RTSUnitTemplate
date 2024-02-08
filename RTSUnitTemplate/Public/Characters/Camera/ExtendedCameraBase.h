@@ -55,6 +55,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* WidgetSelector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	class UWidgetComponent* ResourceWidget;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);

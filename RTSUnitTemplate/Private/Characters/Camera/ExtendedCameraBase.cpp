@@ -29,6 +29,10 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 
 	WidgetSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("WidgetSelector"));
 	WidgetSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+
+	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
+	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;

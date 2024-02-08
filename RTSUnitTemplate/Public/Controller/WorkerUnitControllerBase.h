@@ -46,6 +46,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DetachWorkResource(AWorkResource* WorkResource);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
+								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint);
 };
 
 

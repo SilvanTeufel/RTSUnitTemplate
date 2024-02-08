@@ -16,7 +16,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Controller/ControllerBase.h"
+#include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
 
 void AWorkerUnitControllerBase::Tick(float DeltaSeconds)
@@ -61,14 +63,14 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToBuild:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
 				GoToBuild(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::Build:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Build"));
+				//UE_LOG(LogTemp, Warning, TEXT("Build"));
 				Build(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -273,14 +275,94 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 
 void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if(!UnitBase || !UnitBase->BuildArea) return;
+	if (!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass) // || !UnitBase->BuildArea->BuildingClass
+	{
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		return;
+	}
+
+	/*
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	if (!GameMode){
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		return;
+	}
+
+	/*
+	const FBuildingCost& ConstructionCost = UnitBase->BuildArea->ConstructionCost;
+
+	if (!GameMode->CanAffordConstruction(ConstructionCost, UnitBase->TeamId))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Not enough resources to build."));
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		return; // Not enough resources
+	}
+*/
 	
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUnitState(UnitData::Evasion);
+		UnitBase->UnitStatePlaceholder = UnitData::GoToBuild;
+		return;
+	}
+
+	if(!UnitBase->SetUEPathfinding)
+		return;
+	
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+	const FVector BaseLocation = UnitBase->BuildArea->GetActorLocation();
+
+	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }
 
 void AWorkerUnitControllerBase::Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if(!UnitBase || !UnitBase->BuildArea) return;
+	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
+	{
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		return;
+	}
+
+	if(UnitBase->BuildArea->Building)
+	{
+		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+		if(!ResourceGameMode || !UnitBase) return;
+		
+		TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetFiveClosestResourcePlaces(UnitBase);
+		UnitBase->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
+		
+		UnitBase->SetUnitState(UnitData::GoToBuild);
+		return;
+	}
+
 	
+	UnitBase->UnitControlTimer += DeltaSeconds;
+	if(UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
+	{
+		/*
+		AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+		if (!GameMode){
+			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+			return;
+		}*/
+		if(!UnitBase->BuildArea->Building)
+		{
+			FUnitSpawnParameter SpawnParameter;
+			SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
+			SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
+			SpawnParameter.UnitOffset = FVector(0.f);
+			SpawnParameter.UnitMinRange = FVector(0.f);
+			SpawnParameter.UnitMaxRange = FVector(0.f);
+			SpawnParameter.ServerMeshRotation = FRotator (0.f, -90.f, 0.f);
+			SpawnParameter.State = UnitData::Idle;
+			SpawnParameter.StatePlaceholder = UnitData::Idle;
+			SpawnParameter.Material = nullptr;
+			UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
+			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
+		}
+			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		
+	}
 }
 
 void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
@@ -335,3 +417,79 @@ void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
 		WorkResource->IsAttached = false;
 	}
 }
+
+
+AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
+	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
+{
+	// Waypointspawn
+
+	FTransform EnemyTransform;
+	
+	EnemyTransform.SetLocation(FVector(Location.X, Location.Y, Location.Z));
+		
+		
+	const auto UnitBase = Cast<AUnitBase>
+		(UGameplayStatics::BeginDeferredActorSpawnFromClass
+		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+
+		
+
+	if(SpawnParameter.UnitControllerBaseClass)
+	{
+		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+		if(!ControllerBase) return nullptr;
+		ControllerBase->Possess(UnitBase);
+	}
+	
+	if (UnitBase != nullptr)
+	{
+		if(UnitBase->UnitToChase)
+		{
+			UnitBase->UnitToChase = UnitToChase;
+			UnitBase->SetUnitState(UnitData::Chase);
+		}
+		
+		if(TeamId)
+		{
+			UnitBase->TeamId = TeamId;
+		}
+
+		UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+			
+		UnitBase->OnRep_MeshAssetPath();
+		UnitBase->OnRep_MeshMaterialPath();
+
+		UnitBase->SetReplicateMovement(true);
+		SetReplicates(true);
+		UnitBase->GetMesh()->SetIsReplicated(true);
+
+		// Does this have to be replicated?
+		UnitBase->SetMeshRotationServer();
+		
+		UnitBase->UnitState = SpawnParameter.State;
+		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
+		
+		
+		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
+
+		UnitBase->InitializeAttributes();
+		AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+		if (!GameMode){
+			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+			return nullptr;
+		}
+		
+		GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+		
+		
+		return UnitBase;
+	}
+
+	return nullptr;
+}
+
+
+	

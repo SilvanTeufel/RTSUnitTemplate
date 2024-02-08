@@ -7,7 +7,6 @@
 #include "Engine/DataTable.h"
 #include "WorkerData.generated.h"
 
-
 UENUM(BlueprintType)
 enum class EResourceType : uint8
 {

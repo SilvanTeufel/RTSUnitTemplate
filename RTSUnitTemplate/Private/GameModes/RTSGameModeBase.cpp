@@ -260,12 +260,13 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 
 		
 
-	AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-
-	if(!ControllerBase) return nullptr;
-
-	ControllerBase->Possess(UnitBase);
-		
+	if(SpawnParameter.UnitControllerBaseClass)
+	{
+		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+		if(!ControllerBase) return nullptr;
+		ControllerBase->Possess(UnitBase);
+	}
+	
 	if (UnitBase != nullptr)
 	{
 		if(UnitBase->UnitToChase)
@@ -580,3 +581,4 @@ FVector ARTSGameModeBase::CalcLocation(FVector Offset, FVector MinRange, FVector
 				
 	return FVector(X, Y, Z);
 }
+
