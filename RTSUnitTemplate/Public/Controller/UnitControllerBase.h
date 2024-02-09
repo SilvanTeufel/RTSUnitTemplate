@@ -106,7 +106,7 @@ public:
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void EvasionIdle(AUnitBase* UnitBase, FVector LocationToGo);
+	void EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation);
 
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -42,35 +42,35 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToResourceExtraction:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
+				UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
 				GoToResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::ResourceExtraction:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
+				UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
 				ResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::GoToBase:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
+				UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
 				GoToBase(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::GoToBuild:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
+				UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
 				GoToBuild(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::Build:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("Build"));
+				UE_LOG(LogTemp, Warning, TEXT("Build"));
 				Build(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -162,10 +162,21 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::Evasion:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-			if(	UnitBase->CollisionUnit)
+			if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
+
+				
+			/*
+			if(UnitBase->UnitControlTimer >= 5.f)
 			{
-				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
+				//UnitBase->SetActorLocation(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*500.f);
+				UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*500.f, FVector(5000.f, 5000.f, 0.f), 200.f, 500.f);
+				UnitBase->CollisionUnit = nullptr;
+				UnitBase->UnitControlTimer = 0.f;
+				UnitBase->SetUEPathfinding = true;
+				UnitBase->SetUnitState(UnitData::GoToBase);
+				UE_LOG(LogTemp, Warning, TEXT("SET EVASION BACK!"));
+			}else */if(UnitBase->CollisionUnit)
+			{
 				EvasionWorker(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UnitBase->UnitControlTimer += DeltaSeconds;
 			}
@@ -212,10 +223,11 @@ void AWorkerUnitControllerBase::EvasionWorker(AUnitBase* UnitBase, FVector Colli
 	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
 
 	if (Distance >= UnitBase->EvadeDistance) {
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 		UnitBase->CollisionUnit = nullptr;
+		UnitBase->UnitControlTimer = 0.f;
 	}
-	UnitBase->UnitControlTimer = 0.f;
 }
 
 void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds)
@@ -281,6 +293,11 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		return;
 	}
 
+	if (UnitBase->BuildArea && UnitBase->BuildArea->StartedBuilding) // || !UnitBase->BuildArea->BuildingClass
+	{
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+		return;
+	}
 	/*
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 	if (!GameMode){
@@ -315,7 +332,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }
 
-void AWorkerUnitControllerBase::Build(AUnitBase* UnitBase, float DeltaSeconds)
+void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
 	{
@@ -350,7 +367,7 @@ void AWorkerUnitControllerBase::Build(AUnitBase* UnitBase, float DeltaSeconds)
 			FUnitSpawnParameter SpawnParameter;
 			SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
 			SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
-			SpawnParameter.UnitOffset = FVector(0.f);
+			SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
 			SpawnParameter.UnitMinRange = FVector(0.f);
 			SpawnParameter.UnitMaxRange = FVector(0.f);
 			SpawnParameter.ServerMeshRotation = FRotator (0.f, -90.f, 0.f);
@@ -369,6 +386,7 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 {
 
 	FTransform Transform;
+
 	Transform.SetLocation(Location);
 	Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
 
@@ -426,7 +444,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnP
 
 	FTransform EnemyTransform;
 	
-	EnemyTransform.SetLocation(FVector(Location.X, Location.Y, Location.Z));
+	EnemyTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
 		
 		
 	const auto UnitBase = Cast<AUnitBase>

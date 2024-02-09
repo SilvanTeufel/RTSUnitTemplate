@@ -117,9 +117,13 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 			{
 				UE_LOG(LogTemp, Warning, TEXT("Enough resources to build."));
 				Worker->SetUnitState(UnitData::GoToBuild);
+			}else
+			{
+				Worker->SetUnitState(UnitData::GoToResourceExtraction);
 			}
 	
 }
+
 void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetFiveClosestResourcePlaces(Worker);
@@ -130,13 +134,16 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 void AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
 {
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
-	Worker->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
-	if(!CanAffordConstruction)
+	Worker->BuildArea = BuildAreas.Num() ? BuildAreas[0] : nullptr;//ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
+	if(!CanAffordConstruction || !Worker->BuildArea)
 	{
 		Worker->SetUnitState(UnitData::GoToResourceExtraction);
-	}else
+	}else if(CanAffordConstruction && Worker->BuildArea)
 	{
 		Worker->SetUnitState(UnitData::GoToBuild);
+	}else
+	{
+		Worker->SetUnitState(UnitData::GoToBase);
 	}
 }
 
