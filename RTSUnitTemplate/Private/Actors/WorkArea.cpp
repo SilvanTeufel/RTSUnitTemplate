@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/WorkArea.h"
+
+#include "Characters/Unit/BuildingBase.h"
 #include "Core/WorkerData.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameModes/ResourceGameMode.h"
@@ -37,8 +39,22 @@ void AWorkArea::BeginPlay()
 void AWorkArea::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
+	if(Building && Building->GetUnitState() == UnitData::Dead)
+	{
+		StartedBuilding = false;
+		Building = nullptr;
+	}
 
-
+	
+	ControlTimer += DeltaTime;
+	if(ControlTimer >= ResetStartBuildTime)
+	{
+		if(!Building)
+			StartedBuilding = false;
+		
+		ControlTimer = 0.f;
+	}
 	
 }
 
@@ -78,7 +94,7 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
     {
         HandleBaseArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
     }
-    else if (Type == WorkAreaData::BuildArea && Building == nullptr && ResourceGameMode)
+    else if (Type == WorkAreaData::BuildArea && ResourceGameMode)
     {
         HandleBuildArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
     }
@@ -103,22 +119,21 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 				DespawnWorkResource(UnitBase->WorkResource);
 			}
 	
-			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 
 			if (Worker->BuildArea && !CanAffordConstruction)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Not enough resources to build."));
 				SwitchResourceArea(Worker, UnitBase, ResourceGameMode);
 			}else if((Worker->BuildArea && Worker->BuildArea->StartedBuilding) || !Worker->BuildArea)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Try to GetClosestBuildPlaces!"));
 				SwitchBuildArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
-			}else if(Worker->BuildArea)
+			}else if(Worker->BuildArea && !Worker->BuildArea->StartedBuilding)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Enough resources to build."));
+				Worker->BuildArea->StartedBuilding = true;
+				UnitBase->SetUEPathfinding = true;
 				Worker->SetUnitState(UnitData::GoToBuild);
 			}else
 			{
+				UnitBase->SetUEPathfinding = true;
 				Worker->SetUnitState(UnitData::GoToResourceExtraction);
 			}
 	
@@ -128,21 +143,27 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 {
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetFiveClosestResourcePlaces(Worker);
 	Worker->ResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
-	UE_LOG(LogTemp, Warning, TEXT("Not enough resources to build."));
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 }
+
 void AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
 {
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
-	Worker->BuildArea = BuildAreas.Num() ? BuildAreas[0] : nullptr;//ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
+	BuildAreas.SetNum(3);
+	
+	Worker->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
+
 	if(!CanAffordConstruction || !Worker->BuildArea)
 	{
 		Worker->SetUnitState(UnitData::GoToResourceExtraction);
-	}else if(CanAffordConstruction && Worker->BuildArea)
+	}else if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->StartedBuilding)
 	{
+		Worker->BuildArea->StartedBuilding = true;
+		UnitBase->SetUEPathfinding = true;
 		Worker->SetUnitState(UnitData::GoToBuild);
 	}else
 	{
+		UnitBase->SetUEPathfinding = true;
 		Worker->SetUnitState(UnitData::GoToBase);
 	}
 }
@@ -154,13 +175,9 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->SetUEPathfinding = true;
-
-		UE_LOG(LogTemp, Warning, TEXT("HandleBuildArea"));
-		UE_LOG(LogTemp, Warning, TEXT("CanAffordConstruction %d"), CanAffordConstruction);
-		UE_LOG(LogTemp, Warning, TEXT("StartedBuilding %d"), StartedBuilding);
-		if(!StartedBuilding && (this == Worker->BuildArea) && CanAffordConstruction)
+	
+		if((this == Worker->BuildArea) && CanAffordConstruction && Building == nullptr)
 		{
-			StartedBuilding = true;
 			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.PrimaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.SecondaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.TertiaryCost);
@@ -168,12 +185,14 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, -Worker->BuildArea->ConstructionCost.EpicCost);
 			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.LegendaryCost);
 
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Build);
-		}else if (this == Worker->BuildArea && StartedBuilding && CanAffordConstruction)
+		}else if (this == Worker->BuildArea && Building != nullptr && CanAffordConstruction)
 		{
 			SwitchBuildArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
 		}else if(this == Worker->BuildArea)
 		{
+			UnitBase->SetUEPathfinding = true;
 			Worker->SetUnitState(UnitData::GoToResourceExtraction);
 		}
 }
@@ -226,7 +245,6 @@ bool AWorkArea::CanAffordConstruction(int32 TeamId, int32 NumberOfTeams, TArray<
 		// Ensure TeamId is within bounds for the resource array
 		if (!ResourceArray.Resources.IsValidIndex(TeamId))
 		{
-			UE_LOG(LogTemp, Error, TEXT("TeamId %d is out of bounds for resource type %d"), TeamId, static_cast<int32>(ResourceArray.ResourceType));
 			return false; // This ensures we don't proceed with invalid TeamId
 		}
 

@@ -111,24 +111,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost;
-/*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 PrimaryCost = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 SecondaryCost = 0;
+	float ResetStartBuildTime = 25.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 TertiaryCost = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 RareCost = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 EpicCost = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 LegendaryCost = 0;*/
+	float ControlTimer = 0.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CanAffordConstruction(int32 TeamId, int32 NumberOfTeams, TArray<FResourceArray> TeamResources);

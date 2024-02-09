@@ -293,20 +293,19 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 			   (AreaB.GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
 	});
 
-	// Take up to the first five areas
+	// Take up to the first X areas
 	int32 NumAreas = FMath::Min(MaxBuildAreasToSet, AllAreas.Num());
+
 	TArray<AWorkArea*> ClosestAreas;
+	
 	for (int i = 0; i < NumAreas; ++i)
 	{
 		if(!AllAreas[i]->StartedBuilding)
 		{
 			ClosestAreas.Add(AllAreas[i]);
-		}else
-		{
-			i++;
 		}
-		
 	}
+
 	AllAreas.Empty();
 
 	return ClosestAreas;

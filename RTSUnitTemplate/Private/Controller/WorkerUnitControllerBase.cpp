@@ -42,35 +42,35 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToResourceExtraction:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
 				GoToResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::ResourceExtraction:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
+				//UE_LOG(LogTemp, Warning, TEXT("ResourceExtraction"));
 				ResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::GoToBase:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToBase"));
 				GoToBase(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::GoToBuild:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToBuild"));
 				GoToBuild(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
 		break;
 		case UnitData::Build:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Build"));
+				//UE_LOG(LogTemp, Warning, TEXT("Build"));
 				Build(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -78,7 +78,11 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Dead:
 		{
 			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
-			Dead(UnitBase, DeltaSeconds);
+				
+			if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
+				UnitBase->BuildArea->StartedBuilding = false;
+
+				Dead(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Patrol:
@@ -162,20 +166,29 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::Evasion:
 		{
-			if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
 
 				
-			/*
-			if(UnitBase->UnitControlTimer >= 5.f)
+			
+			if(UnitBase->UnitControlTimer >= 7.f)
 			{
 				//UnitBase->SetActorLocation(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*500.f);
-				UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*500.f, FVector(5000.f, 5000.f, 0.f), 200.f, 500.f);
+				/*
+				UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*350.f, FVector(5000.f, 5000.f, 0.f), 25.f, 350.f);
 				UnitBase->CollisionUnit = nullptr;
 				UnitBase->UnitControlTimer = 0.f;
 				UnitBase->SetUEPathfinding = true;
-				UnitBase->SetUnitState(UnitData::GoToBase);
+				UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+				*/
+				FVector NewLocation = UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*300.f;
+				NewLocation.Z = UnitBase->GetActorLocation().Z;
+				UnitBase->UnitControlTimer = 0.f;
+				UnitBase->TeleportToValidLocation(NewLocation);
+				UnitBase->SetUEPathfinding = true;
+				UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+				//EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UE_LOG(LogTemp, Warning, TEXT("SET EVASION BACK!"));
-			}else */if(UnitBase->CollisionUnit)
+			}else if(UnitBase->CollisionUnit)
 			{
 				EvasionWorker(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UnitBase->UnitControlTimer += DeltaSeconds;
@@ -200,6 +213,10 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 	if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
 		DetachWorkResource(UnitBase->WorkResource);
 		KillUnitBase(UnitBase);
+		
+		if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
+			UnitBase->BuildArea->StartedBuilding = false;
+		
 		UnitBase->UnitControlTimer = 0.f;
 	}
 }
@@ -289,15 +306,16 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 {
 	if (!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass) // || !UnitBase->BuildArea->BuildingClass
 	{
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-
+	/*
 	if (UnitBase->BuildArea && UnitBase->BuildArea->StartedBuilding) // || !UnitBase->BuildArea->BuildingClass
 	{
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
-	}
+	}*/
 	/*
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 	if (!GameMode){
@@ -305,7 +323,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		return;
 	}
 
-	/*
+	/*aaaaa
 	const FBuildingCost& ConstructionCost = UnitBase->BuildArea->ConstructionCost;
 
 	if (!GameMode->CanAffordConstruction(ConstructionCost, UnitBase->TeamId))
@@ -318,6 +336,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::GoToBuild;
 		return;
@@ -336,10 +355,11 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
 	{
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-
+	/*
 	if(UnitBase->BuildArea->Building)
 	{
 		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
@@ -350,7 +370,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		
 		UnitBase->SetUnitState(UnitData::GoToBuild);
 		return;
-	}
+	}*/
 
 	
 	UnitBase->UnitControlTimer += DeltaSeconds;
@@ -377,8 +397,12 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
 			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
 		}
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		
+	}else if (UnitBase->GetUnitState() == UnitData::Dead)
+	{
+			UnitBase->BuildArea->StartedBuilding = false;
 	}
 }
 
