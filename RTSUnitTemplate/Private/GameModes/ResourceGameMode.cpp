@@ -20,7 +20,7 @@ void AResourceGameMode::BeginPlay()
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
-	AssignWorkAreasToWorkers();
+	//AssignWorkAreasToWorkers();
 }
 
 void AResourceGameMode::InitializeResources(int32 InNumberOfTeams)
@@ -85,8 +85,6 @@ void AResourceGameMode::ModifyResource(EResourceType ResourceType, int32 TeamId,
 			if (TeamId >= 0 && TeamId < ResourceArray.Resources.Num())
 			{
 				ResourceArray.Resources[TeamId] += Amount;
-
-				UE_LOG(LogTemp, Warning, TEXT("New Resource Amount: %f"), ResourceArray.Resources[TeamId]);
 				break; // Exit once the correct resource type is modified
 			}
 		}
@@ -95,46 +93,6 @@ void AResourceGameMode::ModifyResource(EResourceType ResourceType, int32 TeamId,
 
 bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const
 {
-	/*
-	if (TeamId < 0 || TeamId >= NumberOfTeams)
-		return false;
-	
-	// Check each resource type against the team's available resources
-
-	for (const FResourceArray& Resource : TeamResources)
-	{
-		int32 ResourceAmount = Resource.Resources.IsValidIndex(TeamId) ? Resource.Resources[TeamId] : 0;
-		//UE_LOG(LogTemp, Warning, TEXT("ConstructionCost.PrimaryCost: %d"), ConstructionCost.PrimaryCost);
-		UE_LOG(LogTemp, Warning, TEXT("ResourceAmount: %d"), ResourceAmount);
-
-		if(ResourceAmount > 0.f)
-		switch (Resource.ResourceType)
-		{
-		case EResourceType::Primary:
-			if (ResourceAmount < ConstructionCost.PrimaryCost) return false;
-			break;
-		case EResourceType::Secondary:
-			if (ResourceAmount < ConstructionCost.SecondaryCost) return false;
-			break;
-		case EResourceType::Tertiary:
-			if (ResourceAmount < ConstructionCost.TertiaryCost) return false;
-			break;
-		case EResourceType::Rare:
-			if (ResourceAmount < ConstructionCost.RareCost) return false;
-			break;
-		case EResourceType::Epic:
-			if (ResourceAmount < ConstructionCost.EpicCost) return false;
-			break;
-		case EResourceType::Legendary:
-			if (ResourceAmount < ConstructionCost.LegendaryCost) return false;
-			break;
-		default:
-			break;
-	
-	}
-
-	// If all costs are affordable
-	return true;*/
 
 	if (TeamId < 0 || TeamId >= NumberOfTeams)
 		return false;
@@ -154,14 +112,10 @@ bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionC
 		// Ensure TeamId is within bounds for the resource array
 		if (!ResourceArray.Resources.IsValidIndex(TeamId))
 		{
-			UE_LOG(LogTemp, Error, TEXT("TeamId %d is out of bounds for resource type %d"), TeamId, static_cast<int32>(ResourceArray.ResourceType));
 			return false; // This ensures we don't proceed with invalid TeamId
 		}
 
 		int32 ResourceAmount = ResourceArray.Resources[TeamId];
-
-		// Log the resource amount for debugging
-		UE_LOG(LogTemp, Warning, TEXT("ResourceAmount for type %d: %d"), static_cast<int32>(ResourceArray.ResourceType), ResourceAmount);
 
 		// Check if the team has enough resources of the current type
 		if (Costs.Contains(ResourceArray.ResourceType) && ResourceAmount < Costs[ResourceArray.ResourceType])
@@ -196,6 +150,19 @@ void AResourceGameMode::AssignWorkAreasToWorkers()
 		TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
 		Worker->ResourcePlace = GetRandomClosestWorkArea(WorkPlaces);
 	}
+}
+
+void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
+{
+	
+	if (!Worker) return;
+
+	// Assign the closest base
+	Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
+
+	// Assign one of the five closest resource places randomly
+	TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
+	Worker->ResourcePlace = GetRandomClosestWorkArea(WorkPlaces);
 }
 
 AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas)
@@ -300,7 +267,7 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 	
 	for (int i = 0; i < NumAreas; ++i)
 	{
-		if(!AllAreas[i]->StartedBuilding)
+		if(!AllAreas[i]->PlannedBuilding)
 		{
 			ClosestAreas.Add(AllAreas[i]);
 		}

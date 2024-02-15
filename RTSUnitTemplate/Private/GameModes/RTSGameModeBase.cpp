@@ -90,47 +90,50 @@ void ARTSGameModeBase::SetTeamIds_Implementation()
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
 {
-	if (UnitSpawnParameter && HasAuthority())
+	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
-		TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
-		for (const FName& RowName : RowNames)
+		if (UnitSpawnParameter && HasAuthority())
 		{
-			FUnitSpawnParameter* SpawnParameterPtr = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
-
-			if (SpawnParameterPtr) 
+			TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
+			for (const FName& RowName : RowNames)
 			{
-				FUnitSpawnParameter SpawnParameter = *SpawnParameterPtr; // Copy the struct
-				
-				// Use a weak pointer for the GameMode to ensure it's still valid when the timer fires
-				TWeakObjectPtr<ARTSGameModeBase> WeakThis(this);
-				
-				// Set the timer
-				if (SpawnParameter.ShouldLoop)
+				FUnitSpawnParameter* SpawnParameterPtr = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
+
+				if (SpawnParameterPtr) 
 				{
-					// Use SpawnParameter by value in the lambda
-					auto TimerCallback = [WeakThis, SpawnParameter, Location, UnitToChase]()
+					FUnitSpawnParameter SpawnParameter = *SpawnParameterPtr; // Copy the struct
+				
+					// Use a weak pointer for the GameMode to ensure it's still valid when the timer fires
+					TWeakObjectPtr<ARTSGameModeBase> WeakThis(this);
+				
+					// Set the timer
+					if (SpawnParameter.ShouldLoop)
 					{
-						// Check if the GameMode is still valid
-						if (!WeakThis.IsValid()) return;
+						// Use SpawnParameter by value in the lambda
+						auto TimerCallback = [WeakThis, SpawnParameter, Location, UnitToChase]()
+						{
+							// Check if the GameMode is still valid
+							if (!WeakThis.IsValid()) return;
 
-						WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase, 0, nullptr);
-					};
+							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase, 0, nullptr);
+						};
 					
-					FTimerHandle TimerHandle;
-					//SpawnTimerHandles.Add(TimerHandle);
-					GetWorld()->GetTimerManager().SetTimer(TimerHandle, TimerCallback, SpawnParameter.LoopTime, true);
+						FTimerHandle TimerHandle;
+						//SpawnTimerHandles.Add(TimerHandle);
+						GetWorld()->GetTimerManager().SetTimer(TimerHandle, TimerCallback, SpawnParameter.LoopTime, true);
 
-					FTimerHandleMapping TimerMap;
-					TimerMap.Id = SpawnParameter.Id;
-					TimerMap.Timer = TimerHandle;
-					TimerMap.SkipTimer = false;
-					SpawnTimerHandleMap.Add(TimerMap);
-					TimerIndex++;
-				}
+						FTimerHandleMapping TimerMap;
+						TimerMap.Id = SpawnParameter.Id;
+						TimerMap.Timer = TimerHandle;
+						TimerMap.SkipTimer = false;
+						SpawnTimerHandleMap.Add(TimerMap);
+						TimerIndex++;
+					}
 
 			
-			}
+				}
 
+			}
 		}
 	}
 }
@@ -160,16 +163,19 @@ void ARTSGameModeBase::SetSkipTimerMappingById(int32 SearchId, bool Value)
 
 void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
-	if (UnitSpawnParameter)
+	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
-		TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
-		for (const FName& RowName : RowNames)
+		if (UnitSpawnParameter)
 		{
-			FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
-			if (SpawnParameter && SpawnParameter->Id == id)
+			TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
+			for (const FName& RowName : RowNames)
 			{
+				FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
+				if (SpawnParameter && SpawnParameter->Id == id)
+				{
 			
-				SpawnUnits_Implementation(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+					SpawnUnits_Implementation(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+				}
 			}
 		}
 	}
@@ -178,16 +184,19 @@ void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBas
 AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId,
 	AWaypoint* Waypoint)
 {
-	if (UnitSpawnParameter)
+	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
-		TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
-		for (const FName& RowName : RowNames)
+		if (UnitSpawnParameter)
 		{
-			FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
-			if (SpawnParameter && SpawnParameter->Id == id)
+			TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
+			for (const FName& RowName : RowNames)
 			{
+				FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
+				if (SpawnParameter && SpawnParameter->Id == id)
+				{
 			
-				return SpawnSingleUnits(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+					return SpawnSingleUnits(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+				}
 			}
 		}
 	}
@@ -466,9 +475,6 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	}
 	// Enemyspawn
 }
-
-
-
 
 void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {

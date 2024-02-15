@@ -80,7 +80,10 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
 				
 			if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
+			{
+				UnitBase->BuildArea->PlannedBuilding = false;
 				UnitBase->BuildArea->StartedBuilding = false;
+			}
 
 				Dead(UnitBase, DeltaSeconds);
 		}
@@ -103,7 +106,10 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 					UnitBase->SetUnitState(UnitData::Chase);
 				}else
 				{
-					SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
+					UnitBase->UnitControlTimer = 0.f;
+					UnitBase->SetUEPathfinding = true;
+					UnitBase->SetUnitState(UnitData::GoToBase);
+					//SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
 				}
 
 			}
@@ -122,7 +128,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 					{
 						UnitBase->UnitControlTimer = 0.f;
 						UnitBase->SetUEPathfinding = true;
-						UnitBase->SetUnitState(UnitData::PatrolRandom);
+						UnitBase->SetUnitState(UnitData::GoToBase);
 					}
 				}
 			}
@@ -172,22 +178,16 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 			
 			if(UnitBase->UnitControlTimer >= 7.f)
 			{
-				//UnitBase->SetActorLocation(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*500.f);
-				/*
-				UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*350.f, FVector(5000.f, 5000.f, 0.f), 25.f, 350.f);
+		
+				//UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*350.f, FVector(5000.f, 5000.f, 0.f), 25.f, 350.f);
 				UnitBase->CollisionUnit = nullptr;
-				UnitBase->UnitControlTimer = 0.f;
-				UnitBase->SetUEPathfinding = true;
-				UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
-				*/
 				FVector NewLocation = UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*300.f;
 				NewLocation.Z = UnitBase->GetActorLocation().Z;
 				UnitBase->UnitControlTimer = 0.f;
 				UnitBase->TeleportToValidLocation(NewLocation);
 				UnitBase->SetUEPathfinding = true;
 				UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
-				//EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
-				UE_LOG(LogTemp, Warning, TEXT("SET EVASION BACK!"));
+	
 			}else if(UnitBase->CollisionUnit)
 			{
 				EvasionWorker(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
@@ -215,8 +215,10 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		KillUnitBase(UnitBase);
 		
 		if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
+		{
+			UnitBase->BuildArea->PlannedBuilding = false;
 			UnitBase->BuildArea->StartedBuilding = false;
-		
+		}
 		UnitBase->UnitControlTimer = 0.f;
 	}
 }
@@ -258,6 +260,13 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 		UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
 		return;
 	}
+	
+	UnitBase->UnitControlTimer+= DeltaSeconds;
+	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
+	{
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUEPathfinding = true;
+	}
 
 	if(!UnitBase->SetUEPathfinding)
 		return;
@@ -275,7 +284,7 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
 	{
-		SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->WorkResourceClass, UnitBase);
+		SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBase);
@@ -291,6 +300,28 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::GoToBase;
 		return;
+	}
+	
+	/*
+	float DistanceToBase = UnitBase->GetDistanceTo(UnitBase->Base);
+
+	if(DistanceToBase <= 100.f && UnitBase->ResourcePlace)
+	{
+		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+		if(ResourceGameMode && UnitBase->WorkResource)
+		ResourceGameMode->ModifyResource(UnitBase->WorkResource->ResourceType, UnitBase->TeamId, UnitBase->WorkResource->Amount); // Assuming 1.0f as the resource amount to add
+
+		DespawnWorkResource(UnitBase->WorkResource);
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUEPathfinding = false;
+		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+	} */
+	UnitBase->UnitControlTimer+= DeltaSeconds;
+	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
+	{
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUEPathfinding = true;
 	}
 
 	if(!UnitBase->SetUEPathfinding)
@@ -310,36 +341,21 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-	/*
-	if (UnitBase->BuildArea && UnitBase->BuildArea->StartedBuilding) // || !UnitBase->BuildArea->BuildingClass
-	{
-		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-		return;
-	}*/
-	/*
-	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	if (!GameMode){
-		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-		return;
-	}
 
-	/*aaaaa
-	const FBuildingCost& ConstructionCost = UnitBase->BuildArea->ConstructionCost;
-
-	if (!GameMode->CanAffordConstruction(ConstructionCost, UnitBase->TeamId))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Not enough resources to build."));
-		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-		return; // Not enough resources
-	}
-*/
-	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::GoToBuild;
 		return;
+	}
+
+	UnitBase->UnitControlTimer+= DeltaSeconds;
+	
+	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
+	{
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUEPathfinding = false;
 	}
 
 	if(!UnitBase->SetUEPathfinding)
@@ -359,29 +375,12 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-	/*
-	if(UnitBase->BuildArea->Building)
-	{
-		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-		if(!ResourceGameMode || !UnitBase) return;
-		
-		TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetFiveClosestResourcePlaces(UnitBase);
-		UnitBase->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
-		
-		UnitBase->SetUnitState(UnitData::GoToBuild);
-		return;
-	}*/
 
-	
+	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
 	{
-		/*
-		AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-		if (!GameMode){
-			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-			return;
-		}*/
+
 		if(!UnitBase->BuildArea->Building)
 		{
 			FUnitSpawnParameter SpawnParameter;
@@ -394,7 +393,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			SpawnParameter.State = UnitData::Idle;
 			SpawnParameter.StatePlaceholder = UnitData::Idle;
 			SpawnParameter.Material = nullptr;
-			UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
+			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
 			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
 		}
 			UnitBase->SetUEPathfinding = true;
@@ -402,6 +401,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		
 	}else if (UnitBase->GetUnitState() == UnitData::Dead)
 	{
+			UnitBase->BuildArea->PlannedBuilding = false;
 			UnitBase->BuildArea->StartedBuilding = false;
 	}
 }
@@ -421,13 +421,6 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 	
 	if (MyWorkResource != nullptr)
 	{
-		//MyWorkResource->TeamId = TeamId;
-		//MyWorkResource->Mesh->OnComponentBeginOverlap.AddDynamic(MyWorkResource, &AEffectArea::OnOverlapBegin);
-
-		// Apply scale to the Mesh
-		//MyWorkResource->Mesh->SetWorldScale3D(Scale);
-
-		
 		if(ActorToLockOn)
 		{
 			MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
@@ -447,6 +440,7 @@ void AWorkerUnitControllerBase::DespawnWorkResource(AWorkResource* WorkResource)
 	{
 		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		WorkResource->Destroy();
+		WorkResource = nullptr;
 	}
 }
 
@@ -461,6 +455,7 @@ void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
 }
 
 
+
 AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
 	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
@@ -473,7 +468,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnP
 		
 	const auto UnitBase = Cast<AUnitBase>
 		(UGameplayStatics::BeginDeferredActorSpawnFromClass
-		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
 
 		
 
@@ -520,6 +515,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnP
 		UnitBase->InitializeAttributes();
 		AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 		if (!GameMode){
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 			return nullptr;
 		}

@@ -14,6 +14,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "NavMesh/NavMeshPath.h"
 
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
@@ -310,9 +311,19 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 	FAIMoveRequest MoveRequest;
 	MoveRequest.SetGoalLocation(DestinationLocation);
 	MoveRequest.SetAcceptanceRadius(5.0f); // Set an acceptance radius for reaching the destination
+	
 	FNavPathSharedPtr NavPath;
-
+	
 	AIController->MoveTo(MoveRequest, &NavPath);
+	
+	if(NavPath)
+	{
+		FNavMeshPath* NavMeshPath = NavPath->CastPath<FNavMeshPath>();
+		if (NavMeshPath)
+		{
+			NavMeshPath->OffsetFromCorners(UEPathfindingCornerOffset);
+		}
+	}
 }
 
 void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, int State)

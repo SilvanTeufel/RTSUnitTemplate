@@ -19,6 +19,7 @@ class RTSUNITTEMPLATE_API AWorkingUnitBase : public AAbilityUnit
 	GENERATED_BODY()
 	
 public:
+	virtual void BeginPlay() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* ResourcePlace;
@@ -30,11 +31,8 @@ public:
 	class AWorkArea* BuildArea;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	TSubclassOf<class AWorkResource> WorkResourceClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EResourceType ExtractingWorkResourceType = EResourceType::Primary;
 	

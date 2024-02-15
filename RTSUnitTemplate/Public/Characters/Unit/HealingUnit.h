@@ -15,8 +15,6 @@ class RTSUNITTEMPLATE_API AHealingUnit : public AUnitBase
 	GENERATED_BODY()
 
 public:
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UnitsToHeal", Keywords = "RTSUnitTemplate UnitsToHeal"), Category = RTSUnitTemplate)
-	//AUnitBase* UnitToHeal;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealActorSpawnOffset", Keywords = "RTSUnitTemplate HealActorSpawnOffset"), Category = RTSUnitTemplate)
 	FVector HealActorSpawnOffset = FVector(0.f,0.f,0.f);
@@ -29,8 +27,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetNextUnitToChaseHeal", Keywords = "RTSUnitTemplate SetNextUnitToChaseHeal"), Category = RTSUnitTemplate)
 	bool SetNextUnitToChaseHeal();
-	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetNextUnitToHeal", Keywords = "RTSUnitTemplate SetNextUnitToHeal"), Category = RTSUnitTemplate)
-	//bool SetNextUnitToHeal();
+
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerStartHealingEvent();
 

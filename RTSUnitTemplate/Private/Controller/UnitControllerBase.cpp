@@ -664,6 +664,7 @@ void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLoca
 
 	if (Distance >= UnitBase->EvadeDistance) {
 		//UnitBase->SetUnitState(UnitData::Run);
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 		UnitBase->CollisionUnit = nullptr;
 	}
@@ -695,6 +696,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 {
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
+		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
@@ -715,7 +717,12 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 	if (Distance <= UnitBase->StopRunTolerance) {
 		UnitBase->SetUnitState(UnitData::Idle);
+		return;
 	}
+
+	if(!UnitBase->SetUEPathfinding) return;
+
+	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RunLocation);
 }
 
 void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)

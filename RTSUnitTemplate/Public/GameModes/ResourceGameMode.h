@@ -78,7 +78,7 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas);
 	
@@ -107,4 +107,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AssignWorkAreasToWorker(AWorkingUnitBase* Worker);
 };

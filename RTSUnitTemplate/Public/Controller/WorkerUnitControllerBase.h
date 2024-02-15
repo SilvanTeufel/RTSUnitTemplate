@@ -50,6 +50,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
 								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ResetPathfindingTime = 2.f;
 };
 
 

@@ -187,6 +187,6 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	TArray<FUnitSpawnData> UnitSpawnDataSets;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	class UDataTable* UnitSpawnParameter;
+	TArray<class UDataTable*> UnitSpawnParameters;
 
 };

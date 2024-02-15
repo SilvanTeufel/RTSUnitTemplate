@@ -30,6 +30,11 @@ protected:
 	// Function to update the display of team resources on the widget
 	void UpdateTeamResourcesDisplay();
 
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
+	int32 TeamId;
+
+	UPROPERTY(meta = (BindWidget))
+	class UTextBlock* TeamIdText;
 	// TextFields for each type of resource
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* PrimaryResourceText;

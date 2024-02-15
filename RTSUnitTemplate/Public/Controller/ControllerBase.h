@@ -83,6 +83,9 @@ public:
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 		bool UseUnrealEnginePathFinding = true;
+	
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float UEPathfindingCornerOffset = 100.f;
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetToggleUnitDetection(AUnitBase* Unit, bool State);

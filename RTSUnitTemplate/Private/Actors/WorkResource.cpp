@@ -58,14 +58,13 @@ void AWorkResource::Tick(float DeltaTime)
 			if(Sound)
 				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
 
-			
-			AttachToComponent(UnitBase->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+
+			AttachToComponent(Cast<USceneComponent>(UnitBase->GetMesh()), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+			//AttachToComponent(UnitBase->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
 			FollowTarget = false;
 			IsAttached = true;
 		}
 	}
-
-	
 }
 
 void AWorkResource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -12,6 +12,22 @@ void UResourceWidget::NativeConstruct()
     Super::NativeConstruct();
     // Initialize your widget's properties and bindings here
     UpdateTeamResourcesDisplay();
+
+    APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+    if (!PlayerController)
+    {
+        return;
+    }
+    
+    // Cast to your custom player controller class, replace 'AMyPlayerController' with your actual class name
+    AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+    if (!ControllerBase)
+    {
+        return;
+    }
+
+    // Get the SelectableTeamId from the player controller
+    TeamId = ControllerBase->SelectableTeamId;
 }
 
 void UResourceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -23,35 +39,25 @@ void UResourceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     // Check if the timer has reached the update interval
     if (UpdateTimer >= UpdateInterval)
     {
+        
         // Update the team resources display
         UpdateTeamResourcesDisplay();
 
         // Reset the timer
         UpdateTimer = 0.0f;
+
+        
     }
 }
 
 void UResourceWidget::UpdateTeamResourcesDisplay()
 {
     // Get the current player controller
-    APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-    if (!PlayerController)
+
+    if (TeamIdText) // Always check if the pointer is valid
     {
-        UE_LOG(LogTemp, Warning, TEXT("UpdateTeamResourcesDisplay: PlayerController is null."));
-        return;
-    }
-
-    // Cast to your custom player controller class, replace 'AMyPlayerController' with your actual class name
-    AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-    if (!ControllerBase)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("UpdateTeamResourcesDisplay: Could not cast to custom PlayerController."));
-        return;
-    }
-
-    // Get the SelectableTeamId from the player controller
-    int32 TeamId = ControllerBase->SelectableTeamId;
-
+        TeamIdText->SetText(FText::AsNumber(TeamId));
+     }
     
     AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
     if (!GameMode) return;

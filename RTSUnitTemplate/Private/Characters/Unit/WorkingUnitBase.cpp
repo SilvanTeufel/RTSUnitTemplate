@@ -11,4 +11,17 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
+
+void AWorkingUnitBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+	if (GameMode)
+	{
+		GameMode->AssignWorkAreasToWorker(this);
+	}
+}
