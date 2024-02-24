@@ -7,11 +7,17 @@
 #include "EngineUtils.h" // For TActorIterator
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "GameStates/ResourceGameState.h"
+#include "Net/UnrealNetwork.h"
 
 
 AResourceGameMode::AResourceGameMode()
 {
-
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources); 
+	}
 }
 
 void AResourceGameMode::BeginPlay()
@@ -20,7 +26,20 @@ void AResourceGameMode::BeginPlay()
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
+
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources); 
+	}
 	//AssignWorkAreasToWorkers();
+}
+
+void AResourceGameMode::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AResourceGameMode, TeamResources);
+	DOREPLIFETIME(AResourceGameMode, NumberOfTeams);
 }
 
 void AResourceGameMode::InitializeResources(int32 InNumberOfTeams)
@@ -76,7 +95,7 @@ void AResourceGameMode::GatherWorkAreas()
 }
 
 // Adjusting the ModifyResource function to use the ResourceType within FResourceArray
-void AResourceGameMode::ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount)
+void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType, int32 TeamId, float Amount)
 {
 	for (FResourceArray& ResourceArray : TeamResources)
 	{
@@ -88,6 +107,12 @@ void AResourceGameMode::ModifyResource(EResourceType ResourceType, int32 TeamId,
 				break; // Exit once the correct resource type is modified
 			}
 		}
+	}
+
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources);
 	}
 }
 
@@ -276,4 +301,17 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 	AllAreas.Empty();
 
 	return ClosestAreas;
+}
+
+
+float AResourceGameMode::GetResource(int TeamId, EResourceType RType)
+{
+	for (const FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.Resources.IsValidIndex(TeamId) && ResourceArray.ResourceType == RType)
+		{
+			return ResourceArray.Resources[TeamId];
+		}
+	}
+	return 0;
 }

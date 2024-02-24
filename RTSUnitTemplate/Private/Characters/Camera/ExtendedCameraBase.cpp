@@ -4,6 +4,7 @@
 #include "Controller/CameraControllerBase.h"
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"
+#include "Widgets/ResourceWidget.h"
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
 
@@ -70,9 +71,29 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
-	//SpawnTalentChooser();
-	//SetTalentChooserLocation();
-	// Your custom BeginPlay logic here
+	SetupResourceWidget();
+
+}
+
+void AExtendedCameraBase::SetupResourceWidget()
+{
+	if (IsOwnedByLocalPlayer()) // This is a pseudo-function, replace with actual ownership check
+	{
+		ResourceWidget->SetVisibility(true);
+		UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
+
+		if(ResourceBar)
+		{
+			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			
+			if(CameraControllerBase)
+				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
+		}
+	}
+	else
+	{
+		ResourceWidget->SetVisibility(false);
+	}
 }
 
 // Tick implementation
@@ -80,12 +101,14 @@ void AExtendedCameraBase::Tick(float DeltaTime)
 {
 	// Call the base class Tick
 	Super::Tick(DeltaTime);
-
-	//if(AutoAdjustTalentChooserPosition)
-	//SetTalentChooserLocation();
-	// Your custom Tick logic here
 }
 
+
+bool AExtendedCameraBase::IsOwnedByLocalPlayer()
+{
+	APlayerController* MyController = Cast<APlayerController>(GetController());
+	return MyController && MyController->IsLocalPlayerController();
+}
 
 void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {

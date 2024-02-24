@@ -17,6 +17,16 @@ class RTSUNITTEMPLATE_API UResourceWidget : public UUserWidget
 public:
 	virtual void NativeConstruct() override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateTeamIdText();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetTeamId(int Id)
+	{
+		TeamId = Id;
+		UpdateTeamIdText();
+	}
+	
 private:
 	// Timer to track when to update the resource display
 	float UpdateTimer = 0.0f;
@@ -27,6 +37,8 @@ private:
 protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	
+	
 	// Function to update the display of team resources on the widget
 	void UpdateTeamResourcesDisplay();
 
@@ -36,21 +48,21 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* TeamIdText;
 	// TextFields for each type of resource
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* PrimaryResourceText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* SecondaryResourceText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* TertiaryResourceText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* RareResourceText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* EpicResourceText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* LegendaryResourceText;
 };

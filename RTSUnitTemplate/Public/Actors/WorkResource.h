@@ -63,4 +63,6 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Amount = 10.f;
+
+	FVector SocketOffset = FVector(10.0f, 10.0f, 0.0f);
 };

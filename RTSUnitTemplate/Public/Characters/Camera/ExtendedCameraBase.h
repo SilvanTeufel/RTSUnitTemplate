@@ -21,6 +21,8 @@ public:
 	// Override the BeginPlay function
 	virtual void BeginPlay() override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetupResourceWidget();
 	// Override the Tick function
 	virtual void Tick(float DeltaTime) override;
 	
@@ -41,7 +43,8 @@ public:
 	void Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	/** Handles Enhanced Keyboard Inputs */
-	
+
+	bool IsOwnedByLocalPlayer();
 	// Abilitys + Talents /////
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* TalentChooser;

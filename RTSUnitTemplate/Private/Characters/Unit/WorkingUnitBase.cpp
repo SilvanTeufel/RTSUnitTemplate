@@ -24,4 +24,5 @@ void AWorkingUnitBase::BeginPlay()
 	{
 		GameMode->AssignWorkAreasToWorker(this);
 	}
+	
 }

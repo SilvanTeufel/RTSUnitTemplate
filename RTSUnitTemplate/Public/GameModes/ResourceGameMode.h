@@ -53,13 +53,11 @@ public:
 	// Constructor
 	AResourceGameMode();
 
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay
 	
-	// Array of structs to manage resources. Each struct contains an array for a specific resource type.
-	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
-	//TArray<FResourceArray> TeamResources;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	FWorkAreaArrays WorkAreaGroups; // Storage for work areas grouped by type
 
@@ -87,6 +85,7 @@ protected:
 	
 public:
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = Work)
 	int32 NumberOfTeams = 10;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -98,10 +97,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetRandomClosestWorkArea(const TArray<AWorkArea*>& WorkAreas);
 	// Function to modify a resource for a specific team
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetResource(int TeamId, EResourceType RType);
+	
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	TArray<FResourceArray> TeamResources;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

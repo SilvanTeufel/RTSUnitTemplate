@@ -15,6 +15,8 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "NavMesh/NavMeshPath.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameModes/ResourceGameMode.h"
 
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
@@ -616,6 +618,22 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
 	
+}
+
+float AControllerBase::GetResource(int TeamId, EResourceType RType)
+{
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (!GameMode) return 0;
+
+	return GameMode->GetResource(TeamId, RType);
+}
+
+void AControllerBase::ModifyResource_Implementation(EResourceType ResourceType, int32 TeamId, float Amount){
+	
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (!GameMode) return;
+
+	GameMode->ModifyResource(ResourceType, TeamId, Amount);
 }
 
 void AControllerBase::SetControlerTeamId_Implementation(int Id)

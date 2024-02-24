@@ -302,21 +302,6 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		return;
 	}
 	
-	/*
-	float DistanceToBase = UnitBase->GetDistanceTo(UnitBase->Base);
-
-	if(DistanceToBase <= 100.f && UnitBase->ResourcePlace)
-	{
-		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-
-		if(ResourceGameMode && UnitBase->WorkResource)
-		ResourceGameMode->ModifyResource(UnitBase->WorkResource->ResourceType, UnitBase->TeamId, UnitBase->WorkResource->Amount); // Assuming 1.0f as the resource amount to add
-
-		DespawnWorkResource(UnitBase->WorkResource);
-		UnitBase->UnitControlTimer = 0.f;
-		UnitBase->SetUEPathfinding = false;
-		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-	} */
 	UnitBase->UnitControlTimer+= DeltaSeconds;
 	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
 	{
@@ -406,6 +391,9 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 }
 
+
+
+
 void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
 {
 
@@ -423,13 +411,33 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 	{
 		if(ActorToLockOn)
 		{
-			MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+			//MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
 			MyWorkResource->IsAttached = true;
 			MyWorkResource->ResourceType = ResourceType;
+			
+			UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);
+			
+			ActorToLockOn->WorkResource = MyWorkResource;
+
+
+			
+			/// Attack Socket with Delay //////////////
+			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, false);
+			FName SocketName = FName("ResourceSocket");
+			
+			auto AttachWorkResource = [MyWorkResource, ActorToLockOn, AttachmentRules, SocketName]()
+			{
+				if (ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
+				{
+					MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), AttachmentRules, SocketName);
+					MyWorkResource->IsAttached = true;
+					// Now attempt to set the actor's relative location after attachment
+					MyWorkResource->SetActorRelativeLocation(MyWorkResource->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
+				}
+			};
+
+			AttachWorkResource();
 		}
-		
-		UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);
-		ActorToLockOn->WorkResource = MyWorkResource;
 	}
 	
 }

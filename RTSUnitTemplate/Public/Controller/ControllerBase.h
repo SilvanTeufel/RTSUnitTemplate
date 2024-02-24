@@ -242,5 +242,12 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 	int SelectedUnitCount = 0;
+
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetResource(int TeamId, EResourceType RType);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
 };
 
