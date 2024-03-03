@@ -17,6 +17,7 @@ namespace UnitData
 		Idle   UMETA(DisplayName = "Idle"),
 		Evasion   UMETA(DisplayName = "Evasion"),
 		Run  UMETA(DisplayName = "Run"),
+		Rooted  UMETA(DisplayName = "Rooted"),
 		Patrol UMETA(DisplayName = "Patrol"),
 		PatrolRandom UMETA(DisplayName = "PatrolRandom"),
 		PatrolIdle UMETA(DisplayName = "PatrolIdle"),

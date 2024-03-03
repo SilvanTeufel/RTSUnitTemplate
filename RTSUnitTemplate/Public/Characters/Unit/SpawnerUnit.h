@@ -23,7 +23,9 @@ struct FSpawnData : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float ProbabilityArray;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	float MaxLifeTime;
 };
 
 UCLASS()
@@ -45,7 +47,7 @@ public:
 	void CreateSpawnDataFromDataTable();
 	
 	UFUNCTION(BlueprintCallable, Category = Spawn)
-	APickup* SpawnPickup(FVector Location, TSubclassOf<APickup> PickupClass);
+	APickup* SpawnPickup(FVector Location, FSpawnData Data);
 
 	UFUNCTION(BlueprintCallable, Category = Spawn)
 	bool SpawnPickupWithProbability(FSpawnData Data, FVector Offset);

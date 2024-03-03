@@ -25,7 +25,8 @@ void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	DOREPLIFETIME(APickup, PickupEffectTwo);
 	DOREPLIFETIME(APickup, TeamId);
 	DOREPLIFETIME(APickup, FollowTarget);
-
+	DOREPLIFETIME(APickup, LifeTime);
+	DOREPLIFETIME(APickup, MaxLifeTime);
 }
 
 // Called when the game starts or when spawned
@@ -39,6 +40,14 @@ void APickup::BeginPlay()
 void APickup::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	LifeTime += DeltaTime;
+
+	if(LifeTime > MaxLifeTime && MaxLifeTime > 0.f)
+	{
+		Destroy(true, false);
+	}
+	
 	if(FollowTarget && Target)
 	{
 		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Target->GetActorLocation());

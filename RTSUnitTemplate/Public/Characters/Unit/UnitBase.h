@@ -252,7 +252,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DestroyAfterDeath", Keywords = "RTSUnitTemplate DestroyAfterDeath"), Category = RTSUnitTemplate)
 	bool DestroyAfterDeath = true;
 ///////////////////////////////////////////////////////////////////
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "PauseDuration", Keywords = "RTSUnitTemplate PauseDuration"), Category = RTSUnitTemplate)
+		float PauseDuration = 0.6f;
 	
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float CastTime = 5.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		class UWidgetComponent* TimerWidgetComp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		FVector TimerWidgetCompLocation = FVector (0.f, 0.f, -180.f);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetupTimerWidget();
 };
 
 

@@ -48,7 +48,9 @@ void AEffectArea::Tick(float DeltaTime)
 void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AEffectArea, AreaEffect);
+	DOREPLIFETIME(AEffectArea, AreaEffectOne);
+	DOREPLIFETIME(AEffectArea, AreaEffectTwo);
+	DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Mesh);
 }
 
@@ -83,10 +85,16 @@ void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 			// Do Nothing
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectOne);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectTwo);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectThree);
+			ImpactEvent(UnitToHit);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
-			UnitToHit->ApplyInvestmentEffect(AreaEffect);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectOne);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectTwo);
+			UnitToHit->ApplyInvestmentEffect(AreaEffectThree);
+			ImpactEvent(UnitToHit);
 		}
 	}
 }

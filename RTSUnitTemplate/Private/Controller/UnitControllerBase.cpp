@@ -93,13 +93,16 @@ void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 {
 	AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
-	AUnitBase* DetectedUnit = Cast<AUnitBase>(DetectedUnits[0]);
-	
-	if(!DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId != CurrentUnit->TeamId)) 
+	for (AActor* Actor  : DetectedUnits) // Loop through each detected unit
 	{
-		if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
+		AUnitBase* DetectedUnit = Cast<AUnitBase>(Actor);
+		if (!DetectedUnit) continue; // Skip if cast fails
+		
+		if(!DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId != CurrentUnit->TeamId)) 
 		{
-			DistanceToUnitToChase = GetPawn()->GetDistanceTo(DetectedUnit);
+			if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
+			{
+				DistanceToUnitToChase = GetPawn()->GetDistanceTo(DetectedUnit);
 			
 				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
 				CurrentUnit->SetNextUnitToChase();
@@ -112,23 +115,24 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 					}
 				}
 			
-		}
-	}else if (DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId == CurrentUnit->TeamId)) {
-		if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
-		{
-			DistanceToUnitToChase = GetPawn()->GetDistanceTo(DetectedUnit);
-			
-			CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
-			CurrentUnit->SetNextUnitToChase();
-				
-			if (CurrentUnit->UnitToChase) {
-				if(CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Run && CurrentUnit->UnitToChase->Attributes->GetHealth() < CurrentUnit->UnitToChase->Attributes->GetMaxHealth())
-				{
-					CurrentUnit->AddMovementInput(FVector(0.f), CurrentUnit->Attributes->GetRunSpeedScale());
-					CurrentUnit->SetUnitState(UnitData::Chase);
-				}
 			}
+		}else if (DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId == CurrentUnit->TeamId)) {
+			if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
+			{
+				DistanceToUnitToChase = GetPawn()->GetDistanceTo(DetectedUnit);
 			
+				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
+				CurrentUnit->SetNextUnitToChase();
+				
+				if (CurrentUnit->UnitToChase) {
+					if(CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Run && CurrentUnit->UnitToChase->Attributes->GetHealth() < CurrentUnit->UnitToChase->Attributes->GetMaxHealth())
+					{
+						CurrentUnit->AddMovementInput(FVector(0.f), CurrentUnit->Attributes->GetRunSpeedScale());
+						CurrentUnit->SetUnitState(UnitData::Chase);
+					}
+				}
+			
+			}
 		}
 	}
 	
@@ -266,6 +270,12 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 				
 		}
 		break;
+		case UnitData::Rooted:
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				Rooted(UnitBase, DeltaSeconds);
+			}
+			break;
 		case UnitData::Idle:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
@@ -283,6 +293,18 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 	if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
 		KillUnitBase(UnitBase);
 		UnitBase->UnitControlTimer = 0.f;
+	}
+}
+
+void AUnitControllerBase::Rooted(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	UnitBase->SetWalkSpeed(0);
+	UnitBase->UnitControlTimer += DeltaSeconds;
+	if (UnitBase->UnitControlTimer > IsRootedDuration)
+	{
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+		UnitBase->UnitControlTimer = 0.f;
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 	}
 }
 
@@ -414,7 +436,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     					AUnitBase* UnitToChase = UnitBase->UnitToChase;
 					
     					if (IsUnitToChaseInRange(UnitBase)) {
-    						if(UnitBase->UnitControlTimer >= PauseDuration)
+    						if(UnitBase->UnitControlTimer >= UnitBase->PauseDuration)
     						{
     							UnitBase->ServerStartAttackEvent_Implementation();
     							UnitBase->SetUnitState(UnitData::Attack);
@@ -516,7 +538,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 		return;
 	}
 				
-	if (UnitBase->UnitControlTimer > AttackDuration + PauseDuration) {
+	if (UnitBase->UnitControlTimer > AttackDuration + UnitBase->PauseDuration) {
 		if(!UnitBase->UseProjectile )
 		{
 			// Attack without Projectile
@@ -579,7 +601,7 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState( UnitBase->UnitStatePlaceholder );
 				
-	} else if (UnitBase->UnitControlTimer > PauseDuration) {
+	} else if (UnitBase->UnitControlTimer > UnitBase->PauseDuration) {
 		
 		ProjectileSpawned = false;
 		UnitBase->SetUnitState(UnitData::Chase);

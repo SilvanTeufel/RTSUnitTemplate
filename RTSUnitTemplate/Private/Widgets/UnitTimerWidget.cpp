@@ -21,8 +21,32 @@ void UUnitTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		return;
 
 
+
+
 	AUnitBase* UnitBase = Cast<AUnitBase>(OwnerCharacter);
 	
+	switch (UnitBase->GetUnitState())
+	{
+	case UnitData::Pause:
+		{
+			IsVisible = true;
+			TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->PauseDuration);
+		}
+		break;
+	default:
+		{
+			if(UnitBase->UnitControlTimer > 0.f)
+			{
+				IsVisible = true;
+				TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
+			}else
+			{
+				IsVisible = false;
+			}
+		}
+		break;
+	}
+
 	/*
 	switch (UnitBase->GetUnitState())
 	{

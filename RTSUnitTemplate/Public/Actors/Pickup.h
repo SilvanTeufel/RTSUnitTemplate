@@ -32,7 +32,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int WeaponId; // Needed for MagazineCount
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float LifeTime = 0.f;
 	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MaxLifeTime = 0.f;
 protected:
 	// Called when the game starts or when spawneds
 	virtual void BeginPlay() override;

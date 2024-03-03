@@ -180,7 +180,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
 						
     					if (IsUnitToChaseInRange(UnitBase)) {
 
-    						if(!bHealActorSpawned && UnitBase->UnitControlTimer >= PauseDuration && UnitBase->UnitToChase->Attributes->GetHealth() < UnitBase->UnitToChase->Attributes->GetMaxHealth())
+    						if(!bHealActorSpawned && UnitBase->UnitControlTimer >=  UnitBase->PauseDuration && UnitBase->UnitToChase->Attributes->GetHealth() < UnitBase->UnitToChase->Attributes->GetMaxHealth())
     						{
     							UnitBase->SpawnHealActor(UnitBase->UnitToChase);
     							UnitBase->ServerStartHealingEvent_Implementation();
@@ -255,7 +255,7 @@ void AHealingUnitController::Healing(AHealingUnit* UnitBase, float DeltaSeconds)
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
-	if (UnitBase->UnitControlTimer > AttackDuration + PauseDuration) {
+	if (UnitBase->UnitControlTimer > AttackDuration +  UnitBase->PauseDuration) {
 		UnitBase->SetUnitState( UnitData::Pause );
 		bHealActorSpawned = false;
 		UnitBase->UnitControlTimer = 0.f;
@@ -281,7 +281,7 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 		}
 
 
-		if (UnitBase->UnitControlTimer > PauseDuration) {
+		if (UnitBase->UnitControlTimer >  UnitBase->PauseDuration) {
 
 			bHealActorSpawned = false;
 			if (IsUnitToChaseInRange(UnitBase) && !bHealActorSpawned && UnitBase->SetNextUnitToChaseHeal()) {

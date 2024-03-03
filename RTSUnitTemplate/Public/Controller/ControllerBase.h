@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Hud/PathProviderHUD.h"
 #include "Characters/Camera/CameraBase.h"
-
 #include "Core/UnitData.h"
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"

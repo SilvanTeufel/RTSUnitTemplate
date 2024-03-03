@@ -36,7 +36,7 @@ void ASpawnerUnit::CreateSpawnDataFromDataTable()
 	}
 }
 
-APickup* ASpawnerUnit::SpawnPickup(FVector Location, TSubclassOf<APickup> PickupClass)
+APickup* ASpawnerUnit::SpawnPickup(FVector Location, FSpawnData Data)
 {
 	// Spawn a new instance of the ASelectable class
 	//ASelectable* NewSelectable = GetWorld()->SpawnActor<ASelectable>(SelectableClass, Location, FRotator::ZeroRotator);
@@ -44,13 +44,13 @@ APickup* ASpawnerUnit::SpawnPickup(FVector Location, TSubclassOf<APickup> Pickup
 	//return NewSelectable;
 
 	// Spawn a new instance of the ASelectable class with deferred spawn method
-	APickup* NewPickup = GetWorld()->SpawnActorDeferred<APickup>(PickupClass, FTransform(FRotator::ZeroRotator, Location));
+	APickup* NewPickup = GetWorld()->SpawnActorDeferred<APickup>(Data.PickupBlueprint, FTransform(FRotator::ZeroRotator, Location));
 
 	if (NewPickup)
 	{
 		// Set the TeamId of the NewSelectable
 		NewPickup->TeamId = TeamId;
-
+		NewPickup->MaxLifeTime = Data.MaxLifeTime;
 		// Finish the spawning process after setting properties
 		NewPickup->FinishSpawning(FTransform(FRotator::ZeroRotator, Location));
 	}
@@ -65,7 +65,7 @@ bool ASpawnerUnit::SpawnPickupWithProbability(FSpawnData Data, FVector Offset)
 
 	if (Data.ProbabilityArray >= RandomNumber)
 	{
-		SpawnPickup(GetActorLocation() + Offset, Data.PickupBlueprint);
+		SpawnPickup(GetActorLocation() + Offset, Data);
 		return true;
 	}
 

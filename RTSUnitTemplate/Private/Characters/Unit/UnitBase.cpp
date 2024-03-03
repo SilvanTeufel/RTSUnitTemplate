@@ -12,6 +12,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Widgets/UnitTimerWidget.h"
 
 // Sets default values
 AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
@@ -44,6 +45,9 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
 	SelectedIconBaseClass = ASelectedIcon::StaticClass();
+
+	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
+	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	/*
 	if (HasAuthority())
 	{
@@ -70,6 +74,7 @@ void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other
 void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
+	
 		if (HealthWidgetComp) {
 
 			HealthWidgetComp->SetRelativeLocation(HealthWidgetCompLocation, false, 0, ETeleportType::None);
@@ -79,14 +84,18 @@ void AUnitBase::BeginPlay()
 				Healthbar->SetOwnerActor(this);
 			}
 		}
-		
+
+		SetupTimerWidget();
+
+		/*
 		FRotator NewRotation = FRotator(0, -90, 0);
 		FQuat QuatRotation = FQuat(NewRotation);
 		
 		GetMesh()->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
 		GetMesh()->SetRelativeLocation(FVector(0, 0, -75), false, 0, ETeleportType::None);
-		SpawnSelectedIcon();
+		*/
 
+		SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;
 		
 		if(IsFlying)
@@ -284,6 +293,19 @@ void AUnitBase::SpawnSelectedIcon()
 	if (SelectedIcon) {
 		SelectedIcon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("rootSocket"));
 		SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
+	}
+}
+
+void AUnitBase::SetupTimerWidget()
+{
+	if (TimerWidgetComp) {
+
+		TimerWidgetComp->SetRelativeLocation(TimerWidgetCompLocation, false, 0, ETeleportType::None);
+		UUnitTimerWidget* Timerbar = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject());
+
+		if (Timerbar) {
+			Timerbar->SetOwnerActor(this);
+		}
 	}
 }
 
