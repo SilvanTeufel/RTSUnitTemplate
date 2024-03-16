@@ -16,6 +16,7 @@
 void AGASUnit::BeginPlay()
 {
 	Super::BeginPlay();
+	
 }
 
 void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -74,6 +75,8 @@ void AGASUnit::PossessedBy(AController* NewController)
 
 	InitializeAttributes();
 	GiveAbilities();
+
+	SetupAbilitySystemDelegates();
 }
 
 
@@ -94,14 +97,7 @@ void AGASUnit::OnRep_PlayerState()
 			FTopLevelAssetPath(GetPathNameSafe(UClass::TryFindTypeSlow<UEnum>("EGASAbilityInputID"))),
 			static_cast<int32>(EGASAbilityInputID::Confirm),
 			static_cast<int32>(EGASAbilityInputID::Cancel));
-		/*
-		const FGameplayAbilityInputBinds Binds(
-			"Confirm", 
-			"Cancel",
-			"EGASAbilityInputID",
-			static_cast<int32>(EGASAbilityInputID::Confirm),
-			static_cast<int32>(EGASAbilityInputID::Cancel)
-		);*/
+
 
 		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
 
@@ -109,31 +105,33 @@ void AGASUnit::OnRep_PlayerState()
 	}
 }
 
-/*
-void AGASUnit::OnRep_PlayerState()
+
+void AGASUnit::SetupAbilitySystemDelegates()
 {
-	Super::OnRep_PlayerState();
-
-	// Not sure if both is this
-	AbilitySystemComponent->InitAbilityActorInfo(this, this);
-
-	InitializeAttributes();
-
-	if(AbilitySystemComponent && InputComponent)
+	UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates!"));
+	if (AbilitySystemComponent)
 	{
-		const FGameplayAbilityInputBinds Binds(
-"Confirm", 
-"Cancel",
-"EGASAbilityInputID",
-static_cast<int32>(EGASAbilityInputID::Confirm),
-static_cast<int32>(EGASAbilityInputID::Cancel)
-		);
-
-		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
+		// Register a delegate to be called when an ability is activated
+		AbilitySystemComponent->AbilityActivatedCallbacks.AddUObject(this, &AGASUnit::OnAbilityActivated);
+		UE_LOG(LogTemp, Log, TEXT("SetupAbilitySystemDelegates: Delegate for ability activation registered successfully."));
 	}
-	
+	else
+	{
+		// Log error if AbilitySystemComponent is null
+		UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates: AbilitySystemComponent is null."));
+	}
 }
-*/
+
+// This is your handler for when an ability is activated
+void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
+{
+	UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
+	// Assuming ActivatedAbilityInstance is a class member
+	// Cast to UGameplayAbilityBase if necessary, depending on your class hierarchy
+	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
+
+	// Do something with the ActivatedAbilityInstance...
+}
 
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

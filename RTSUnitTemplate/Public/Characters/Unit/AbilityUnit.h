@@ -99,7 +99,7 @@ public:
 	bool IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability);
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int Ability);
+	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int AbilityIndex);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	int32 DetermineAbilityID(int32 Level);
@@ -124,4 +124,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	int AbilityCostIncreaser = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	int MaxAbilityPointsToInvest = 5;
 };

@@ -59,6 +59,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float IsRootedDuration = 5.f;
+
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		//float IsCastingDuration = 5.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "AttackAngleTolerance", Keywords = "RTSUnitTemplate AttackAngleTolerance"), Category = RTSUnitTemplate)
 		float AttackAngleTolerance = 0.f;
@@ -83,6 +86,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void Rooted(AUnitBase* UnitBase, float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Casting(AUnitBase* UnitBase, float DeltaSeconds);
+
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Dead", Keywords = "RTSUnitTemplate Dead"), Category = RTSUnitTemplate)
 		bool IsUnitToChaseInRange(AUnitBase* UnitBase);

@@ -69,49 +69,52 @@ void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 
 void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
-	if(Data.EvaluatedData.Attribute == GetEffectDamageAttribute())
+	AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor());
+
+	if(UnitBase && UnitBase->GetUnitState() != UnitData::Dead)
 	{
-
-		// Assume DamageAmount is the amount of damage to apply
-		float DamageAmount = Data.EvaluatedData.Magnitude;
-
-		// Check and apply damage to Shield first
-		if(DamageAmount < 0)
+		if(Data.EvaluatedData.Attribute == GetEffectDamageAttribute())
 		{
-			if(GetShield() > 0)
+
+			// Assume DamageAmount is the amount of damage to apply
+			float DamageAmount = Data.EvaluatedData.Magnitude;
+
+			// Check and apply damage to Shield first
+			if(DamageAmount < 0)
 			{
-				float OldShield = GetShield();
+				if(GetShield() > 0)
+				{
+					float OldShield = GetShield();
+
+					SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
+					SetAttributeShield(GetShield() + DamageAmount);
+				
+					if(OldShield < DamageAmount)
+					{
+						DamageAmount = DamageAmount - (OldShield - GetShield());
+					}
+					else
+					{
+						DamageAmount = 0;
+					}
+				}
 
 				SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
-				SetAttributeShield(GetShield() + DamageAmount);
-				
-				if(OldShield < DamageAmount)
-				{
-					DamageAmount = DamageAmount - (OldShield - GetShield());
-				}
-				else
-				{
-					DamageAmount = 0;
-				}
+				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
+			}else
+			{
+				SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
+				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
+		}
 
-			SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
-			SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
-		}else
+		if(Data.EvaluatedData.Attribute == GetEffectShieldAttribute() && GetHealth() > 0)
 		{
-			SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
-			SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
+			float ShieldAmount = Data.EvaluatedData.Magnitude;
+			SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
+			SetAttributeShield(GetShield() + ShieldAmount);
 		}
 	}
-
-	if(Data.EvaluatedData.Attribute == GetEffectShieldAttribute())
-	{
-		float ShieldAmount = Data.EvaluatedData.Magnitude;
-		SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
-		SetAttributeShield(GetShield() + ShieldAmount);
-	}
-
-	
 	// Call the superclass version for other attributes
 	Super::PostGameplayEffectExecute(Data);
 	

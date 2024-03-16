@@ -67,7 +67,7 @@ void AHealingActor::Tick(float DeltaTime)
 		
 		for (int32 i = 0; i < Actors.Num(); i++)
 		{
-			if(Actors[i])
+			if(Actors[i] && Actors[i]->GetUnitState() != UnitData::Dead)
 			Actors[i]->SetHealth(Actors[i]->Attributes->GetHealth() + IntervalHeal);
 		}
 	}
@@ -81,7 +81,7 @@ void AHealingActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	{
 		AUnitBase* UnitToHeal = Cast<AUnitBase>(OtherActor);
 
-		if(UnitToHeal && HealingUnit && HealingUnit->TeamId == UnitToHeal->TeamId)
+		if(UnitToHeal && HealingUnit && HealingUnit->TeamId == UnitToHeal->TeamId && UnitToHeal->GetUnitState() != UnitData::Dead)
 			Actors.Push(UnitToHeal);
 			
 	}

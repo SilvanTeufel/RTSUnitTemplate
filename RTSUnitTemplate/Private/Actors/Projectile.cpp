@@ -144,7 +144,17 @@ void AProjectile::Tick(float DeltaTime)
 				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
             	AddActorWorldOffset(Direction * MovementSpeed);
 		}
+
+		// Calculate the distance between the projectile and the target
+		float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+		if(DistanceToTarget <= MovementSpeed)
+		{
+			Impact(Target);
+			Destroy(true, false);
+		}
+		
 	}
+	
 	
 }
 
@@ -231,7 +241,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			ImpactEvent();
 			DestroyProjectileWithDelay();
-		} if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
+		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
 			ImpactEvent();
 			Impact(Target);
@@ -272,10 +282,14 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 {
 	if(UnitToHit->GetUnitState() != UnitData::Run &&
 		UnitToHit->GetUnitState() != UnitData::Attack &&
+		UnitToHit->GetUnitState() != UnitData::Casting &&
 		UnitToHit->GetUnitState() != UnitData::Pause)
 	{
 		UnitToHit->UnitControlTimer = 0.f;
 		UnitToHit->SetUnitState( UnitData::IsAttacked );
+	}else if(UnitToHit->GetUnitState() == UnitData::Casting)
+	{
+		UnitToHit->UnitControlTimer -= UnitToHit->ReduceCastTime;
 	}
 }
 

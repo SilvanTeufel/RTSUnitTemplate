@@ -21,5 +21,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ability")
 	EGASAbilityInputID AbilityInputID = EGASAbilityInputID::None;
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "Abilities")
+	void OnAbilityCastComplete();
 	
 };

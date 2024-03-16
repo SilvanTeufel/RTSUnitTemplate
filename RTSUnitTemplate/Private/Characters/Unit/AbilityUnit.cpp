@@ -211,58 +211,55 @@ void AAbilityUnit::SetAutoAbilitySequence(int Index, int32 Value)
 	AutoAbilitySequence[Index] = Value;
 }
 
-bool AAbilityUnit::IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability)
+bool AAbilityUnit::IsAbilityAllowed(EGASAbilityInputID AbilityID, int AbilityIndex)
 {
 	switch (AbilityID)
 	{
 	case EGASAbilityInputID::AbilityOne:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest; // Was 1
 	case EGASAbilityInputID::AbilityTwo:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
 	case EGASAbilityInputID::AbilityThree:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
 	case EGASAbilityInputID::AbilityFour:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
 	case EGASAbilityInputID::AbilityFive:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
 	case EGASAbilityInputID::AbilitySix:
-		return LevelData.UsedAbilityPointsArray[Ability] < 1;
+		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
 	default:
 		return false;
 	}
 }
 
-void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
+void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int AbilityIndex)
 {
 
-	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), Ability);
+	UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), AbilityIndex);
 
 	int32 AbilityIDIndex = static_cast<int32>(AbilityID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 	int32 AbilityCost = (1 + AbilityCostIncreaser*AbilityIDIndex);
-	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, Ability) || LevelData.AbilityPoints < AbilityCost) return;
+	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, AbilityIndex) || LevelData.AbilityPoints < AbilityCost) return;
+
+	UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
 	
-	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
-	
-	switch (Ability)
+	switch (AbilityIndex)
 	{
 	case 0:
-		if(OffensiveAbilityID == AbilityID) return;
-		OffensiveAbilityID = AbilityID;
+		if(OffensiveAbilityID == EGASAbilityInputID::None) OffensiveAbilityID = AbilityID;
+		else if(OffensiveAbilityID != AbilityID) return;
 		break;
-            
 	case 1:
-		if(DefensiveAbilityID == AbilityID) return;
-		DefensiveAbilityID = AbilityID;
+		if(DefensiveAbilityID == EGASAbilityInputID::None) DefensiveAbilityID = AbilityID;
+		else if(DefensiveAbilityID != AbilityID) return;
 		break;
-
 	case 2:
-		if(AttackAbilityID == AbilityID) return;
-		AttackAbilityID = AbilityID;
+		if(AttackAbilityID == EGASAbilityInputID::None) AttackAbilityID = AbilityID;
+		else if(AttackAbilityID != AbilityID) return;
 		break;
-
 	case 3:
-		if(ThrowAbilityID == AbilityID) return;
-		ThrowAbilityID = AbilityID;
+		if(ThrowAbilityID == EGASAbilityInputID::None) ThrowAbilityID = AbilityID;
+		else if(ThrowAbilityID != AbilityID) return;
 		break;
 
 	default:
@@ -272,8 +269,8 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability)
 	LevelData.AbilityPoints -= AbilityCost;
 	LevelData.UsedAbilityPoints += AbilityCost;
 
-	if(Ability <= 3 && Ability >= 0)
-		LevelData.UsedAbilityPointsArray[Ability] += AbilityCost;
+	if(AbilityIndex <= 3 && AbilityIndex >= 0)
+		LevelData.UsedAbilityPointsArray[AbilityIndex] += AbilityCost;
 }
 
 

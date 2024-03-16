@@ -38,6 +38,23 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelData LevelData;
 
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void SetLevelData(
+	int32 Experience,
+	int32 CharacterLevel,
+	int32 TalentPoints,
+	int32 UsedTalentPoints,
+	int32 AbilityPoints,
+	int32 UsedAbilityPoints)
+	{
+		LevelData.Experience = Experience;
+		LevelData.CharacterLevel = CharacterLevel;
+		LevelData.TalentPoints = TalentPoints;
+		LevelData.UsedTalentPoints = UsedTalentPoints;
+		LevelData.AbilityPoints = AbilityPoints;
+		LevelData.UsedAbilityPoints = UsedAbilityPoints;
+	}
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelUpData LevelUpData;
 

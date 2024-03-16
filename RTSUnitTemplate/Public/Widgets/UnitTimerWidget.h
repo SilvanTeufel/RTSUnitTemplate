@@ -32,4 +32,11 @@ protected:
 
 	bool IsVisible = false;
 	bool SetVisible = false;
+	
+public:
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	FLinearColor CastingColor = FLinearColor::Red; // Replace with your desired color
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	FLinearColor PauseColor = FLinearColor::Yellow;
 };

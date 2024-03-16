@@ -59,5 +59,16 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
-	
+
+protected:
+	// Function called when an ability is activated
+	void OnAbilityActivated(UGameplayAbility* ActivatedAbility);
+
+	// Setup delegates for ability system
+	void SetupAbilitySystemDelegates();
+
+public:
+	// Reference to the activated ability instance
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
+	UGameplayAbilityBase* ActivatedAbilityInstance;
 };

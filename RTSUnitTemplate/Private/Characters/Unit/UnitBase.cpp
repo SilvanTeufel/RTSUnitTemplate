@@ -309,6 +309,19 @@ void AUnitBase::SetupTimerWidget()
 	}
 }
 
+void AUnitBase::SetTimerWidgetCastingColor(FLinearColor Color)
+{
+	if (TimerWidgetComp) {
+
+		UUnitTimerWidget* Timerbar = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject());
+
+		if (Timerbar) {
+			Timerbar->CastingColor = Color;
+		}
+	}
+}
+
+
 void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker) // FVector TargetLocation
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
@@ -341,7 +354,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	}
 }
 
-void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset) // FVector TargetLocation
+void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset, float Scale) // FVector TargetLocation
 {
 
 	if(!Aim || !Attacker || !ProjectileClass)
@@ -374,7 +387,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
 
 			Transform.SetRotation(FQuat(InitialRotation));
-			Transform.SetScale3D(ShootingUnit->ProjectileScale);
+			Transform.SetScale3D(ShootingUnit->ProjectileScale*Scale);
 			
 			const auto MyProjectile = Cast<AProjectile>
 								(UGameplayStatics::BeginDeferredActorSpawnFromClass
@@ -389,7 +402,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->FollowTarget = FollowTarget;
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
-				
 			
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			}

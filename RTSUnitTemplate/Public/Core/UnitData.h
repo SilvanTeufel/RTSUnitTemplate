@@ -28,6 +28,7 @@ namespace UnitData
 		Build UMETA(DisplayName = "Build"),
 		Jump   UMETA(DisplayName = "Jump"),
 		Attack UMETA(DisplayName = "Attack"),
+		Casting UMETA(DisplayName = "Casting"),
 		Healing UMETA(DisplayName = "Healing"),
 		Pause UMETA(DisplayName = "Pause"),
 		Chase UMETA(DisplayName = "Chase"),
