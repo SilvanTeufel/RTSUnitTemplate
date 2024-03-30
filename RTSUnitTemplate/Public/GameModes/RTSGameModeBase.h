@@ -9,12 +9,13 @@
 #include "Core/UnitData.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameplayEffect.h"
+#include "Developer/GraphColor/Private/appconst.h"
 #include "RTSGameModeBase.generated.h"
 
 /**
  * 
  */
-
+/*
 USTRUCT(BlueprintType)
 struct FUnitSpawnParameter : public FTableRowBase
 {
@@ -96,7 +97,7 @@ struct FUnitSpawnData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FUnitSpawnParameter SpawnParameter;
 };
-
+*/
 USTRUCT(BlueprintType)
 struct FTimerHandleMapping
 {
@@ -143,6 +144,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerFromDataTable(FVector Location, AUnitBase* UnitToChase);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SetupUnitsFromDataTable(FVector Location, AUnitBase* UnitToChase, const TArray<class UDataTable*>& UnitTable); // , int TeamId, const FString& WaypointTag, int32 UnitIndex = 0, AUnitBase* SummoningUnit = nullptr, int SummonIndex = -1
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FTimerHandleMapping GetTimerHandleMappingById(int32 SearchId);
 
@@ -150,10 +154,16 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	void SetSkipTimerMappingById(int32 SearchId, bool Value);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
+	void SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase); // , int TeamId, AWaypoint* Waypoint = nullptr
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* SpawnSingleUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsUnitWithIndexDead(int32 UnitIndex);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool RemoveDeadUnitWithIndexFromDataSet(int32 UnitIndex);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 CheckAndRemoveDeadUnits(int32 SpawnParaId);
@@ -168,14 +178,13 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	TArray<int32> SpawnParameterIdArray;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
+	void SpawnUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase); // , int TeamId, AWaypoint* Waypoint = nullptr, int32 UnitIndex = 0, AUnitBase* SummoningUnit = nullptr, int SummonIndex = -1
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter);
-
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag);

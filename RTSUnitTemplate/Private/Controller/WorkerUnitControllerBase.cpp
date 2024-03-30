@@ -380,6 +380,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			SpawnParameter.Material = nullptr;
 			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
 			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
+			UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
 		}
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);

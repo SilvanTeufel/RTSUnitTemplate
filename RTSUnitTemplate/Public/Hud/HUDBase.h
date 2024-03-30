@@ -97,6 +97,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = TopDownRTSTemplate)
 		void DeselectAllUnits();
+
+	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
+		void DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ControllDirectionToMouse", Keywords = "RTSUnitTemplate ControllDirectionToMouse"), Category = RTSUnitTemplate)
 		void ControllDirectionToMouse(AActor* Units, FHitResult Hit);

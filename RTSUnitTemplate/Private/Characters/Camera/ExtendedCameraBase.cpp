@@ -1,6 +1,6 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
-
+#include "Components/SkeletalMeshComponent.h"
 #include "Controller/CameraControllerBase.h"
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"

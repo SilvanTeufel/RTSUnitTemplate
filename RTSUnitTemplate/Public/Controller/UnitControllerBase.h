@@ -4,22 +4,34 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
+
 #include "Characters/Unit/UnitBase.h"
 #include "Hud/HUDBase.h"
 #include "Hud/PathProviderHUD.h"
+#include "NavigationSystem.h"
+#include "NavMesh/NavMeshPath.h"
+
+
 #include "UnitControllerBase.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnMoveCompletedDelegate, FAIRequestID, RequestID, EPathFollowingResult::Type, Result);
 /**
  * 
  */
+
 UCLASS()
 class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
 {
 	GENERATED_BODY()
 
+private:
+	AUnitBase* PendingUnit = nullptr;
+	FVector PendingDestination;
+	
 public:
 	AUnitControllerBase();
-
+	
 	virtual void BeginPlay() override;
 
 	virtual void OnPossess(APawn* Pawn) override;
@@ -30,6 +42,20 @@ public:
 	
 	virtual FRotator GetControlRotation() const override;
 
+	FOnMoveCompletedDelegate OnMoveCompleted;
+	
+	void OnAdjustedMoveCompleted(FAIRequestID RequestID, const EPathFollowingResult::Type Result)
+	{
+		UE_LOG(LogTemp, Log, TEXT("OnAdjustedMoveCompleted!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
+		if(PendingUnit &&  Result == EPathFollowingResult::Success) //  Result.IsSuccess()
+		{
+			UE_LOG(LogTemp, Log, TEXT("Move completed successfully. Moving to location."));
+			MoveToLocationUEPathFinding(PendingUnit, PendingDestination);
+			// Reset the PendingUnit and PendingDestination to avoid reusing them incorrectly
+			PendingUnit = nullptr;
+		}
+	}
+
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "KillUnitBase", Keywords = "RTSUnitTemplate KillUnitBase"), Category = RTSUnitTemplate)
 		void KillUnitBase(AUnitBase* UnitBase);
 
@@ -37,7 +63,7 @@ public:
 		float SightRadius = 1500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightAge", Keywords = "RTSUnitTemplate SightAge"), Category = RTSUnitTemplate)
-		float SightAge = 5.0f;
+		float SightAge = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "LoseSightRadius", Keywords = "RTSUnitTemplate LoseSightRadius"), Category = RTSUnitTemplate)
 		float LoseSightRadius = SightRadius + 1000.0f;
@@ -106,6 +132,18 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Chase", Keywords = "RTSUnitTemplate Chase"), Category = RTSUnitTemplate)
 		void Chase(AUnitBase* UnitBase, float DeltaSeconds);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void ActivateCombatAbilities(AUnitBase* UnitBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		FVector CalculateChaseLocation(AUnitBase* UnitBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void LoseUnitToChase(AUnitBase* UnitBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void ResetPath(AUnitBase* UnitBase);
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Attack", Keywords = "RTSUnitTemplate Attack"), Category = RTSUnitTemplate)
 		void Attack(AUnitBase* UnitBase, float DeltaSeconds);
 
@@ -118,6 +156,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Idle", Keywords = "RTSUnitTemplate Idle"), Category = RTSUnitTemplate)
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EvasionChase(AUnitBase* UnitBase, FVector CollisionLocation);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation);
 
@@ -151,6 +192,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
+
+	
+		//void OnAdjustedMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "CreateProjectile", Keywords = "RTSUnitTemplate CreateProjectile"), Category = RTSUnitTemplate)
 		void CreateProjectile (AUnitBase* UnitBase);

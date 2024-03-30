@@ -20,6 +20,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void BuildingControlStateMachine(float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CastingUnit(AUnitBase* UnitBase, float DeltaSeconds);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AutoExecuteAbilitys(AUnitBase* UnitBase, float DeltaSeconds);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void BuildingChase(AUnitBase* UnitBase, float DeltaSeconds);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<bool> AutoExeAbilitysArray = { true, false, false, false, false, false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExecutenDelayTime = 3.f;
 	
 };
 

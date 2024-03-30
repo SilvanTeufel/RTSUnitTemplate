@@ -8,8 +8,6 @@
 #include "AbilityUnit.generated.h"
 
 
-
-
 UCLASS()
 class RTSUNITTEMPLATE_API AAbilityUnit : public APathSeekerBase
 {
@@ -37,7 +35,7 @@ public:
 	virtual void LevelUp_Implementation() override;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	void TeleportToValidLocation(const FVector& Destination);
+	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 200.f);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
@@ -50,7 +48,7 @@ public:
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	TEnumAsByte<UnitData::EState> GetUnitState();
+	TEnumAsByte<UnitData::EState> GetUnitState() const;
 
 	UFUNCTION(BlueprintCallable, Category=Ability)
 	virtual void GetAbilitiesArrays();
@@ -127,4 +125,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	int MaxAbilityPointsToInvest = 5;
+
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	//TArray<FUnitSpawnData> SummonedUnitsDataSet;
+
+//	UFUNCTION(BlueprintCallable, Category = Ability)
+//	void SpawnUnitsFromParameters(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int NewTeamId, AWaypoint* Waypoint, int UIndex);
+
+
 };

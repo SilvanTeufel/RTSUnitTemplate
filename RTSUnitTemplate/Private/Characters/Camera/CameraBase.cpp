@@ -118,7 +118,7 @@ void ACameraBase::ZoomOut(float ZoomMultiplier, bool Decelerate) {
 	if(SpringArm)
 		SpringArm->TargetArmLength += zoomAmount;
 
-	SetControlWidgetLocation();
+	//SetControlWidgetLocation();
 }
 
 void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
@@ -138,7 +138,7 @@ void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
 	if(SpringArm && SpringArm->TargetArmLength > 100.f)
 		SpringArm->TargetArmLength += zoomAmount;
 
-	SetControlWidgetLocation();
+	//SetControlWidgetLocation();
 }
 
 
@@ -244,7 +244,7 @@ bool ACameraBase::RotateCamLeft(float Add, bool stopCam) // CamRotationOffset
 
 	SpringArm->SetRelativeRotation(SpringArmRotator);
 
-	SetControlWidgetLocation();
+	//SetControlWidgetLocation();
 	
 	if (SpringArmRotator.Yaw >= 360) SpringArmRotator.Yaw = 0.f;
 	
@@ -278,7 +278,7 @@ bool ACameraBase::RotateCamRight(float Add, bool stopCam) // CamRotationOffset
 
 	SpringArm->SetRelativeRotation(SpringArmRotator);
 
-	SetControlWidgetLocation();
+	//SetControlWidgetLocation();
 	
 	if (SpringArmRotator.Yaw <= -1) SpringArmRotator.Yaw = 359.f;
 
@@ -470,10 +470,10 @@ void ACameraBase::ShowControlWidget()
 	if (ControlWidgetComp)
 	{
 		ControlWidgetComp->SetVisibility(true);
-		SetControlWidgetLocation();
+		//SetControlWidgetLocation();
 	}
 }
-
+/*
 void ACameraBase::SetControlWidgetLocation()
 {
 	if (!ControlWidgetComp || !GetWorld()) return;
@@ -514,7 +514,7 @@ void ACameraBase::SetControlWidgetLocation()
 	FQuat CombinedQuat = NewRotation.Quaternion() * OffsetRotation.Quaternion();
 	
 	ControlWidgetComp->SetWorldRotation(CombinedQuat.Rotator()); // NewRotation
-}
+}*/
 
 void ACameraBase::DeSpawnLoadingWidget()
 {

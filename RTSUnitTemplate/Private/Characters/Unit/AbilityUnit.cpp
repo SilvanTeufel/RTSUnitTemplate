@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/AbilityUnit.h"
+
+#include "AIController.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/GameplayAbilityBase.h"
@@ -40,7 +42,7 @@ void AAbilityUnit::LevelUp_Implementation()
 	}
 }
 
-void AAbilityUnit::TeleportToValidLocation(const FVector& Destination)
+void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float MaxZDifference)
 {
 	FVector Start = Destination + FVector(0.f, 0.f, 1000.f);
 	FVector End = Destination - FVector(0.f, 0.f, 200.f);
@@ -50,7 +52,7 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination)
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility))
 	{
 		// If the hit location is valid (e.g., on the ground), teleport to that location
-		if (HitResult.bBlockingHit)
+		if (HitResult.bBlockingHit && abs(GetActorLocation().Z-HitResult.Location.Z) < MaxZDifference)
 		{
 			// Optionally, you might want to add additional checks on HitResult to ensure it's a valid surface
 			SetActorLocation(FVector(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z + 70.f));
@@ -58,7 +60,7 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination)
 		}
 	}
 
-	SetActorLocation(GetActorLocation());
+	//SetActorLocation(GetActorLocation());
 }
 
 void AAbilityUnit::StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart)
@@ -201,7 +203,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	UnitState = NewUnitState;
 }
 
-TEnumAsByte<UnitData::EState> AAbilityUnit::GetUnitState()
+TEnumAsByte<UnitData::EState> AAbilityUnit::GetUnitState() const
 {
 	return UnitState;
 }
@@ -213,35 +215,38 @@ void AAbilityUnit::SetAutoAbilitySequence(int Index, int32 Value)
 
 bool AAbilityUnit::IsAbilityAllowed(EGASAbilityInputID AbilityID, int AbilityIndex)
 {
-	switch (AbilityID)
-	{
-	case EGASAbilityInputID::AbilityOne:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest; // Was 1
-	case EGASAbilityInputID::AbilityTwo:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
-	case EGASAbilityInputID::AbilityThree:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
-	case EGASAbilityInputID::AbilityFour:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
-	case EGASAbilityInputID::AbilityFive:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
-	case EGASAbilityInputID::AbilitySix:
-		return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
-	default:
-		return false;
-	}
+
+		switch (AbilityID)
+		{
+		case EGASAbilityInputID::AbilityOne:
+		case EGASAbilityInputID::AbilityTwo:
+		case EGASAbilityInputID::AbilityThree:
+		case EGASAbilityInputID::AbilityFour:
+		case EGASAbilityInputID::AbilityFive:
+		case EGASAbilityInputID::AbilitySix:
+			return LevelData.UsedAbilityPointsArray[AbilityIndex] < MaxAbilityPointsToInvest;
+		default:
+			return false;
+		}
+
 }
 
 void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int AbilityIndex)
 {
-
-	UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), AbilityIndex);
+	// Ensure the AbilityIndex is within the expected range before proceeding
+	if (AbilityIndex < 0 || AbilityIndex >= LevelData.UsedAbilityPointsArray.Num())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpendAbilityPoints called with an out of bounds AbilityIndex: %d"), AbilityIndex);
+		return; // Exit the function as we have an invalid index
+	}
+	
+	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), AbilityIndex);
 
 	int32 AbilityIDIndex = static_cast<int32>(AbilityID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 	int32 AbilityCost = (1 + AbilityCostIncreaser*AbilityIDIndex);
 	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, AbilityIndex) || LevelData.AbilityPoints < AbilityCost) return;
 
-	UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
+	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
 	
 	switch (AbilityIndex)
 	{
@@ -269,7 +274,7 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int AbilityI
 	LevelData.AbilityPoints -= AbilityCost;
 	LevelData.UsedAbilityPoints += AbilityCost;
 
-	if(AbilityIndex <= 3 && AbilityIndex >= 0)
+	if(AbilityIndex <= 3)
 		LevelData.UsedAbilityPointsArray[AbilityIndex] += AbilityCost;
 }
 

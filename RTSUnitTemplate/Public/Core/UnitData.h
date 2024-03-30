@@ -16,6 +16,7 @@ namespace UnitData
 	{
 		Idle   UMETA(DisplayName = "Idle"),
 		Evasion   UMETA(DisplayName = "Evasion"),
+		EvasionChase   UMETA(DisplayName = "EvasionChase"),
 		Run  UMETA(DisplayName = "Run"),
 		Rooted  UMETA(DisplayName = "Rooted"),
 		Patrol UMETA(DisplayName = "Patrol"),
@@ -264,4 +265,86 @@ inline float CalcAngle(FVector VectorOne, FVector VectorTwo)
 
 	float AngleDiff = AngleOneX - AngleTwoX;
 	return AngleOneX - AngleTwoX;
+};
+
+USTRUCT(BlueprintType)
+struct FUnitSpawnParameter : public FTableRowBase
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int Id;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class AUnitBase> UnitBaseClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class AAIController> UnitControllerBaseClass;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int UnitCount = 3;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector UnitOffset = FVector(0.f,0.f,1.f);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector UnitMinRange = FVector(0.f,0.f,0.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector UnitMaxRange = FVector(100.f,100.f,0.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TEnumAsByte<UnitData::EState> State;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TEnumAsByte<UnitData::EState> StatePlaceholder;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float LoopTime = 3.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ShouldLoop = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FString WaypointTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxUnitSpawnCount = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	USkeletalMesh* CharacterMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInstance* Material;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FRotator ServerMeshRotation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int TeamId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	TSubclassOf<class UGameplayEffect> Attributes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool LoadLevelAfterSpawn = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SkipTimerAfterDeath = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SpawnAtWaypoint = false;
+};
+
+USTRUCT(BlueprintType)
+struct FUnitSpawnData : public FTableRowBase
+{
+	GENERATED_USTRUCT_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int Id;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
+	class AUnitBase* UnitBase;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FUnitSpawnParameter SpawnParameter;
 };

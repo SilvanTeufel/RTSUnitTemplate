@@ -3,6 +3,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "AbilitySystemComponent.h"
+#include "AIController.h"
 #include "NavCollision.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Components/CapsuleComponent.h"
@@ -11,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 
@@ -421,6 +423,186 @@ bool AUnitBase::GetToggleUnitDetection()
 
 bool AUnitBase::SetNextUnitToChase()
 {
+	if (UnitsToChase.IsEmpty()) return false;
+    
+	float ShortestDistance = TNumericLimits<float>::Max();
+	AUnitBase* ClosestUnit = nullptr;
+
+	for (auto& Unit : UnitsToChase)
+	{
+		if (Unit && Unit->GetUnitState() != UnitData::Dead)
+		{
+			float Distance = GetDistanceTo(Unit);
+			if (Distance < ShortestDistance)
+			{
+				ShortestDistance = Distance;
+				ClosestUnit = Unit;
+			}
+		}
+	}
+
+	// Remove dead units in-place using the RemoveAll function which is more efficient.
+	UnitsToChase.RemoveAll([](const AUnitBase* Unit) -> bool {
+		return !Unit || Unit->GetUnitState() == UnitData::Dead;
+	});
+
+	// Set the closest living unit as the target, if any.
+	if (ClosestUnit)
+	{
+		UnitToChase = ClosestUnit;
+		return true;
+	}
+
+	return false;
+}
+
+
+int AUnitBase::SpawnUnitsFromParameters(
+TSubclassOf<class AAIController> AIControllerBaseClass,
+TSubclassOf<class AUnitBase> UnitBaseClass, FRotator HostMeshRotation, FVector Location,
+TEnumAsByte<UnitData::EState> UState,
+TEnumAsByte<UnitData::EState> UStatePlaceholder,
+int NewTeamId, AWaypoint* Waypoint, int UIndex)
+{
+	FUnitSpawnParameter SpawnParameter;
+	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
+	SpawnParameter.UnitBaseClass = UnitBaseClass;
+	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
+	SpawnParameter.ServerMeshRotation = HostMeshRotation;
+	SpawnParameter.State = UState;
+	SpawnParameter.StatePlaceholder = UStatePlaceholder;
+	// Waypointspawn
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	if(!GameMode) return 0;
+	
+	FTransform UnitTransform;
+	
+	UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
+		
+		
+	const auto UnitBase = Cast<AUnitBase>
+		(UGameplayStatics::BeginDeferredActorSpawnFromClass
+		(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
+
+	
+	if(SpawnParameter.UnitControllerBaseClass)
+	{
+		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+		if(!ControllerBase) return 0;
+		APawn* PawnBase = Cast<APawn>(UnitBase);
+		if(PawnBase)
+		{
+			ControllerBase->Possess(PawnBase);
+		}
+	}
+	
+	if (UnitBase != nullptr)
+	{
+		
+		if(NewTeamId)
+		{
+			UnitBase->TeamId = NewTeamId;
+		}
+
+		UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+			
+		UnitBase->OnRep_MeshAssetPath();
+		UnitBase->OnRep_MeshMaterialPath();
+
+		UnitBase->SetReplicateMovement(true);
+		SetReplicates(true);
+		UnitBase->GetMesh()->SetIsReplicated(true);
+
+		// Does this have to be replicated?
+		UnitBase->SetMeshRotationServer();
+		
+		UnitBase->UnitState = SpawnParameter.State;
+		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
+		if(UnitToChase)
+		{
+			UnitBase->UnitToChase = UnitToChase;
+			UnitBase->SetUnitState(UnitData::Chase);
+		}
+		
+		UGameplayStatics::FinishSpawningActor(
+		 Cast<AActor>(UnitBase), 
+		 UnitTransform
+		);
+
+
+		UnitBase->InitializeAttributes();
+
+		if(Waypoint)
+		UnitBase->NextWaypoint = Waypoint;
+		
+		if(UIndex == 0)
+		{
+			GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+			
+			FUnitSpawnData UnitSpawnDataSet;
+			UnitSpawnDataSet.Id = SpawnParameter.Id;
+			UnitSpawnDataSet.UnitBase = UnitBase;
+			UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+			SummonedUnitsDataSet.Add(UnitSpawnDataSet);
+		}
+		else
+		{
+			UnitBase->UnitIndex = UIndex;
+			SetUnitBase(UIndex, UnitBase);
+		}
+
+		return UnitBase->UnitIndex;
+	}
+
+	return 0;
+}
+
+bool AUnitBase::IsSpawnedUnitDead(int UIndex)
+{
+
+	for (int32 i = SummonedUnitsDataSet.Num() - 1; i >= 0; --i)
+	{
+		FUnitSpawnData& UnitData = SummonedUnitsDataSet[i];
+		// Assuming that UnitBase has a member variable UnitIndex to match with UnitIndex
+		if (UnitData.UnitBase && UnitData.UnitBase->UnitIndex == UIndex)
+		{
+			// Assuming AUnitBase has a method or property named IsDead to check if the unit is dead
+			return (UnitData.UnitBase->GetUnitState() == UnitData::Dead);
+		}
+	}
+
+	// If no unit matches the UnitIndex, you can either return false, 
+	// or handle it based on how you want to treat units that are not found
+	return true;
+}
+
+void AUnitBase::SetUnitBase(int UIndex, AUnitBase* NewUnit)
+{
+
+	for (int32 i = SummonedUnitsDataSet.Num() - 1; i >= 0; --i)
+	{
+		FUnitSpawnData& UnitData = SummonedUnitsDataSet[i];
+		// Assuming that UnitBase has a member variable UnitIndex to match with UnitIndex
+		if (UnitData.UnitBase && UnitData.UnitBase->UnitIndex == UIndex)
+		{
+			UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+			UnitData.UnitBase->Destroy(true);
+			UnitData.UnitBase = NewUnit;
+			UnitData.UnitBase->LoadAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+		}
+	}
+
+	// If no unit matches the UnitIndex, you can either return false, 
+	// or handle it based on how you want to treat units that are not found
+}
+
+
+/*
+bool AUnitBase::SetNextUnitToChase()
+{
 	if(!UnitsToChase.Num()) return false;
 		
 	float ShortestDistance = GetDistanceTo(UnitsToChase[0]);
@@ -458,4 +640,4 @@ bool AUnitBase::SetNextUnitToChase()
 	}
 
 	return RValue;
-}
+}*/

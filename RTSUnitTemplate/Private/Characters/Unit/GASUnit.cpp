@@ -108,24 +108,24 @@ void AGASUnit::OnRep_PlayerState()
 
 void AGASUnit::SetupAbilitySystemDelegates()
 {
-	UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates!"));
+	//UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates!"));
 	if (AbilitySystemComponent)
 	{
 		// Register a delegate to be called when an ability is activated
 		AbilitySystemComponent->AbilityActivatedCallbacks.AddUObject(this, &AGASUnit::OnAbilityActivated);
-		UE_LOG(LogTemp, Log, TEXT("SetupAbilitySystemDelegates: Delegate for ability activation registered successfully."));
+		//UE_LOG(LogTemp, Log, TEXT("SetupAbilitySystemDelegates: Delegate for ability activation registered successfully."));
 	}
 	else
 	{
 		// Log error if AbilitySystemComponent is null
-		UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates: AbilitySystemComponent is null."));
+		//UE_LOG(LogTemp, Warning, TEXT("SetupAbilitySystemDelegates: AbilitySystemComponent is null."));
 	}
 }
 
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
-	UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
+	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
 	// Assuming ActivatedAbilityInstance is a class member
 	// Cast to UGameplayAbilityBase if necessary, depending on your class hierarchy
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);

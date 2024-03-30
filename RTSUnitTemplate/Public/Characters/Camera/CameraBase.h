@@ -328,8 +328,8 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShowControlWidget", Keywords = "RTSUnitTemplate ShowControlWidget"), Category = RTSUnitTemplate)
 		void ShowControlWidget();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SetControlWidgetLocation();
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		//void SetControlWidgetLocation();
 	
 	/////// Loading Widget ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -231,7 +231,7 @@ public:
 	void SpawnProjectile(AActor* Target, AActor* Attacker);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnProjectileFromClass(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset, float Scale);
+	void SpawnProjectileFromClass(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset, float Scale = 1.f);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;
@@ -261,6 +261,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ReduceCastTime = 0.5f;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float ReduceRootedTime = 0.1f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		class UWidgetComponent* TimerWidgetComp;
@@ -273,6 +276,26 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTimerWidgetCastingColor(FLinearColor Color);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	TArray<FUnitSpawnData> SummonedUnitsDataSet;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	TArray<int> SummonedUnitIndexes = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	int SpawnUnitsFromParameters(
+TSubclassOf<class AAIController> AIControllerBaseClass,
+TSubclassOf<class AUnitBase> UnitBaseClass, FRotator HostMeshRotation, FVector Location,
+TEnumAsByte<UnitData::EState> UState,
+TEnumAsByte<UnitData::EState> UStatePlaceholder,
+int NewTeamId, AWaypoint* Waypoint, int UIndex);
+
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	bool IsSpawnedUnitDead(int UIndex);
+	
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void SetUnitBase(int UIndex, AUnitBase* NewUnit);
 };
 
 

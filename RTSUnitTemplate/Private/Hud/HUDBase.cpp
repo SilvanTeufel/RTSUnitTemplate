@@ -322,6 +322,25 @@ void AHUDBase::DeselectAllUnits()
 		SelectedUnits.Empty();
 }
 
+
+void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
+{
+	for (int32 i = 0; i < AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		//DetectingUnit->Attributes->Range
+	
+		if (Unit && Unit->TeamId != DetectingUnit->TeamId)
+		{
+
+			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+
+			if (Distance <= Sight)
+				DetectedUnits.Emplace(Unit);
+		}
+	}
+}
+
 void AHUDBase::ControllDirectionToMouse(AActor* Units, FHitResult Hit)
 {
 	FVector CharacterDirectionVector = Units->GetActorForwardVector();

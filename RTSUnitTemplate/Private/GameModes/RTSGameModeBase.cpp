@@ -90,6 +90,7 @@ void ARTSGameModeBase::SetTeamIds_Implementation()
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
 {
+
 	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
 		if (UnitSpawnParameter && HasAuthority())
@@ -102,21 +103,33 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 				if (SpawnParameterPtr) 
 				{
 					FUnitSpawnParameter SpawnParameter = *SpawnParameterPtr; // Copy the struct
-				
+
+
 					// Use a weak pointer for the GameMode to ensure it's still valid when the timer fires
 					TWeakObjectPtr<ARTSGameModeBase> WeakThis(this);
 				
 					// Set the timer
 					if (SpawnParameter.ShouldLoop)
 					{
+	
+
+						auto TimerCallback = [WeakThis, SpawnParameter, Location, UnitToChase]()
+						{
+							// Check if the GameMode is still valid
+							if (!WeakThis.IsValid()) return;
+
+							// Now call SpawnUnits_Implementation with all the parameters
+							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase);
+						};
+						/*
 						// Use SpawnParameter by value in the lambda
 						auto TimerCallback = [WeakThis, SpawnParameter, Location, UnitToChase]()
 						{
 							// Check if the GameMode is still valid
 							if (!WeakThis.IsValid()) return;
 
-							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase, 0, nullptr);
-						};
+							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase, 0, nullptr, 0, nullptr, -1);
+						};*/
 					
 						FTimerHandle TimerHandle;
 						//SpawnTimerHandles.Add(TimerHandle);
@@ -129,14 +142,35 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 						SpawnTimerHandleMap.Add(TimerMap);
 						TimerIndex++;
 					}
-
-			
 				}
 
 			}
 		}
 	}
 }
+
+void ARTSGameModeBase::SetupUnitsFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase, const TArray<class UDataTable*>& UnitTable) // , int TeamId , const FString& WaypointTag, int32 UnitIndex, AUnitBase* SummoningUnit, int SummonIndex
+{
+	for (UDataTable* UnitSpawnParameter : UnitTable)
+	{
+		if (UnitSpawnParameter && HasAuthority())
+		{
+			TArray<FName> RowNames = UnitSpawnParameter->GetRowNames();
+			for (const FName& RowName : RowNames)
+			{
+				FUnitSpawnParameter* SpawnParameterPtr = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
+
+				if (SpawnParameterPtr) 
+				{
+					FUnitSpawnParameter SpawnParameter = *SpawnParameterPtr; // Copy the struct
+					SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase);
+				}
+
+			}
+		}
+	}
+}
+
 FTimerHandleMapping ARTSGameModeBase::GetTimerHandleMappingById(int32 SearchId)
 {
 	for (FTimerHandleMapping& TimerMap : SpawnTimerHandleMap)
@@ -161,7 +195,7 @@ void ARTSGameModeBase::SetSkipTimerMappingById(int32 SearchId, bool Value)
 	}
 }
 
-void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
+void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase) // , int TeamId, AWaypoint* Waypoint
 {
 	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
@@ -173,8 +207,7 @@ void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBas
 				FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
 				if (SpawnParameter && SpawnParameter->Id == id)
 				{
-			
-					SpawnUnits_Implementation(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+					SpawnUnits_Implementation(*SpawnParameter, Location, UnitToChase);
 				}
 			}
 		}
@@ -201,6 +234,54 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Locati
 		}
 	}
 	return nullptr;
+}
+
+bool ARTSGameModeBase::IsUnitWithIndexDead(int32 UnitIndex)
+{
+	for (int32 i = UnitSpawnDataSets.Num() - 1; i >= 0; --i)
+	{
+		FUnitSpawnData& UnitData = UnitSpawnDataSets[i];
+	
+		// Assuming AUnitBase has a method to check if the unit is dead
+		if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead && UnitData.UnitBase->UnitIndex == UnitIndex)
+		{
+			// Check if the index is not already in the array
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ARTSGameModeBase::RemoveDeadUnitWithIndexFromDataSet(int32 UnitIndex)
+{
+	for (int32 i = UnitSpawnDataSets.Num() - 1; i >= 0; --i)
+	{
+		FUnitSpawnData& UnitData = UnitSpawnDataSets[i];
+	
+			// Assuming AUnitBase has a method to check if the unit is dead
+			if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead && UnitData.UnitBase->UnitIndex == UnitIndex)
+			{
+				// Check if the index is not already in the array
+			
+				//UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
+				UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+	
+				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+
+				if(PlayerController)
+				{
+					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+					if(HUD)
+					{
+						HUD->AllUnits.Remove(UnitData.UnitBase);
+					}
+				}
+				
+				UnitSpawnDataSets.RemoveAt(i);
+				return true;
+			}
+		}
+	return false;
 }
 
 int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
@@ -235,6 +316,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 						HUD->AllUnits.Remove(UnitData.UnitBase);
 					}
 				}
+				
 				UnitSpawnDataSets.RemoveAt(i);
 			}
 			else //if (UnitData.Id == SpawnParaId)
@@ -357,7 +439,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 }
 
 
-void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
+void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase) // , int TeamId, AWaypoint* Waypoint, int32 UnitIndex, AUnitBase* SummoningUnit, int SummonIndex
 {
 	
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
@@ -397,7 +479,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		
 		if (UnitBase != nullptr)
 		{
-			if(UnitBase->UnitToChase)
+			if(UnitToChase != nullptr)
 			{
 				UnitBase->UnitToChase = UnitToChase;
 				UnitBase->SetUnitState(UnitData::Chase);
@@ -414,15 +496,10 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			{
 				UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
 			}
-
+			
 			if (SpawnParameter.TeamId)
 			{
 				UnitBase->TeamId = SpawnParameter.TeamId;
-			}
-			
-			if(TeamId)
-			{
-				UnitBase->TeamId = TeamId;
 			}
 
 			UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
@@ -438,11 +515,12 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			
 			AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
 
-
-			if(Waypoint)
+			/*
+			if(Waypoint != nullptr)
 			{
 				UnitBase->NextWaypoint = Waypoint;
-			}
+			}*/
+			
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 
@@ -461,13 +539,28 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		
 			UnitBase->InitializeAttributes();
 
-			int32 Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
-			AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
+			int32 Index;
 			
+			Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
+			AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
+
+			/*
+			if(SummoningUnit != nullptr && SummonIndex != -1) // SummoningUnit->SummonedUnitsIndexes.Num()
+			{
+				UE_LOG(LogTemp, Log, TEXT("SummoningUnit->SummonedUnitsIndexes.Num() = %d"), SummoningUnit->SummonedUnitsIndexes.Num());
+				UE_LOG(LogTemp, Log, TEXT("SummonIndex = %d"), SummonIndex);
+				// This is not needed then ?
+				SummoningUnit->SummonedUnitsIndexes[SummonIndex] = UnitBase->UnitIndex;
+
+				// Perhaps do better this ?
+				SummoningUnit->SummonedUnits.Add(UnitBase);;
+			}
+			*/
 			FUnitSpawnData UnitSpawnDataSet;
 			UnitSpawnDataSet.Id = SpawnParameter.Id;
 			UnitSpawnDataSet.UnitBase = UnitBase;
 			UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+	
 			UnitSpawnDataSets.Add(UnitSpawnDataSet);
 			
 		}

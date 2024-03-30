@@ -120,8 +120,10 @@ void AProjectile::Tick(float DeltaTime)
 			Mesh->AddLocalRotation(NewRotation);
 		}
 	}
-	
 	if(LifeTime > MaxLifeTime)
+	{
+		Destroy(true, false);
+	}else if(LifeTime > MaxLifeTime && FollowTarget)
 	{
 		Impact(Target);
 		Destroy(true, false);
@@ -138,7 +140,7 @@ void AProjectile::Tick(float DeltaTime)
 			}
 		}else if(FollowTarget)
 		{
-			Destroy(true, false);
+				Destroy(true, false);
 		}else
 		{
 				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
@@ -147,7 +149,7 @@ void AProjectile::Tick(float DeltaTime)
 
 		// Calculate the distance between the projectile and the target
 		float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-		if(DistanceToTarget <= MovementSpeed)
+		if(DistanceToTarget <= MovementSpeed && FollowTarget)
 		{
 			Impact(Target);
 			Destroy(true, false);
@@ -283,6 +285,7 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 	if(UnitToHit->GetUnitState() != UnitData::Run &&
 		UnitToHit->GetUnitState() != UnitData::Attack &&
 		UnitToHit->GetUnitState() != UnitData::Casting &&
+		UnitToHit->GetUnitState() != UnitData::Rooted &&
 		UnitToHit->GetUnitState() != UnitData::Pause)
 	{
 		UnitToHit->UnitControlTimer = 0.f;
@@ -290,6 +293,9 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 	}else if(UnitToHit->GetUnitState() == UnitData::Casting)
 	{
 		UnitToHit->UnitControlTimer -= UnitToHit->ReduceCastTime;
+	}else if(UnitToHit->GetUnitState() == UnitData::Rooted)
+	{
+		UnitToHit->UnitControlTimer -= UnitToHit->ReduceRootedTime;
 	}
 }
 
