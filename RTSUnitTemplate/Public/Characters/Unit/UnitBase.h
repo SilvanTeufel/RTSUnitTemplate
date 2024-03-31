@@ -203,6 +203,9 @@ public:
 	FVector RandomPatrolLocation;
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float LineTraceZDistance = 80.f;
+	
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EvadeDistance = 70.f;
 /////////////////////////////
 
@@ -286,7 +289,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	int SpawnUnitsFromParameters(
 TSubclassOf<class AAIController> AIControllerBaseClass,
-TSubclassOf<class AUnitBase> UnitBaseClass, FRotator HostMeshRotation, FVector Location,
+TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
 int NewTeamId, AWaypoint* Waypoint, int UIndex);

@@ -36,6 +36,9 @@ public:
 	void GoToBuild(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector GetGroundLocation(FVector ALocation, AUnitBase* UnitBase);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Build(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

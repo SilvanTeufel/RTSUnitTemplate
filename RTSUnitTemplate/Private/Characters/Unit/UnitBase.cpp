@@ -459,7 +459,7 @@ bool AUnitBase::SetNextUnitToChase()
 
 int AUnitBase::SpawnUnitsFromParameters(
 TSubclassOf<class AAIController> AIControllerBaseClass,
-TSubclassOf<class AUnitBase> UnitBaseClass, FRotator HostMeshRotation, FVector Location,
+TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
 int NewTeamId, AWaypoint* Waypoint, int UIndex)
@@ -471,6 +471,8 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 	SpawnParameter.ServerMeshRotation = HostMeshRotation;
 	SpawnParameter.State = UState;
 	SpawnParameter.StatePlaceholder = UStatePlaceholder;
+	SpawnParameter.Material = Material;
+	SpawnParameter.CharacterMesh = CharacterMesh;
 	// Waypointspawn
 
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
@@ -500,6 +502,16 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 	
 	if (UnitBase != nullptr)
 	{
+
+		if (SpawnParameter.CharacterMesh)
+		{
+			UnitBase->MeshAssetPath = SpawnParameter.CharacterMesh->GetPathName();
+		}
+		
+		if (SpawnParameter.Material)
+		{
+			UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
+		}
 		
 		if(NewTeamId)
 		{

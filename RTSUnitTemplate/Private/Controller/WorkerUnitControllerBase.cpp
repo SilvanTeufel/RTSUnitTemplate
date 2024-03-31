@@ -340,7 +340,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
 	{
 		UnitBase->UnitControlTimer = 0.f;
-		UnitBase->SetUEPathfinding = false;
+		UnitBase->SetUEPathfinding = true;
 	}
 
 	if(!UnitBase->SetUEPathfinding)
@@ -349,9 +349,41 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	const FVector BaseLocation = UnitBase->BuildArea->GetActorLocation();
 
+	//BaseLocation = GetGroundLocation(BaseLocation, UnitBase);
+	
 	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }
 
+
+
+FVector AWorkerUnitControllerBase::GetGroundLocation(FVector ALocation, AUnitBase* UnitBase)
+{
+	while(true)
+	{
+
+		// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
+		const FVector Start = FVector(ALocation.X, ALocation.Y, ALocation.Z + UnitBase->LineTraceZDistance);  // Start from a point high above the PatrolCloseLocation
+		const FVector End = FVector(ALocation.X, ALocation.Y, ALocation.Z - UnitBase->LineTraceZDistance);  // End at a point below the PatrolCloseLocation
+
+		FHitResult HitResult;
+		FCollisionQueryParams CollisionParams;
+		CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
+		{
+			AActor* HitActor = HitResult.GetActor();
+
+			// Check if we hit the landscape
+			if (HitActor && HitActor->IsA(ALandscape::StaticClass()) )
+			{
+				// Hit landscape
+				// Set the Z-coordinate accordingly
+				//UnitBase->RandomPatrolLocation.Z = HitResult.ImpactPoint.Z;
+				return HitResult.ImpactPoint;
+			}
+		}
+	}
+}
 void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)

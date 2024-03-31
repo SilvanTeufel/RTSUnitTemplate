@@ -551,17 +551,11 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 	//UnitBase->UnitControlTimer += DeltaSeconds;
     // Check for immediate collision with an enemy unit.
     if(UnitBase->CollisionUnit 
-       && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+       && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId)
     {
-    	if(UnitBase->CollisionUnit->TeamId != UnitBase->TeamId)
-    	{
     		UnitBase->UnitToChase = UnitBase->CollisionUnit;
     		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
     		UnitBase->CollisionUnit = nullptr;
-    	}else if(UnitBase->CollisionUnit->TeamId == UnitBase->TeamId)
-    	{
-    		UnitBase->SetUnitState(UnitData::EvasionChase);
-    	}
     } else if (!UnitBase->SetNextUnitToChase()) // If no unit is being chased, try to find one, otherwise set the pathfinding.
     {
         UnitBase->SetUEPathfinding = true;
@@ -588,6 +582,12 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
         }
         else
         {
+        	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead &&UnitBase->CollisionUnit->TeamId == UnitBase->TeamId)
+        	{
+        		UnitBase->SetUnitState(UnitData::EvasionChase);
+        		return;
+        	}
+        	
             // If the target is flying and we're not, check if we should idle.
             if(UnitBase->UnitToChase->IsFlying && !UnitBase->IsFlying 
                && DistanceToUnitToChase > UnitBase->StopRunToleranceForFlying)
@@ -1003,8 +1003,8 @@ void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 		FVector(UnitBase->NextWaypoint->PatrolCloseOffset.X, UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0)));
 
 		// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
-		const FVector Start = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
-		const FVector End = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
+		const FVector Start = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z + UnitBase->LineTraceZDistance);  // Start from a point high above the PatrolCloseLocation
+		const FVector End = FVector(UnitBase->RandomPatrolLocation.X, UnitBase->RandomPatrolLocation.Y, UnitBase->RandomPatrolLocation.Z - UnitBase->LineTraceZDistance);  // End at a point below the PatrolCloseLocation
 
 		FHitResult HitResult;
 		FCollisionQueryParams CollisionParams;
