@@ -34,20 +34,23 @@ void ABuildingControllerBase::BuildingControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Attack:
 		{
+				AutoExecuteAbilitys(UnitBase, DeltaSeconds);
 			Attack(UnitBase, DeltaSeconds);
+				
 		}
 		break;
 		case UnitData::Pause:
 		{
+				AutoExecuteAbilitys(UnitBase, DeltaSeconds);
 			Pause(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Casting:
-			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-				CastingUnit(UnitBase, DeltaSeconds);
-			}
-			break;
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			CastingUnit(UnitBase, DeltaSeconds);
+		}
+		break;
 		case UnitData::Idle:
 		{
 
@@ -95,7 +98,7 @@ void ABuildingControllerBase::CastingUnit(AUnitBase* UnitBase, float DeltaSecond
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
 		if (UnitBase->ActivatedAbilityInstance)
-		UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;
@@ -107,7 +110,7 @@ void ABuildingControllerBase::AutoExecuteAbilitys(AUnitBase* UnitBase, float Del
 {
 
 	UnitBase->UnitControlTimer += DeltaSeconds;
-	if(UnitBase->UnitControlTimer >= ExecutenDelayTime)
+	if(UnitBase->UnitControlTimer >= ExecutenDelayTime || UnitBase->UnitControlTimer == 0.f)
 	{
 		UnitBase->UnitControlTimer = 0.f;
 		

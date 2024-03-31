@@ -802,21 +802,25 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, FVector CollisionLocation)
 {
+	// Ensure the unit runs at its designated run speed.
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 				
+	// Adjust collision location for flying units.
 	if(UnitBase->IsFlying)
 	{
-		CollisionLocation = FVector(CollisionLocation.X, CollisionLocation.Y, UnitBase->FlyHeight);
+		CollisionLocation.Z = UnitBase->FlyHeight;
 	}
 	
-	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
-	const FVector RotatedDirection = FRotator(0.f,60.f,0.f).RotateVector(-1*ADirection);
+	//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
+	FVector AwayDirection = (UnitLocation - CollisionLocation).GetSafeNormal();
+	const FVector RotatedDirection = FRotator(0.f,90.f,0.f).RotateVector(AwayDirection);
 	UnitBase->AddMovementInput(RotatedDirection, UnitBase->Attributes->GetRunSpeedScale());
 
-	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
-
+	// Simplify distance calculation using FVector::Dist.
+	float Distance = FVector::Dist(UnitLocation, CollisionLocation);
+	
 	if (Distance >= UnitBase->EvadeDistance) {
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);

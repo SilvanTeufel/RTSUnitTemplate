@@ -39,4 +39,7 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
 	FLinearColor PauseColor = FLinearColor::Yellow;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	FLinearColor BuildColor = FLinearColor::Black;
 };

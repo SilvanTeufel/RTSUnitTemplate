@@ -170,6 +170,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
+		case UnitData::EvasionChase:
 		case UnitData::Evasion:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));

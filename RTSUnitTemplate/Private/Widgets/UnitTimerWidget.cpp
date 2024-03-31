@@ -3,6 +3,7 @@
 
 #include "Widgets/UnitTimerWidget.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include <Components/ProgressBar.h>
 
 void UUnitTimerWidget::NativeConstruct()
@@ -27,6 +28,14 @@ void UUnitTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	
 	switch (UnitBase->GetUnitState())
 	{
+	case UnitData::Build:
+		{
+			IsVisible = true;
+			AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
+			TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->BuildArea->BuildTime);
+			TimerBar->SetFillColorAndOpacity(BuildColor);
+		}
+		break;
 	case UnitData::Casting:
 		{
 			IsVisible = true;
