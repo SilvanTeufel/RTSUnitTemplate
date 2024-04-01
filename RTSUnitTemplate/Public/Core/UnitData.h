@@ -6,6 +6,8 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/DataTable.h"
 #include "Sound/SoundBase.h"
+#include "Engine/SkeletalMesh.h"
+#include "Materials/MaterialInstance.h"
 #include "UnitData.generated.h"
 
 

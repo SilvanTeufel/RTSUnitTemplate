@@ -1144,29 +1144,18 @@ void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* 
 	PendingUnit = Unit;
 	PendingDestination = DestinationLocation;
 
+	/*
 	bool bIsHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, CollisionParams);
 	if (bIsHit && HitResult.GetActor() && HitResult.GetActor()->IsA<AUnitBase>())
 	{
-		UE_LOG(LogTemp, Log, TEXT("IsHit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! AdjustMove"));
 		// Adjust route
 		FVector AvoidanceDirection = FVector::CrossProduct(FVector::UpVector, (EndLocation - StartLocation).GetSafeNormal());
-		EndLocation = StartLocation + AvoidanceDirection * 1000.0f; // Adjust by 100 units to the right
+		EndLocation = StartLocation + AvoidanceDirection * 100.0f; // Adjust by 100 units to the right
 
-		//FAIMoveRequest AdjustedMoveRequest;
-		//AdjustedMoveRequest.SetGoalLocation(AdjustedLocation);
-		//AdjustedMoveRequest.SetAcceptanceRadius(5.0f);
-
-		//FNavPathSharedPtr AdjustedNavPath;
-		//MoveTo(AdjustedMoveRequest, &AdjustedNavPath);
 		// Optionally, after reaching the adjusted location, move to the original destination
 		// This could be done by setting a delegate for when the path to AdjustedLocation completes
 		OnMoveCompleted.AddDynamic(this, &AUnitControllerBase::OnAdjustedMoveCompleted);
-		//OnMoveCompleted.BindUObject(this, &AUnitControllerBase::OnAdjustedMoveCompleted);
-		//return; // Return early to avoid moving directly to the destination below
-	}else
-	{
-		UE_LOG(LogTemp, Log, TEXT("Is not Hit!"));
-	}
+	}*/
 
 
 

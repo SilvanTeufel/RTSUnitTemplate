@@ -46,15 +46,13 @@ public:
 	
 	void OnAdjustedMoveCompleted(FAIRequestID RequestID, const EPathFollowingResult::Type Result)
 	{
-		UE_LOG(LogTemp, Log, TEXT("OnAdjustedMoveCompleted!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 		if(PendingUnit &&  Result == EPathFollowingResult::Success) //  Result.IsSuccess()
 		{
-			UE_LOG(LogTemp, Log, TEXT("Move completed successfully. Moving to location."));
 			MoveToLocationUEPathFinding(PendingUnit, PendingDestination);
 			// Reset the PendingUnit and PendingDestination to avoid reusing them incorrectly
 			PendingUnit = nullptr;
 		}
-	}
+	};
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "KillUnitBase", Keywords = "RTSUnitTemplate KillUnitBase"), Category = RTSUnitTemplate)
 		void KillUnitBase(AUnitBase* UnitBase);
