@@ -234,6 +234,18 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::Patrol:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+				APlayerController* PC = GetWorld()->GetFirstPlayerController();
+				if (PC)
+				{
+					AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+					if (MyHUD)
+					{
+						TArray<AActor*> DetectedUnits;
+						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+						OnUnitDetected(DetectedUnits);
+					}
+				}
 				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -254,20 +266,16 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
 						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
 						OnUnitDetected(DetectedUnits);
-						// Verarbeite die erkannten Einheiten wie gewünscht
-						//for (AUnitBase* DetectedUnit : DetectedUnits)
-						//{
-							// Beispiel: Logge die Namen der erkannten Einheiten
-							//UE_LOG(LogTemp, Warning, TEXT("Detected Unit: %s"), *DetectedUnit->GetName());
-						//}
 					}
 				}
+				
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::Chase);
 				}else
 				{
+					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 					SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
 				}
 
@@ -282,6 +290,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 					UnitBase->SetUnitState(UnitData::Chase);
 				}else
 				{
+					UnitBase->SetWalkSpeed(0);
 					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 				
 					if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
@@ -458,10 +467,10 @@ bool AUnitControllerBase::IsUnitToChaseInRange(AUnitBase* UnitBase)
 void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	//UnitBase->SetWalkSpeed(0);
-				
+	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
-	FVector ActorLocation = UnitBase->GetActorLocation();
+	//FVector ActorLocation = UnitBase->GetActorLocation();
 
 	UnitBase->SpawnPickupsArray();
 	//UnitBase->SetActorLocation(FVector(ActorLocation.X + 0.f,ActorLocation.Y + 0.f,ActorLocation.Z -1.f));
@@ -517,6 +526,19 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC)
+		{
+			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+			if (MyHUD)
+			{
+				TArray<AActor*> DetectedUnits;
+				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+				OnUnitDetected(DetectedUnits);
+			}
+		}
+		
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);

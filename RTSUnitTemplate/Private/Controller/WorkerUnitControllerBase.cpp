@@ -106,6 +106,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 					UnitBase->SetUnitState(UnitData::Chase);
 				}else
 				{
+					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 					UnitBase->UnitControlTimer = 0.f;
 					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::GoToBase);
@@ -123,7 +124,8 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 				}else
 				{
 					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
-				
+
+					UnitBase->SetWalkSpeed(0);
 					if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
 					{
 						UnitBase->UnitControlTimer = 0.f;
@@ -254,7 +256,7 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 {
 	if(!UnitBase || !UnitBase->ResourcePlace) return;
 
-	
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUnitState(UnitData::Evasion);
@@ -282,6 +284,7 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 {
 	if(!UnitBase || !UnitBase->ResourcePlace) return;
 
+	UnitBase->SetWalkSpeed(0);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
 	{
@@ -296,6 +299,8 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 {
 	if(!UnitBase || !UnitBase->Base) return;
 
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUnitState(UnitData::Evasion);
@@ -328,6 +333,8 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		return;
 	}
 
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -394,6 +401,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		return;
 	}
 
+	UnitBase->SetWalkSpeed(0);
 	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)

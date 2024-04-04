@@ -42,6 +42,20 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 	case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+			APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			if (PC)
+			{
+				AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+				if (MyHUD)
+				{
+					TArray<AActor*> DetectedUnits;
+					// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+					MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+					OnUnitDetected(DetectedUnits);
+				}
+			}
+
+			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				HealPatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -51,11 +65,25 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 	case UnitData::PatrolRandom:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+			APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			if (PC)
+			{
+				AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+				if (MyHUD)
+				{
+					TArray<AActor*> DetectedUnits;
+					// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+					MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+					OnUnitDetected(DetectedUnits);
+				}
+			}
+			
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
 			}else
 			{
+				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
 			}
 
@@ -69,6 +97,8 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 				UnitBase->SetUnitState(UnitData::Chase);
 			}else
 			{
+				UnitBase->SetWalkSpeed(0);
+				
 				UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 				
 				if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
@@ -115,6 +145,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
+	case UnitData::EvasionChase:
 	case UnitData::Evasion:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
@@ -314,8 +345,22 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		return;
 	}
 	
-	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
+
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC)
+		{
+			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+			if (MyHUD)
+			{
+				TArray<AActor*> DetectedUnits;
+				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+				OnUnitDetected(DetectedUnits);
+			}
+		}
+		
 		if(UnitBase->SetNextUnitToChaseHeal())
 		{
 			UnitBase->SetUEPathfinding = true;
@@ -355,8 +400,21 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		return;
 	}
 	
-	if(UnitBase->ToggleUnitDetection && UnitBase->UnitToChase)
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC)
+		{
+			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+			if (MyHUD)
+			{
+				TArray<AActor*> DetectedUnits;
+				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+				OnUnitDetected(DetectedUnits);
+			}
+		}
+		
 		if(UnitBase->SetNextUnitToChaseHeal())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);

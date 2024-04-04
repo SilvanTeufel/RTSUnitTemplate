@@ -22,11 +22,13 @@ AWorkArea::AWorkArea()
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
 
+
 	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
 	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerCapsule->SetupAttachment(RootComponent);
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
+
 	
 	if (HasAuthority())
 	{
@@ -125,7 +127,7 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 	
 			if(Worker->WorkResource)
 			{
-				ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount); // Assuming 1.0f as the resource amount to add
+				ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
 				DespawnWorkResource(UnitBase->WorkResource);
 			}
 	
@@ -237,9 +239,9 @@ void AWorkArea::DespawnWorkResource(AWorkResource* WorkResource)
 {
 	if (WorkResource != nullptr)
 	{
-		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		WorkResource->Destroy();
 		WorkResource = nullptr;
+		//WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	}
 }
 

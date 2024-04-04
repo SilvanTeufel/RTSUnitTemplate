@@ -42,4 +42,7 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
 	FLinearColor BuildColor = FLinearColor::Black;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	FLinearColor ExtractionColor = FLinearColor::Black;
 };

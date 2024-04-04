@@ -36,6 +36,14 @@ void UUnitTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 			TimerBar->SetFillColorAndOpacity(BuildColor);
 		}
 		break;
+	case UnitData::ResourceExtraction:
+		{
+			IsVisible = true;
+			AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
+			TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->ResourceExtractionTime);
+			TimerBar->SetFillColorAndOpacity(ExtractionColor);
+		}
+		break;
 	case UnitData::Casting:
 		{
 			IsVisible = true;
