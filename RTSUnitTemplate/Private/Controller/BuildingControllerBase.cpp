@@ -35,14 +35,14 @@ void ABuildingControllerBase::BuildingControlStateMachine(float DeltaSeconds)
 		case UnitData::Attack:
 		{
 				AutoExecuteAbilitys(UnitBase, DeltaSeconds);
-			Attack(UnitBase, DeltaSeconds);
+			AttackBuilding(UnitBase, DeltaSeconds);
 				
 		}
 		break;
 		case UnitData::Pause:
 		{
 				AutoExecuteAbilitys(UnitBase, DeltaSeconds);
-			Pause(UnitBase, DeltaSeconds);
+			PauseBuilding(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Casting:
@@ -61,6 +61,20 @@ void ABuildingControllerBase::BuildingControlStateMachine(float DeltaSeconds)
 				UnitBase->CollisionUnit = nullptr;
 			}
 
+				APlayerController* PC = GetWorld()->GetFirstPlayerController();
+				if (PC)
+				{
+					AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+					if (MyHUD)
+					{
+						TArray<AActor*> DetectedUnits;
+						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+						OnUnitDetected(DetectedUnits);
+					}
+				}
+		
+				
 			if(UnitBase->UnitsToChase.Num())
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
@@ -72,6 +86,13 @@ void ABuildingControllerBase::BuildingControlStateMachine(float DeltaSeconds)
 
 		}
 		break;
+		case UnitData::PatrolIdle:
+		case UnitData::PatrolRandom:
+		case UnitData::Patrol:
+			{
+				PatrolRandomBuilding(UnitBase, DeltaSeconds);
+			}
+			break;
 		default:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("default Idle"));
@@ -92,7 +113,6 @@ void ABuildingControllerBase::CastingUnit(AUnitBase* UnitBase, float DeltaSecond
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
 	UnitBase->SetWalkSpeed(0);
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
@@ -100,7 +120,7 @@ void ABuildingControllerBase::CastingUnit(AUnitBase* UnitBase, float DeltaSecond
 		if (UnitBase->ActivatedAbilityInstance)
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
 		
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+		UnitBase->SetWalkSpeed(0);
 		UnitBase->UnitControlTimer = 0.f;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 	}
@@ -172,4 +192,134 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
             LoseUnitToChase(UnitBase);
         }
     }
+}
+
+void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (PC)
+	{
+		AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+		if (MyHUD)
+		{
+			TArray<AActor*> DetectedUnits;
+			// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
+			MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
+			OnUnitDetected(DetectedUnits);
+		}
+	}
+				
+	if(UnitBase->SetNextUnitToChase())
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+	}
+}
+
+
+void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	UnitBase->SetWalkSpeed(0);
+	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
+
+	if(UnitBase->SetNextUnitToChase())
+	{
+		
+		if (UnitBase->UnitControlTimer > AttackDuration + UnitBase->PauseDuration) {
+		
+			if(!UnitBase->UseProjectile )
+			{
+				// Attack without Projectile
+				if(IsUnitToChaseInRange(UnitBase))
+				{
+					//UE_LOG(LogTemp, Warning, TEXT("Unit is in Range, Attack without Projectile!"));
+					float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
+			
+					if(UnitBase->IsDoingMagicDamage)
+						NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetMagicResistance();
+				
+					if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
+						UnitBase->UnitToChase->SetHealth(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
+					else
+						UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+
+					UnitBase->LevelData.Experience++;
+
+					UnitBase->ServerMeeleImpactEvent();
+					UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID, UnitBase->UnitToChase->DefensiveAbilities);
+				
+					if (!UnitBase->UnitToChase->UnitsToChase.Contains(UnitBase))
+					{
+						// If not, add UnitBase to the array
+						UnitBase->UnitToChase->UnitsToChase.Emplace(UnitBase);
+						UnitBase->UnitToChase->SetNextUnitToChase();
+					}
+				
+					if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run &&
+						UnitBase->UnitToChase->GetUnitState() != UnitData::Attack &&
+						UnitBase->UnitToChase->GetUnitState() != UnitData::Casting &&
+						UnitBase->UnitToChase->GetUnitState() != UnitData::Rooted &&
+						UnitBase->UnitToChase->GetUnitState() != UnitData::Pause)
+					{
+						UnitBase->UnitToChase->UnitControlTimer = 0.f;
+						UnitBase->UnitToChase->SetUnitState( UnitData::IsAttacked );
+					}else if(UnitBase->UnitToChase->GetUnitState() == UnitData::Casting)
+					{
+						UnitBase->UnitToChase->UnitControlTimer -= UnitBase->UnitToChase->ReduceCastTime;
+					}else if(UnitBase->UnitToChase->GetUnitState() == UnitData::Rooted)
+					{
+						UnitBase->UnitToChase->UnitControlTimer -= UnitBase->UnitToChase->ReduceRootedTime;
+					}
+				}else
+				{
+					UnitBase->SetUnitState( UnitData::Chase );
+				}
+			}
+
+			ProjectileSpawned = false;
+			UnitBase->UnitControlTimer = 0.f;
+			UnitBase->SetUnitState( UnitData::Pause);
+		}
+	}else
+	{
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+	}
+}
+
+
+void ABuildingControllerBase::PauseBuilding(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	UnitBase->SetWalkSpeed(0);
+				
+	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
+	
+	if(!UnitBase->SetNextUnitToChase()) {
+
+		//if(UnitBase->SetNextUnitToChase()) return;
+
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState( UnitBase->UnitStatePlaceholder );
+				
+	} else if (UnitBase->UnitControlTimer > UnitBase->PauseDuration) {
+		
+		ProjectileSpawned = false;
+		UnitBase->SetUnitState(UnitData::Chase);
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+		
+		if (IsUnitToChaseInRange(UnitBase)) {
+				UnitBase->ServerStartAttackEvent_Implementation();
+				UnitBase->SetUnitState(UnitData::Attack);
+
+				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+				UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+				if(UnitBase->Attributes->GetRange() >= 600.f) UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+
+			
+				CreateProjectile(UnitBase);
+		}else
+		{
+			UnitBase->SetUnitState(UnitData::Chase);
+		}
+		
+	}
 }

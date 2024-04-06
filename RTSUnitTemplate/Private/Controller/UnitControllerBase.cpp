@@ -50,7 +50,7 @@ void AUnitControllerBase::BeginPlay()
 	
 	if (UAIPerceptionComponent* PerceptionComp = GetPerceptionComponent())
 	{
-			UE_LOG(LogTemp, Warning, TEXT("All Systems Set"));
+			//UE_LOG(LogTemp, Warning, TEXT("All Systems Set"));
 			GetPerceptionComponent()->SetComponentTickInterval(0.05f); //
 			PerceptionComp->RequestStimuliListenerUpdate();
 		}
@@ -303,20 +303,20 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			}
 			break;
 		case UnitData::Run:
-		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
-				
-			if(UnitBase->UEPathfindingUsed)
-				RunUEPathfinding(UnitBase, DeltaSeconds);
-			else
-				Run(UnitBase, DeltaSeconds);
-		}
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
+					
+				if(UnitBase->UEPathfindingUsed)
+					RunUEPathfinding(UnitBase, DeltaSeconds);
+				else
+					Run(UnitBase, DeltaSeconds);
+			}
 		break;
 		case UnitData::Chase:
-		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
-			Chase(UnitBase, DeltaSeconds);
-		}
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
+				Chase(UnitBase, DeltaSeconds);
+			}
 		break;
 		case UnitData::Attack:
 		{
@@ -396,16 +396,16 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			}
 			break;
 		case UnitData::Idle:
-		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-			Idle(UnitBase, DeltaSeconds);
-		}
+			{
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				Idle(UnitBase, DeltaSeconds);
+			}
 		break;
 		default:
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("default Idle"));
-			UnitBase->SetUnitState(UnitData::Idle);
-		}
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("default Idle"));
+				UnitBase->SetUnitState(UnitData::Idle);
+			}
 		break;
 		}
 }
@@ -604,7 +604,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
         }
         else
         {
-        	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead &&UnitBase->CollisionUnit->TeamId == UnitBase->TeamId)
+        	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId)
         	{
         		UnitBase->SetUnitState(UnitData::EvasionChase);
         		return;
@@ -1187,7 +1187,7 @@ void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* 
 	// Move the unit to the destination location using the navigation system
 	FAIMoveRequest MoveRequest;
 	MoveRequest.SetGoalLocation(EndLocation);
-	MoveRequest.SetAcceptanceRadius(5.0f); // Set an acceptance radius for reaching the destination
+	MoveRequest.SetAcceptanceRadius(AcceptanceRadius); // Set an acceptance radius for reaching the destination
 	
 	FNavPathSharedPtr NavPath;
 	

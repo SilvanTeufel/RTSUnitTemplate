@@ -271,6 +271,19 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 		UnitBase->SetUEPathfinding = true;
 	}
 
+	// Check if Base is allready in Range /////////////////////////////
+	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
+	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->ResourcePlace->GetActorLocation()) - Worker->ResourcePlace->GetSimpleCollisionRadius();
+	
+	// Check Distance between Worker and Base
+	if (DistanceToBase <= ResourceAreaArrivalDistance)
+	{
+		Worker->ResourcePlace->HandleResourceExtractionArea(Worker, UnitBase);
+		return;
+	}
+	// Check if Base is allready in Range /////////////////////////////
+
+	
 	if(!UnitBase->SetUEPathfinding)
 		return;
 	
@@ -307,6 +320,22 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		UnitBase->UnitStatePlaceholder = UnitData::GoToBase;
 		return;
 	}
+
+	// Check if Base is allready in Range /////////////////////////////
+	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	const bool CanAffordConstruction = Worker->BuildArea? Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+
+	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->Base->GetActorLocation()) - Worker->Base->GetSimpleCollisionRadius();
+
+
+	// Check Distance between Worker and Base
+	if (DistanceToBase <= BaseArrivalDistance)
+	{
+		Worker->Base->HandleBaseArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
+		return;
+	}
+	// Check if Base is allready in Range /////////////////////////////
 	
 	UnitBase->UnitControlTimer+= DeltaSeconds;
 	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
@@ -350,6 +379,22 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		UnitBase->UnitControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 	}
+
+
+	// Check if Base is allready in Range /////////////////////////////
+	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	const bool CanAffordConstruction = Worker->BuildArea? Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+
+	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->BuildArea->GetActorLocation()) - Worker->BuildArea->GetSimpleCollisionRadius();
+	
+	// Check Distance between Worker and Base
+	if (DistanceToBase <= BuildAreaArrivalDistance)
+	{
+		Worker->BuildArea->HandleBuildArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
+		return;
+	}
+	// Check if Base is allready in Range /////////////////////////////
 
 	if(!UnitBase->SetUEPathfinding)
 		return;

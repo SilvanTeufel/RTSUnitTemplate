@@ -202,5 +202,8 @@ public:
 
 	UPROPERTY(BlueprintReadWrite,  Category = RTSUnitTemplate)
 		bool ProjectileSpawned = false;
+	
+	UPROPERTY(BlueprintReadWrite,  Category = RTSUnitTemplate)
+		float AcceptanceRadius = 1.0f;
 };
 

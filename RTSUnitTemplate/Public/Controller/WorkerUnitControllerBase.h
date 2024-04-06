@@ -56,7 +56,17 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResetPathfindingTime = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BuildAreaArrivalDistance = 50.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BaseArrivalDistance = 250.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ResourceAreaArrivalDistance = 50.f;
 };
+
 
 
 
