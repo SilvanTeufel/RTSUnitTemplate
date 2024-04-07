@@ -177,6 +177,12 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 				SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 		}
 		break;
+	case UnitData::Casting:
+		{
+			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			Casting(UnitBase, DeltaSeconds);
+		}
+		break;
 	default: 
 		{
 			UnitBase->SetUnitState(UnitData::Idle);
