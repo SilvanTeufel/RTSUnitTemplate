@@ -165,7 +165,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 
 			if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 			{
-				UnitBase->UnitStatePlaceholder = UnitData::Idle;
+				//UnitBase->UnitStatePlaceholder = UnitData::Idle;
 				UnitBase->RunLocation = UnitBase->GetActorLocation();
 				UnitBase->SetUnitState(UnitData::Evasion);
 			}
