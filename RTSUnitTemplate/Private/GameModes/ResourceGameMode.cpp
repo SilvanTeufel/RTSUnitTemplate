@@ -9,6 +9,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Hud/HUDBase.h"
+#include "Controller/WorkerUnitControllerBase.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -25,19 +26,11 @@ AResourceGameMode::AResourceGameMode()
 void AResourceGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	// Initialize resources for the game
-	//InitializeResources(NumberOfTeams);
-	//InitializeTeamAbilitySystemComponents();
+
 	InitializeTeamResourcesAttributes();
 	GatherWorkAreas();
 
-	/*
-	AResourceGameState* RGState = GetGameState<AResourceGameState>();
-	if (RGState)
-	{
-		RGState->SetTeamResources(TeamResources); 
-	}*/
-	//AssignWorkAreasToWorkers();
+
 }
 
 void AResourceGameMode::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -132,45 +125,7 @@ void AResourceGameMode::ModifyTeamResourceAttributes(int32 TeamId, EResourceType
         }
     }
 }
-/*
-void AResourceGameMode::ModifyTeamWorkerAttributes(int32 TeamId, EResourceType ResourceType, float Amount, UAbilitySystemComponent* AbilitySystemComponent)
-{
-    if (TeamResourceAttributeSets.IsValidIndex(TeamId))
-    {
-        UResourceAttributeSet* AttributeSet = TeamResourceAttributeSets[TeamId];
-        if (AttributeSet)
-        {
-        	//UAbilitySystemComponent* AbilitySystemComponent = TeamAbilitySystemComponents[TeamId]; // Obtain the ASC reference specific to your team/player
 
-        	// Check which resource type is being modified and apply the change
-        	if(AbilitySystemComponent)
-            switch (ResourceType)
-            {
-                case EResourceType::Primary:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetPrimaryWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                case EResourceType::Secondary:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetSecondaryWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                case EResourceType::Tertiary:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetTertiaryWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                case EResourceType::Rare:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetRareWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                case EResourceType::Epic:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetEpicWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                case EResourceType::Legendary:
-                    AbilitySystemComponent->ApplyModToAttributeUnsafe(AttributeSet->GetLegendaryWorkersAttribute(), EGameplayModOp::Additive, Amount);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-}
-*/
 bool AResourceGameMode::CanAffordConstructionAttributes(const FBuildingCost& ConstructionCost, int32 TeamId) const
 {
 	if (TeamId < 0 || TeamId >= TeamResourceAttributeSets.Num())
@@ -277,28 +232,12 @@ void AResourceGameMode::AssignWorkAreasToWorkers()
 		
 		if (!Worker) continue;
 
-		// Assign the closest base
-		Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
-
-		/*
-		// Assign one of the five closest resource places randomly
-		TArray<AWorkArea*> WorkPlaces = GetClosestResourcePlaces(Worker);
-		UE_LOG(LogTemp, Warning, TEXT("BBBBB"));
-
-		AWorkArea* NewResourcePlace = GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
-
-		if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
+		AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
+		if (WorkerController)
 		{
-			SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-			SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
-			Worker->ResourcePlace = NewResourcePlace;
-		}else if(!Worker->ResourcePlace && NewResourcePlace)
-		{
-			SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-			Worker->ResourcePlace = NewResourcePlace;
+			// Assign the closest base
+			Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
 		}
-		*/
-		//Worker->ResourcePlace = Worker->ResourcePlace = GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces); //GetRandomClosestWorkArea(WorkPlaces);
 	}
 }
 
@@ -309,28 +248,7 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 
 	// Assign the closest base
 	Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
-
-	/*
-	// Assign one of the five closest resource places randomly
-	TArray<AWorkArea*> WorkPlaces = GetClosestResourcePlaces(Worker);
-	UE_LOG(LogTemp, Warning, TEXT("WorkPlaces.Num(): %d"), WorkPlaces.Num());
 	
-	AWorkArea* NewResourcePlace = GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
-	UE_LOG(LogTemp, Warning, TEXT("CCCC"));
-	if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SET!A"));
-		SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
-	}else if(!Worker->ResourcePlace && NewResourcePlace)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SET!B"));
-		SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
-	}*/
-	//UE_LOG(LogTemp, Warning, TEXT("CCCC"));
-	//Worker->ResourcePlace = GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces); //GetRandomClosestWorkArea(WorkPlaces);
 }
 
 AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas)
@@ -401,28 +319,18 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 			{
 				if (WorkArea)
 				{
-					//for (EResourceType ResourceType : TEnumRange<EResourceType>())
-					//{
-					
 						EResourceType ResourceType = ConvertToResourceType(WorkArea->Type); // Assume WorkArea has a ResourceType property
 						int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
 						int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType); // Implement this based on your AttributeSet
-					UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), ResourceType);
-					UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"), CurrentWorkers);
-					UE_LOG(LogTemp, Warning, TEXT("MaxWorkers: %d"), MaxWorkers);
+	
 					
 						if (CurrentWorkers < MaxWorkers)
 						{
-							//UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), ResourceType);
-							//UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"), CurrentWorkers);
-							//UE_LOG(LogTemp, Warning, TEXT("MaxWorkers: %d"), MaxWorkers);
 							SuitableWorkAreas.Add(WorkArea);
 						}
-					//}
 				}
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("SuitableWorkAreas found: %d"), SuitableWorkAreas.Num());
 			return GetRandomClosestWorkArea(SuitableWorkAreas);
 
 	// If no suitable WorkArea found
@@ -435,10 +343,46 @@ void AResourceGameMode::SetMaxWorkersForResourceType(int TeamId, EResourceType R
 	UResourceAttributeSet* AttributeSet = TeamResourceAttributeSets[TeamId];
 	
 	if (!AttributeSet) // Check if AttributeSet is valid
-		{
+	{
 		UE_LOG(LogTemp, Warning, TEXT("AttributeSet is null in GetMaxWorkersForResourceType"));
 		return;
+	}
+	
+	TArray<AActor*> TempActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorkingUnitBase::StaticClass(), TempActors);
+	
+	// Correctly use GetWorld()->GetAllActorsOfClass
+
+	int32 TeamWorkerCount = 0;
+	for (AActor* MyActor : TempActors)
+	{
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(MyActor);
+		if (Worker && Worker->TeamId == TeamId)
+		{
+			// Cast the Controller property to AWorkingUnitController
+			AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
+			if (WorkerController)
+			{
+				// This worker has a AWorkingUnitController, proceed as needed
+				TeamWorkerCount++;
+			}
 		}
+	}
+
+	// Count all workers in the AttributeSet from every resource
+	const float AttributeSetWorkerCount = AttributeSet->PrimaryWorkers.GetBaseValue() +
+									AttributeSet->SecondaryWorkers.GetBaseValue() +
+									AttributeSet->TertiaryWorkers.GetBaseValue() +
+									AttributeSet->RareWorkers.GetBaseValue() +
+									AttributeSet->EpicWorkers.GetBaseValue() +
+									AttributeSet->LegendaryWorkers.GetBaseValue();
+	
+	// Check if the total worker count matches and amount is positive
+	if (AttributeSetWorkerCount >= TeamWorkerCount && amount > 0.f)
+	{
+		return; // Exit without modifying the worker count
+	}
+	
 
 	switch (ResourceType)
 	{
@@ -673,93 +617,3 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 
 	return ClosestAreas;
 }
-
-/*
-
-void AResourceGameMode::InitializeResources(int32 InNumberOfTeams)
-{
-	NumberOfTeams = InNumberOfTeams;
-	TeamResources.Empty();
-
-	for(int32 ResourceTypeIndex = 0; ResourceTypeIndex < static_cast<int32>(EResourceType::MAX); ++ResourceTypeIndex)
-	{
-		EResourceType ResourceType = static_cast<EResourceType>(ResourceTypeIndex);
-		TeamResources.Add(FResourceArray(ResourceType, NumberOfTeams));
-	}
-}
-
-
-
-
-float AResourceGameMode::GetResource(int TeamId, EResourceType RType)
-{
-	for (const FResourceArray& ResourceArray : TeamResources)
-	{
-		if (ResourceArray.Resources.IsValidIndex(TeamId) && ResourceArray.ResourceType == RType)
-		{
-			return ResourceArray.Resources[TeamId];
-		}
-	}
-	return 0;
-}
-
-
-// Adjusting the ModifyResource function to use the ResourceType within FResourceArray
-void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType, int32 TeamId, float Amount)
-{
-	for (FResourceArray& ResourceArray : TeamResources)
-	{
-		if (ResourceArray.ResourceType == ResourceType)
-		{
-			if (TeamId >= 0 && TeamId < ResourceArray.Resources.Num())
-			{
-				ResourceArray.Resources[TeamId] += Amount;
-				break; // Exit once the correct resource type is modified
-			}
-		}
-	}
-
-	AResourceGameState* RGState = GetGameState<AResourceGameState>();
-	if (RGState)
-	{
-		RGState->SetTeamResources(TeamResources);
-	}
-}
-
-bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const
-{
-
-	if (TeamId < 0 || TeamId >= NumberOfTeams)
-		return false;
-
-	// Initialize a map to store the total costs for easy comparison
-	TMap<EResourceType, int32> Costs;
-	Costs.Add(EResourceType::Primary, ConstructionCost.PrimaryCost);
-	Costs.Add(EResourceType::Secondary, ConstructionCost.SecondaryCost);
-	Costs.Add(EResourceType::Tertiary, ConstructionCost.TertiaryCost);
-	Costs.Add(EResourceType::Rare, ConstructionCost.RareCost);
-	Costs.Add(EResourceType::Epic, ConstructionCost.EpicCost);
-	Costs.Add(EResourceType::Legendary, ConstructionCost.LegendaryCost);
-
-	// Verify resources for each type
-	for (const FResourceArray& ResourceArray : TeamResources)
-	{
-		// Ensure TeamId is within bounds for the resource array
-		if (!ResourceArray.Resources.IsValidIndex(TeamId))
-		{
-			return false; // This ensures we don't proceed with invalid TeamId
-		}
-
-		int32 ResourceAmount = ResourceArray.Resources[TeamId];
-
-		// Check if the team has enough resources of the current type
-		if (Costs.Contains(ResourceArray.ResourceType) && ResourceAmount < Costs[ResourceArray.ResourceType])
-		{
-			return false; // Not enough resources of this type
-		}
-	}
-
-	// If all costs are affordable
-	return true;
-}
-*/
