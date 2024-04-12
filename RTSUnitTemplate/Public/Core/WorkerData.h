@@ -19,7 +19,8 @@ enum class EResourceType : uint8
 	MAX
 };
 
-
+ENUM_RANGE_BY_FIRST_AND_LAST(EResourceType, EResourceType::Primary, EResourceType::Legendary)
+/*
 USTRUCT(BlueprintType)
 struct FResourceArray
 {
@@ -45,7 +46,7 @@ public:
 		Resources.Init(0.0f, Size);
 	}
 };
-
+*/
 
 UENUM()
 namespace WorkAreaData
@@ -61,4 +62,30 @@ namespace WorkAreaData
 		Base UMETA(DisplayName = "Base"),
 		BuildArea UMETA(DisplayName = "BuildArea"),
 	};
+}
+
+inline EResourceType ConvertToResourceType(WorkAreaData::WorkAreaType workAreaType)
+{
+	switch (workAreaType)
+	{
+	case WorkAreaData::Primary:
+		return EResourceType::Primary;
+	case WorkAreaData::Secondary:
+		return EResourceType::Secondary;
+	case WorkAreaData::Tertiary:
+		return EResourceType::Tertiary;
+	case WorkAreaData::Rare:
+		return EResourceType::Rare;
+	case WorkAreaData::Epic:
+		return EResourceType::Epic;
+	case WorkAreaData::Legendary:
+		return EResourceType::Legendary;
+		// Add other cases as necessary
+		default:
+			// Handle the default case or assert
+			break;
+	}
+    
+	// Return a default value or assert if the input value is unexpected
+	return EResourceType::MAX; // Example of a default return value, adjust as needed
 }

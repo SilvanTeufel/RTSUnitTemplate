@@ -276,7 +276,7 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->ResourcePlace->GetActorLocation()) - Worker->ResourcePlace->GetSimpleCollisionRadius();
 	
 	// Check Distance between Worker and Base
-	if (DistanceToBase <= ResourceAreaArrivalDistance)
+	if (EnableDistanceCheck && DistanceToBase <= ResourceAreaArrivalDistance)
 	{
 		Worker->ResourcePlace->HandleResourceExtractionArea(Worker, UnitBase);
 		return;
@@ -301,6 +301,7 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Spawn WorkResource!"));
 		SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->SetUEPathfinding = true;
@@ -324,13 +325,13 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 	// Check if Base is allready in Range /////////////////////////////
 	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	const bool CanAffordConstruction = Worker->BuildArea? Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	const bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstructionAttributes(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
 	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->Base->GetActorLocation()) - Worker->Base->GetSimpleCollisionRadius();
 
 
 	// Check Distance between Worker and Base
-	if (DistanceToBase <= BaseArrivalDistance)
+	if (EnableDistanceCheck && DistanceToBase <= BaseArrivalDistance)
 	{
 		Worker->Base->HandleBaseArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
 		return;
@@ -384,12 +385,12 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	// Check if Base is allready in Range /////////////////////////////
 	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	const bool CanAffordConstruction = Worker->BuildArea? Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	const bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstructionAttributes(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
 	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->BuildArea->GetActorLocation()) - Worker->BuildArea->GetSimpleCollisionRadius();
 	
 	// Check Distance between Worker and Base
-	if (DistanceToBase <= BuildAreaArrivalDistance)
+	if (EnableDistanceCheck && DistanceToBase <= BuildAreaArrivalDistance)
 	{
 		Worker->BuildArea->HandleBuildArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
 		return;

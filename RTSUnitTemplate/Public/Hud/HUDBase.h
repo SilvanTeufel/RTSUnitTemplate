@@ -71,12 +71,15 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AllUnits", Keywords = "RTSUnitTemplate AllUnits"), Category = RTSUnitTemplate)
 		TArray <AActor*> AllUnits;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "EnemyUnitBases", Keywords = "RTSUnitTemplate EnemyUnitBases"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> EnemyUnitBases;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "AllUnitBases", Keywords = "RTSUnitTemplate AllUnitBases"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> AllUnitBases;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		TArray <AWorkingUnitBase*> WorkingUnits;
+	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SpeakingUnits", Keywords = "RTSUnitTemplate SpeakingUnits"), Category = RTSUnitTemplate)
 		TArray <ASpeakingUnit*> SpeakingUnits;
 

@@ -625,7 +625,8 @@ float AControllerBase::GetResource(int TeamId, EResourceType RType)
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
 	if (!GameMode) return 0;
 
-	return GameMode->GetResource(TeamId, RType);
+	return GameMode->GetResourceAttribute(TeamId, RType);
+	//return GameMode->GetResource(TeamId, RType);
 }
 
 void AControllerBase::ModifyResource_Implementation(EResourceType ResourceType, int32 TeamId, float Amount){
@@ -633,7 +634,8 @@ void AControllerBase::ModifyResource_Implementation(EResourceType ResourceType, 
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
 	if (!GameMode) return;
 
-	GameMode->ModifyResource(ResourceType, TeamId, Amount);
+	GameMode->ModifyTeamResourceAttributes(TeamId, ResourceType, Amount);
+	//GameMode->ModifyResource(ResourceType, TeamId, Amount);
 }
 
 void AControllerBase::SetControlerTeamId_Implementation(int Id)

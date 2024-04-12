@@ -177,6 +177,10 @@ void AHUDBase::AddUnitsToArray()
 		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(AllUnits[i]);
 		if(SpeakingUnit)
 			SpeakingUnits.Add(SpeakingUnit);
+
+		AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(AllUnits[i]);
+		if(WorkingUnit)
+		WorkingUnits.Add(WorkingUnit);
 	}
 }
 

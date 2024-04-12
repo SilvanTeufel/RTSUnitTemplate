@@ -8,9 +8,9 @@ void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(AResourceGameState, TeamResources);
+	//DOREPLIFETIME(AResourceGameState, TeamResources);
 }
-
+/*
 void AResourceGameState::OnRep_TeamResources()
 {
 	// Handle any logic needed when TeamResources updates, such as notifying UI elements to refresh.
@@ -20,3 +20,4 @@ void AResourceGameState::SetTeamResources(TArray<FResourceArray> Resources)
 {
 	TeamResources = Resources;
 }
+*/

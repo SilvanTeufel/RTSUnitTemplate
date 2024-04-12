@@ -65,6 +65,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResourceAreaArrivalDistance = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool EnableDistanceCheck = false;
 };
 
 

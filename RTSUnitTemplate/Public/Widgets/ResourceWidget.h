@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "ResourceWidget.generated.h"
 
 /**
@@ -26,13 +27,20 @@ public:
 		TeamId = Id;
 		UpdateTeamIdText();
 	}
+
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void AddWorkerToResource(EResourceType ResourceType);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void RemoveWorkerFromResource(EResourceType ResourceType);
 	
 private:
 	// Timer to track when to update the resource display
 	float UpdateTimer = 0.0f;
 
 	// Interval in seconds for how often to update the resource display
-	const float UpdateInterval = 1.0f;
+	const float UpdateInterval = 0.0f;
 	
 protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -65,4 +73,65 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	class UTextBlock* LegendaryResourceText;
+
+
+	void UpdateWorkerCountDisplay();
+	
+    // Resource TextBlocks for displaying current worker counts
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* PrimaryWorkerCount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* SecondaryWorkerCount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* TertiaryWorkerCount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* RareWorkerCount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* EpicWorkerCount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UTextBlock* LegendaryWorkerCount;
+
+    // Buttons for adding workers
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddPrimaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddSecondaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddTertiaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddRareWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddEpicWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* AddLegendaryWorkerButton;
+
+    // Buttons for removing workers
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemovePrimaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemoveSecondaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemoveTertiaryWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemoveRareWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemoveEpicWorkerButton;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "RTSUnitTemplate")
+    UButton* RemoveLegendaryWorkerButton;
+	
 };

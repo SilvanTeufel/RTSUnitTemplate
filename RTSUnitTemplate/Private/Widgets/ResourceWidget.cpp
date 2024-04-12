@@ -13,30 +13,7 @@ void UResourceWidget::NativeConstruct()
     Super::NativeConstruct();
     // Initialize your widget's properties and bindings here
     UpdateTeamResourcesDisplay();
-
-    /*
-    APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-    if (!PlayerController)
-    {
-        return;
-    }
-    
-    // Cast to your custom player controller class, replace 'AMyPlayerController' with your actual class name
-    AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-    if (!ControllerBase)
-    {
-        return;
-    }
-
-    // Get the SelectableTeamId from the player controller
-    TeamId = ControllerBase->SelectableTeamId;
-  
-    // Subscribe to the game mode's OnTeamResourcesUpdated delegate
-    AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
-    if (GameMode)
-    {
-        GameMode->OnTeamResourcesUpdated.AddDynamic(this, &UResourceWidget::UpdateTeamResourcesDisplay);
-    } */
+    UpdateWorkerCountDisplay();
 }
 
 void UResourceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -51,7 +28,7 @@ void UResourceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         
         // Update the team resources display
         UpdateTeamResourcesDisplay();
-
+        UpdateWorkerCountDisplay();
         // Reset the timer
         UpdateTimer = 0.0f;
     }
@@ -65,35 +42,49 @@ void UResourceWidget::UpdateTeamIdText()
     }
 }
 
+void UResourceWidget::AddWorkerToResource(EResourceType ResourceType)
+{
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+    if (GameMode)
+    {
+        GameMode->SetMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
+    }
+}
+
+void UResourceWidget::RemoveWorkerFromResource(EResourceType ResourceType)
+{
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+    if (GameMode)
+    {
+        GameMode->SetMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
+    }
+}
+
 void UResourceWidget::UpdateTeamResourcesDisplay()
 {
     
-    AResourceGameState* ResourceGameState = GetWorld()->GetGameState<AResourceGameState>();
-    if (!ResourceGameState)
+ // Cast to your specific game mode class
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+    if (!GameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("ResourceGameState not found on client."));
+        UE_LOG(LogTemp, Warning, TEXT("GameMode not found or is not of type AResourceGameMode."));
         return;
     }
-        
 
-    TArray<FResourceArray>& TeamResources = ResourceGameState->TeamResources;
-    
-    if (TeamResources.IsEmpty())
+    // Assuming your GameMode has a method like GetResourceAmount that takes a team ID and a resource type
+    // and returns the amount of that resource for the team. You need to implement this method based on your setup.
+
+    // Iterate over all resource types. This example assumes you have an enum class EResourceType
+    // that lists all the resource types your game uses.
+    for (EResourceType ResourceType : TEnumRange<EResourceType>())
     {
-        UE_LOG(LogTemp, Warning, TEXT("TeamResources is empty or not initialized."));
-        return; // Early exit if TeamResources is empty or not initialized
-    }
-    
-    for (const FResourceArray& ResourceArray : TeamResources)
-    {
+        float ResourceAmount = GameMode->GetResourceAttribute(TeamId, ResourceType);
         
-        if (ResourceArray.Resources.IsValidIndex(TeamId))
+        FString ResourceAmountText = FString::Printf(TEXT("%.1f"), ResourceAmount);
+
+        // Update the UI element corresponding to the resource type
+        switch (ResourceType)
         {
-            float ResourceAmount = ResourceArray.Resources[TeamId];
-            FString ResourceAmountText = FString::Printf(TEXT("%f"), ResourceAmount);
-            
-            switch (ResourceArray.ResourceType)
-            {
             case EResourceType::Primary:
                 if (PrimaryResourceText) PrimaryResourceText->SetText(FText::FromString(ResourceAmountText));
                 break;
@@ -112,11 +103,53 @@ void UResourceWidget::UpdateTeamResourcesDisplay()
             case EResourceType::Legendary:
                 if (LegendaryResourceText) LegendaryResourceText->SetText(FText::FromString(ResourceAmountText));
                 break;
-            default:
-                // Handle any unexpected resource type
-                break;
-            }
+            // No default case needed as we're iterating over the enum range
         }
-        
+    }
+}
+
+void UResourceWidget::UpdateWorkerCountDisplay()
+{
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+    if (!GameMode)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GameMode not found or is not of type AResourceGameMode."));
+        return;
+    }
+
+    // Assuming your GameMode has a method like GetWorkerCount that takes a team ID and a resource type
+    // and returns the number of workers for that resource for the team.
+
+    for (EResourceType ResourceType : TEnumRange<EResourceType>())
+    {
+        int32 WorkerCount = GameMode->GetMaxWorkersForResourceType(TeamId, ResourceType);
+
+        FString WorkerCountText = FString::Printf(TEXT("%d"), WorkerCount);
+
+        // Update the UI element corresponding to the worker count for each resource type
+        switch (ResourceType)
+        {
+        case EResourceType::Primary:
+            if (PrimaryWorkerCount) PrimaryWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        case EResourceType::Secondary:
+            if (SecondaryWorkerCount) SecondaryWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        case EResourceType::Tertiary:
+            if (TertiaryWorkerCount) TertiaryWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        case EResourceType::Rare:
+            if (RareWorkerCount) RareWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        case EResourceType::Epic:
+            if (EpicWorkerCount) EpicWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        case EResourceType::Legendary:
+            if (LegendaryWorkerCount) LegendaryWorkerCount->SetText(FText::FromString(WorkerCountText));
+            break;
+        default:
+            // Consider logging or handling the default case if necessary
+            break;
+        }
     }
 }
