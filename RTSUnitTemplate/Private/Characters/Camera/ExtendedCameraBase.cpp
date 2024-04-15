@@ -2,6 +2,8 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Controller/CameraControllerBase.h"
+#include "GameModes/ResourceGameMode.h"
+#include "GameStates/ResourceGameState.h"
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"
 #include "Widgets/ResourceWidget.h"
@@ -80,14 +82,17 @@ void AExtendedCameraBase::SetupResourceWidget()
 	if (IsOwnedByLocalPlayer()) // This is a pseudo-function, replace with actual ownership check
 	{
 		ResourceWidget->SetVisibility(true);
-		UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
+		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
 
 		if(ResourceBar)
 		{
 			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 			
 			if(CameraControllerBase)
+			{
 				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
+
+			}
 		}
 	}
 	else

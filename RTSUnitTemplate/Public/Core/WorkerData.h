@@ -20,7 +20,7 @@ enum class EResourceType : uint8
 };
 
 ENUM_RANGE_BY_FIRST_AND_LAST(EResourceType, EResourceType::Primary, EResourceType::Legendary)
-/*
+
 USTRUCT(BlueprintType)
 struct FResourceArray
 {
@@ -33,6 +33,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
 	TArray<float> Resources;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
+	TArray<int> CurrentWorkers;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
+	TArray<int> MaxWorkers;
 	// Default constructor
 	FResourceArray()
 		: ResourceType(EResourceType::Primary) // Default value, adjust as needed
@@ -44,9 +49,11 @@ public:
 		: ResourceType(InResourceType)
 	{
 		Resources.Init(0.0f, Size);
+		CurrentWorkers.Init(0.0f, Size);
+		MaxWorkers.Init(2.0f, Size);
 	}
 };
-*/
+
 
 UENUM()
 namespace WorkAreaData

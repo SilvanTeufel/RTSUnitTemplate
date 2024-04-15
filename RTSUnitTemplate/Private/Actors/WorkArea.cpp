@@ -96,7 +96,7 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
-	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstructionAttributes(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false;//Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false;//Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 	
     if (isResourceExtractionArea && isValidStateForExtraction && Worker->GetUnitState() != UnitData::GoToBuild)
     {
@@ -127,9 +127,9 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 	
 			if(Worker->WorkResource)
 			{
-				ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
+				//ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
 				UE_LOG(LogTemp, Warning, TEXT("WorkResource Despawn!"));
-				// ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
+				ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
 				DespawnWorkResource(UnitBase->WorkResource);
 			}
 	
@@ -183,7 +183,7 @@ void AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 	
 	Worker->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
 
-	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstructionAttributes(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 	
 	if(!CanAffordConstruction || !Worker->BuildArea)
 	{
@@ -215,21 +215,22 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		if((this == Worker->BuildArea) && CanAffordConstruction && Building == nullptr && !StartedBuilding)
 		{
 			StartedBuilding = true;
+			/*
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Primary, -Worker->BuildArea->ConstructionCost.PrimaryCost);
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Secondary, -Worker->BuildArea->ConstructionCost.SecondaryCost);
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Tertiary, -Worker->BuildArea->ConstructionCost.TertiaryCost);
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Rare, -Worker->BuildArea->ConstructionCost.RareCost);
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Epic, -Worker->BuildArea->ConstructionCost.EpicCost);
 			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Legendary, -Worker->BuildArea->ConstructionCost.LegendaryCost);
-
-			/*
+			*/
+			
 			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.PrimaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.SecondaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.TertiaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, -Worker->BuildArea->ConstructionCost.RareCost);
 			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, -Worker->BuildArea->ConstructionCost.EpicCost);
 			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.LegendaryCost);
-			*/
+			
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Build);

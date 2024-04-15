@@ -7,8 +7,6 @@
 #include "Core/WorkerData.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/WorkingUnitBase.h"
-#include "GAS/ResourceAttributeSet.h"
-#include "AbilitySystemComponent.h"
 #include "ResourceGameMode.generated.h"
 
 /**
@@ -46,7 +44,6 @@ public:
 	TArray<AWorkArea*> BuildAreas;
 };
 
-
 UCLASS()
 class RTSUNITTEMPLATE_API AResourceGameMode : public ARTSGameModeBase
 {
@@ -57,37 +54,22 @@ public:
 	AResourceGameMode();
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-
-	// Array of AttributeSets, one for each team.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
-	TArray<UResourceAttributeSet*> TeamResourceAttributeSets;
-
-	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
-	//TArray<UAbilitySystemComponent*> TeamAbilitySystemComponents;
-	// Function to modify resources for a specific team
-	void ModifyTeamResourceAttributes(int32 TeamId, EResourceType ResourceType, float Amount);
-
-	//void ModifyTeamWorkerAttributes(int32 TeamId, EResourceType ResourceType, float Amount, UAbilitySystemComponent* AbilitySystemComponent);
-
-	bool CanAffordConstructionAttributes(const FBuildingCost& ConstructionCost, int32 TeamId) const;
-
-	float GetResourceAttribute(int TeamId, EResourceType RType);
-	// Initialize resources for teams
-	void InitializeTeamResourcesAttributes();
-
-	//void InitializeTeamAbilitySystemComponents();
 	
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	FWorkAreaArrays WorkAreaGroups; // Storage for work areas grouped by type
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	int MaxResourceAreasToSet = 5;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	int MaxBuildAreasToSet = 15;
+	
+	// Helper function to initialize resource arrays
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void InitializeResources(int32 NumberOfTeams);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GatherWorkAreas();
@@ -107,7 +89,7 @@ public:
 	int32 NumberOfTeams = 10;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	TArray<AWorkArea*> GetClosestResourcePlaces(AWorkingUnitBase* Worker);
+	TArray<AWorkArea*> GetFiveClosestResourcePlaces(AWorkingUnitBase* Worker);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetClosestBuildPlaces(AWorkingUnitBase* Worker);
@@ -115,29 +97,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetRandomClosestWorkArea(const TArray<AWorkArea*>& WorkAreas);
 	// Function to modify a resource for a specific team
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AWorkArea* GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float amount);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	int32 GetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float amount);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	int32 GetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void AssignWorkAreasToWorker(AWorkingUnitBase* Worker);
-
-	/*
-	 *
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void InitializeResources(int32 NumberOfTeams);
-	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
 
@@ -150,5 +109,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const;
 
-	*/
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AssignWorkAreasToWorker(AWorkingUnitBase* Worker);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AWorkArea* GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	TArray<AWorkArea*> GetClosestResourcePlaces(AWorkingUnitBase* Worker);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int32 GetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int32 GetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
+	
 };

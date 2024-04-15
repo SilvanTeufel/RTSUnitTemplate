@@ -34,7 +34,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void RemoveWorkerFromResource(EResourceType ResourceType);
-	
+
 private:
 	// Timer to track when to update the resource display
 	float UpdateTimer = 0.0f;
@@ -44,8 +44,6 @@ private:
 	
 protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-
-	
 	
 	// Function to update the display of team resources on the widget
 	void UpdateTeamResourcesDisplay();

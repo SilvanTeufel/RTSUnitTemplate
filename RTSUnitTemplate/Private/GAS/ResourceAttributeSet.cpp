@@ -5,6 +5,7 @@
 
 UResourceAttributeSet::UResourceAttributeSet()
 {
+	
 }
 
 
@@ -14,20 +15,20 @@ void UResourceAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	// Existing resource attributes
-	DOREPLIFETIME(UResourceAttributeSet, PrimaryResource);
-	DOREPLIFETIME(UResourceAttributeSet, SecondaryResource);
-	DOREPLIFETIME(UResourceAttributeSet, TertiaryResource);
-	DOREPLIFETIME(UResourceAttributeSet, RareResource);
-	DOREPLIFETIME(UResourceAttributeSet, EpicResource);
-	DOREPLIFETIME(UResourceAttributeSet, LegendaryResource);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, PrimaryResource, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, SecondaryResource, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, TertiaryResource, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, RareResource, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, EpicResource, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, LegendaryResource, COND_None, REPNOTIFY_Always);
 
 	// Worker count attributes
-	DOREPLIFETIME(UResourceAttributeSet, PrimaryWorkers);
-	DOREPLIFETIME(UResourceAttributeSet, SecondaryWorkers);
-	DOREPLIFETIME(UResourceAttributeSet, TertiaryWorkers);
-	DOREPLIFETIME(UResourceAttributeSet, RareWorkers);
-	DOREPLIFETIME(UResourceAttributeSet, EpicWorkers);
-	DOREPLIFETIME(UResourceAttributeSet, LegendaryWorkers);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, PrimaryWorkers, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, SecondaryWorkers, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, TertiaryWorkers, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, RareWorkers, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, EpicWorkers, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UResourceAttributeSet, LegendaryWorkers, COND_None, REPNOTIFY_Always);
 }
 
 void UResourceAttributeSet::OnRep_PrimaryResource(const FGameplayAttributeData& OldPrimaryResource)

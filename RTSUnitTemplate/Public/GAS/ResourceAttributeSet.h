@@ -13,13 +13,15 @@ GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
 GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
 GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
-UCLASS()
+UCLASS(BlueprintType)
 class UResourceAttributeSet : public UAttributeSet
 {
     GENERATED_BODY()
 
 public:
     UResourceAttributeSet();
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     // Gameplay Attributes for resources. One attribute for each resource type.
     UPROPERTY(BlueprintReadOnly, Category = "Resources", ReplicatedUsing = OnRep_PrimaryResource)

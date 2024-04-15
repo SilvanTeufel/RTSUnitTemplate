@@ -46,6 +46,7 @@ public:
 	virtual void GiveAbilities();
 
 	virtual void PossessedBy(AController* NewController) override;
+	
 	virtual void OnRep_PlayerState() override;
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)

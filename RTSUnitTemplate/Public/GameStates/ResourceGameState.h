@@ -16,15 +16,15 @@ class RTSUNITTEMPLATE_API AResourceGameState : public AGameStateBase
 
 public:
 	// Use replicated properties to share data with clients
-	//UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
-	//TArray<FResourceArray> TeamResources;
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	TArray<FResourceArray> TeamResources;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// Function to handle changes to the replicated TeamResources
-	//UFUNCTION()
-	//void OnRep_TeamResources();
+	UFUNCTION()
+	void OnRep_TeamResources();
 
-	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	//void SetTeamResources(TArray<FResourceArray> Resources);
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetTeamResources(TArray<FResourceArray> Resources);
 };
