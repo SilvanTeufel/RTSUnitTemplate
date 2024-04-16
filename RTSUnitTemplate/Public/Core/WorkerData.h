@@ -50,7 +50,7 @@ public:
 	{
 		Resources.Init(0.0f, Size);
 		CurrentWorkers.Init(0.0f, Size);
-		MaxWorkers.Init(2.0f, Size);
+		MaxWorkers.Init(0.0f, Size);
 	}
 };
 

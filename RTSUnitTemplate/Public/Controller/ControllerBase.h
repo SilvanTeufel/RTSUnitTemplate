@@ -248,5 +248,11 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void AddWorkerToResource(EResourceType ResourceType, int TeamId);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
 };
 

@@ -119,15 +119,21 @@ public:
 	TArray<AWorkArea*> GetClosestResourcePlaces(AWorkingUnitBase* Worker);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
+	void AddCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 GetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
+	void AddMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 GetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAllCurrentWorkers(int TeamId);
 	
 };

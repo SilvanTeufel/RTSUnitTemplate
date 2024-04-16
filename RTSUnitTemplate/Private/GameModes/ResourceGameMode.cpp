@@ -7,6 +7,7 @@
 #include "EngineUtils.h" // For TActorIterator
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Controller/BuildingControllerBase.h"
 #include "Controller/WorkerUnitControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
@@ -174,7 +175,10 @@ void AResourceGameMode::AssignWorkAreasToWorkers()
 
 		// Assign one of the five closest resource places randomly
 		TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
-		Worker->ResourcePlace = GetRandomClosestWorkArea(WorkPlaces);
+		AWorkArea* WorkPlace = GetRandomClosestWorkArea(WorkPlaces);
+		//AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(WorkPlace->Type), +1.0f);
+		Worker->ResourcePlace = WorkPlace;
+		//SetAllCurrentWorkers(Worker->TeamId);
 	}
 }
 
@@ -188,7 +192,10 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 
 	// Assign one of the five closest resource places randomly
 	TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
-	Worker->ResourcePlace = GetRandomClosestWorkArea(WorkPlaces);
+	AWorkArea* WorkPlace = GetRandomClosestWorkArea(WorkPlaces);
+	//AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(WorkPlace->Type), +1.0f);
+	Worker->ResourcePlace = WorkPlace;
+	//SetAllCurrentWorkers(Worker->TeamId);
 }
 
 AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas)
@@ -357,10 +364,12 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 				if (WorkArea)
 				{
 						EResourceType ResourceType = ConvertToResourceType(WorkArea->Type); // Assume WorkArea has a ResourceType property
+	
 						int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
 						int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType); // Implement this based on your AttributeSet
-	
-					
+						UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), ResourceType);
+						UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"), CurrentWorkers);
+						UE_LOG(LogTemp, Warning, TEXT("MaxWorkers: %d"), MaxWorkers);
 						if (CurrentWorkers < MaxWorkers)
 						{
 							SuitableWorkAreas.Add(WorkArea);
@@ -368,18 +377,18 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 				}
 			}
 
+			UE_LOG(LogTemp, Warning, TEXT("SuitableWorkAreas: %d"), SuitableWorkAreas.Num());
 			return GetRandomClosestWorkArea(SuitableWorkAreas);
 
 	// If no suitable WorkArea found
 }
 
-void AResourceGameMode::SetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount)
+void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount)
 {
 	TArray<AActor*> TempActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorkingUnitBase::StaticClass(), TempActors);
 	
 	// Correctly use GetWorld()->GetAllActorsOfClass
-
 	int32 TeamWorkerCount = 0;
 	for (AActor* MyActor : TempActors)
 	{
@@ -396,10 +405,18 @@ void AResourceGameMode::SetMaxWorkersForResourceType(int TeamId, EResourceType R
 		}
 	}
 
-	const int CurrentMaxWorkerCount = GetMaxWorkersForResourceType(TeamId, ResourceType);
+	const int CurrentMaxWorkerCount = GetMaxWorkersForResourceType(TeamId, EResourceType::Primary) +
+										GetMaxWorkersForResourceType(TeamId, EResourceType::Secondary) +
+											GetMaxWorkersForResourceType(TeamId, EResourceType::Tertiary) +
+												GetMaxWorkersForResourceType(TeamId, EResourceType::Rare) +
+													GetMaxWorkersForResourceType(TeamId, EResourceType::Epic) +
+														GetMaxWorkersForResourceType(TeamId, EResourceType::Legendary);
 
+	
+	//UE_LOG(LogTemp, Log, TEXT("CurrentMaxWorkerCount: %d"), CurrentMaxWorkerCount);
+	//UE_LOG(LogTemp, Log, TEXT("TeamWorkerCount: %d"), TeamWorkerCount);
 	// Check if the total worker count matches and amount is positive
-	if (CurrentMaxWorkerCount >= TeamWorkerCount && Amount > 0.f)
+	if ((CurrentMaxWorkerCount >= TeamWorkerCount && Amount >= 0) || (GetMaxWorkersForResourceType(TeamId, ResourceType) == 0 && Amount <= 0))
 	{
 		return; // Exit without modifying the worker count
 	}
@@ -425,6 +442,72 @@ void AResourceGameMode::SetMaxWorkersForResourceType(int TeamId, EResourceType R
 
 void AResourceGameMode::SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount)
 {
+
+	if(GetCurrentWorkersForResourceType(TeamId, ResourceType) == 0 && Amount <= 0) return;
+	
+	for (FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.ResourceType == ResourceType)
+		{
+			if (TeamId >= 0 && TeamId < ResourceArray.CurrentWorkers.Num())
+			{
+				ResourceArray.CurrentWorkers[TeamId] = Amount;
+				break; // Exit once the correct resource type is modified
+			}
+		}
+	}
+
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources);
+	}
+}
+
+void AResourceGameMode::SetAllCurrentWorkers(int TeamId)
+{
+	TArray<AActor*> TempActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorkingUnitBase::StaticClass(), TempActors);
+	
+	// Correctly use GetWorld()->GetAllActorsOfClass
+	TMap<EResourceType, int32> WorkerCountPerType;
+	
+	//for (const FResourceArray& ResourceArray : TeamResources)
+	//{
+		//WorkerCountPerType.Add(ResourceArray.ResourceType, 0);
+	//}
+	
+	for (AActor* MyActor : TempActors)
+	{
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(MyActor);
+		if (Worker && Worker->ResourcePlace && Worker->TeamId == TeamId)
+		{
+			// Cast the Controller property to AWorkingUnitController
+			AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
+			//ABuildingControllerBase* BuildingController = Cast<ABuildingControllerBase>(WorkerController);
+			if (WorkerController)
+			{
+				EResourceType ResourceType = ConvertToResourceType(Worker->ResourcePlace->Type);
+				// SAVE WORKERCOUNT DEPENDING ON RESOURCETYPE
+				WorkerCountPerType.FindOrAdd(ResourceType)++;
+				//WorkerCountPerType[ResourceType]++;
+			}
+		}
+	}
+	// Setting current workers for each resource type
+	for (const auto& Pair : WorkerCountPerType)
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), Pair.Key);
+		//UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"),  Pair.Value);
+		SetCurrentWorkersForResourceType(TeamId, Pair.Key, Pair.Value);
+	}
+}
+
+void AResourceGameMode::AddCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount)
+{
+
+	if(GetCurrentWorkersForResourceType(TeamId, ResourceType) == 0 && Amount <= 0) return;
+	
 	for (FResourceArray& ResourceArray : TeamResources)
 	{
 		if (ResourceArray.ResourceType == ResourceType)

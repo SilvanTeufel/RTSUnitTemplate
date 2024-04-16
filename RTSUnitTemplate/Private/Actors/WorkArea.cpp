@@ -157,20 +157,21 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 {
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(Worker);
 	UE_LOG(LogTemp, Warning, TEXT("AAAAA"));
+	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
 
 	if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
 	{
-		ResourceGameMode->SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		ResourceGameMode->SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
+		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
+		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		Worker->ResourcePlace = NewResourcePlace;
 	}else if(!Worker->ResourcePlace && NewResourcePlace)
 	{
-		ResourceGameMode->SetCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		Worker->ResourcePlace = NewResourcePlace;
 	}
+	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 
-	//ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
 	
 	UnitBase->SetUEPathfinding = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);

@@ -4,14 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "UnitControllerBase.h"
-#include "WorkerUnitControllerBase.h"
 #include "BuildingControllerBase.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API ABuildingControllerBase : public AWorkerUnitControllerBase
+class RTSUNITTEMPLATE_API ABuildingControllerBase : public AUnitControllerBase
 {
 	GENERATED_BODY()
 

@@ -889,3 +889,21 @@ void AControllerBase::LoadAbility_Implementation(const int32 UnitIndex, const FS
 		}
 	}
 }
+
+void AControllerBase::AddWorkerToResource_Implementation(EResourceType ResourceType, int TeamId)
+{
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (GameMode)
+	{
+		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
+	}
+}
+
+void AControllerBase::RemoveWorkerFromResource_Implementation(EResourceType ResourceType, int TeamId)
+{
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (GameMode)
+	{
+		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
+	}
+}

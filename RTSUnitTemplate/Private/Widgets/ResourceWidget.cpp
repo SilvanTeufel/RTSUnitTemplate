@@ -47,7 +47,7 @@ void UResourceWidget::AddWorkerToResource(EResourceType ResourceType)
     AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
     if (GameMode)
     {
-        GameMode->SetMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
+        GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
     }
 }
 
@@ -56,7 +56,7 @@ void UResourceWidget::RemoveWorkerFromResource(EResourceType ResourceType)
     AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
     if (GameMode)
     {
-        GameMode->SetMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
+        GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
     }
 }
 
