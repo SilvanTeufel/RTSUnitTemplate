@@ -367,17 +367,14 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 	
 						int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
 						int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType); // Implement this based on your AttributeSet
-						UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), ResourceType);
-						UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"), CurrentWorkers);
-						UE_LOG(LogTemp, Warning, TEXT("MaxWorkers: %d"), MaxWorkers);
+
 						if (CurrentWorkers < MaxWorkers)
 						{
 							SuitableWorkAreas.Add(WorkArea);
 						}
 				}
 			}
-
-			UE_LOG(LogTemp, Warning, TEXT("SuitableWorkAreas: %d"), SuitableWorkAreas.Num());
+	
 			return GetRandomClosestWorkArea(SuitableWorkAreas);
 
 	// If no suitable WorkArea found
@@ -413,8 +410,6 @@ void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType R
 														GetMaxWorkersForResourceType(TeamId, EResourceType::Legendary);
 
 	
-	//UE_LOG(LogTemp, Log, TEXT("CurrentMaxWorkerCount: %d"), CurrentMaxWorkerCount);
-	//UE_LOG(LogTemp, Log, TEXT("TeamWorkerCount: %d"), TeamWorkerCount);
 	// Check if the total worker count matches and amount is positive
 	if ((CurrentMaxWorkerCount >= TeamWorkerCount && Amount >= 0) || (GetMaxWorkersForResourceType(TeamId, ResourceType) == 0 && Amount <= 0))
 	{
@@ -469,13 +464,7 @@ void AResourceGameMode::SetAllCurrentWorkers(int TeamId)
 	TArray<AActor*> TempActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorkingUnitBase::StaticClass(), TempActors);
 	
-	// Correctly use GetWorld()->GetAllActorsOfClass
 	TMap<EResourceType, int32> WorkerCountPerType;
-	
-	//for (const FResourceArray& ResourceArray : TeamResources)
-	//{
-		//WorkerCountPerType.Add(ResourceArray.ResourceType, 0);
-	//}
 	
 	for (AActor* MyActor : TempActors)
 	{
@@ -484,21 +473,17 @@ void AResourceGameMode::SetAllCurrentWorkers(int TeamId)
 		{
 			// Cast the Controller property to AWorkingUnitController
 			AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
-			//ABuildingControllerBase* BuildingController = Cast<ABuildingControllerBase>(WorkerController);
 			if (WorkerController)
 			{
 				EResourceType ResourceType = ConvertToResourceType(Worker->ResourcePlace->Type);
 				// SAVE WORKERCOUNT DEPENDING ON RESOURCETYPE
 				WorkerCountPerType.FindOrAdd(ResourceType)++;
-				//WorkerCountPerType[ResourceType]++;
 			}
 		}
 	}
 	// Setting current workers for each resource type
 	for (const auto& Pair : WorkerCountPerType)
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("ResourceType: %d"), Pair.Key);
-		//UE_LOG(LogTemp, Warning, TEXT("CurrentWorkers: %d"),  Pair.Value);
 		SetCurrentWorkersForResourceType(TeamId, Pair.Key, Pair.Value);
 	}
 }

@@ -128,7 +128,7 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 			if(Worker->WorkResource)
 			{
 				//ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
-				UE_LOG(LogTemp, Warning, TEXT("WorkResource Despawn!"));
+				//UE_LOG(LogTemp, Warning, TEXT("WorkResource Despawn!"));
 				ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
 				DespawnWorkResource(UnitBase->WorkResource);
 			}
@@ -156,7 +156,6 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(Worker);
-	UE_LOG(LogTemp, Warning, TEXT("AAAAA"));
 	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
 
