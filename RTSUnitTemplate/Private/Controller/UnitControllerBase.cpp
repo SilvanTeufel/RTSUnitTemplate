@@ -18,6 +18,8 @@
 #include "Controller/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "NavigationSystem.h"
+
 #include "Navigation/PathFollowingComponent.h"
 
 AUnitControllerBase::AUnitControllerBase()
@@ -1062,7 +1064,9 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	if (ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f) ||
 		UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime) 
 	{
-		if (FMath::FRand() * 100.0f < UnitBase->NextWaypoint->PatrolCloseIdlePercentage && !ActorLocation.Equals(WaypointLocation, 200.f)) // && DistanceToWaypoint > 500.f
+		if (FMath::FRand() * 100.0f < UnitBase->NextWaypoint->PatrolCloseIdlePercentage &&
+										!ActorLocation.Equals(WaypointLocation, 200.f) &&
+										ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f)) // && DistanceToWaypoint > 500.f
 		{
 			UnitBase->UnitControlTimer = 0.f;
 			UnitBase->SetUnitState(UnitData::PatrolIdle);
@@ -1088,14 +1092,21 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 
 	//UnitBase->UnitControlTimer += DeltaSeconds;
 
-	SetPatrolCloseLocation(UnitBase);
-	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RandomPatrolLocation);
+	bool Succeeded = false;
+	// Execute SetPatrolCloseLocation again if Succeeded is false
+	int X = 0;
+	while (!Succeeded && X < 5)
+	{
+		SetPatrolCloseLocation(UnitBase);
+		Succeeded = SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RandomPatrolLocation);
+		X++;
+	}
 }
 
-void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
+bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
 {
 	if(!UnitBase->SetUEPathfinding)
-		return;
+		return false;
 		
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 	if(PlayerController)
@@ -1110,9 +1121,11 @@ void AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
 			//ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
-			MoveToLocationUEPathFinding(UnitBase, Location);
+			return MoveToLocationUEPathFinding(UnitBase, Location);
 		}
 	}
+	
+	return false;
 }
 
 void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
@@ -1136,6 +1149,69 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 	}
 }
 
+bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+	// Check server authority
+	if(!HasAuthority())
+	{
+		return false;
+	}
+    
+	// Check if the unit is valid and can move
+	if (!Unit || !Unit->GetCharacterMovement())
+	{
+		return false;
+	}
+
+	// Check for a valid navigation system
+	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (!NavSystem)
+	{
+		return false;
+	}
+
+	FVector StartLocation = Unit->GetActorLocation();
+	FVector EndLocation = DestinationLocation;
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(Unit); // Ignore the unit that is moving
+
+	PendingUnit = Unit;
+	PendingDestination = DestinationLocation;
+
+	Unit->SetRunLocation(EndLocation);
+	Unit->UEPathfindingUsed = true;
+    
+	// Attempt to move the unit to the destination location
+	FAIMoveRequest MoveRequest;
+	MoveRequest.SetGoalLocation(EndLocation);
+	MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
+
+	FNavPathSharedPtr NavPath;
+	MoveTo(MoveRequest, &NavPath);
+
+	
+	// Check if a valid path was found
+	if (!NavPath || !NavPath->IsValid())
+	{
+		return false;
+	}
+
+	// Check if pathfinding indicates that the location is unreachable
+	if (NavPath->IsPartial())
+	{
+		return false; // Destination is unreachable, e.g., separated by obstacles or on an island
+	}
+
+	FNavMeshPath* NavMeshPath = NavPath->CastPath<FNavMeshPath>();
+	if (NavMeshPath)
+	{
+		NavMeshPath->OffsetFromCorners(100.f);
+	}
+
+	return true; // Pathfinding succeeded and the unit can move
+}
+/*
 void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
 
@@ -1166,21 +1242,6 @@ void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* 
 	PendingUnit = Unit;
 	PendingDestination = DestinationLocation;
 
-	/*
-	bool bIsHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, CollisionParams);
-	if (bIsHit && HitResult.GetActor() && HitResult.GetActor()->IsA<AUnitBase>())
-	{
-		// Adjust route
-		FVector AvoidanceDirection = FVector::CrossProduct(FVector::UpVector, (EndLocation - StartLocation).GetSafeNormal());
-		EndLocation = StartLocation + AvoidanceDirection * 100.0f; // Adjust by 100 units to the right
-
-		// Optionally, after reaching the adjusted location, move to the original destination
-		// This could be done by setting a delegate for when the path to AdjustedLocation completes
-		OnMoveCompleted.AddDynamic(this, &AUnitControllerBase::OnAdjustedMoveCompleted);
-	}*/
-
-
-
 	
 	Unit->SetRunLocation(EndLocation);
 	Unit->UEPathfindingUsed = true;
@@ -1202,7 +1263,7 @@ void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* 
 		}
 	}
 }
-
+*/
 /*
 void AUnitControllerBase::OnAdjustedMoveCompleted(FAIRequestID RequestID,  const FPathFollowingResult& Result)
 {

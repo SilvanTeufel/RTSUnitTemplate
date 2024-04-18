@@ -41,6 +41,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector CalculateUnitsAverage(float DeltaTime);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void GetAutoCamWaypoints();
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int UnitCountInRange;
 

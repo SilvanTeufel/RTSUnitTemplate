@@ -19,7 +19,7 @@ enum class EResourceType : uint8
 	MAX
 };
 
-ENUM_RANGE_BY_FIRST_AND_LAST(EResourceType, EResourceType::Primary, EResourceType::Legendary)
+//ENUM_RANGE_BY_FIRST_AND_LAST(EResourceType, EResourceType::Primary, EResourceType::Legendary);
 
 USTRUCT(BlueprintType)
 struct FResourceArray
@@ -55,7 +55,7 @@ public:
 };
 
 
-UENUM()
+UENUM(BlueprintType)
 namespace WorkAreaData
 {
 	enum WorkAreaType

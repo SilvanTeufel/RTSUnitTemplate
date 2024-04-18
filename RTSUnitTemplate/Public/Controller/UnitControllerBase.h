@@ -186,14 +186,16 @@ public:
 		void SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
+		bool SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
+	//UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	//bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
 	
 		//void OnAdjustedMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result);
 	

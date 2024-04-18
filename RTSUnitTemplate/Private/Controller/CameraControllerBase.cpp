@@ -1,6 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/CameraControllerBase.h"
 #include "AIController.h"
+#include "Actors/AutoCamWaypoint.h"
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
 #include "Engine/Engine.h"      
 #include "Kismet/GameplayStatics.h"
@@ -22,6 +23,8 @@ void ACameraControllerBase::BeginPlay()
 
 	if(CameraBase)
 	GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
+
+	GetAutoCamWaypoints();
 }
 
 void ACameraControllerBase::SetupInputComponent()
@@ -237,6 +240,44 @@ FVector ACameraControllerBase::CalculateUnitsAverage(float DeltaTime) {
 
 	if (UnitCount == 0) return OrbitPositions[OrbitRotatorIndex];
 	return SumPosition / UnitCount;
+}
+
+void ACameraControllerBase::GetAutoCamWaypoints()
+{
+	TArray<AActor*> Waypoints;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AAutoCamWaypoint::StaticClass(), Waypoints);
+
+	//TArray<AAutoCamWaypoint*> Waypoints;
+	AAutoCamWaypoint* StartWaypoint = nullptr;
+    
+	// Find the first Waypoint that has a NextWaypoint assigned
+	for (AActor* ActorWaypoint : Waypoints)
+	{
+		AAutoCamWaypoint* Waypoint = Cast<AAutoCamWaypoint>(ActorWaypoint);
+		
+		if (Waypoint && Waypoint->NextWaypoint)
+		{
+			StartWaypoint = Waypoint;
+			break;
+		}
+	}
+    
+	// If a valid StartWaypoint is found, setup the orbit positions
+	if (StartWaypoint)
+	{
+		OrbitPositions.Empty(); // Clear existing waypoints
+		OrbitTimes.Empty();
+		
+		AAutoCamWaypoint* CurrentWaypoint = StartWaypoint;
+		do
+		{
+			OrbitPositions.Add(CurrentWaypoint->GetActorLocation());
+			OrbitTimes.Add(CurrentWaypoint->OrbitTime);
+			CurrentWaypoint = CurrentWaypoint->NextWaypoint;
+		} 
+		while (CurrentWaypoint && CurrentWaypoint != StartWaypoint); // Continue until loop completes or returns to start
+	}
+	
 }
 
 void ACameraControllerBase::SetCameraAveragePosition(ACameraBase* Camera, float DeltaTime) {

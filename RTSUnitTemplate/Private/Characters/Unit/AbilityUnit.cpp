@@ -363,3 +363,20 @@ void AAbilityUnit::ResetAbility()
 	LevelData.UsedAbilityPoints = 0;
 	LevelData.UsedAbilityPointsArray = { 0, 0, 0, 0, 0 };
 }
+
+
+void AAbilityUnit::RollRandomAbilitys()
+{
+	// Create an array of ability IDs
+	TArray<EGASAbilityInputID> AbilityIDs = {
+		EGASAbilityInputID::AbilityOne,
+		EGASAbilityInputID::AbilityTwo,
+		EGASAbilityInputID::AbilityThree,
+		EGASAbilityInputID::AbilityFour
+	};
+	
+	OffensiveAbilityID =  AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
+	DefensiveAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
+	AttackAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
+	ThrowAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
+}

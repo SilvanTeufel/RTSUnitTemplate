@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 //#include "Characters/Unit/UnitBase.h"
+#include "GameplayEffect.h"
 #include "TimerManager.h"
 #include "Core/WorkerData.h"
 #include "WorkArea.generated.h"

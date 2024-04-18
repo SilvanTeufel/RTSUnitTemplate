@@ -117,6 +117,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void ResetAbility();
 
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void RollRandomAbilitys();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	int AbilityResetPenalty = 0;
 
