@@ -7,6 +7,8 @@
 //#include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
 #include "Core/WorkerData.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "WorkResource.generated.h"
 
 UCLASS()

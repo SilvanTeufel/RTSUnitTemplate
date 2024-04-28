@@ -8,6 +8,7 @@
 #include "GameplayEffect.h"
 #include "TimerManager.h"
 #include "Core/WorkerData.h"
+#include "Components/StaticMeshComponent.h"
 #include "WorkArea.generated.h"
 
 

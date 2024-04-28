@@ -6,6 +6,7 @@
 //#include "PathSeekerBase.h"
 #include "GameFramework/Character.h"
 #include "Actors/Pickup.h"
+#include "Engine/World.h"
 #include "SpawnerUnit.generated.h"
 
 /**

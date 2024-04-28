@@ -1,6 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Controller/BuildingControllerBase.h"
+#include "GAS/GameplayAbilityBase.h"
 #include "Characters/Unit/GASUnit.h"
 
 void ABuildingControllerBase::Tick(float DeltaSeconds)

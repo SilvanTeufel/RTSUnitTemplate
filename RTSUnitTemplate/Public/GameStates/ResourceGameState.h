@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
+#include "Core/WorkerData.h"
 #include "ResourceGameState.generated.h"
 
 /**

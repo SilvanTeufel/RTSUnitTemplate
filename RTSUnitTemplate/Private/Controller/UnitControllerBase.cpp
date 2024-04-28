@@ -138,53 +138,6 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 
 
 
-/*
-void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
-{
-	AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
-	for (AActor* Actor  : DetectedUnits) // Loop through each detected unit
-	{
-		AUnitBase* DetectedUnit = Cast<AUnitBase>(Actor);
-		if (!DetectedUnit) continue; // Skip if cast fails
-		
-		if(!DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId != CurrentUnit->TeamId)) 
-		{
-			if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
-			{
-				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
-			}
-		}else if (DetectFriendlyUnits && DetectedUnit && CurrentUnit && (DetectedUnit->TeamId == CurrentUnit->TeamId)) {
-			if(DetectedUnit->GetUnitState() != UnitData::Dead && CurrentUnit->GetUnitState() != UnitData::Dead)
-			{
-				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
-			}
-		}
-	}
-
-	if(!DetectFriendlyUnits)
-	{
-		CurrentUnit->SetNextUnitToChase();
-				
-		if (CurrentUnit->UnitToChase) {
-			if(CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Run && CurrentUnit->GetUnitState() != UnitData::Casting)
-			{
-				CurrentUnit->SetUnitState(UnitData::Chase);
-			}
-		}
-	}else if (DetectFriendlyUnits)
-	{
-		CurrentUnit->SetNextUnitToChase();
-				
-		if (CurrentUnit->UnitToChase) {
-			if(CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Casting && CurrentUnit->GetUnitState() != UnitData::Run && CurrentUnit->UnitToChase->Attributes->GetHealth() < CurrentUnit->UnitToChase->Attributes->GetMaxHealth())
-			{
-				CurrentUnit->SetUnitState(UnitData::Chase);
-			}
-		}
-	}
-	
-}*/
-
 void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack)
 {
 	if(AttackingUnit && UnitToAttack)
@@ -1061,21 +1014,23 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	FVector ActorLocation = UnitBase->GetActorLocation();
 	FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
 	
-	if (ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f) ||
-		UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime) 
-	{
-		if (FMath::FRand() * 100.0f < UnitBase->NextWaypoint->PatrolCloseIdlePercentage &&
-										!ActorLocation.Equals(WaypointLocation, 200.f) &&
-										ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f)) // && DistanceToWaypoint > 500.f
+
+	
+		if (ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f) ||
+			UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime) 
 		{
+			if (FMath::FRand() * 100.0f < UnitBase->NextWaypoint->PatrolCloseIdlePercentage &&
+											!ActorLocation.Equals(WaypointLocation, 200.f) &&
+											ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f)) // && DistanceToWaypoint > 500.f
+			{
+				UnitBase->UnitControlTimer = 0.f;
+				UnitBase->SetUnitState(UnitData::PatrolIdle);
+				return;
+			}
+			
 			UnitBase->UnitControlTimer = 0.f;
-			UnitBase->SetUnitState(UnitData::PatrolIdle);
-			return;
+			UnitBase->SetUEPathfinding = true;
 		}
-		
-		UnitBase->UnitControlTimer = 0.f;
-		UnitBase->SetUEPathfinding = true;
-	}
 
 	if(UnitBase->CollisionUnit)
 	{
@@ -1083,9 +1038,13 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 		UnitBase->CollisionUnit = nullptr;
 	}
 
+	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
+	
 	UnitBase->UnitControlTimer += DeltaSeconds;
-	//if(!UnitBase->SetUEPathfinding)
-		//return;
+
+	
+	if(!UnitBase->SetUEPathfinding)
+		return;
 	
 	//if(UnitBase->UnitControlTimer == 0.f)
 		//SetPatrolCloseLocation(UnitBase);
@@ -1099,7 +1058,14 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	{
 		SetPatrolCloseLocation(UnitBase);
 		Succeeded = SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RandomPatrolLocation);
+		Succeeded = Succeeded && UnitBase->GetVelocity().X != 0.0f && UnitBase->GetVelocity().Y != 0.0f;
 		X++;
+	}
+
+	// Draw debug line from UnitBase to RandomPatrolLocation
+	if (GEngine && DebugPatrolRandom)
+	{
+		DrawDebugLine(GetWorld(), UnitBase->GetActorLocation(), UnitBase->RandomPatrolLocation, FColor::Red, false, 5.0, 0, 5.0f);
 	}
 }
 

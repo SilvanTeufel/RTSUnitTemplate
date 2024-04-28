@@ -10,6 +10,7 @@
 #include "Hud/HUDBase.h"
 #include "Hud/PathProviderHUD.h"
 #include "NavigationSystem.h"
+#include "Engine.h"
 #include "NavMesh/NavMeshPath.h"
 
 
@@ -207,5 +208,8 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 		float AcceptanceRadius = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+		bool DebugPatrolRandom = false;
 };
 

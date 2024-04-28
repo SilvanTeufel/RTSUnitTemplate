@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/Class.h"
 
 UENUM(BlueprintType)
 enum class EGASAbilityInputID : uint8

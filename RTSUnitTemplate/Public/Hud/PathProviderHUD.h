@@ -11,6 +11,7 @@
 #include "Actors/DijkstraCenter.h"
 #include "Actors/NoPathFindingArea.h"
 #include "Windows/AllowWindowsPlatformTypes.h"
+#include "DrawDebugHelpers.h"
 #include "PathProviderHUD.generated.h"
 
 UCLASS()
