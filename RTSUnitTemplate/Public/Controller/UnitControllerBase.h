@@ -211,5 +211,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 		bool DebugPatrolRandom = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+		UClass* SurfaceClass = AStaticMeshActor::StaticClass();
 };
 

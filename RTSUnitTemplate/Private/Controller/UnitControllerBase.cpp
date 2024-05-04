@@ -996,7 +996,7 @@ void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 			AActor* HitActor = HitResult.GetActor();
 
 			// Check if we hit the landscape
-			if (HitActor && HitActor->IsA(ALandscape::StaticClass()) )
+			if (HitActor && (HitActor->IsA(ALandscape::StaticClass()) || HitActor->IsA(SurfaceClass) ))
 			{
 				// Hit landscape
 				// Set the Z-coordinate accordingly
