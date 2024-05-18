@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerStart.h"
+#include "Actors/Waypoint.h"
 #include "PlayerStartBase.generated.h"
 
 /**
@@ -18,4 +19,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= RTSUnitTemplate)
 	int SelectableTeamId = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AWaypoint* DefaultWaypoint;
 };

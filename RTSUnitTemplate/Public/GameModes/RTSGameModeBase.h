@@ -51,10 +51,10 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SetTeamId(int Id, ACameraControllerBase* CameraControllerBase);
+	void SetTeamIdAndDefaultWaypoint(int Id, AWaypoint* Waypoint, ACameraControllerBase* CameraControllerBase);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SetTeamIds();
+	void SetTeamIdsAndWaypoints();
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerFromDataTable(FVector Location, AUnitBase* UnitToChase);

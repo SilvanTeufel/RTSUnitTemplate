@@ -163,17 +163,17 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 			//if(UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 			UnitBase->SetWalkSpeed(0);
 
-			if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+			if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 			{
 				//UnitBase->UnitStatePlaceholder = UnitData::Idle;
 				UnitBase->RunLocation = UnitBase->GetActorLocation();
 				UnitBase->SetUnitState(UnitData::Evasion);
 			}
 			
-			if(UnitBase->SetNextUnitToChaseHeal())
+			if(UnitBase->SetNextUnitToChaseHeal() && !UnitBase->IsOnPlattform)
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
-			}else
+			}else if(!UnitBase->IsOnPlattform)
 				SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 		}
 		break;

@@ -211,6 +211,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::PatrolRandom:
 			{
 				// Zugriff auf den PlayerController und Cast zu deinem spezifischen HUD
+				
 				APlayerController* PC = GetWorld()->GetFirstPlayerController();
 				if (PC)
 				{
@@ -758,22 +759,22 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 
 
-	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
 		UnitBase->UnitToChase = UnitBase->CollisionUnit;
 		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
 		UnitBase->CollisionUnit = nullptr;
-	}else if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	}else if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
 		UnitBase->UnitStatePlaceholder = UnitData::Idle;
 		UnitBase->RunLocation = UnitBase->GetActorLocation();
 		UnitBase->SetUnitState(UnitData::Evasion);
 	}
 
-	if(UnitBase->UnitsToChase.Num())
+	if(UnitBase->UnitsToChase.Num() && !UnitBase->IsOnPlattform)
 	{
 		UnitBase->SetUnitState(UnitData::Chase);
-	}else
+	}else if(!UnitBase->IsOnPlattform)
 		SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 }
 

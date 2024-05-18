@@ -9,6 +9,7 @@
 #include "Landscape.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
+#include "Actors/UnitSpawnPlatform.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -17,6 +18,7 @@
 #include "NavMesh/NavMeshPath.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
+#include "Engine/Engine.h"
 
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
@@ -27,10 +29,45 @@ AControllerBase::AControllerBase() {
 
 
 void AControllerBase::BeginPlay() {
-	
+
+		ToggleFPSDisplay(ShowFPS);
 		CameraBase = Cast<ACameraBase>(GetPawn());
 		HUDBase = Cast<APathProviderHUD>(GetHUD());
 		if(HUDBase && HUDBase->StopLoading) CameraBase->DeSpawnLoadingWidget();
+}
+
+void AControllerBase::ToggleFPSDisplay(bool bEnable)
+{
+	if (bEnable)
+	{
+		// Start the timer to call DisplayFPS every 2 seconds
+		GetWorldTimerManager().SetTimer(FPSTimerHandle, this, &AControllerBase::DisplayFPS, 2.0f, true);
+	}
+	else
+	{
+		// Stop the timer if it's running
+		GetWorldTimerManager().ClearTimer(FPSTimerHandle);
+	}
+}
+
+void AControllerBase::DisplayFPS()
+{
+	float DeltaTime = GetWorld()->DeltaTimeSeconds;
+	float FPS = 1.0f / DeltaTime;
+	FString FPSMessage = FString::Printf(TEXT("FPS: %f"), FPS);
+
+	// Retrieve the count of all units from HUDBase or a similar class
+	int UnitsCount = HUDBase->AllUnits.Num();
+	FString UnitsMessage = FString::Printf(TEXT("Unit Count: %d"), UnitsCount);
+
+	// Combine FPS and Unit Count messages
+	FString CombinedMessage = FPSMessage + TEXT(" | ") + UnitsMessage;
+
+	// Display the combined message on screen
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, CombinedMessage, true);
+	}
 }
 
 void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -66,7 +103,7 @@ void AControllerBase::SetupInputComponent() {
 void AControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-
+	
 	if(HUDBase)
 	if((HUDBase->CreatedGridAndDijkstra || HUDBase->StopLoading) && CameraBase)
 	{
@@ -98,6 +135,42 @@ void AControllerBase::Tick(float DeltaSeconds)
 			SetRunLocationUseDijkstraForAI(HUDBase->EnemyUnitBases[i]->DijkstraEndPoint, HUDBase->EnemyUnitBases[i]->DijkstraStartPoint, HUDBase->EnemyUnitBases, PathPoints, i);
 			HUDBase->EnemyUnitBases[i]->DijkstraSetPath = false;
 		}
+
+	// Optionally, attach the actor to the cursor
+	if(CurrentDraggedUnitBase)
+	{
+		FVector MousePosition, MouseDirection;
+		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+		// Raycast from the mouse position into the scene to find the ground
+		FVector Start = MousePosition;
+		FVector End = Start + MouseDirection * 5000; // Extend to a maximum reasonable distance
+
+		FHitResult HitResult;
+		FCollisionQueryParams CollisionParams;
+		CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
+		CollisionParams.AddIgnoredActor(CurrentDraggedUnitBase); // Ignore the dragged actor in the raycast
+
+		// Perform the raycast
+		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
+
+		// Check if something was hit
+		if (bHit && HitResult.GetActor() != nullptr)
+		{
+			CurrentDraggedGround = HitResult.GetActor();
+			// Update the actor's position to the hit location
+			FVector NewActorPosition = HitResult.Location;
+			NewActorPosition.Z += 50.f;
+			CurrentDraggedUnitBase->SetActorLocation(NewActorPosition);
+		}
+		/*
+		FVector MousePosition, MouseDirection;
+		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+		FVector NewActorPosition = MousePosition + MouseDirection*300; // 300 units in front of the camera
+		CurrentDraggedUnitBase->SetActorLocation(NewActorPosition);
+		*/
+	}
 }
 
 void AControllerBase::ShiftPressed()
@@ -233,7 +306,9 @@ void AControllerBase::LeftClickPressed()
 			{
 				HUDBase->DeselectAllUnits();
 				HUDBase->SetUnitSelected(UnitBase);
-
+				DragUnitBase(UnitBase);
+		
+				
 				if(CameraBase->AutoLockOnSelect)
 					LockCameraToUnit = true;
 			}
@@ -251,9 +326,35 @@ void AControllerBase::LeftClickReleased()
 	LeftClickIsPressed = false;
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
+	DropUnitBase();
 	SetWidgets(0);
 }
 
+void AControllerBase::DragUnitBase(AUnitBase* UnitToDrag)
+{
+	if(UnitToDrag->IsOnPlattform)
+	{
+		CurrentDraggedUnitBase = UnitToDrag;
+		CurrentDraggedUnitBase->IsDragged = true;
+	}
+}
+
+void AControllerBase::DropUnitBase()
+{
+	AUnitSpawnPlatform* SpawnPlatform = Cast<AUnitSpawnPlatform>(CurrentDraggedGround);
+	if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !SpawnPlatform)
+	{
+		CurrentDraggedUnitBase->IsOnPlattform = false;
+		CurrentDraggedUnitBase->IsDragged = false;
+		CurrentDraggedUnitBase->SetUnitState(UnitData::PatrolRandom);
+		CurrentDraggedUnitBase = nullptr;
+	}else if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform)
+	{
+		CurrentDraggedUnitBase->IsDragged = false;
+		CurrentDraggedUnitBase->SetUnitState(UnitData::Idle);
+		CurrentDraggedUnitBase = nullptr;
+	}
+}
 
 void AControllerBase::SetWidgets(int Index)
 {
@@ -639,6 +740,12 @@ void AControllerBase::ModifyResource_Implementation(EResourceType ResourceType, 
 void AControllerBase::SetControlerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
+}
+
+void AControllerBase::SetControlerDefaultWaypoint_Implementation(AWaypoint* Waypoint)
+{
+	if(Waypoint)
+		DefaultWaypoint = Waypoint;
 }
 
 void AControllerBase::LoadLevel_Implementation(const FString& SlotName)

@@ -12,6 +12,7 @@
 #include "Actors/Waypoint.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/Engine.h"
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -19,7 +20,7 @@ void ARTSGameModeBase::BeginPlay()
 	Super::BeginPlay();
 
 	FTimerHandle TimerHandle;
-	SetTeamIds();
+	SetTeamIdsAndWaypoints();
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 
 }
@@ -27,7 +28,7 @@ void ARTSGameModeBase::BeginPlay()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
-	SetTeamIds();
+	SetTeamIdsAndWaypoints();
 }
 
 void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -54,17 +55,18 @@ int32 FindMatchingIndex(const TArray<int32>& IdArray, int32 SearchId)
 	return Index; // Return the found index, or INDEX_NONE if not found
 }
 
-void ARTSGameModeBase::SetTeamId_Implementation(int Id, ACameraControllerBase* CameraControllerBase)
+void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypoint* Waypoint, ACameraControllerBase* CameraControllerBase)
 {
 
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->SetControlerTeamId(Id);
+		CameraControllerBase->SetControlerDefaultWaypoint(Waypoint);
 	}
 	
 }
 
-void ARTSGameModeBase::SetTeamIds_Implementation()
+void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
@@ -82,7 +84,7 @@ void ARTSGameModeBase::SetTeamIds_Implementation()
 		if (CameraControllerBase && PlayerStarts.IsValidIndex(PlayerStartIndex))
 		{
 			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
-			SetTeamId_Implementation(CustomPlayerStart->SelectableTeamId, CameraControllerBase);
+			SetTeamIdAndDefaultWaypoint_Implementation(CustomPlayerStart->SelectableTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
 		}
 	}

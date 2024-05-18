@@ -291,17 +291,24 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	int SpawnUnitsFromParameters(
-TSubclassOf<class AAIController> AIControllerBaseClass,
-TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
-TEnumAsByte<UnitData::EState> UState,
-TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UIndex);
+		TSubclassOf<class AAIController> AIControllerBaseClass,
+		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
+		TEnumAsByte<UnitData::EState> UState,
+		TEnumAsByte<UnitData::EState> UStatePlaceholder,
+		int NewTeamId, AWaypoint* Waypoint, int UIndex);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitBase(int UIndex, AUnitBase* NewUnit);
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsOnPlattform = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsDragged = false;
 };
 
 

@@ -27,6 +27,15 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 
+	// Timer handle for managing FPS display updates
+	FTimerHandle FPSTimerHandle;
+
+	// Function called by timer to display FPS
+	void DisplayFPS();
+
+	UFUNCTION(BlueprintCallable, Category="Display")
+	void ToggleFPSDisplay(bool bEnable);
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
 
@@ -36,6 +45,8 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AActor* ClickedActor;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ShowFPS = true;
 	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	//FVector ClickLocation = FVector(0.0f, 0.0f, 0.0f);
 	
@@ -68,6 +79,12 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void DragUnitBase(AUnitBase* UnitToDrag);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void DropUnitBase();
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetWidgets(int Index);
 	
@@ -189,12 +206,24 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> SelectedUnits;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		AUnitBase* CurrentDraggedUnitBase;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		AActor* CurrentDraggedGround;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		int SelectableTeamId = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AWaypoint* DefaultWaypoint;
+		
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetControlerTeamId(int Id);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetControlerDefaultWaypoint(AWaypoint* Waypoint);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SaveLevel(const FString& SlotName);
 
