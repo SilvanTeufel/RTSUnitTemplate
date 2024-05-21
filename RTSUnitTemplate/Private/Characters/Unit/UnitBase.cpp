@@ -60,6 +60,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	*/
 }
 
+
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
@@ -248,6 +249,15 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
+	if(NewHealth <= Attributes->GetHealth())
+	{
+		if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+		{
+			HealthBarWidget->ResetCollapseTimer();
+			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+		}
+	}
+	
 	Attributes->SetAttributeHealth(NewHealth);
 
 	if(NewHealth <= 0.f)

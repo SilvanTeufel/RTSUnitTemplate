@@ -256,7 +256,7 @@ public:
 // Used for Despawn  //////////////////////////////////////////
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DestroyAfterDeath", Keywords = "RTSUnitTemplate DestroyAfterDeath"), Category = RTSUnitTemplate)
-	bool DestroyAfterDeath = true;
+		bool DestroyAfterDeath = true;
 ///////////////////////////////////////////////////////////////////
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "PauseDuration", Keywords = "RTSUnitTemplate PauseDuration"), Category = RTSUnitTemplate)

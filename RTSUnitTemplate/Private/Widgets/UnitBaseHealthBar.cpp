@@ -44,3 +44,14 @@ void UUnitBaseHealthBar::UpdateExperience()
 		}
 	}
 }
+
+void UUnitBaseHealthBar::ResetCollapseTimer() {
+	if (GetWorld()) {
+		GetWorld()->GetTimerManager().ClearTimer(CollapseTimerHandle);
+		GetWorld()->GetTimerManager().SetTimer(CollapseTimerHandle, this, &UUnitBaseHealthBar::CollapseWidget, 10.0f, false);
+	}
+}
+
+void UUnitBaseHealthBar::CollapseWidget() {
+	SetVisibility(ESlateVisibility::Collapsed);
+}

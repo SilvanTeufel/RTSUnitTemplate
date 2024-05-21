@@ -301,7 +301,6 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Spawn WorkResource!"));
 		SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->SetUEPathfinding = true;

@@ -19,6 +19,8 @@ class RTSUNITTEMPLATE_API UUnitBaseHealthBar : public UUserWidget
 public:
 	void SetOwnerActor(AUnitBase* Enemy) {
 		OwnerCharacter = Enemy;
+		SetVisibility(ESlateVisibility::Collapsed);
+		ResetCollapseTimer();
 	}
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -63,5 +65,12 @@ public:
 //private:
 	float PreviousShieldValue = -1.0f;
 
+	FTimerHandle CollapseTimerHandle;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void ResetCollapseTimer();
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void CollapseWidget();
 };
 

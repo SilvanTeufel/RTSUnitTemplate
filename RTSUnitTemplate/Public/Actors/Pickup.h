@@ -20,6 +20,9 @@ public:
 	APickup();
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UStaticMeshComponent* Mesh;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UCapsuleComponent* TriggerCapsule;
