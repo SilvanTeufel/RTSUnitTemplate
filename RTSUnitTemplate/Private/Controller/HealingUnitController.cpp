@@ -10,6 +10,7 @@
 AHealingUnitController::AHealingUnitController()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.05f; 
 	DetectFriendlyUnits = true;
 }
 

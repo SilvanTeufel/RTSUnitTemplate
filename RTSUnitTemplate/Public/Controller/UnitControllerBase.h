@@ -32,6 +32,9 @@ private:
 	
 public:
 	AUnitControllerBase();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TickInterval = 0.05;
 	
 	virtual void BeginPlay() override;
 
@@ -156,7 +159,7 @@ public:
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void EvasionChase(AUnitBase* UnitBase, FVector CollisionLocation);
+	void EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, FVector CollisionLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation);
@@ -197,7 +200,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
-	
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopMovementCommand(AUnitBase* Unit);
 		//void OnAdjustedMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "CreateProjectile", Keywords = "RTSUnitTemplate CreateProjectile"), Category = RTSUnitTemplate)

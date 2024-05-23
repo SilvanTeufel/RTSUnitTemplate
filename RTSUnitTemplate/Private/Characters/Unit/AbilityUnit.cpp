@@ -200,6 +200,8 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
+	//if(NewUnitState == UnitData::Chase && UnitState == UnitData::EvasionChase) return;
+	//if(NewUnitState == UnitData::Attack && UnitState == UnitData::EvasionChase) return;
 	UnitState = NewUnitState;
 }
 

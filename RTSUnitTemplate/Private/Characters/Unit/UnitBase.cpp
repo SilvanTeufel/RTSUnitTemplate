@@ -70,6 +70,7 @@ void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other
 	{
 		// Handle collision with another AUnitBase
 		CollisionUnit = OtherUnit;
+		CollisionLocation = GetActorLocation();
 	}
 }
 
@@ -253,8 +254,11 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	{
 		if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 		{
-			HealthBarWidget->ResetCollapseTimer();
-			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			if(NewHealth <= 0.f)
+			{
+				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			}else
+				HealthBarWidget->ResetCollapseTimer();
 		}
 	}
 	
@@ -272,6 +276,19 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetUnitState(UnitData::Dead);
 		UnitControlTimer = 0.f;
 	}
+}
+
+void AUnitBase::SetShield_Implementation(float NewShield)
+{
+	if(NewShield <= Attributes->GetShield())
+	{
+		if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+		{
+			HealthBarWidget->ResetCollapseTimer();
+		}
+	}
+	
+	Attributes->SetAttributeShield(NewShield);
 }
 
 void AUnitBase::SetSelected()

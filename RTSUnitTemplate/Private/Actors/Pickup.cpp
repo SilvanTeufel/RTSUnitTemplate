@@ -74,7 +74,8 @@ void APickup::Tick(float DeltaTime)
 				break;
 			case PickUpData::Shield:
 				{
-					UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
+					UnitBase->SetShield(UnitBase->Attributes->GetShield() + Amount);
+					//UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
 				}
 				break;
 			case PickUpData::Effect:

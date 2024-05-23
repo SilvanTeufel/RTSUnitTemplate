@@ -19,11 +19,12 @@ class RTSUNITTEMPLATE_API UUnitTimerWidget : public UUserWidget
 public:
 	void SetOwnerActor(AUnitBase* Unit) {
 		OwnerCharacter = Unit;
+		GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitTimerWidget::TimerTick, UpdateInterval, true);
 	}
 
 
 protected:
-	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	TWeakObjectPtr<AUnitBase> OwnerCharacter;
 
@@ -34,15 +35,29 @@ protected:
 	bool SetVisible = false;
 	
 public:
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor CastingColor = FLinearColor::Red; // Replace with your desired color
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor PauseColor = FLinearColor::Yellow;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor BuildColor = FLinearColor::Black;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor ExtractionColor = FLinearColor::Black;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool DisableAutoAttack = true;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool DisableBuild = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UpdateInterval = 0.05;
+	
+	FTimerHandle TickTimerHandle;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void TimerTick();
 };

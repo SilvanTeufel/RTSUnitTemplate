@@ -19,8 +19,11 @@ class RTSUNITTEMPLATE_API UUnitBaseHealthBar : public UUserWidget
 public:
 	void SetOwnerActor(AUnitBase* Enemy) {
 		OwnerCharacter = Enemy;
-		SetVisibility(ESlateVisibility::Collapsed);
-		ResetCollapseTimer();
+		if(!HideWidget)
+		{
+			GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitBaseHealthBar::TimerTick, UpdateInterval, true);
+			SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -30,7 +33,7 @@ public:
 
 	
 //private:	
-	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UFUNCTION()
 	void UpdateExperience();
@@ -67,10 +70,21 @@ public:
 
 	FTimerHandle CollapseTimerHandle;
 
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HideWidget = false;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ResetCollapseTimer();
 
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CollapseWidget();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UpdateInterval = 0.05;
+	
+	FTimerHandle TickTimerHandle;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void TimerTick();
 };
 

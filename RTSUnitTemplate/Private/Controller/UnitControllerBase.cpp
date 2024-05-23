@@ -26,6 +26,7 @@ AUnitControllerBase::AUnitControllerBase()
 {
 	
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = TickInterval; 
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("Sight Config"));
 	SetPerceptionComponent(*CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception Component")));
 
@@ -41,7 +42,7 @@ AUnitControllerBase::AUnitControllerBase()
 	GetPerceptionComponent()->SetDominantSense(*SightConfig->GetSenseImplementation());
 	GetPerceptionComponent()->OnPerceptionUpdated.AddDynamic(this, &AUnitControllerBase::OnUnitDetected);
 	GetPerceptionComponent()->ConfigureSense(*SightConfig);
-	GetPerceptionComponent()->SetComponentTickInterval(0.05f); //
+	GetPerceptionComponent()->SetComponentTickInterval(TickInterval); //
 	GetPerceptionComponent()->SetSenseEnabled(UAISense_Sight::StaticClass(), true);
 	
 }
@@ -310,10 +311,11 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 	
 				}else if(UnitBase->CollisionUnit)
 				{
-					EvasionChase(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
+					EvasionChase(UnitBase, DeltaSeconds, UnitBase->CollisionLocation);
 					UnitBase->UnitControlTimer += DeltaSeconds;
 				}
 			}
+		break;
 		case UnitData::Evasion:
 		{
 		
@@ -562,6 +564,8 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
         {
         	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId)
         	{
+        		StopMovementCommand(UnitBase);
+        		UnitBase->UnitControlTimer = 0.f;
         		UnitBase->SetUnitState(UnitData::EvasionChase);
         		return;
         	}
@@ -660,7 +664,8 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 					if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
 						UnitBase->UnitToChase->SetHealth(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
 					else
-						UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+						UnitBase->UnitToChase->SetShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+						//UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
 					UnitBase->LevelData.Experience++;
 
@@ -778,13 +783,13 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 		SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 }
 
-void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, FVector CollisionLocation)
+void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, FVector CollisionLocation)
 {
 	// Ensure the unit runs at its designated run speed.
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
-				
+	const FVector CollisionUnitLocation = UnitBase->CollisionUnit->GetActorLocation();
 	// Adjust collision location for flying units.
 	if(UnitBase->IsFlying)
 	{
@@ -792,14 +797,19 @@ void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, FVector CollisionLoc
 	}
 	
 	//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
-	FVector AwayDirection = (UnitLocation - CollisionLocation).GetSafeNormal();
-	const FVector RotatedDirection = FRotator(0.f,90.f,0.f).RotateVector(AwayDirection);
-	UnitBase->AddMovementInput(RotatedDirection, UnitBase->Attributes->GetRunSpeedScale());
+	FVector AwayDirection = (UnitLocation - CollisionUnitLocation).GetSafeNormal();
+	
+	const FVector RotatedDirection = FRotator(0.f,40.f,0.f).RotateVector(AwayDirection);
+	//UnitBase->AddMovementInput(RotatedDirection,  UnitBase->Attributes->GetRunSpeedScale()); // UnitBase->Attributes->GetRunSpeedScale()
+	const FVector LocationToGo = UnitBase->GetActorLocation() + RotatedDirection*(UnitBase->EvadeDistanceChase+100.f);
+	UnitBase->SetUEPathfinding = true;
+	SetUEPathfinding(UnitBase, DeltaSeconds, LocationToGo);
+
 
 	// Simplify distance calculation using FVector::Dist.
 	float Distance = FVector::Dist(UnitLocation, CollisionLocation);
 	
-	if (Distance >= UnitBase->EvadeDistance) {
+	if (Distance >= UnitBase->EvadeDistanceChase) { // Distance >= UnitBase->EvadeDistanceChase
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 		UnitBase->CollisionUnit = nullptr;
@@ -1178,70 +1188,26 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 	return true; // Pathfinding succeeded and the unit can move
 }
-/*
-void AUnitControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
-{
 
-	if(!HasAuthority())
-	{
-		return;
-	}
-	
+void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)
+{
 	if (!Unit || !Unit->GetCharacterMovement())
 	{
 		return;
 	}
-
-	// Check if we have a valid navigation system
-	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
-	if (!NavSystem)
-	{
-		return;
-	}
-
-
-	FVector StartLocation = Unit->GetActorLocation();
-	FVector EndLocation = DestinationLocation;
-	FHitResult HitResult;
-	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(Unit); // Ignore the unit that is moving
-
-	PendingUnit = Unit;
-	PendingDestination = DestinationLocation;
-
+	// Stop the current movement request
+	StopMovement();
 	
-	Unit->SetRunLocation(EndLocation);
-	Unit->UEPathfindingUsed = true;
-	// Move the unit to the destination location using the navigation system
-	FAIMoveRequest MoveRequest;
-	MoveRequest.SetGoalLocation(EndLocation);
-	MoveRequest.SetAcceptanceRadius(AcceptanceRadius); // Set an acceptance radius for reaching the destination
-	
-	FNavPathSharedPtr NavPath;
-	
-	MoveTo(MoveRequest, &NavPath);
-	
-	if(NavPath)
-	{
-		FNavMeshPath* NavMeshPath = NavPath->CastPath<FNavMeshPath>();
-		if (NavMeshPath)
-		{
-			NavMeshPath->OffsetFromCorners(100.f);
-		}
-	}
+	// Clear the pending unit and destination
+	PendingUnit = nullptr;
+	PendingDestination = FVector::ZeroVector;
+
+	// If necessary, reset any flags or states in the unit
+
+	Unit->UEPathfindingUsed = false;
+	Unit->SetRunLocation(FVector::ZeroVector);
+
 }
-*/
-/*
-void AUnitControllerBase::OnAdjustedMoveCompleted(FAIRequestID RequestID,  const FPathFollowingResult& Result)
-{
-	if(PendingUnit) //  Result.IsSuccess()
-	{
-		MoveToLocationUEPathFinding(PendingUnit, PendingDestination);
-		// Reset the PendingUnit and PendingDestination to avoid reusing them incorrectly
-		PendingUnit = nullptr;
-	}
-}
-*/
 
 void AUnitControllerBase::CreateProjectile_Implementation(AUnitBase* UnitBase)
 {

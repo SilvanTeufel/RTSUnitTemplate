@@ -175,7 +175,8 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 		if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-NewDamage);
 		else
-			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
+			UnitToHit->SetShield(UnitToHit->Attributes->GetShield()-NewDamage);
+			//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 
 
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
@@ -205,7 +206,8 @@ void AProjectile::ImpactHeal_Implementation(AActor* ImpactTarget)
 		if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()+NewDamage);
 		else
-			UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()+NewDamage);
+			UnitToHit->SetShield(UnitToHit->Attributes->GetShield()+NewDamage);
+			//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()+NewDamage);
 
 
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)

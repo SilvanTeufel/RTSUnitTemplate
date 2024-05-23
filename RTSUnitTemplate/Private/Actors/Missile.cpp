@@ -60,7 +60,8 @@ void AMissile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Other
 			if(UnitToHit->Attributes->GetShield() <= 0)
 				UnitToHit->SetHealth(UnitToHit->Attributes->GetHealth()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
 			else
-				UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
+				UnitToHit->SetShield(UnitToHit->Attributes->GetShield()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
+				//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
 
 			
 			if(UnitToHit->GetUnitState() != UnitData::Run)
