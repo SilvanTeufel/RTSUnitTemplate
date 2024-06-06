@@ -332,24 +332,29 @@ void AControllerBase::LeftClickReleased()
 
 void AControllerBase::DragUnitBase(AUnitBase* UnitToDrag)
 {
-	if(UnitToDrag->IsOnPlattform)
+	if(UnitToDrag->IsOnPlattform && SpawnPlatform)
 	{
-		CurrentDraggedUnitBase = UnitToDrag;
-		CurrentDraggedUnitBase->IsDragged = true;
+		if(SpawnPlatform->GetEnergy() >= UnitToDrag->EnergyCost)
+		{
+			CurrentDraggedUnitBase = UnitToDrag;
+			CurrentDraggedUnitBase->IsDragged = true;
+			SpawnPlatform->SetEnergy(SpawnPlatform->Energy-UnitToDrag->EnergyCost);
+		}
 	}
 }
 
 void AControllerBase::DropUnitBase()
 {
-	AUnitSpawnPlatform* SpawnPlatform = Cast<AUnitSpawnPlatform>(CurrentDraggedGround);
-	if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !SpawnPlatform)
+	AUnitSpawnPlatform* CurrentSpawnPlatform = Cast<AUnitSpawnPlatform>(CurrentDraggedGround);
+	if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !CurrentSpawnPlatform && SpawnPlatform)
 	{
 		CurrentDraggedUnitBase->IsOnPlattform = false;
 		CurrentDraggedUnitBase->IsDragged = false;
 		CurrentDraggedUnitBase->SetUnitState(UnitData::PatrolRandom);
 		CurrentDraggedUnitBase = nullptr;
-	}else if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform)
+	}else if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && SpawnPlatform)
 	{
+		SpawnPlatform->SetEnergy(SpawnPlatform->Energy+CurrentDraggedUnitBase->EnergyCost);
 		CurrentDraggedUnitBase->IsDragged = false;
 		CurrentDraggedUnitBase->SetUnitState(UnitData::Idle);
 		CurrentDraggedUnitBase = nullptr;

@@ -1,15 +1,15 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/UnitSpawnPlatform.h"
-
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Components/StaticMeshComponent.h"
 #include "Controller/ControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "Widgets/SpawnEnergyBar.h"
 
 // Sets default values
-AUnitSpawnPlatform::AUnitSpawnPlatform()
+AUnitSpawnPlatform::AUnitSpawnPlatform(const FObjectInitializer& ObjectInitializer)
 {
 	// Set this actor to call Tick() every frame. You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -21,6 +21,9 @@ AUnitSpawnPlatform::AUnitSpawnPlatform()
 	// Create spawn point
 	SpawnPoint = CreateDefaultSubobject<USceneComponent>(TEXT("SpawnPoint"));
 	SpawnPoint->SetupAttachment(RootComponent);
+
+	EnergyWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("EnergyBar"));
+	EnergyWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 }
 
 // Called when the game starts or when spawned
@@ -31,11 +34,14 @@ void AUnitSpawnPlatform::BeginPlay()
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 	if (PlayerController)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Found PlayerController"));
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 		if (ControllerBase)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("Found ControllerBase"));
 			DefaultTeamId = ControllerBase->SelectableTeamId;
 			DefaultWaypoint = ControllerBase->DefaultWaypoint;
+			ControllerBase->SpawnPlatform = this;
 		}
 	}
 	
@@ -46,7 +52,28 @@ void AUnitSpawnPlatform::BeginPlay()
 
 	const float PositionInterval = 1.0f; // Time in seconds between Resposition
 	GetWorld()->GetTimerManager().SetTimer(PositionTimerHandle, this, &AUnitSpawnPlatform::UpdateUnitPositions, PositionInterval, true);
+
+	const float EnergyInterval = 1.0f; // Time in seconds between Resposition
+	GetWorld()->GetTimerManager().SetTimer(EnergyTimerHandle, this, &AUnitSpawnPlatform::UpdateEnergy, PositionInterval, true);
+
 	
+	if (EnergyWidgetComp) {
+		
+		USpawnEnergyBar* Energybar = Cast<USpawnEnergyBar>(EnergyWidgetComp->GetUserWidgetObject());
+
+		if (EnergyWidgetComp) {
+			Energybar->SetOwnerActor(this);
+		}
+	}
+}
+
+void AUnitSpawnPlatform::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AUnitSpawnPlatform, Energy);
+	DOREPLIFETIME(AUnitSpawnPlatform, MaxEnergy);
+	DOREPLIFETIME(AUnitSpawnPlatform, EnergyWidgetComp);
 }
 
 void AUnitSpawnPlatform::SpawnUnitsFromArray()
@@ -106,6 +133,10 @@ void AUnitSpawnPlatform::UpdateUnitPositions()
 	}
 }
 
+void AUnitSpawnPlatform::UpdateEnergy()
+{
+	SetEnergy(GetEnergy()+1.f);
+}
 void AUnitSpawnPlatform::ReSpawnUnits()
 {
 	int NumUnits = SpawnedUnits.Num();
@@ -246,4 +277,26 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 	}
 
 	return 0;
+}
+
+float AUnitSpawnPlatform::GetEnergy()
+{
+	return Energy;
+}
+
+float AUnitSpawnPlatform::GetMaxEnergy()
+{
+	return MaxEnergy;
+}
+
+void AUnitSpawnPlatform::SetEnergy(float NewEnergy)
+{
+	if(NewEnergy > MaxEnergy)
+		Energy = MaxEnergy;
+	else if(NewEnergy <= 0.f)
+		Energy = 0.f;
+	else
+	{
+		Energy = NewEnergy;
+	}
 }

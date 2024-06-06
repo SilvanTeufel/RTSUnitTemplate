@@ -8,6 +8,7 @@
 #include "Core/UnitData.h"
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"
+#include "Actors/UnitSpawnPlatform.h"
 #include "EOS/EOS_PlayerController.h"
 #include "ControllerBase.generated.h"
 
@@ -211,6 +212,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		AActor* CurrentDraggedGround;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		AUnitSpawnPlatform* SpawnPlatform;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		int SelectableTeamId = 0;

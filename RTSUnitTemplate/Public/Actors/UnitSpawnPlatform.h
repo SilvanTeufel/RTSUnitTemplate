@@ -4,6 +4,8 @@
 #include "CoreMinimal.h"
 #include "Core/UnitData.h"
 #include "GameFramework/Actor.h"
+#include "Components/WidgetComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "UnitSpawnPlatform.generated.h"
 
 UCLASS()
@@ -13,22 +15,27 @@ class RTSUNITTEMPLATE_API AUnitSpawnPlatform : public AActor
     
 public:    
 	// Sets default values for this actor's properties
-	AUnitSpawnPlatform();
+	AUnitSpawnPlatform(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 private:
 	FTimerHandle RespawnTimerHandle;
 	FTimerHandle PositionTimerHandle;
-	
+	FTimerHandle EnergyTimerHandle;
 public:    
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateUnitPositions();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateEnergy();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnUnitsFromArray();
@@ -54,6 +61,7 @@ private:
 	USceneComponent* SpawnPoint;
 
 public:
+	
 	// Variables for specifying spawn details
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<AUnitBase>> DefaultUnitBaseClass;
@@ -97,4 +105,23 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float UnitZOffset = 50.0f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	class UWidgetComponent* EnergyWidgetComp;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float Energy = 100.f;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MaxEnergy = 100.f;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetEnergy();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetMaxEnergy();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetEnergy(float NewEnergy);
+
 };
