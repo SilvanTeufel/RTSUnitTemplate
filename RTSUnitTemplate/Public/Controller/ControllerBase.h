@@ -47,7 +47,7 @@ public:
 	AActor* ClickedActor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ShowFPS = true;
+	bool ShowFPS = false;
 	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	//FVector ClickLocation = FVector(0.0f, 0.0f, 0.0f);
 	

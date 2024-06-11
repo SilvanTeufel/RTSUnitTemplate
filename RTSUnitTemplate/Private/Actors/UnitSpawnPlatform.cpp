@@ -34,11 +34,9 @@ void AUnitSpawnPlatform::BeginPlay()
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 	if (PlayerController)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Found PlayerController"));
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 		if (ControllerBase)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Found ControllerBase"));
 			DefaultTeamId = ControllerBase->SelectableTeamId;
 			DefaultWaypoint = ControllerBase->DefaultWaypoint;
 			ControllerBase->SpawnPlatform = this;

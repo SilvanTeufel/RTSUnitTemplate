@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Actors/UnitSpawnPlatform.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "SpawnEnergyBar.generated.h"
 
 /**
