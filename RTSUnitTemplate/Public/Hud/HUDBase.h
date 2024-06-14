@@ -31,12 +31,18 @@ public:
 	void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool bSelectFullSquad = false;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SelectUnitsFromSameSquad(AUnitBase* SelectedUnit);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void AddUnitsToArray();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void AssignNewHighestIndex(AUnitBase* Unit);
+		int AssignNewHighestIndex(AUnitBase* Unit);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		int32 HighestUnitIndex = 0;
@@ -74,8 +80,8 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> EnemyUnitBases;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		TArray <AUnitBase*> AllUnitBases;
+	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	//	TArray <AUnitBase*> AllUnitBases;
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AWorkingUnitBase*> WorkingUnits;

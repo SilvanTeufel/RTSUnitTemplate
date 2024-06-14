@@ -199,6 +199,8 @@ void ARTSGameModeBase::SetSkipTimerMappingById(int32 SearchId, bool Value)
 
 void ARTSGameModeBase::SpawnUnitFromDataTable(int id, FVector Location, AUnitBase* UnitToChase) // , int TeamId, AWaypoint* Waypoint
 {
+
+	
 	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
 		if (UnitSpawnParameter)
@@ -458,120 +460,125 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		return;
 	}
 	
-	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
-	for(int i = 0; i < SpawnParameter.UnitCount; i++)
-	{
-		// Waypointspawn
-		const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
-
-		FTransform EnemyTransform;
-		EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, SpawnParameter.UnitOffset.Z));
-		
-		const auto UnitBase = Cast<AUnitBase>
-			(UGameplayStatics::BeginDeferredActorSpawnFromClass
-			(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-
-		
-
-		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-
-		if(!ControllerBase) return;
-
-		ControllerBase->Possess(UnitBase);
-		
-		if (UnitBase != nullptr)
-		{
-			if(UnitToChase != nullptr)
-			{
-				UnitBase->UnitToChase = UnitToChase;
-				UnitBase->SetUnitState(UnitData::Chase);
-			}
-
-			// Check and apply CharacterMesh
-			if (SpawnParameter.CharacterMesh)
-			{
-				UnitBase->MeshAssetPath = SpawnParameter.CharacterMesh->GetPathName();
-			}
-
-			// Check and apply Material
-			if (SpawnParameter.Material)
-			{
-				UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
-			}
-			
-			if (SpawnParameter.TeamId)
-			{
-				UnitBase->TeamId = SpawnParameter.TeamId;
-			}
-
-			UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
-			
-			UnitBase->OnRep_MeshAssetPath();
-			UnitBase->OnRep_MeshMaterialPath();
-
-			UnitBase->SetReplicateMovement(true);
-			SetReplicates(true);
-			UnitBase->GetMesh()->SetIsReplicated(true);
-			
-			UnitBase->SetMeshRotationServer();
-			
-			AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
-
-			/*
-			if(Waypoint != nullptr)
-			{
-				UnitBase->NextWaypoint = Waypoint;
-			}*/
-			
-			UnitBase->UnitState = SpawnParameter.State;
-			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
-			if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
-			{
-				FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
-				UnitBase->SetActorLocation(NewLocation);
-			}
-
-			UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
-			
-			if(SpawnParameter.Attributes)
-			{
-				UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
-			}
-		
-			UnitBase->InitializeAttributes();
-
-			int32 Index;
-			
-			Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
-			AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
-
-			/*
-			if(SummoningUnit != nullptr && SummonIndex != -1) // SummoningUnit->SummonedUnitsIndexes.Num()
-			{
-				UE_LOG(LogTemp, Log, TEXT("SummoningUnit->SummonedUnitsIndexes.Num() = %d"), SummoningUnit->SummonedUnitsIndexes.Num());
-				UE_LOG(LogTemp, Log, TEXT("SummonIndex = %d"), SummonIndex);
-				// This is not needed then ?
-				SummoningUnit->SummonedUnitsIndexes[SummonIndex] = UnitBase->UnitIndex;
-
-				// Perhaps do better this ?
-				SummoningUnit->SummonedUnits.Add(UnitBase);;
-			}
-			*/
-			FUnitSpawnData UnitSpawnDataSet;
-			UnitSpawnDataSet.Id = SpawnParameter.Id;
-			UnitSpawnDataSet.UnitBase = UnitBase;
-			UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+	HighestSquadId++;
 	
-			UnitSpawnDataSets.Add(UnitSpawnDataSet);
+	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
+	{
+		HighestSquadId++;
+		for(int i = 0; i < SpawnParameter.UnitCount; i++)
+		{
+			// Waypointspawn
+			const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
+
+			FTransform EnemyTransform;
+			EnemyTransform.SetLocation(FVector(FirstLocation.X, FirstLocation.Y, SpawnParameter.UnitOffset.Z));
+			
+			const auto UnitBase = Cast<AUnitBase>
+				(UGameplayStatics::BeginDeferredActorSpawnFromClass
+				(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+
+			
+
+			AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+
+			if(!ControllerBase) return;
+
+			ControllerBase->Possess(UnitBase);
+			
+			if (UnitBase != nullptr)
+			{
+				if(UnitToChase != nullptr)
+				{
+					UnitBase->UnitToChase = UnitToChase;
+					UnitBase->SetUnitState(UnitData::Chase);
+				}
+
+				// Check and apply CharacterMesh
+				if (SpawnParameter.CharacterMesh)
+				{
+					UnitBase->MeshAssetPath = SpawnParameter.CharacterMesh->GetPathName();
+				}
+
+				// Check and apply Material
+				if (SpawnParameter.Material)
+				{
+					UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
+				}
+				
+				if (SpawnParameter.TeamId)
+				{
+					UnitBase->TeamId = SpawnParameter.TeamId;
+				}
+
+				UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+				
+				UnitBase->OnRep_MeshAssetPath();
+				UnitBase->OnRep_MeshMaterialPath();
+
+				UnitBase->SetReplicateMovement(true);
+				SetReplicates(true);
+				UnitBase->GetMesh()->SetIsReplicated(true);
+				
+				UnitBase->SetMeshRotationServer();
+				
+				AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
+
+				/*
+				if(Waypoint != nullptr)
+				{
+					UnitBase->NextWaypoint = Waypoint;
+				}*/
+				
+				UnitBase->UnitState = SpawnParameter.State;
+				UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+				UnitBase->SquadId = HighestSquadId;
+				if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
+				{
+					FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
+					UnitBase->SetActorLocation(NewLocation);
+				}
+
+				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+				
+				if(SpawnParameter.Attributes)
+				{
+					UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
+				}
+			
+				UnitBase->InitializeAttributes();
+
+				int32 Index;
+				
+				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
+				AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
+
+				/*
+				if(SummoningUnit != nullptr && SummonIndex != -1) // SummoningUnit->SummonedUnitsIndexes.Num()
+				{
+					UE_LOG(LogTemp, Log, TEXT("SummoningUnit->SummonedUnitsIndexes.Num() = %d"), SummoningUnit->SummonedUnitsIndexes.Num());
+					UE_LOG(LogTemp, Log, TEXT("SummonIndex = %d"), SummonIndex);
+					// This is not needed then ?
+					SummoningUnit->SummonedUnitsIndexes[SummonIndex] = UnitBase->UnitIndex;
+
+					// Perhaps do better this ?
+					SummoningUnit->SummonedUnits.Add(UnitBase);;
+				}
+				*/
+				FUnitSpawnData UnitSpawnDataSet;
+				UnitSpawnDataSet.Id = SpawnParameter.Id;
+				UnitSpawnDataSet.UnitBase = UnitBase;
+				UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+		
+				UnitSpawnDataSets.Add(UnitSpawnDataSet);
+				
+			}
 			
 		}
-		
 	}
 	// Enemyspawn
 }
 
-void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
+int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 
@@ -580,10 +587,12 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
 		if(HUD)
 		{
-				HUD->AssignNewHighestIndex(UnitBase);
+				int Index = HUD->AssignNewHighestIndex(UnitBase);
 				HUD->AllUnits.Add(UnitBase);
+				return Index;
 		}
 	}
+	return 0;
 }
 
 void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter)

@@ -123,6 +123,7 @@ void AHUDBase::DrawHUD()
 				{
 					NewUnitBases[i]->SetSelected();
 					SelectedUnits.Emplace(NewUnitBases[i]);
+					SelectUnitsFromSameSquad(NewUnitBases[i]);
 				}
 			}
 
@@ -157,6 +158,20 @@ void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AHUDBase, AllUnits);
 }
 
+void AHUDBase::SelectUnitsFromSameSquad(AUnitBase* SelectedUnit)
+{
+	if(bSelectFullSquad)
+	for (int32 i = 0; i < AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		if(Unit && Unit->SquadId == SelectedUnit->SquadId && Unit->SquadId != 0)
+		{
+			Unit->SetSelected();
+			SelectedUnits.Emplace(Unit);
+		}
+	}
+}
+
 void AHUDBase::AddUnitsToArray()
 {
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
@@ -184,10 +199,11 @@ void AHUDBase::AddUnitsToArray()
 	}
 }
 
-void AHUDBase::AssignNewHighestIndex(AUnitBase* Unit)
+int AHUDBase::AssignNewHighestIndex(AUnitBase* Unit)
 {
 	HighestUnitIndex++;
 	Unit->SetUnitIndex(HighestUnitIndex);
+	return HighestUnitIndex;
 	//UE_LOG(LogTemp, Warning, TEXT("Assigned UnitINDEX! %d"), Unit->UnitIndex);
 }
 
@@ -311,7 +327,8 @@ void AHUDBase::SetUnitSelected(AUnitBase* Unit)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		SelectedUnits[i]->SetSelected();
 	}
-	
+
+	SelectUnitsFromSameSquad(Unit);
 }
 
 void AHUDBase::DeselectAllUnits()

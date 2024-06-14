@@ -96,7 +96,7 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	void SpawnUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase); // , int TeamId, AWaypoint* Waypoint = nullptr, int32 UnitIndex = 0, AUnitBase* SummoningUnit = nullptr, int SummonIndex = -1
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
+	int AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter);
@@ -113,4 +113,6 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UDataTable*> UnitSpawnParameters;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 HighestSquadId = 0;
 };

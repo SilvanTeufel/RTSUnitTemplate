@@ -484,12 +484,12 @@ bool AUnitBase::SetNextUnitToChase()
 }
 
 
-int AUnitBase::SpawnUnitsFromParameters(
+void AUnitBase::SpawnUnitsFromParameters(
 TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UIndex)
+int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 {
 	FUnitSpawnParameter SpawnParameter;
 	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
@@ -504,99 +504,104 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
-	if(!GameMode) return 0;
+	if(!GameMode) return;
+
+	GameMode->HighestSquadId++;
+	for(int i = 0; i < UnitCount; i++)
+	{
+		FTransform UnitTransform;
 	
-	FTransform UnitTransform;
-	
-	UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
+		UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
 		
 		
-	const auto UnitBase = Cast<AUnitBase>
-		(UGameplayStatics::BeginDeferredActorSpawnFromClass
-		(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
+		const auto UnitBase = Cast<AUnitBase>
+			(UGameplayStatics::BeginDeferredActorSpawnFromClass
+			(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
 
 	
-	if(SpawnParameter.UnitControllerBaseClass)
-	{
-		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!ControllerBase) return 0;
-		APawn* PawnBase = Cast<APawn>(UnitBase);
-		if(PawnBase)
+		if(SpawnParameter.UnitControllerBaseClass)
 		{
-			ControllerBase->Possess(PawnBase);
+			AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+			if(!ControllerBase) return;
+			APawn* PawnBase = Cast<APawn>(UnitBase);
+			if(PawnBase)
+			{
+				ControllerBase->Possess(PawnBase);
+			}
+		}
+	
+		if (UnitBase != nullptr)
+		{
+
+			if (SpawnParameter.CharacterMesh)
+			{
+				UnitBase->MeshAssetPath = SpawnParameter.CharacterMesh->GetPathName();
+			}
+		
+			if (SpawnParameter.Material)
+			{
+				UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
+			}
+		
+			if(NewTeamId)
+			{
+				UnitBase->TeamId = NewTeamId;
+			}
+
+			UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+			
+			UnitBase->OnRep_MeshAssetPath();
+			UnitBase->OnRep_MeshMaterialPath();
+
+			UnitBase->SetReplicateMovement(true);
+			SetReplicates(true);
+			UnitBase->GetMesh()->SetIsReplicated(true);
+
+			// Does this have to be replicated?
+			UnitBase->SetMeshRotationServer();
+		
+			UnitBase->UnitState = SpawnParameter.State;
+			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
+			if(UnitToChase)
+			{
+				UnitBase->UnitToChase = UnitToChase;
+				UnitBase->SetUnitState(UnitData::Chase);
+			}
+		
+			UGameplayStatics::FinishSpawningActor(
+			 Cast<AActor>(UnitBase), 
+			 UnitTransform
+			);
+
+
+			UnitBase->InitializeAttributes();
+			UnitBase->SquadId = GameMode->HighestSquadId;
+			
+			if(Waypoint)
+				UnitBase->NextWaypoint = Waypoint;
+		
+			if(SummonedUnitIndexes.Num() < i+1 || SummonContinuously)
+			{
+				int UIndex = GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+			
+				FUnitSpawnData UnitSpawnDataSet;
+				UnitSpawnDataSet.Id = SpawnParameter.Id;
+				UnitSpawnDataSet.UnitBase = UnitBase;
+				UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+				SummonedUnitsDataSet.Add(UnitSpawnDataSet);
+				SummonedUnitIndexes.Add(UIndex);
+			}
+			else if(IsSpawnedUnitDead(SummonedUnitIndexes[i]))
+			{
+				UnitBase->UnitIndex = SummonedUnitIndexes[i];
+				SetUnitBase(SummonedUnitIndexes[i], UnitBase);
+			}
+			//return UnitBase->UnitIndex;
 		}
 	}
-	
-	if (UnitBase != nullptr)
-	{
 
-		if (SpawnParameter.CharacterMesh)
-		{
-			UnitBase->MeshAssetPath = SpawnParameter.CharacterMesh->GetPathName();
-		}
-		
-		if (SpawnParameter.Material)
-		{
-			UnitBase->MeshMaterialPath = SpawnParameter.Material->GetPathName();
-		}
-		
-		if(NewTeamId)
-		{
-			UnitBase->TeamId = NewTeamId;
-		}
-
-		UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
-			
-		UnitBase->OnRep_MeshAssetPath();
-		UnitBase->OnRep_MeshMaterialPath();
-
-		UnitBase->SetReplicateMovement(true);
-		SetReplicates(true);
-		UnitBase->GetMesh()->SetIsReplicated(true);
-
-		// Does this have to be replicated?
-		UnitBase->SetMeshRotationServer();
-		
-		UnitBase->UnitState = SpawnParameter.State;
-		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
-		if(UnitToChase)
-		{
-			UnitBase->UnitToChase = UnitToChase;
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-		
-		UGameplayStatics::FinishSpawningActor(
-		 Cast<AActor>(UnitBase), 
-		 UnitTransform
-		);
-
-
-		UnitBase->InitializeAttributes();
-
-		if(Waypoint)
-		UnitBase->NextWaypoint = Waypoint;
-		
-		if(UIndex == 0)
-		{
-			GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-			
-			FUnitSpawnData UnitSpawnDataSet;
-			UnitSpawnDataSet.Id = SpawnParameter.Id;
-			UnitSpawnDataSet.UnitBase = UnitBase;
-			UnitSpawnDataSet.SpawnParameter = SpawnParameter;
-			SummonedUnitsDataSet.Add(UnitSpawnDataSet);
-		}
-		else
-		{
-			UnitBase->UnitIndex = UIndex;
-			SetUnitBase(UIndex, UnitBase);
-		}
-
-		return UnitBase->UnitIndex;
-	}
-
-	return 0;
+	//return 0;
 }
 
 bool AUnitBase::IsSpawnedUnitDead(int UIndex)

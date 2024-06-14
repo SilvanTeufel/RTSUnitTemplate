@@ -79,7 +79,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void DragUnitBase(AUnitBase* UnitToDrag);
 

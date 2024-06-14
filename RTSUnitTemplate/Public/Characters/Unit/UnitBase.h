@@ -72,9 +72,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetMeshRotationServer();
 	
-//	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "TeamId", Keywords = "RTSUnitTemplate IsFriendly"), Category = RTSUnitTemplate)
-		//int TeamId = 1;
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "IsFlying", Keywords = "RTSUnitTemplate IsFlying"), Category = RTSUnitTemplate)
 		bool IsFlying = false;
 
@@ -296,15 +293,15 @@ public:
 	TArray<FUnitSpawnData> SummonedUnitsDataSet;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
-	TArray<int> SummonedUnitIndexes = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	TArray<int> SummonedUnitIndexes;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	int SpawnUnitsFromParameters(
+	void SpawnUnitsFromParameters(
 		TSubclassOf<class AAIController> AIControllerBaseClass,
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, AWaypoint* Waypoint, int UIndex);
+		int NewTeamId, AWaypoint* Waypoint, int UnitCount = 1, bool SummonContinuously = true);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);
