@@ -828,7 +828,7 @@ void ACameraControllerBase::LockCamToSpecificUnit(AUnitBase* SUnit)
 		CameraBase->LockOnUnit(Unit);
 
 		CamIsRotatingLeft = true;
-		CameraBase->RotateCamLeft(CameraBase->AddCamRotation/100);
+		CameraBase->RotateCamLeft(CameraBase->AddCamRotationSpeaking/100);
 		
 		if(CamIsZoomingInState)
 		{
