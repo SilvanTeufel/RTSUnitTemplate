@@ -298,12 +298,12 @@ void AExtendedCameraBase::Input_A_Pressed(const FInputActionValue& InputActionVa
 {
 	if(BlockControls) return;
 
-	
+	/*
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->TPressed();
-	}
+	} */
 }
 
 void AExtendedCameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)

@@ -18,9 +18,21 @@ AWorkArea::AWorkArea()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
 	
-	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
+	// Set collision enabled 
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // Query Only (No Physics Collision)
+	Mesh->SetCollisionObjectType(ECC_WorldStatic); // Object Type: WorldStatic
 	Mesh->SetGenerateOverlapEvents(true);
+
+	// Set collision responses
+	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // Visibility: Block
+	Mesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Overlap); // Camera: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Overlap); // WorldStatic: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap); // WorldDynamic: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap); // Pawn: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap); // PhysicsBody: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Overlap); // Vehicle: Overlap
+	Mesh->SetCollisionResponseToChannel(ECC_Destructible, ECR_Overlap); // Destructible: Overlap
+
 
 
 	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
