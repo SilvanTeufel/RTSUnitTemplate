@@ -243,6 +243,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "AddCamRotation", Keywords = "TopDownRTSCamLib AddCamRotation"), Category = RTSUnitTemplate)
 		float AddCamRotation = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float AddCamRotationSpeaking = 0.75f;
 	
 	UPROPERTY(EditAnywhere, meta = (DisplayName = "CameraAngles", Keywords = "TopDownRTSCamLib CameraAngles"), Category = RTSUnitTemplate)
 		float CameraAngles[4] = { 0.f, 90.f, 180.f, 270.f };
