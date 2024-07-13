@@ -136,7 +136,7 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
 	float UnitControlTimer = 0.0f; // This Timer is used in UnitControllerBase Statemachine
-
+/*
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;
 
@@ -145,7 +145,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool GetToggleUnitDetection();
-	
+	*/
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitToChase", Keywords = "RTSUnitTemplate UnitToChase"), Category = RTSUnitTemplate)
 	AUnitBase* UnitToChase;
 

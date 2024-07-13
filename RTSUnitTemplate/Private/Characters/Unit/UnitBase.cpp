@@ -437,7 +437,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 		}
 	}
 }
-
+/*
 void AUnitBase::SetToggleUnitDetection_Implementation(bool ToggleTo)
 {
 		ToggleUnitDetection = ToggleTo;
@@ -447,7 +447,7 @@ bool AUnitBase::GetToggleUnitDetection()
 {
 	return ToggleUnitDetection;
 }
-
+*/
 bool AUnitBase::SetNextUnitToChase()
 {
 	if (UnitsToChase.IsEmpty()) return false;

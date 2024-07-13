@@ -163,13 +163,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 			NewActorPosition.Z += 50.f;
 			CurrentDraggedUnitBase->SetActorLocation(NewActorPosition);
 		}
-		/*
-		FVector MousePosition, MouseDirection;
-		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
 
-		FVector NewActorPosition = MousePosition + MouseDirection*300; // 300 units in front of the camera
-		CurrentDraggedUnitBase->SetActorLocation(NewActorPosition);
-		*/
 	}
 }
 
@@ -465,6 +459,8 @@ void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, i
 void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, bool State)
 {
 	Unit->SetToggleUnitDetection(State);
+	Unit->UnitsToChase.Empty();
+	Unit->UnitToChase = nullptr;
 }
 void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
 {

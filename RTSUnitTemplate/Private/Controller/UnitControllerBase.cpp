@@ -101,7 +101,7 @@ void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 {
 	AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
-	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead) return;
+	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || (CurrentUnit->GetUnitState() == UnitData::Run && !CurrentUnit->GetToggleUnitDetection())) return;
 
 	// Loop through each detected unit
 	for (AActor* Actor : DetectedUnits)
@@ -290,7 +290,6 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 
 		case UnitData::IsAttacked:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
 			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
@@ -299,13 +298,8 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			{
 				if(UnitBase->UnitControlTimer >= 7.f)
 				{
-		
-					//UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*350.f, FVector(5000.f, 5000.f, 0.f), 25.f, 350.f);
 					UnitBase->CollisionUnit = nullptr;
-					//FVector NewLocation = UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*300.f;
-					//NewLocation.Z = UnitBase->GetActorLocation().Z;
 					UnitBase->UnitControlTimer = 0.f;
-					//UnitBase->TeleportToValidLocation(NewLocation);
 					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 	
@@ -318,13 +312,18 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Evasion:
 		{
-		
+
+				
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
-			if(	UnitBase->CollisionUnit)
+			
+			if(UnitBase->CollisionUnit)
 			{
 				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
 				EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UnitBase->UnitControlTimer += DeltaSeconds;
+			}else
+			{
+				UnitBase->SetUnitState(UnitData::Run);
 			}
 				
 		}
@@ -819,15 +818,21 @@ void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, 
 
 void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation)
 {
-	
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
+	/*
+	if(!(UnitBase->UnitStatePlaceholder == UnitData::Run && !UnitBase->GetToggleUnitDetection()) && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
 		}
-	}
-				
+	}*/
+
+
+
+
+
+
+
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
@@ -845,7 +850,7 @@ void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLoca
 	if (Distance >= UnitBase->EvadeDistance) {
 		//UnitBase->SetUnitState(UnitData::Run);
 		UnitBase->SetUEPathfinding = true;
-		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		UnitBase->SetUnitState(UnitData::Run);
 		UnitBase->CollisionUnit = nullptr;
 	}
 	UnitBase->UnitControlTimer = 0.f;
@@ -912,6 +917,8 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		return;
 	}
 
+	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
+	
 	if(!UnitBase->SetUEPathfinding) return;
 
 	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RunLocation);
@@ -1082,6 +1089,8 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 
 bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
 {
+	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
+	
 	if(!UnitBase->SetUEPathfinding)
 		return false;
 		

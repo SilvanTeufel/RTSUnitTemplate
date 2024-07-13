@@ -198,10 +198,25 @@ void AAbilityUnit::GetAbilitiesArrays()
 	}
 }
 
+
+
+
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
 	//if(NewUnitState == UnitData::Chase && UnitState == UnitData::EvasionChase) return;
 	//if(NewUnitState == UnitData::Attack && UnitState == UnitData::EvasionChase) return;
+	
+	if(UnitState == UnitData::Evasion && 
+		NewUnitState != UnitData::Run //&&
+		//NewUnitState != UnitData::EvasionChase
+	) return;
+	
+	if(UnitState == UnitData::Run && !GetToggleUnitDetection() &&
+			NewUnitState != UnitData::Idle &&
+			NewUnitState != UnitData::Evasion //&&
+			//NewUnitState != UnitData::EvasionChase
+		) return;
+		
 	UnitState = NewUnitState;
 }
 

@@ -49,6 +49,15 @@ public:
 	
 	virtual void OnRep_PlayerState() override;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ToggleUnitDetection = false;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
+	void SetToggleUnitDetection(bool ToggleTo);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool GetToggleUnitDetection();
+	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 

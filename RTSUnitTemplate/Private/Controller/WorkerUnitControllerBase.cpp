@@ -176,27 +176,18 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Evasion:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
-
-				
-			
-			if(UnitBase->UnitControlTimer >= 7.f)
-			{
-		
-				//UnitBase->StartAcceleratingTowardsDestination(UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*350.f, FVector(5000.f, 5000.f, 0.f), 25.f, 350.f);
-				UnitBase->CollisionUnit = nullptr;
-				FVector NewLocation = UnitBase->GetActorLocation()+UnitBase->GetActorForwardVector()*300.f;
-				NewLocation.Z = UnitBase->GetActorLocation().Z;
-				UnitBase->UnitControlTimer = 0.f;
-				UnitBase->TeleportToValidLocation(NewLocation);
-				UnitBase->SetUEPathfinding = true;
-				UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+				if(UnitBase->UnitControlTimer >= 7.f)
+				{
+					UnitBase->CollisionUnit = nullptr;
+					UnitBase->UnitControlTimer = 0.f;
+					UnitBase->SetUEPathfinding = true;
+					UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 	
-			}else if(UnitBase->CollisionUnit)
-			{
-				EvasionWorker(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
-				UnitBase->UnitControlTimer += DeltaSeconds;
-			}
-				
+				}else if(UnitBase->CollisionUnit)
+				{
+					EvasionChase(UnitBase, DeltaSeconds, UnitBase->CollisionLocation);
+					UnitBase->UnitControlTimer += DeltaSeconds;
+				}
 		}
 		break;
 		case UnitData::Idle:

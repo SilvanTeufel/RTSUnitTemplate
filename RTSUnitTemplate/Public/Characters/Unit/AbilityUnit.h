@@ -42,7 +42,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingFromDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
-
+	
 	// Set Unit States  //////////////////////////////////////////
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);

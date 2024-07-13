@@ -13,6 +13,12 @@ void UUnitWidgetSelector::NativeConstruct()
 	SetVisibleButtonCount(ShowButtonCount);
 	SetButtonLabelCount(ShowButtonCount);
 	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	/*
+	if (ControllerBase)
+	{
+		ControllerBase->SetInputMode(FInputModeGameAndUI());
+		ControllerBase->bShowMouseCursor = true;
+	}*/
 }
 
 void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -85,6 +91,9 @@ void UUnitWidgetSelector::SetButtonIds()
 			SelectButtons[i]->Id = i;
 			SelectButtons[i]->Selector = this;
 			SelectButtons[i]->SelectUnit = false;
+			
+			// Bind the OnClick event
+			SelectButtons[i]->OnClicked.AddUniqueDynamic(SelectButtons[i], &USelectorButton::OnClick);
 		}
 	}
 
@@ -95,6 +104,9 @@ void UUnitWidgetSelector::SetButtonIds()
 			SingleSelectButtons[i]->Id = i;
 			SingleSelectButtons[i]->Selector = this;
 			SingleSelectButtons[i]->SelectUnit = true;
+
+			// Bind the OnClick event
+			SingleSelectButtons[i]->OnClicked.AddUniqueDynamic(SingleSelectButtons[i], &USelectorButton::OnClick);
 		}
 	}
 }

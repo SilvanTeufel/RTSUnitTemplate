@@ -8,22 +8,22 @@
 
 USelectorButton::USelectorButton()
 {
-	OnClicked.AddUniqueDynamic(this, &USelectorButton::OnClick);
-	CallbackIdDelegate.AddUniqueDynamic(this, &USelectorButton::SetUnitSelectorId);
+
 }
 
 void USelectorButton::OnClick()
 {
-	CallbackIdDelegate.Broadcast(Id);
+	SetUnitSelectorId(Id);
 }
 
 
 void USelectorButton::SetUnitSelectorId(int newID)
 {
-	
+
 	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 
 	if(!ControllerBase) return;
+
 
 	ControllerBase->SetWidgets(newID);
 
@@ -39,7 +39,6 @@ void USelectorButton::SetUnitSelectorId(int newID)
 			SelectorR->Name->SetText(FText::FromString(CharacterName));
 		}
 	}
-
 	
 	if(SelectUnit)
 	{

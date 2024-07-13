@@ -133,6 +133,16 @@ void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 	// Do something with the ActivatedAbilityInstance...
 }
 
+void AGASUnit::SetToggleUnitDetection_Implementation(bool ToggleTo)
+{
+	ToggleUnitDetection = ToggleTo;
+}
+
+bool AGASUnit::GetToggleUnitDetection()
+{
+	return ToggleUnitDetection;
+}
+
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	if(AbilitySystemComponent)
