@@ -176,6 +176,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Evasion:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
+				
 				if(UnitBase->UnitControlTimer >= 7.f)
 				{
 					UnitBase->CollisionUnit = nullptr;

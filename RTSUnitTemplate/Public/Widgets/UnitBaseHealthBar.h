@@ -74,7 +74,7 @@ public:
 	bool HideWidget = false;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ResetCollapseTimer();
+	void ResetCollapseTimer(float VisibleTime = 10.f);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CollapseWidget();

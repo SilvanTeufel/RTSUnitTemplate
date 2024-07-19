@@ -45,11 +45,11 @@ void UUnitBaseHealthBar::UpdateExperience()
 	}
 }
 
-void UUnitBaseHealthBar::ResetCollapseTimer() {
+void UUnitBaseHealthBar::ResetCollapseTimer(float VisibleTime) {
 	if (GetWorld() && !HideWidget) {
 		SetVisibility(ESlateVisibility::Visible);
 		GetWorld()->GetTimerManager().ClearTimer(CollapseTimerHandle);
-		GetWorld()->GetTimerManager().SetTimer(CollapseTimerHandle, this, &UUnitBaseHealthBar::CollapseWidget, 10.0f, false);
+		GetWorld()->GetTimerManager().SetTimer(CollapseTimerHandle, this, &UUnitBaseHealthBar::CollapseWidget, VisibleTime, false);
 	}
 }
 

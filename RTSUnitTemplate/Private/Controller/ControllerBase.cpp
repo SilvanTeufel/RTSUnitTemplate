@@ -526,36 +526,32 @@ bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
 	{
 		//UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
 		AActor* HitActor = Hit_Pawn.GetActor();
-
-		if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
+		
+		//if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
 
 		
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
 
 		if(WorkArea)
 		{
-			//UE_LOG(LogTemp, Log, TEXT("HitActor is a WorkArea"));
 			TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkArea->Type;
 		
 			bool isResourceExtractionArea = Type == WorkAreaData::Primary || Type == WorkAreaData::Secondary || 
 									 Type == WorkAreaData::Tertiary || Type == WorkAreaData::Rare ||
 									 Type == WorkAreaData::Epic || Type == WorkAreaData::Legendary;
 
-			//UE_LOG(LogTemp, Log, TEXT("WorkArea type: %d, isResourceExtractionArea: %s"), static_cast<int32>(Type), isResourceExtractionArea ? TEXT("true") : TEXT("false"));
-			
+
 			if(WorkArea && isResourceExtractionArea)
 			{
 				for (int32 i = 0; i < SelectedUnits.Num(); i++)
 				{
 					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
 					{
-						//UE_LOG(LogTemp, Log, TEXT("Selected unit %d is valid and not dead"), i);
 						
 						AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(SelectedUnits[i]);
 
 						if(WorkingUnit)
 						{
-							//UE_LOG(LogTemp, Log, TEXT("Unit %d assigned to WorkArea and state set to GoToResourceExtraction"), i);
 							WorkingUnit->ResourcePlace = WorkArea;
 							WorkingUnit->SetUnitState(UnitData::GoToResourceExtraction);
 							return true;
