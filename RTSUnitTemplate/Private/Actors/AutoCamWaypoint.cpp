@@ -2,7 +2,7 @@
 
 
 #include "Actors/AutoCamWaypoint.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Characters/Camera/CameraBase.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"

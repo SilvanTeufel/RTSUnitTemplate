@@ -1,7 +1,7 @@
 
 #include "Widgets/AbilityChooser.h"
 
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 
 void UAbilityChooser::NativeConstruct()
 {

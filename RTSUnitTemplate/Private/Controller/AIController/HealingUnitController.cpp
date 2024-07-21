@@ -1,11 +1,11 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Controller/HealingUnitController.h"
+#include "Controller/AIController/HealingUnitController.h"
 #include "Perception/AiPerceptionComponent.h"
 #include "Perception/AiSenseConfig_Sight.h"
 #include "Actors/Waypoint.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 
 AHealingUnitController::AHealingUnitController()
 {

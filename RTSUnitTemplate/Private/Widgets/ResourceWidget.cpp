@@ -5,7 +5,7 @@
 #include <Components/VerticalBox.h>
 #include <Components/VerticalBoxSlot.h>
 
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 
 void UResourceWidget::NativeConstruct()

@@ -7,8 +7,8 @@
 #include "EngineUtils.h" // For TActorIterator
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
-#include "Controller/BuildingControllerBase.h"
-#include "Controller/WorkerUnitControllerBase.h"
+#include "Controller/AIController/BuildingControllerBase.h"
+#include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
 

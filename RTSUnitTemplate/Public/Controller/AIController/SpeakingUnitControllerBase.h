@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Controller/UnitControllerBase.h"
+#include "Controller/AIController/UnitControllerBase.h"
 #include "SpeakingUnitControllerBase.generated.h"
 
 /**

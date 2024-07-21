@@ -1,6 +1,6 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
-#include "Controller/UnitControllerBase.h"
+#include "Controller/AIController/UnitControllerBase.h"
 #include <string>
 #include "Landscape.h"
 #include "Characters/Unit/UnitBase.h"
@@ -15,7 +15,7 @@
 #include "Perception/AiSenseConfig_Sight.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "NavigationSystem.h"
@@ -101,7 +101,7 @@ void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 {
 	AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
-	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || (CurrentUnit->GetUnitState() == UnitData::Run && !CurrentUnit->GetToggleUnitDetection())) return;
+	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || (CurrentUnit->GetUnitState() == UnitData::Run && !CurrentUnit->GetToggleUnitDetection()) || CurrentUnit->GetUnitState() == UnitData::Evasion) return;
 
 	// Loop through each detected unit
 	for (AActor* Actor : DetectedUnits)

@@ -5,7 +5,7 @@
 #include "PlayerStart/PlayerStartBase.h"
 #include "Characters/Camera/CameraBase.h"
 #include "EngineUtils.h"
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "Hud/PathProviderHUD.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "AIController.h"

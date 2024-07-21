@@ -1,7 +1,7 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameStates/ResourceGameState.h"
 #include "GAS/GAS.h"

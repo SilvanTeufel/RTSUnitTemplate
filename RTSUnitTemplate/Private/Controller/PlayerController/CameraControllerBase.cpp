@@ -1,5 +1,5 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "AIController.h"
 #include "Actors/AutoCamWaypoint.h"
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient

@@ -4,7 +4,7 @@
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Components/StaticMeshComponent.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Widgets/SpawnEnergyBar.h"
 

@@ -5,7 +5,7 @@
 #include "Controller/Input/EnhancedInputComponentBase.h"
 #include "Controller/Input/GameplayTags.h"
 #include "EnhancedInputSubsystems.h"
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AIController.h"
 #include "Components/SkeletalMeshComponent.h"

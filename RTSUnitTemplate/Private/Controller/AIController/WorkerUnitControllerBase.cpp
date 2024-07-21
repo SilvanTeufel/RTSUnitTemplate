@@ -1,6 +1,6 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
-#include "Controller/WorkerUnitControllerBase.h"
+#include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "Landscape.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/Waypoint.h"
@@ -17,7 +17,7 @@
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
 #include "Characters/Unit/BuildingBase.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
 

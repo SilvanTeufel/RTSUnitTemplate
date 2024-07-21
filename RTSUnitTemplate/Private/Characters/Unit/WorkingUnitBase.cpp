@@ -10,7 +10,7 @@
 #include "Actors/Projectile.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Controller/WorkerUnitControllerBase.h"
+#include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"

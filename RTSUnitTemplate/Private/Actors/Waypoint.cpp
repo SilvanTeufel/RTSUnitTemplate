@@ -3,7 +3,7 @@
 
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 

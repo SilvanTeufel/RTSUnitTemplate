@@ -51,7 +51,7 @@ public:
 	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	//FVector ClickLocation = FVector(0.0f, 0.0f, 0.0f);
 	
-	void Tick(float DeltaSeconds);
+	virtual void Tick(float DeltaSeconds) override;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShiftPressed", Keywords = "RTSUnitTemplate ShiftPressed"), Category = RTSUnitTemplate)
 		void ShiftPressed();
@@ -79,7 +79,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
-	
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void DragUnitBase(AUnitBase* UnitToDrag);
 
@@ -88,7 +88,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetWidgets(int Index);
-	
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	
@@ -233,7 +233,8 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetControlerDefaultWaypoint(AWaypoint* Waypoint);
-	
+
+	/*
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SaveLevel(const FString& SlotName);
 
@@ -277,11 +278,11 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LoadAbility(const int32 UnitIndex, const FString& SlotName);
-
+	*/
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 	int SelectedUnitCount = 0;
 
-
+	/*
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	float GetResource(int TeamId, EResourceType RType);
 
@@ -293,5 +294,6 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
+	*/
 };
 

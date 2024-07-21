@@ -4,7 +4,7 @@
 #include <Components/TextBlock.h>
 #include <Components/Button.h>
 #include "Components/WidgetSwitcher.h"
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameFramework/GameSession.h"
 #include "Kismet/GameplayStatics.h"
 

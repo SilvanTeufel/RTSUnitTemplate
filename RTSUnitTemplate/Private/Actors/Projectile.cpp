@@ -5,7 +5,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Characters/Unit/UnitBase.h"
-#include "Controller/UnitControllerBase.h"
+#include "Controller/AIController/UnitControllerBase.h"
 #include "Net/UnrealNetwork.h"
 
 // Sets default values

@@ -9,7 +9,7 @@
 #include "Elements/Actor/ActorElementData.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Components/WidgetSwitcher.h"
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 

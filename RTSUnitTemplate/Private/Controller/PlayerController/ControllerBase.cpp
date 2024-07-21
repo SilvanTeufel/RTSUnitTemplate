@@ -1,9 +1,9 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "NavigationSystem.h" // Include this for navigation functions
-#include "Controller/CameraControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "Core/UnitData.h"
 #include "AIController.h"
 #include "Landscape.h"
@@ -773,7 +773,7 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 	}
 	
 }
-
+/*
 float AControllerBase::GetResource(int TeamId, EResourceType RType)
 {
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
@@ -789,7 +789,7 @@ void AControllerBase::ModifyResource_Implementation(EResourceType ResourceType, 
 	
 	GameMode->ModifyResource(ResourceType, TeamId, Amount);
 }
-
+*/
 void AControllerBase::SetControlerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
@@ -800,7 +800,7 @@ void AControllerBase::SetControlerDefaultWaypoint_Implementation(AWaypoint* Wayp
 	if(Waypoint)
 		DefaultWaypoint = Waypoint;
 }
-
+/*
 void AControllerBase::LoadLevel_Implementation(const FString& SlotName)
 {
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
@@ -1067,3 +1067,5 @@ void AControllerBase::RemoveWorkerFromResource_Implementation(EResourceType Reso
 		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
 	}
 }
+
+*/

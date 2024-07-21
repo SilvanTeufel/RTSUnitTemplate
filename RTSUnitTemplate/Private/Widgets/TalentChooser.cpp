@@ -4,7 +4,7 @@
 #include <Components/Button.h>
 #include "Blueprint/UserWidget.h"
 #include "Components/VerticalBox.h"
-#include "Controller/ControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/GameSession.h"
 
 void UTalentChooser::NativeConstruct()
