@@ -366,12 +366,64 @@ void AWidgetController::SpendAbilityPoints_Implementation(EGASAbilityInputID Abi
 	}
 }
 
+void AWidgetController::SpendAbilityPointsByTag_Implementation(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex)
+{
+	FGameplayTagContainer TargetUnitTags;
+
+	// Find the target unit and get its tags
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			TargetUnitTags = Unit->UnitTags;
+			break;
+		}
+	}
+
+	// Iterate through all units to find those with matching tags and spend ability points
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == SelectableTeamId || SelectableTeamId == 0))
+		{
+			Unit->SpendAbilityPoints(AbilityID, Ability);
+		}
+	}
+}
+
 void AWidgetController::ResetAbility_Implementation(const int32 UnitIndex)
 {
 	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
 		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->ResetAbility();
+		}
+	}
+}
+
+void AWidgetController::ResetAbilityByTag_Implementation(const int32 UnitIndex)
+{
+	FGameplayTagContainer TargetUnitTags;
+
+	// Find the target unit and get its tags
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			TargetUnitTags = Unit->UnitTags;
+			break;
+		}
+	}
+
+	// Iterate through all units to find those with matching tags and reset ability
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == SelectableTeamId || SelectableTeamId == 0))
 		{
 			Unit->ResetAbility();
 		}
@@ -396,6 +448,32 @@ void AWidgetController::LoadAbility_Implementation(const int32 UnitIndex, const 
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
 		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			Unit->LoadAbilityAndLevelData(SlotName);
+		}
+	}
+}
+
+void AWidgetController::LoadAbilityByTag_Implementation(const int32 UnitIndex, const FString& SlotName)
+{
+	FGameplayTagContainer TargetUnitTags;
+
+	// Find the target unit and get its tags
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		{
+			TargetUnitTags = Unit->UnitTags;
+			break;
+		}
+	}
+
+	// Iterate through all units to find those with matching tags and load ability data
+	for (int32 i = 0; i < HUDBase->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(HUDBase->AllUnits[i]);
+		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == SelectableTeamId || SelectableTeamId == 0))
 		{
 			Unit->LoadAbilityAndLevelData(SlotName);
 		}

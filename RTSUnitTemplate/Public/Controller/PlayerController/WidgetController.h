@@ -70,14 +70,23 @@ public:
 	void SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SpendAbilityPointsByTag(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ResetAbility(const int32 UnitIndex);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ResetAbilityByTag(const int32 UnitIndex);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SaveAbility(const int32 UnitIndex, const FString& SlotName);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LoadAbility(const int32 UnitIndex, const FString& SlotName);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void LoadAbilityByTag(const int32 UnitIndex, const FString& SlotName);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	float GetResource(int TeamId, EResourceType RType);
 
