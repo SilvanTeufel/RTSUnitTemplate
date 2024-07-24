@@ -120,6 +120,7 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 	// The actual state change logic is refactored here, outside the loop.
 	//CurrentUnit->SetNextUnitToChase();
 
+	if(!CurrentUnit->UnitToChase)
 	if (CurrentUnit->SetNextUnitToChase())
 	{
 		bool isUnitChasing = CurrentUnit->GetUnitState() == UnitData::Chase;
@@ -212,7 +213,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::PatrolRandom:
 			{
 				// Zugriff auf den PlayerController und Cast zu deinem spezifischen HUD
-				
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
 				APlayerController* PC = GetWorld()->GetFirstPlayerController();
 				if (PC)
 				{
@@ -727,7 +728,7 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 	} else if (UnitBase->UnitControlTimer > UnitBase->PauseDuration) {
 		
 		ProjectileSpawned = false;
-		UnitBase->SetUnitState(UnitData::Chase);
+		//UnitBase->SetUnitState(UnitData::Chase);
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		
 		if (IsUnitToChaseInRange(UnitBase)) {

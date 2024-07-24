@@ -134,7 +134,7 @@ public:
 // related to Animations  //////////////////////////////////////////
 public:
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
 	float UnitControlTimer = 0.0f; // This Timer is used in UnitControllerBase Statemachine
 /*
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -178,13 +178,16 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetShield(float NewHealth);
-	
+
+	/*
 protected:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealthWidgetComp", Keywords = "RTSUnitTemplate HealthWidgetComp"), Category = RTSUnitTemplate)
 		class UWidgetComponent* HealthWidgetComp;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealthWidgetCompLocation", Keywords = "RTSUnitTemplate HealthWidgetCompLocation"), Category = RTSUnitTemplate)
 		FVector HealthWidgetCompLocation = FVector (0.f, 0.f, 180.f);
+
+	*/
 ///////////////////////////////////////////////////////////////////
 
 
@@ -233,12 +236,13 @@ protected:
 
 // Projectile related /////////
 public:
+	/*
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileBaseClass", Keywords = "TopDownRTSTemplate ProjectileBaseClass"), Category = RTSUnitTemplate)
 	TSubclassOf<class AProjectile> ProjectileBaseClass;
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "Projectile", Keywords = "RTSUnitTemplate Projectile"), Category = RTSUnitTemplate)
 	class AProjectile* Projectile;
-
+*/
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SpawnProjectile", Keywords = "RTSUnitTemplate SpawnProjectile"), Category = RTSUnitTemplate)
 	void SpawnProjectile(AActor* Target, AActor* Attacker);
 
@@ -276,10 +280,10 @@ public:
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ReduceRootedTime = 0.1f;
-	
+	/*
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		class UWidgetComponent* TimerWidgetComp;
-
+	*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		FVector TimerWidgetCompLocation = FVector (0.f, 0.f, -180.f);
 	

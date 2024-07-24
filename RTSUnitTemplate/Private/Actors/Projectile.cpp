@@ -353,3 +353,8 @@ AUnitBase* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* U
 	return RUnit;
 }
 
+void AProjectile::SetVisibility(bool Visible)
+{
+	GetMesh()->SetVisibility(Visible);
+}
+

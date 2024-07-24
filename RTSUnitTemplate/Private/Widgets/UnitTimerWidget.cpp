@@ -93,8 +93,12 @@ void UUnitTimerWidget::TimerTick()
 		{
 			if(!DisableBuild)
 			{
+				
 				IsVisible = true;
 				AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
+
+				if(!UnitBase || !UnitBase->UnitControlTimer || !WorkingUnitBase || !WorkingUnitBase->BuildArea || !WorkingUnitBase->BuildArea->BuildTime) return;
+					
 				TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->BuildArea->BuildTime);
 				TimerBar->SetFillColorAndOpacity(BuildColor);
 			}

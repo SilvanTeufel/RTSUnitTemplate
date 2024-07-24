@@ -55,6 +55,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
 
+	UStaticMeshComponent* GetMesh(){ return Mesh; };
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* Material;
 
@@ -130,4 +132,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AUnitBase* GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* UnitToHit);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetVisibility(bool Visible);
 };

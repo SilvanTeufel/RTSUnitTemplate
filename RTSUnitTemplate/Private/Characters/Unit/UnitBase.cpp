@@ -120,11 +120,12 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(AUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
 	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
+	DOREPLIFETIME(AUnitBase, UnitControlTimer);
+
 }
 
 
