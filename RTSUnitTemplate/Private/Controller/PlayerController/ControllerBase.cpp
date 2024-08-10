@@ -11,6 +11,7 @@
 #include "Actors/MissileRain.h"
 #include "Actors/UnitSpawnPlatform.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -516,7 +517,10 @@ void AControllerBase::RightClickPressed()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
-	if(!CheckResourceExtraction(Hit)) RunUnits(Hit);
+	if(!CheckResourceExtraction(Hit))
+	{
+		RunUnitsAndSetWaypoints(Hit);
+	}
 }
 
 bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
@@ -565,13 +569,49 @@ bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
 	return false;
 }
 
+void AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
+{
+	UWorld* World = GetWorld();
+	if (World && WaypointClass)
+	{
+		// Define the spawn parameters (can customize this further if needed)
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = GetInstigator();
 
-void AControllerBase::RunUnits(FHitResult Hit)
+		// Spawn the waypoint actor
+		AWaypoint* NewWaypoint = World->SpawnActor<AWaypoint>(WaypointClass, NewWPLocation, FRotator::ZeroRotator, SpawnParams);
+
+		if (NewWaypoint)
+		{
+			// Assign the new waypoint to the building
+			BuildingBase->NextWaypoint = NewWaypoint;
+		}
+	}
+}
+bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit)
+{
+			ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+			NewWPLocation.Z += RelocateWaypointZOffset;
+			if(BuildingBase)
+			{
+				if(BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+				else if(BuildingBase->HasWaypoint) CreateAWaypoint(NewWPLocation, BuildingBase);
+				return true;
+			}
+	
+	return false;
+}
+
+void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
 			FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-			if (IsShiftPressed) {
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+			{
+				// DO NOTHING
+			}else if (IsShiftPressed) {
 				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{

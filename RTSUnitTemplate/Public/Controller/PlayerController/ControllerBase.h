@@ -46,6 +46,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AActor* ClickedActor;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Waypoint")
+	TSubclassOf<class AWaypoint> WaypointClass;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ShowFPS = false;
 	
@@ -119,7 +122,13 @@ public:
 		void RightClickPressed();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void RunUnits(FHitResult Hit);
+		void CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void RunUnitsAndSetWaypoints(FHitResult Hit);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool CheckResourceExtraction(FHitResult Hit_Pawn);
@@ -224,7 +233,7 @@ public:
 		int SelectableTeamId = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AWaypoint* DefaultWaypoint;
+		AWaypoint* DefaultWaypoint;
 		
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetControlerTeamId(int Id);
@@ -234,6 +243,8 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 		int SelectedUnitCount = 0;
-	
+
+	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
+		float RelocateWaypointZOffset = 30.f;
 };
 

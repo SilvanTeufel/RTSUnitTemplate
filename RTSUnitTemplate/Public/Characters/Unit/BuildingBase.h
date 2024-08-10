@@ -20,7 +20,8 @@ class RTSUNITTEMPLATE_API ABuildingBase : public AUnitBase
 	GENERATED_BODY()
 	
 public:
-	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HasWaypoint = true;
 
 };
 
