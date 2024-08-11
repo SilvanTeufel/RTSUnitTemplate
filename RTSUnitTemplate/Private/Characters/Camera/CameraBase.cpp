@@ -20,7 +20,9 @@ void ACameraBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ControlWidgetComp->SetVisibility(false);
+	
+	if(ControlWidgetComp)
+		ControlWidgetComp->SetVisibility(false);
 		
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
@@ -36,6 +38,7 @@ void ACameraBase::BeginPlay()
 		}
 		
 	}
+	
 }
 
 void ACameraBase::SetActorBasicLocation()
@@ -51,7 +54,7 @@ void ACameraBase::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	SetActorBasicLocation();
 
-	//if(ShowControlWidgetAtStart) ShowControlWidget();
+	if(ShowControlWidgetAtStart) ShowControlWidget();
 }
 
 void ACameraBase::CreateCameraComp()

@@ -12,6 +12,7 @@
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
 {
+	
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
@@ -35,15 +36,13 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 
 	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
 	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
+	
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockZRotation = true;
 	
-		GetMesh()->AttachToComponent(GetCameraBaseCapsule(), FAttachmentTransformRules::KeepRelativeTransform);
-
-
+	
 		UCapsuleComponent* CComponent = GetCapsuleComponent();
 		if (CComponent)
 		{
@@ -58,13 +57,13 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 		UMeshComponent* CMesh = GetMesh();
 		if(CMesh)
 		{
-	
+			CMesh->AttachToComponent(GetCameraBaseCapsule(), FAttachmentTransformRules::KeepRelativeTransform);
 			CMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);  // Typically, we use the capsule for physics and mesh for simple queries like overlap
 			CMesh->SetCollisionResponseToAllChannels(ECR_Ignore);  // Start by ignoring all channels
 			CMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);  // Overlap with other pawns
 			CMesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);  // Overlap with dynamic objects
 		}
-
+	
 }
 
 // BeginPlay implementation
@@ -72,13 +71,14 @@ void AExtendedCameraBase::BeginPlay()
 {
 	// Call the base class BeginPlay
 	Super::BeginPlay();
-
 	SetupResourceWidget();
 
 }
 
 void AExtendedCameraBase::SetupResourceWidget()
 {
+	if(!ResourceWidget) return;
+	
 	if (IsOwnedByLocalPlayer()) // This is a pseudo-function, replace with actual ownership check
 	{
 		ResourceWidget->SetVisibility(true);

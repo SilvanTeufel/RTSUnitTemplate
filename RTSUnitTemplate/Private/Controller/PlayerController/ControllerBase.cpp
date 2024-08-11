@@ -34,7 +34,7 @@ void AControllerBase::BeginPlay() {
 		ToggleFPSDisplay(ShowFPS);
 		CameraBase = Cast<ACameraBase>(GetPawn());
 		HUDBase = Cast<APathProviderHUD>(GetHUD());
-		if(HUDBase && HUDBase->StopLoading) CameraBase->DeSpawnLoadingWidget();
+		if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
 }
 
 void AControllerBase::ToggleFPSDisplay(bool bEnable)
@@ -104,7 +104,8 @@ void AControllerBase::SetupInputComponent() {
 void AControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	
+
+
 	if(HUDBase)
 	if((HUDBase->CreatedGridAndDijkstra || HUDBase->StopLoading) && CameraBase)
 	{
@@ -116,9 +117,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-	
-	//if(IsShiftPressed)
-		//ClickLocation = Hit.Location;
 	
 	if(AttackToggled)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
@@ -166,6 +164,8 @@ void AControllerBase::Tick(float DeltaSeconds)
 		}
 
 	}
+
+	
 }
 
 void AControllerBase::ShiftPressed()

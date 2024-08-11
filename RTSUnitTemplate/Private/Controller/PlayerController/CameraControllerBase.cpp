@@ -21,10 +21,11 @@ void ACameraControllerBase::BeginPlay()
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
 	CameraBase = Cast<ACameraBase>(GetPawn());
 
-	if(CameraBase)
-	GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
-
+	if(CameraBase) GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
+	
 	GetAutoCamWaypoints();
+
+
 }
 
 void ACameraControllerBase::SetupInputComponent()
@@ -35,9 +36,11 @@ void ACameraControllerBase::SetupInputComponent()
 void ACameraControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
 	CheckSpeakingUnits();
 	RotateCam(DeltaSeconds);
 	CameraBaseMachine(DeltaSeconds);
+
 }
 
 void ACameraControllerBase::MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation)
