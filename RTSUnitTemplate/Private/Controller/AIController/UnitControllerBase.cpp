@@ -21,6 +21,7 @@
 #include "NavigationSystem.h"
 
 #include "Navigation/PathFollowingComponent.h"
+#include "Widgets/UnitBaseHealthBar.h"
 
 AUnitControllerBase::AUnitControllerBase()
 {
@@ -669,6 +670,13 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 
 					UnitBase->LevelData.Experience++;
 
+					UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(UnitBase->HealthWidgetComp->GetUserWidgetObject());
+	
+					if (HealthBarWidget)
+					{
+						HealthBarWidget->UpdateWidget();
+					}
+					
 					UnitBase->ServerMeeleImpactEvent();
 					UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID, UnitBase->UnitToChase->DefensiveAbilities);
 				

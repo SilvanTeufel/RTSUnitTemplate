@@ -21,7 +21,7 @@ public:
 		OwnerCharacter = Enemy;
 		if(!HideWidget)
 		{
-			GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitBaseHealthBar::TimerTick, UpdateInterval, true);
+			//GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitBaseHealthBar::UpdateWidget, UpdateInterval, true);
 			SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
@@ -85,6 +85,6 @@ public:
 	FTimerHandle TickTimerHandle;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void TimerTick();
+	void UpdateWidget();
 };
 

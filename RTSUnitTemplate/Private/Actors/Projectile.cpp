@@ -7,6 +7,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Widgets/UnitBaseHealthBar.h"
 
 // Sets default values
 AProjectile::AProjectile()
@@ -187,8 +188,9 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
 		}
 		
-		ShootingUnit->LevelData.Experience++;
+		ShootingUnit->IncreaseExperience();
 		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
 	}			
@@ -218,7 +220,7 @@ void AProjectile::ImpactHeal_Implementation(AActor* ImpactTarget)
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
 		}
 		
-		ShootingUnit->LevelData.Experience++;
+		ShootingUnit->IncreaseExperience();
 		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);

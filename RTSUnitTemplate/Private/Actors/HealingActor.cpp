@@ -44,7 +44,7 @@ void AHealingActor::Init(AUnitBase* Target, AUnitBase* Healer)
 {
 	HealingUnit = Healer;
 	Target->SetHealth(Target->Attributes->GetHealth() + MainHeal);
-	Healer->LevelData.Experience++;
+	Healer->IncreaseExperience();
 }
 
 // Called when the game starts or when spawned

@@ -251,9 +251,11 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	
 	if(NewHealth <= Attributes->GetHealth())
 	{
-		if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+		if (HealthBarWidget)
 		{
 			if(NewHealth <= 0.f)
 			{
@@ -277,19 +279,50 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetUnitState(UnitData::Dead);
 		UnitControlTimer = 0.f;
 	}
+	
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->UpdateWidget();
+	}
+
 }
 
 void AUnitBase::SetShield_Implementation(float NewShield)
 {
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	
 	if(NewShield <= Attributes->GetShield())
 	{
-		if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+		if (HealthBarWidget)
 		{
 			HealthBarWidget->ResetCollapseTimer();
 		}
 	}
 	
 	Attributes->SetAttributeShield(NewShield);
+
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->UpdateWidget();
+	}
+}
+
+
+void AUnitBase::UpdateWidget()
+{
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->UpdateWidget();
+	}
+}
+
+void AUnitBase::IncreaseExperience()
+{
+	LevelData.Experience++;
+		
+	UpdateWidget();
 }
 
 void AUnitBase::SetSelected()

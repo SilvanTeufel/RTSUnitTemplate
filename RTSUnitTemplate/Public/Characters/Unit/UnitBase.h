@@ -193,16 +193,22 @@ protected:
 
 // HUDBase related ///////////
 public:
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetSelected", Keywords = "TopDownRTSTemplate SetSelected"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateWidget();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void IncreaseExperience();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelected();
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetDeselected", Keywords = "TopDownRTSTemplate SetDeselected"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
 	void SetDeselected();
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RunLocationArray", Keywords = "RTSUnitTemplate RunLocationArray"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite,  Category = RTSUnitTemplate)
 	TArray <FVector> RunLocationArray;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RunLocationArrayIterator", Keywords = "RTSUnitTemplate RunLocationArrayIterator"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 RunLocationArrayIterator = 0;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)

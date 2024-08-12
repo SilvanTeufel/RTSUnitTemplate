@@ -60,7 +60,7 @@ void UUnitBaseHealthBar::CollapseWidget() {
 	}
 }
 
-void UUnitBaseHealthBar::TimerTick()
+void UUnitBaseHealthBar::UpdateWidget()
 {
 	if (!OwnerCharacter)
 		return;
