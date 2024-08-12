@@ -106,6 +106,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
+			UnitBase->UpdateWidget();
 		}
 
 		if(Data.EvaluatedData.Attribute == GetEffectShieldAttribute() && GetHealth() > 0)
@@ -113,6 +114,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			float ShieldAmount = Data.EvaluatedData.Magnitude;
 			SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
 			SetAttributeShield(GetShield() + ShieldAmount);
+			UnitBase->UpdateWidget();
 		}
 	}
 	// Call the superclass version for other attributes
