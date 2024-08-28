@@ -27,7 +27,8 @@ AUnitControllerBase::AUnitControllerBase()
 {
 	
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = TickInterval; 
+	PrimaryActorTick.TickInterval = TickInterval;
+	/*
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("Sight Config"));
 	SetPerceptionComponent(*CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception Component")));
 
@@ -43,25 +44,27 @@ AUnitControllerBase::AUnitControllerBase()
 	GetPerceptionComponent()->SetDominantSense(*SightConfig->GetSenseImplementation());
 	GetPerceptionComponent()->OnPerceptionUpdated.AddDynamic(this, &AUnitControllerBase::OnUnitDetected);
 	GetPerceptionComponent()->ConfigureSense(*SightConfig);
-	GetPerceptionComponent()->SetComponentTickInterval(TickInterval); //
+	GetPerceptionComponent()->SetComponentTickInterval(TickInterval*10); //
 	GetPerceptionComponent()->SetSenseEnabled(UAISense_Sight::StaticClass(), true);
+	*/
+	
 	
 }
 
 void AUnitControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	/*
 	if (UAIPerceptionComponent* PerceptionComp = GetPerceptionComponent())
 	{
-			//UE_LOG(LogTemp, Warning, TEXT("All Systems Set"));
-			GetPerceptionComponent()->SetComponentTickInterval(0.05f); //
+
 			PerceptionComp->RequestStimuliListenerUpdate();
-		}
-		else {
-			UE_LOG(LogTemp, Warning, TEXT("Some Problem Occured"));
-		}
-	
+	}
+	else {
+		UE_LOG(LogTemp, Warning, TEXT("Some Problem Occured"));
+	}
+	*/
 }
 
 void AUnitControllerBase::OnPossess(APawn* PawN)
@@ -160,7 +163,18 @@ void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase
 	}
 }
 
-
+void AUnitControllerBase::CheckUnitDetectionTimer(float DeltaSeconds)
+{
+	if(IsUnitDetected)
+	{
+		UnitDetectionTimer += DeltaSeconds;
+		if(UnitDetectionTimer >= NewDetectionTime)
+		{
+			UnitDetectionTimer = 0.f;
+			IsUnitDetected = false;
+		}
+	}
+}
 
 void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 {
@@ -169,13 +183,13 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
 	
-		if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
+		if (UnitBase->Attributes && UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
 			KillUnitBase(UnitBase);
 			UnitBase->UnitControlTimer = 0.f;
 		}
 
+		CheckUnitDetectionTimer(DeltaSeconds);
 	
-		
 		switch (UnitBase->UnitState)
 		{
 		case UnitData::None:
@@ -192,19 +206,8 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::Patrol:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-				APlayerController* PC = GetWorld()->GetFirstPlayerController();
-				if (PC)
-				{
-					AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-					if (MyHUD)
-					{
-						TArray<AActor*> DetectedUnits;
-						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-						OnUnitDetected(DetectedUnits);
-					}
-				}
-				
+			DetectUnits(UnitBase, DeltaSeconds);
+			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -215,18 +218,8 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			{
 				// Zugriff auf den PlayerController und Cast zu deinem spezifischen HUD
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-				APlayerController* PC = GetWorld()->GetFirstPlayerController();
-				if (PC)
-				{
-					AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-					if (MyHUD)
-					{
-						TArray<AActor*> DetectedUnits;
-						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-						OnUnitDetected(DetectedUnits);
-					}
-				}
+
+				DetectUnits(UnitBase, DeltaSeconds);
 				
 				if(UnitBase->SetNextUnitToChase())
 				{
@@ -439,6 +432,24 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 }
 
+void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	if(IsUnitDetected) return;
+	
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (PC)
+	{
+		AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
+		if (MyHUD)
+		{
+			TArray<AActor*> DetectedUnits;
+			MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits);
+			OnUnitDetected(DetectedUnits);
+			IsUnitDetected = true;
+		}
+	}
+}
+
 void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
@@ -476,28 +487,22 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
+
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		IsUnitDetected = false;
+		DetectUnits(UnitBase, DeltaSeconds);
+	}
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
-		{
-			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-			if (MyHUD)
-			{
-				TArray<AActor*> DetectedUnits;
-				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-				OnUnitDetected(DetectedUnits);
-			}
-		}
-		
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
@@ -898,17 +903,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
-		{
-			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-			if (MyHUD)
-			{
-				TArray<AActor*> DetectedUnits;
-				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-				OnUnitDetected(DetectedUnits);
-			}
-		}
+		DetectUnits(UnitBase, DeltaSeconds);
 		
 		if(UnitBase->SetNextUnitToChase())
 		{

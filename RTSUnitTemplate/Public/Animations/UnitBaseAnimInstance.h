@@ -86,7 +86,13 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float SoundTimer = 0.f;
-	
+/*
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ControlTimer = 0.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UpdateTime = 0.1f;
+	*/
 	UFUNCTION()
 	virtual void NativeInitializeAnimation() override;
 	
@@ -102,5 +108,6 @@ public:
 	void SetBlendPoints(AUnitBase* Unit, float Deltaseconds);
 	
 	FUnitAnimData* UnitAnimData;
+
 	
 };

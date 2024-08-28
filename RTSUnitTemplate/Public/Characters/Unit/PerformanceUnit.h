@@ -21,6 +21,9 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetLODCount(int32 LODCount);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = 0.0f;

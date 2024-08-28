@@ -22,7 +22,7 @@ class RTSUNITTEMPLATE_API AControllerBase : public AEOS_PlayerController
 
 public:
 	AControllerBase();
-
+	
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
@@ -32,10 +32,10 @@ public:
 	FTimerHandle FPSTimerHandle;
 
 	// Function called by timer to display FPS
-	void DisplayFPS();
+	void DisplayUnitCount();
 
 	UFUNCTION(BlueprintCallable, Category="Display")
-	void ToggleFPSDisplay(bool bEnable);
+	void ToggleUnitCountDisplay(bool bEnable);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
@@ -50,7 +50,7 @@ public:
 	TSubclassOf<class AWaypoint> WaypointClass;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ShowFPS = false;
+	bool ShowUnitCount = false;
 	
 	virtual void Tick(float DeltaSeconds) override;
 	

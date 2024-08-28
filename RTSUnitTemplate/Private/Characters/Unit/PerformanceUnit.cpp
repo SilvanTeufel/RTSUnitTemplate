@@ -5,6 +5,10 @@
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Widgets/UnitTimerWidget.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h" // For USkeletalMesh
+#include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
+#include "Engine/SkinnedAssetCommon.h"
 
 void APerformanceUnit::Tick(float DeltaTime)
 {
@@ -22,6 +26,37 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
 }
+
+
+
+void APerformanceUnit::SetLODCount(int32 LODCount)
+{
+	// Ensure the SkeletalMeshComponent is valid
+	if (GetMesh())
+	{
+		//USkeletalMeshComponent* SkeletalMeshComponent = GetMesh();
+
+		// Get the current Skeletal Mesh using GetSkinnedAsset()
+		//USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(SkeletalMeshComponent->GetSkinnedAsset());
+
+
+	
+
+			// Modify the Skeletal Mesh for changes
+			//SkeletalMesh->Modify();
+			//SkeletalMesh->SetLODSettings(nullptr); // Clear LOD settings to manually change LOD count
+
+			// Adjust LOD count
+			//SkeletalMesh->GetLODInfoArray().SetNum(LODCount);
+			GetMesh()->SetPredictedLODLevel(LODCount);
+			// Optional: Log the new LOD count for debugging
+			UE_LOG(LogTemp, Warning, TEXT("LOD Count set to: %d"), LODCount);
+		
+	}
+	
+}
+
+
 
 void APerformanceUnit::CheckVisibility()
 {

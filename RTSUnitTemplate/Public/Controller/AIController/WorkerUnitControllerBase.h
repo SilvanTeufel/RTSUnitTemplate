@@ -16,7 +16,7 @@ class RTSUNITTEMPLATE_API AWorkerUnitControllerBase : public AUnitControllerBase
 
 public:
 	virtual void Tick(float DeltaSeconds) override;
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void WorkingUnitControlStateMachine(float DeltaSeconds);
 	

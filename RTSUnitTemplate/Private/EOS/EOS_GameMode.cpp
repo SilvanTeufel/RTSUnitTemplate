@@ -5,6 +5,7 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
 #include "OnlineSessionSettings.h"  
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "Engine/NetConnection.h"
@@ -22,6 +23,8 @@ void AEOS_GameMode::PostLogin(APlayerController* NewPlayer)
 	//}
 	// Set SessionJoined = true; from UEOS_GameInstance
 	Register(NewPlayer);
+
+
 }
 
 void AEOS_GameMode::Register(APlayerController* NewPlayer)
@@ -81,6 +84,10 @@ void AEOS_GameMode::Register(APlayerController* NewPlayer)
                 			bool bRegistrationSuccess = SessionRef->RegisterPlayer(SessionName, *UniqueNetId, false);
                 			if (bRegistrationSuccess)
                 			{
+                				if (AControllerBase* ControllerBase = Cast<AControllerBase>(NewPlayer))
+                				{
+                					ControllerBase->SpawnPlatform->HideOnTeamId(ControllerBase->SelectableTeamId);
+                				}
                 				UE_LOG(LogTemp, Warning, TEXT("Registration Successful"));
                 			}
                 		}

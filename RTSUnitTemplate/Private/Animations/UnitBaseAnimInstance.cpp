@@ -17,7 +17,6 @@ UUnitBaseAnimInstance::UUnitBaseAnimInstance() {
 void UUnitBaseAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
-
 }
 
 void UUnitBaseAnimInstance::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -44,6 +43,11 @@ void UUnitBaseAnimInstance::GetLifetimeReplicatedProps(TArray< FLifetimeProperty
 void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 {
 	Super::NativeUpdateAnimation(Deltaseconds);
+	/*
+	ControlTimer += Deltaseconds;
+	if(ControlTimer < UpdateTime) return;
+	ControlTimer = 0.f;
+	*/
 	AActor* OwningActor = GetOwningActor();
 
 	if (OwningActor != nullptr) {

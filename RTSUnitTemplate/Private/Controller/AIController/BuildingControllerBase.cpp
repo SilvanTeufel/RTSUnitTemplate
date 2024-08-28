@@ -62,18 +62,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(float DeltaSeconds)
 				UnitBase->CollisionUnit = nullptr;
 			}
 
-				APlayerController* PC = GetWorld()->GetFirstPlayerController();
-				if (PC)
-				{
-					AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-					if (MyHUD)
-					{
-						TArray<AActor*> DetectedUnits;
-						// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-						MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-						OnUnitDetected(DetectedUnits);
-					}
-				}
+				DetectUnits(UnitBase, DeltaSeconds);
 		
 				
 			if(UnitBase->UnitsToChase.Num())
@@ -197,18 +186,7 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
 
 void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (PC)
-	{
-		AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-		if (MyHUD)
-		{
-			TArray<AActor*> DetectedUnits;
-			// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-			MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-			OnUnitDetected(DetectedUnits);
-		}
-	}
+	DetectUnits(UnitBase, DeltaSeconds);
 				
 	if(UnitBase->SetNextUnitToChase())
 	{

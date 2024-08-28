@@ -37,7 +37,7 @@ void AUnitSpawnPlatform::BeginPlay()
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 		if (ControllerBase)
 		{
-			DefaultTeamId = ControllerBase->SelectableTeamId;
+			TeamId = ControllerBase->SelectableTeamId;
 			DefaultWaypoint = ControllerBase->DefaultWaypoint;
 			ControllerBase->SpawnPlatform = this;
 		}
@@ -72,7 +72,9 @@ void AUnitSpawnPlatform::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AUnitSpawnPlatform, Energy);
 	DOREPLIFETIME(AUnitSpawnPlatform, MaxEnergy);
 	DOREPLIFETIME(AUnitSpawnPlatform, EnergyWidgetComp);
+	DOREPLIFETIME(AUnitSpawnPlatform, TeamId);
 }
+
 
 void AUnitSpawnPlatform::SpawnUnitsFromArray()
 {
@@ -95,7 +97,7 @@ void AUnitSpawnPlatform::SpawnUnitsFromArray()
 					FVector SpawnLocation = GetActorLocation() + BaseOffset + RotatedOffset; // Calculate the final spawn location
                     
 					//FVector SpawnLocation = GetActorLocation() + BaseOffset + FVector(0.0f, UnitSpacing * i, 0.0f); // Adjust X or Y depending on orientation
-					SpawnUnit(DefaultAIControllerClass[i], DefaultUnitBaseClass[i], DefaultMaterial, DefaultCharacterMesh, DefaultHostMeshRotation, SpawnLocation, DefaultState, DefaultStatePlaceholder, DefaultTeamId, DefaultWaypoint, DefaultUIndex);
+					SpawnUnit(DefaultAIControllerClass[i], DefaultUnitBaseClass[i], DefaultMaterial, DefaultCharacterMesh, DefaultHostMeshRotation, SpawnLocation, DefaultState, DefaultStatePlaceholder, TeamId, DefaultWaypoint, DefaultUIndex);
 				}
 			}
 		}
@@ -163,7 +165,7 @@ void AUnitSpawnPlatform::ReSpawnUnits()
 				
 				if (AIController && UnitBaseClass)
 				{
-					SpawnUnit(AIController, UnitBaseClass, DefaultMaterial, DefaultCharacterMesh, DefaultHostMeshRotation, SpawnLocation, DefaultState, DefaultStatePlaceholder, DefaultTeamId, DefaultWaypoint, DefaultUIndex);
+					SpawnUnit(AIController, UnitBaseClass, DefaultMaterial, DefaultCharacterMesh, DefaultHostMeshRotation, SpawnLocation, DefaultState, DefaultStatePlaceholder, TeamId, DefaultWaypoint, DefaultUIndex);
 					UnitsToRemove.Add(Unit); // Mark this unit for removal
 				}
 			}
@@ -275,6 +277,13 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 	}
 
 	return 0;
+}
+
+
+void AUnitSpawnPlatform::HideOnTeamId(int PCTeamId)
+{
+	// Hide actor if it doesn't match the player's team
+	SetActorHiddenInGame(PCTeamId != TeamId);
 }
 
 float AUnitSpawnPlatform::GetEnergy()

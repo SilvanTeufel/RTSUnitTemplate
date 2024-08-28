@@ -34,7 +34,7 @@ public:
 	AUnitControllerBase();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TickInterval = 0.05;
+	float TickInterval = 0.15f; 
 	
 	virtual void BeginPlay() override;
 
@@ -125,6 +125,21 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Dead", Keywords = "RTSUnitTemplate Dead"), Category = RTSUnitTemplate)
 		void Dead(AUnitBase* UnitBase, float DeltaSeconds);
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitDetectionTimer = 0.0f;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float NewDetectionTime = 3.0f;
+	
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsUnitDetected = false;
+
+	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
+	void CheckUnitDetectionTimer(float DeltaSeconds);
+	
+	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
+	void DetectUnits(AUnitBase* UnitBase, float DeltaSeconds);
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Patrol", Keywords = "RTSUnitTemplate Patrol"), Category = RTSUnitTemplate)
 		void Patrol(AUnitBase* UnitBase, float DeltaSeconds);
 

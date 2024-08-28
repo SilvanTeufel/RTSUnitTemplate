@@ -30,19 +30,20 @@ AControllerBase::AControllerBase() {
 
 
 void AControllerBase::BeginPlay() {
-
-		ToggleFPSDisplay(ShowFPS);
+	
 		CameraBase = Cast<ACameraBase>(GetPawn());
 		HUDBase = Cast<APathProviderHUD>(GetHUD());
 		if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
+	
+		ToggleUnitCountDisplay(ShowUnitCount);
 }
 
-void AControllerBase::ToggleFPSDisplay(bool bEnable)
+void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {
 	if (bEnable)
 	{
 		// Start the timer to call DisplayFPS every 2 seconds
-		GetWorldTimerManager().SetTimer(FPSTimerHandle, this, &AControllerBase::DisplayFPS, 2.0f, true);
+		GetWorldTimerManager().SetTimer(FPSTimerHandle, this, &AControllerBase::DisplayUnitCount, 2.0f, true);
 	}
 	else
 	{
@@ -51,23 +52,18 @@ void AControllerBase::ToggleFPSDisplay(bool bEnable)
 	}
 }
 
-void AControllerBase::DisplayFPS()
+void AControllerBase::DisplayUnitCount()
 {
-	float DeltaTime = GetWorld()->DeltaTimeSeconds;
-	float FPS = 1.0f / DeltaTime;
-	FString FPSMessage = FString::Printf(TEXT("FPS: %f"), FPS);
+
 
 	// Retrieve the count of all units from HUDBase or a similar class
 	int UnitsCount = HUDBase->AllUnits.Num();
 	FString UnitsMessage = FString::Printf(TEXT("Unit Count: %d"), UnitsCount);
-
-	// Combine FPS and Unit Count messages
-	FString CombinedMessage = FPSMessage + TEXT(" | ") + UnitsMessage;
-
+	
 	// Display the combined message on screen
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, CombinedMessage, true);
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, UnitsMessage, true);
 	}
 }
 
@@ -192,7 +188,7 @@ void AControllerBase::SelectUnit(int Index)
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
-	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Red, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
 	MoveToLocationUEPathFinding(Unit, Location);
 }

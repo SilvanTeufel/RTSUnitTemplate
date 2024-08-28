@@ -10,7 +10,7 @@
 AHealingUnitController::AHealingUnitController()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.05f; 
+	PrimaryActorTick.TickInterval = TickInterval; 
 	DetectFriendlyUnits = true;
 }
 
@@ -43,18 +43,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 	case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			APlayerController* PC = GetWorld()->GetFirstPlayerController();
-			if (PC)
-			{
-				AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-				if (MyHUD)
-				{
-					TArray<AActor*> DetectedUnits;
-					// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-					MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-					OnUnitDetected(DetectedUnits);
-				}
-			}
+			DetectUnits(UnitBase, DeltaSeconds);
 
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
@@ -66,18 +55,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
 	case UnitData::PatrolRandom:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-			APlayerController* PC = GetWorld()->GetFirstPlayerController();
-			if (PC)
-			{
-				AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-				if (MyHUD)
-				{
-					TArray<AActor*> DetectedUnits;
-					// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-					MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-					OnUnitDetected(DetectedUnits);
-				}
-			}
+			DetectUnits(UnitBase, DeltaSeconds);
 			
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
@@ -355,18 +333,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
-		{
-			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-			if (MyHUD)
-			{
-				TArray<AActor*> DetectedUnits;
-				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-				OnUnitDetected(DetectedUnits);
-			}
-		}
+		DetectUnits(UnitBase, DeltaSeconds);
 		
 		if(UnitBase->SetNextUnitToChaseHeal())
 		{
@@ -409,18 +376,7 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
-		{
-			AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-			if (MyHUD)
-			{
-				TArray<AActor*> DetectedUnits;
-				// Führe den DetectUnit Aufruf durch, ersetze 'YourTeamId' durch den entsprechenden Wert
-				MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius);
-				OnUnitDetected(DetectedUnits);
-			}
-		}
+		DetectUnits(UnitBase, DeltaSeconds);
 		
 		if(UnitBase->SetNextUnitToChaseHeal())
 		{

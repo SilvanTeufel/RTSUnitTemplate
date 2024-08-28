@@ -9,6 +9,7 @@
 #include "Elements/Actor/ActorElementData.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Components/WidgetSwitcher.h"
+#include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -140,6 +141,7 @@ void AHUDBase::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	MoveUnitsThroughWayPoints(FriendlyUnits);
 	IsSpeakingUnitClose(FriendlyUnits, SpeakingUnits);
+	//DetectAllUnits();
 }
 
 
@@ -343,15 +345,62 @@ void AHUDBase::DeselectAllUnits()
 		SelectedUnits.Empty();
 }
 
+void AHUDBase::DetectAllUnits()
+{
+	for (int32 x = 0; x < AllUnits.Num(); x++)
+	{
+		AUnitBase* DetectingUnit = Cast<AUnitBase>(AllUnits[x]);
+		if(!DetectingUnit) return;
+		
+		AUnitControllerBase* UnitControllerBase = Cast<AUnitControllerBase>(DetectingUnit->GetController());
+		if(!UnitControllerBase) return;
+		
+		float Sight = UnitControllerBase->SightRadius;
+		bool DetectFriendlyUnits = UnitControllerBase->DetectFriendlyUnits;
+		TArray<AActor*> DetectedUnits;
+		for (int32 i = 0; i < AllUnits.Num(); i++)
+		{
+			AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+			//DetectingUnit->Attributes->Range
+	
+			if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
+			{
 
-void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
+				float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+
+				if (Distance <= Sight)
+					DetectedUnits.Emplace(Unit);
+			}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
+			{
+
+				float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+
+				if (Distance <= Sight)
+					DetectedUnits.Emplace(Unit);
+			}
+		}
+		
+		UnitControllerBase->OnUnitDetected(DetectedUnits);
+		
+	}
+}
+
+
+void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, bool DetectFriendlyUnits)
 {
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
 		//DetectingUnit->Attributes->Range
 	
-		if (Unit && Unit->TeamId != DetectingUnit->TeamId)
+		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
+		{
+
+			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+
+			if (Distance <= Sight)
+				DetectedUnits.Emplace(Unit);
+		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
 		{
 
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());

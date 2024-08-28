@@ -60,8 +60,11 @@ private:
 	UPROPERTY(VisibleAnywhere, Category=RTSUnitTemplate)
 	USceneComponent* SpawnPoint;
 
-public:
 	
+public:
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HideOnTeamId(int PCTeamId);
 	// Variables for specifying spawn details
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<AUnitBase>> DefaultUnitBaseClass;
@@ -88,8 +91,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> DefaultStatePlaceholder = UnitData::EState::Idle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int DefaultTeamId = 1;
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int TeamId = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* DefaultWaypoint;
