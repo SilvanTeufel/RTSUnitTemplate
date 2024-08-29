@@ -13,6 +13,7 @@
 AProjectile::AProjectile()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = TickInterval; 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
 	
@@ -67,6 +68,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	{
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
+		
 	}
 }
 
@@ -108,7 +110,7 @@ void AProjectile::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	LifeTime += DeltaTime;
-
+	
 	if(RotateMesh)
 	{
 		// Calculate rotation amount based on DeltaTime and RotationSpeed

@@ -16,6 +16,9 @@ public:
 	// Sets default values for this actor's properties
 	AProjectile();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TickInterval = 0.025f;
+	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
@@ -73,7 +76,7 @@ public:
 	int TeamId = 1;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float MovementSpeed = 50.f;
+	float MovementSpeed = 100.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> ProjectileEffect;

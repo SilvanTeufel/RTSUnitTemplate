@@ -28,48 +28,27 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 }
 
 
-
-void APerformanceUnit::SetLODCount(int32 LODCount)
-{
-	// Ensure the SkeletalMeshComponent is valid
-	if (GetMesh())
-	{
-		//USkeletalMeshComponent* SkeletalMeshComponent = GetMesh();
-
-		// Get the current Skeletal Mesh using GetSkinnedAsset()
-		//USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(SkeletalMeshComponent->GetSkinnedAsset());
-
-
-	
-
-			// Modify the Skeletal Mesh for changes
-			//SkeletalMesh->Modify();
-			//SkeletalMesh->SetLODSettings(nullptr); // Clear LOD settings to manually change LOD count
-
-			// Adjust LOD count
-			//SkeletalMesh->GetLODInfoArray().SetNum(LODCount);
-			GetMesh()->SetPredictedLODLevel(LODCount);
-			// Optional: Log the new LOD count for debugging
-			UE_LOG(LogTemp, Warning, TEXT("LOD Count set to: %d"), LODCount);
-		
-	}
-	
-}
-
-
-
 void APerformanceUnit::CheckVisibility()
 {
+	USkeletalMeshComponent* SkelMesh = GetMesh();
+	
 	if (IsInViewport(GetActorLocation(), VisibilityOffset))
 	{
-		GetMesh()->SetVisibility(true);
-		
-		if(Projectile) Projectile->SetVisibility(true);
+		IsOnViewport = true;
+		if(SkelMesh)
+		{
+			SkelMesh->SetVisibility(true);
+			SkelMesh->bPauseAnims = false;
+		}
 	}
 	else
 	{
-		GetMesh()->SetVisibility(false);
-		if(Projectile) Projectile->SetVisibility(false);
+		IsOnViewport = false;
+		if(SkelMesh)
+		{
+			SkelMesh->SetVisibility(false);
+			SkelMesh->bPauseAnims = true;
+		}
 	}
 }
 
@@ -93,7 +72,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 {
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
-		if (IsInViewport(HealthWidgetComp->GetComponentLocation(), VisibilityOffset))
+		if (IsOnViewport)
 		{
 			//HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 		}
@@ -108,7 +87,7 @@ void APerformanceUnit::CheckTimerVisibility()
 {
 	if (UUnitTimerWidget* TimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject())) // Assuming you have a UUnitBaseTimer class for the timer widget
 	{
-		if (IsInViewport(TimerWidgetComp->GetComponentLocation(), VisibilityOffset))
+		if (IsOnViewport)
 		{
 			TimerWidget->SetVisibility(ESlateVisibility::Visible);
 		}

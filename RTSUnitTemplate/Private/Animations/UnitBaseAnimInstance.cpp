@@ -52,7 +52,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 
 	if (OwningActor != nullptr) {
 		AUnitBase* UnitBase = Cast<AUnitBase>(OwningActor);
-		if (UnitBase != nullptr) {
+		if (UnitBase != nullptr && UnitBase->IsOnViewport) {
 			CharAnimState = UnitBase->GetUnitState();
 			SetBlendPoints(UnitBase, Deltaseconds);
 

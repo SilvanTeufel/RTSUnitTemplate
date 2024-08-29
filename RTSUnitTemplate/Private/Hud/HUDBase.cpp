@@ -139,9 +139,10 @@ void AHUDBase::DrawHUD()
 void AHUDBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
 	MoveUnitsThroughWayPoints(FriendlyUnits);
 	IsSpeakingUnitClose(FriendlyUnits, SpeakingUnits);
-	//DetectAllUnits();
+
 }
 
 

@@ -90,7 +90,7 @@ void APathProviderHUD::CreateGridAndDijkstra()
 void APathProviderHUD::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	
+
 	StartTimer = StartTimer + DeltaSeconds;
 	if(StartTimer >= StartTime && CreatedGridAndDijkstra == false && !StopLoading)
 	{

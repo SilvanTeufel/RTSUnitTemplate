@@ -262,7 +262,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 			if(NewHealth <= 0.f)
 			{
 				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-			}else
+			}else if(IsOnViewport)
 				HealthBarWidget->ResetCollapseTimer();
 		}
 	}
@@ -293,7 +293,7 @@ void AUnitBase::SetShield_Implementation(float NewShield)
 {
 	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
 	
-	if(NewShield <= Attributes->GetShield())
+	if(NewShield <= Attributes->GetShield() && IsOnViewport)
 	{
 		if (HealthBarWidget)
 		{
@@ -410,8 +410,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
-
-
+			
+			if(!IsOnViewport) MyProjectile->Mesh->SetVisibility(false);
 			
 		
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
@@ -467,23 +467,15 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->FollowTarget = FollowTarget;
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
-			
+
+				if(!IsOnViewport) MyProjectile->Mesh->SetVisibility(false);
+				
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			}
 		}
 	}
 }
-/*
-void AUnitBase::SetToggleUnitDetection_Implementation(bool ToggleTo)
-{
-		ToggleUnitDetection = ToggleTo;
-}
 
-bool AUnitBase::GetToggleUnitDetection()
-{
-	return ToggleUnitDetection;
-}
-*/
 bool AUnitBase::SetNextUnitToChase()
 {
 	if (UnitsToChase.IsEmpty()) return false;
@@ -678,46 +670,3 @@ void AUnitBase::SetUnitBase(int UIndex, AUnitBase* NewUnit)
 	// If no unit matches the UnitIndex, you can either return false, 
 	// or handle it based on how you want to treat units that are not found
 }
-
-
-/*
-bool AUnitBase::SetNextUnitToChase()
-{
-	if(!UnitsToChase.Num()) return false;
-		
-	float ShortestDistance = GetDistanceTo(UnitsToChase[0]);
-	int IndexShortestDistance = 0;
-	for(int i = 0; i < UnitsToChase.Num(); i++)
-	{
-		if(UnitsToChase[i] && UnitsToChase[i]->GetUnitState() != UnitData::Dead)
-		{
-			DistanceToUnitToChase = GetDistanceTo(UnitsToChase[i]);
-						
-			if(DistanceToUnitToChase < ShortestDistance)
-			{
-				ShortestDistance = DistanceToUnitToChase;
-				IndexShortestDistance = i;
-			}
-		}
-	}
-
-	bool RValue = false;
-	
-	if(UnitsToChase[IndexShortestDistance] && UnitsToChase[IndexShortestDistance]->GetUnitState() != UnitData::Dead)
-	{
-		UnitToChase = UnitsToChase[IndexShortestDistance];
-		RValue =  true;
-	}
-
-	TArray <AUnitBase*> UnitsToDelete = UnitsToChase;
-	
-	for(int i = 0; i < UnitsToDelete.Num(); i++)
-	{
-		if(UnitsToDelete[i] && UnitsToDelete[i]->GetUnitState() == UnitData::Dead)
-		{
-			UnitsToChase.Remove(UnitsToDelete[i]);
-		}
-	}
-
-	return RValue;
-}*/

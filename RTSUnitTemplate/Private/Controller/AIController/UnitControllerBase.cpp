@@ -900,11 +900,15 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
+
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		IsUnitDetected = false;
+		DetectUnits(UnitBase, DeltaSeconds);
+	}
 	
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
-		DetectUnits(UnitBase, DeltaSeconds);
-		
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
