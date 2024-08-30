@@ -18,7 +18,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void BuildingControlStateMachine(float DeltaSeconds);
+	void BuildingControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastingUnit(AUnitBase* UnitBase, float DeltaSeconds);

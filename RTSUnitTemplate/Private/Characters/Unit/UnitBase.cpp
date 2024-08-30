@@ -549,12 +549,13 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 	
 		if(SpawnParameter.UnitControllerBaseClass)
 		{
-			AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-			if(!ControllerBase) return;
+			AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+			if(!UnitController) return;
 			APawn* PawnBase = Cast<APawn>(UnitBase);
 			if(PawnBase)
 			{
-				ControllerBase->Possess(PawnBase);
+				UE_LOG(LogTemp, Warning, TEXT("Setup Ai Controller!"));
+				UnitController->Possess(PawnBase);
 			}
 		}
 	

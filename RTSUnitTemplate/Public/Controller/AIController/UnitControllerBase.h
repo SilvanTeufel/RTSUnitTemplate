@@ -11,7 +11,9 @@
 #include "Hud/PathProviderHUD.h"
 #include "NavigationSystem.h"
 #include "Engine.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "NavMesh/NavMeshPath.h"
+#include "Widgets/UnitBaseHealthBar.h"
 
 
 #include "UnitControllerBase.generated.h"
@@ -27,12 +29,27 @@ class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
 	GENERATED_BODY()
 
 private:
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	FVector PendingDestination;
-	
+
 public:
 	AUnitControllerBase();
 
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	AUnitBase* MyUnitBase;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	AHUDBase* HUDBase;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	AControllerBase* ControllerBase;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	UUnitBaseHealthBar* HealthBarWidget;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.15f; 
 	
@@ -110,13 +127,13 @@ public:
 		void RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UnitControlStateMachine", Keywords = "RTSUnitTemplate UnitControlStateMachine"), Category = RTSUnitTemplate)
-		void UnitControlStateMachine(float DeltaSeconds);
+		void UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void Rooted(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void Casting(AUnitBase* UnitBase, float DeltaSeconds);
+		void Casting(AUnitBase* UnitBase, float DeltaSeconds);
 
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Dead", Keywords = "RTSUnitTemplate Dead"), Category = RTSUnitTemplate)

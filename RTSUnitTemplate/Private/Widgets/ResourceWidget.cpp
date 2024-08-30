@@ -121,7 +121,7 @@ void UResourceWidget::UpdateWorkerCountDisplay()
     AResourceGameState* ResourceGameState = GetWorld()->GetGameState<AResourceGameState>();
     if (!ResourceGameState)
     {
-        UE_LOG(LogTemp, Warning, TEXT("ResourceGameState not found on client."));
+        //UE_LOG(LogTemp, Warning, TEXT("ResourceGameState not found on client."));
         return;
     }
         
@@ -130,7 +130,7 @@ void UResourceWidget::UpdateWorkerCountDisplay()
     
     if (TeamResources.IsEmpty())
     {
-        UE_LOG(LogTemp, Warning, TEXT("TeamResources is empty or not initialized."));
+        //UE_LOG(LogTemp, Warning, TEXT("TeamResources is empty or not initialized."));
         return; // Early exit if TeamResources is empty or not initialized
     }
     

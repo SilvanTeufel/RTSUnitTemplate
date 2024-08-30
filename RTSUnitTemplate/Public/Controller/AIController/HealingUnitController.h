@@ -24,7 +24,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UnitControlStateMachine", Keywords = "RTSUnitTemplate UnitControlStateMachine"), Category = RTSUnitTemplate)
-		void HealingUnitControlStateMachine(float DeltaSeconds);
+		void HealingUnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ChaseHealTarget", Keywords = "RTSUnitTemplate ChaseHealTarget"), Category = RTSUnitTemplate)
 		void ChaseHealTarget(AHealingUnit* UnitBase,float DeltaSeconds);

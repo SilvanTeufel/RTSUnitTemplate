@@ -28,48 +28,34 @@ AUnitControllerBase::AUnitControllerBase()
 	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickInterval = TickInterval;
-	/*
-	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("Sight Config"));
-	SetPerceptionComponent(*CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception Component")));
-
-	SightConfig->SightRadius = SightRadius;
-	SightConfig->LoseSightRadius = LoseSightRadius;
-	SightConfig->PeripheralVisionAngleDegrees = FieldOfView;
-	SightConfig->SetMaxAge(SightAge);
-
-	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
-	SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
-	SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
-
-	GetPerceptionComponent()->SetDominantSense(*SightConfig->GetSenseImplementation());
-	GetPerceptionComponent()->OnPerceptionUpdated.AddDynamic(this, &AUnitControllerBase::OnUnitDetected);
-	GetPerceptionComponent()->ConfigureSense(*SightConfig);
-	GetPerceptionComponent()->SetComponentTickInterval(TickInterval*10); //
-	GetPerceptionComponent()->SetSenseEnabled(UAISense_Sight::StaticClass(), true);
-	*/
-	
-	
 }
 
 void AUnitControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	/*
-	if (UAIPerceptionComponent* PerceptionComp = GetPerceptionComponent())
-	{
 
-			PerceptionComp->RequestStimuliListenerUpdate();
-	}
-	else {
-		UE_LOG(LogTemp, Warning, TEXT("Some Problem Occured"));
-	}
-	*/
 }
 
 void AUnitControllerBase::OnPossess(APawn* PawN)
 {
 	Super::OnPossess(PawN);
+
+	MyUnitBase = Cast<AUnitBase>(GetPawn());
+
+	if(MyUnitBase)UE_LOG(LogTemp, Warning, TEXT("MyUnitBase Found!"));
+	
+	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+
+	if(ControllerBase)UE_LOG(LogTemp, Warning, TEXT("ControllerBase Found!"));
+	
+	if(ControllerBase) HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
+
+	if(HUDBase)UE_LOG(LogTemp, Warning, TEXT("HUDBase Found!"));
+	
+	if(MyUnitBase && MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
+
+	if(HealthBarWidget)UE_LOG(LogTemp, Warning, TEXT("HealthBarWidget Found!"));
 }
 
 void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -81,7 +67,7 @@ void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >
 void AUnitControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	UnitControlStateMachine(DeltaSeconds);
+	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
 }
 
 FRotator AUnitControllerBase::GetControlRotation() const
@@ -104,7 +90,8 @@ void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 
 void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 {
-	AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
+	//AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
+	AUnitBase* CurrentUnit = MyUnitBase;
 	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || (CurrentUnit->GetUnitState() == UnitData::Run && !CurrentUnit->GetToggleUnitDetection()) || CurrentUnit->GetUnitState() == UnitData::Evasion) return;
 
 	// Loop through each detected unit
@@ -122,7 +109,6 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 	}
 
 	// The actual state change logic is refactored here, outside the loop.
-	//CurrentUnit->SetNextUnitToChase();
 
 	if(!CurrentUnit->UnitToChase)
 	if (CurrentUnit->SetNextUnitToChase())
@@ -176,10 +162,9 @@ void AUnitControllerBase::CheckUnitDetectionTimer(float DeltaSeconds)
 	}
 }
 
-void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
+void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds)
 {
 
-		AUnitBase* UnitBase = Cast<AUnitBase>(GetPawn());
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
 	
@@ -199,13 +184,13 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Dead:
 		{
-			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
+			if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
 			Dead(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Patrol:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+			if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
 			DetectUnits(UnitBase, DeltaSeconds);
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
@@ -217,8 +202,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		case UnitData::PatrolRandom:
 			{
 				// Zugriff auf den PlayerController und Cast zu deinem spezifischen HUD
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-
+				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
 				DetectUnits(UnitBase, DeltaSeconds);
 				
 				if(UnitBase->SetNextUnitToChase())
@@ -235,7 +219,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			break;
 		case UnitData::PatrolIdle:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
+				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
@@ -256,7 +240,7 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			break;
 		case UnitData::Run:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
+				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
 					
 				if(UnitBase->UEPathfindingUsed)
 					RunUEPathfinding(UnitBase, DeltaSeconds);
@@ -266,26 +250,26 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 		break;
 		case UnitData::Chase:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
+				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
 				Chase(UnitBase, DeltaSeconds);
 			}
 		break;
 		case UnitData::Attack:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Attack"));
+			if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Attack"));
 			Attack(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Pause:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
+			if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
 			Pause(UnitBase, DeltaSeconds);
 		}
 		break;
 
 		case UnitData::IsAttacked:
 		{
-			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
+			if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
@@ -313,7 +297,6 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 			
 			if(UnitBase->CollisionUnit)
 			{
-				//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
 				EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
 				UnitBase->UnitControlTimer += DeltaSeconds;
 			}else
@@ -323,18 +306,6 @@ void AUnitControllerBase::UnitControlStateMachine(float DeltaSeconds)
 				
 		}
 		break;
-		/*case UnitData::Evasion:
-			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-				if(	UnitBase->CollisionUnit)
-				{
-					//UnitBase->EvadeDistance = GetCloseLocation(UnitBase->GetActorLocation(), 100.f);
-					EvasionIdle(UnitBase, UnitBase->CollisionUnit->GetActorLocation());
-					UnitBase->UnitControlTimer += DeltaSeconds;
-				}
-				
-			}
-			break;*/
 		case UnitData::Rooted:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
@@ -418,14 +389,11 @@ bool AUnitControllerBase::IsUnitToChaseInRange(AUnitBase* UnitBase)
 
 void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	//UnitBase->SetWalkSpeed(0);
+
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
-	//FVector ActorLocation = UnitBase->GetActorLocation();
-
 	UnitBase->SpawnPickupsArray();
-	//UnitBase->SetActorLocation(FVector(ActorLocation.X + 0.f,ActorLocation.Y + 0.f,ActorLocation.Z -1.f));
 
 	if (UnitBase->UnitControlTimer >= DespawnTime) {
 		if(UnitBase->DestroyAfterDeath) UnitBase->Destroy(true, false);
@@ -436,18 +404,15 @@ void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(IsUnitDetected) return;
 	
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (PC)
+	if (HUDBase)
 	{
-		AHUDBase* MyHUD = Cast<AHUDBase>(PC->GetHUD());
-		if (MyHUD)
-		{
-			TArray<AActor*> DetectedUnits;
-			MyHUD->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits);
-			OnUnitDetected(DetectedUnits);
-			IsUnitDetected = true;
-		}
+		TArray<AActor*> DetectedUnits;
+		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits);
+		OnUnitDetected(DetectedUnits);
+		IsUnitDetected = true;
+		UE_LOG(LogTemp, Warning, TEXT("DetectUnits!"));
 	}
+
 }
 
 void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
@@ -533,8 +498,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 {
     if (!UnitBase) return;
-
-	//UnitBase->UnitControlTimer += DeltaSeconds;
+	
     // Check for immediate collision with an enemy unit.
     if(UnitBase->CollisionUnit 
        && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId)
@@ -661,7 +625,6 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 				// Attack without Projectile
 				if(IsUnitToChaseInRange(UnitBase))
 				{
-					//UE_LOG(LogTemp, Warning, TEXT("Unit is in Range, Attack without Projectile!"));
 					float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
 			
 					if(UnitBase->IsDoingMagicDamage)
@@ -671,12 +634,9 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 						UnitBase->UnitToChase->SetHealth(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
 					else
 						UnitBase->UnitToChase->SetShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
-						//UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
 					UnitBase->LevelData.Experience++;
-
-					UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(UnitBase->HealthWidgetComp->GetUserWidgetObject());
-	
+					
 					if (HealthBarWidget)
 					{
 						HealthBarWidget->UpdateWidget();
@@ -732,26 +692,20 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	
 	if(!UnitBase->SetNextUnitToChase()) {
-
-		//if(UnitBase->SetNextUnitToChase()) return;
-
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState( UnitBase->UnitStatePlaceholder );
-				
 	} else if (UnitBase->UnitControlTimer > UnitBase->PauseDuration) {
 		
 		ProjectileSpawned = false;
-		//UnitBase->SetUnitState(UnitData::Chase);
+
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		
 		if (IsUnitToChaseInRange(UnitBase)) {
 				UnitBase->ServerStartAttackEvent_Implementation();
 				UnitBase->SetUnitState(UnitData::Attack);
-
 				UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
 				UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
 				if(UnitBase->Attributes->GetRange() >= 600.f) UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
-
 			
 				CreateProjectile(UnitBase);
 		}else
@@ -774,9 +728,7 @@ void AUnitControllerBase::IsAttacked(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(0);
-
-
-
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
 		UnitBase->UnitToChase = UnitBase->CollisionUnit;
@@ -809,20 +761,17 @@ void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, 
 		CollisionLocation.Z = UnitBase->FlyHeight;
 	}
 	
-	//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
 	FVector AwayDirection = (UnitLocation - CollisionUnitLocation).GetSafeNormal();
 	
 	const FVector RotatedDirection = FRotator(0.f,40.f,0.f).RotateVector(AwayDirection);
-	//UnitBase->AddMovementInput(RotatedDirection,  UnitBase->Attributes->GetRunSpeedScale()); // UnitBase->Attributes->GetRunSpeedScale()
 	const FVector LocationToGo = UnitBase->GetActorLocation() + RotatedDirection*(UnitBase->EvadeDistanceChase+100.f);
 	UnitBase->SetUEPathfinding = true;
 	SetUEPathfinding(UnitBase, DeltaSeconds, LocationToGo);
-
-
+	
 	// Simplify distance calculation using FVector::Dist.
 	float Distance = FVector::Dist(UnitLocation, CollisionLocation);
 	
-	if (Distance >= UnitBase->EvadeDistanceChase) { // Distance >= UnitBase->EvadeDistanceChase
+	if (Distance >= UnitBase->EvadeDistanceChase) {
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
 		UnitBase->CollisionUnit = nullptr;
@@ -832,21 +781,6 @@ void AUnitControllerBase::EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, 
 
 void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation)
 {
-	/*
-	if(!(UnitBase->UnitStatePlaceholder == UnitData::Run && !UnitBase->GetToggleUnitDetection()) && UnitBase->UnitToChase)
-	{
-		if(UnitBase->SetNextUnitToChase())
-		{
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	}*/
-
-
-
-
-
-
-
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
@@ -862,7 +796,6 @@ void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLoca
 	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
 
 	if (Distance >= UnitBase->EvadeDistance) {
-		//UnitBase->SetUnitState(UnitData::Run);
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Run);
 		UnitBase->CollisionUnit = nullptr;
@@ -1072,11 +1005,6 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	if(!UnitBase->SetUEPathfinding)
 		return;
 	
-	//if(UnitBase->UnitControlTimer == 0.f)
-		//SetPatrolCloseLocation(UnitBase);
-
-	//UnitBase->UnitControlTimer += DeltaSeconds;
-
 	bool Succeeded = false;
 	// Execute SetPatrolCloseLocation again if Succeeded is false
 	int X = 0;
@@ -1102,22 +1030,18 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	if(!UnitBase->SetUEPathfinding)
 		return false;
 		
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if(PlayerController)
-	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if (ControllerBase != nullptr)
-		{
-			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-			// You can use the controller here
 
-			
-			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
-			UnitBase->SetUEPathfinding = false;
-			//ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
-			return MoveToLocationUEPathFinding(UnitBase, Location);
-		}
+	if (ControllerBase != nullptr)
+	{
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+		// You can use the controller here
+
+		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
+		UnitBase->SetUEPathfinding = false;
+
+		return MoveToLocationUEPathFinding(UnitBase, Location);
 	}
+
 	
 	return false;
 }
@@ -1126,20 +1050,15 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 {
 	if(!UnitBase->SetUEPathfinding)
 		return;
-		
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if(PlayerController)
+	
+	if (ControllerBase != nullptr)
 	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if (ControllerBase != nullptr)
-		{
 			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 			// You can use the controller here
 			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 			UnitBase->SetUEPathfinding = false;
 			ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
 	
-		}
 	}
 }
 

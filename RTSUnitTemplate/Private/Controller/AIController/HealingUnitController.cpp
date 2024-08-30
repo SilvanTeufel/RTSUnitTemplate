@@ -16,12 +16,12 @@ AHealingUnitController::AHealingUnitController()
 
 void AHealingUnitController::Tick(float DeltaSeconds)
 {
-	HealingUnitControlStateMachine(DeltaSeconds);
+	HealingUnitControlStateMachine(MyUnitBase, DeltaSeconds);
 }
 
-void AHealingUnitController::HealingUnitControlStateMachine(float DeltaSeconds)
+void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, float DeltaSeconds)
 {
-	AHealingUnit* UnitBase = Cast<AHealingUnit>(GetPawn());
+	AHealingUnit* UnitBase = Cast<AHealingUnit>(Unit);
 
 	if(!UnitBase)
 		return;

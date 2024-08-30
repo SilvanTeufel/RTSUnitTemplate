@@ -100,7 +100,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::PatrolRandom:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUnitState(UnitData::Chase);
@@ -561,9 +561,9 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnP
 
 	if(SpawnParameter.UnitControllerBaseClass)
 	{
-		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!ControllerBase) return nullptr;
-		ControllerBase->Possess(UnitBase);
+		AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+		if(!UnitController) return nullptr;
+		UnitController->Possess(UnitBase);
 	}
 	
 	if (UnitBase != nullptr)
