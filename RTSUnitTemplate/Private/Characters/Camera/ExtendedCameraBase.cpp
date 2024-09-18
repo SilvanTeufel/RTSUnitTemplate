@@ -205,17 +205,22 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 			TalentBar->SetVisibility(ESlateVisibility::Visible);
 			TalentBar->SetOwnerActor(SelectedActor);
 			TalentBar->CreateClassUIElements();
+			TalentBar->StartUpdateTimer();
 		}
 
 		if (AbilityBar) {
 			AbilityBar->SetVisibility(ESlateVisibility::Visible);
 			AbilityBar->SetOwnerActor(SelectedActor);
+			AbilityBar->StartUpdateTimer();
 		}
 		
 	}else
 	{
+		TalentBar->StopTimer();
+		AbilityBar->StopTimer();
 		TalentBar->SetVisibility(ESlateVisibility::Collapsed);
 		AbilityBar->SetVisibility(ESlateVisibility::Collapsed);
+		
 	}
 
 }
@@ -332,14 +337,48 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 {
 	if(BlockControls) return;
 	
-	ShowControlWidget();
+	TabToggled = !TabToggled;
+	if(TabToggled)
+	{
+		ShowControlWidget();
+		
+		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+		if(!CameraControllerBase || !CameraControllerBase->HUDBase) return;
+
+		if(CameraControllerBase->HUDBase->SelectedUnits.Num())
+		{ 
+			AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
+			SetUserWidget(SelectedUnit);
+		}
+
+		if (ResourceWidget)
+		{
+			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
+			if(ResourceBar) ResourceBar->StartUpdateTimer();
+			ResourceWidget->SetVisibility(true);
+		}
+
+
+	}
 }
 
 void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState)
 {
 	if(BlockControls) return;
 	
-	HideControlWidget();
+	if(!TabToggled)
+	{
+		HideControlWidget();
+		
+		SetUserWidget(nullptr);
+
+		if (ResourceWidget)
+		{
+			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
+			if(ResourceBar) ResourceBar->StopTimer();
+			ResourceWidget->SetVisibility(false);
+		}
+	}
 }
 
 void AExtendedCameraBase::Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState)

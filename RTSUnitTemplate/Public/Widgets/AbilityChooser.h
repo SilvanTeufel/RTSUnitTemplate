@@ -16,10 +16,24 @@ protected:
 	UPROPERTY(Transient)
 	AAbilityUnit* OwnerAbilityUnit;
 
+private:
+	
+	const float UpdateInterval = 1.0f;
+
+	FTimerHandle UpdateTimerHandle;
+
 public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StartUpdateTimer();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopTimer();
+	
 	virtual void NativeConstruct() override;
 	
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	//virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	// Interval in seconds for how often to update the resource display
 	
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* OffensiveAbilityText;

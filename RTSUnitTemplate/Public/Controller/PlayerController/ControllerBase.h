@@ -54,6 +54,7 @@ public:
 	
 	virtual void Tick(float DeltaSeconds) override;
 	
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShiftPressed", Keywords = "RTSUnitTemplate ShiftPressed"), Category = RTSUnitTemplate)
 		void ShiftPressed();
 
@@ -74,19 +75,13 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void LeftClickSelect();
-	
+	/*
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickPressed", Keywords = "RTSUnitTemplate LeftClickPressed"), Category = RTSUnitTemplate)
 		void LeftClickPressed();
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void DragUnitBase(AUnitBase* UnitToDrag);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void DropUnitBase();
-	
+	*/
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetWidgets(int Index);
 
@@ -219,15 +214,6 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		TArray <AUnitBase*> SelectedUnits;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		AUnitBase* CurrentDraggedUnitBase;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		AActor* CurrentDraggedGround;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		AUnitSpawnPlatform* SpawnPlatform;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		int SelectableTeamId = 0;

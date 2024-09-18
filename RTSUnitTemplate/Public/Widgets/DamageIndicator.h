@@ -16,6 +16,8 @@ class RTSUNITTEMPLATE_API UDamageIndicator : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	virtual void NativeConstruct() override;
+	
 	void SetDamage(float NewDamage) {
 		Damage = NewDamage;
 	}
@@ -26,10 +28,20 @@ public:
 		LowDamageColor = LowColor;
 		ColorOffset = COffset;
 	}
+
+	void UpdateIndicator();
+	
+private:
+	
+	const float UpdateInterval = 0.5f;
+
+	FTimerHandle UpdateTimerHandle;
+
+	void StartUpdateTimer();
 	
 protected:
-	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-
+	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	
 	UPROPERTY()
 	float Damage;
 
@@ -63,4 +75,7 @@ protected:
 	float CalculateOpacity();
 	float CalculateTextSize();
 	FLinearColor CalculateTextColor();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxUnitCount = 200;
 };

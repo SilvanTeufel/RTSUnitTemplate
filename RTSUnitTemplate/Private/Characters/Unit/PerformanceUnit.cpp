@@ -52,6 +52,7 @@ void APerformanceUnit::CheckVisibility()
 	}
 }
 
+
 bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 {
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
@@ -70,6 +71,7 @@ bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 
 void APerformanceUnit::CheckHealthBarVisibility()
 {
+	if(HealthWidgetComp)
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
 		if (IsOnViewport)

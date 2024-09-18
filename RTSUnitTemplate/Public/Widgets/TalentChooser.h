@@ -12,10 +12,24 @@ UCLASS()
 class RTSUNITTEMPLATE_API UTalentChooser : public UUserWidget
 {
 	GENERATED_BODY()
-    
-public:
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+private:
+	// Interval in seconds for how often to update the resource display
+	const float UpdateInterval = 0.5f;
+
+	FTimerHandle UpdateTimerHandle;
+
+public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StartUpdateTimer();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopTimer();
+	//virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateWidget();
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateProgressBars();
 	

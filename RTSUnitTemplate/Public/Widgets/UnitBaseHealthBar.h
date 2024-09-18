@@ -78,13 +78,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CollapseWidget();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float UpdateInterval = 0.05;
 	
+	/*
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    	float UpdateInterval = 0.05;
+    	
 	FTimerHandle TickTimerHandle;
-
+	*/
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateWidget();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxUnitCount = 200;
 };
 

@@ -4,7 +4,7 @@
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Components/StaticMeshComponent.h"
-#include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Widgets/SpawnEnergyBar.h"
 
@@ -34,7 +34,7 @@ void AUnitSpawnPlatform::BeginPlay()
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 	if (PlayerController)
 	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+		AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(PlayerController);
 		if (ControllerBase)
 		{
 			TeamId = ControllerBase->SelectableTeamId;

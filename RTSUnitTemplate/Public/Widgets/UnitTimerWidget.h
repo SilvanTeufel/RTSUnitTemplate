@@ -54,7 +54,7 @@ public:
 	bool DisableBuild = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float UpdateInterval = 0.05;
+	float UpdateInterval = 0.15;
 	
 	FTimerHandle TickTimerHandle;
 

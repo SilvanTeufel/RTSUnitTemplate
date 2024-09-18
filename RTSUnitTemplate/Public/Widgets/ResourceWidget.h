@@ -40,10 +40,22 @@ private:
 	float UpdateTimer = 0.0f;
 
 	// Interval in seconds for how often to update the resource display
-	const float UpdateInterval = 0.0f;
+	const float UpdateInterval = 1.0f;
+
+	FTimerHandle UpdateTimerHandle;
+
+public:
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StartUpdateTimer();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopTimer();
 	
 protected:
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	//virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	
+	void UpdateWidget();
 	
 	// Function to update the display of team resources on the widget
 	void UpdateTeamResourcesDisplay();

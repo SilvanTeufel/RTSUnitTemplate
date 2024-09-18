@@ -6,24 +6,41 @@
 void UAbilityChooser::NativeConstruct()
 {
     Super::NativeConstruct();
-   UsedAbilityPointsTextArray.Empty();
+     UsedAbilityPointsTextArray.Empty();
     InitializeButtonArray(ButtonPreFixes[0], OffensiveAbilityButtons);
     InitializeButtonArray(ButtonPreFixes[1], DefensiveAbilityButtons);
     InitializeButtonArray(ButtonPreFixes[2], AttackAbilityButtons);
     InitializeButtonArray(ButtonPreFixes[3], ThrowAbilityButtons);
     SetVisibility(ESlateVisibility::Hidden);
+   // StartUpdateTimer();
 }
-
+/*
 void UAbilityChooser::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
     UpdateAbilityDisplay();
-}
+}*/
 
 void UAbilityChooser::SetOwnerActor(AAbilityUnit* NewOwner)
 {
     OwnerAbilityUnit = NewOwner;
 }
+
+void UAbilityChooser::StartUpdateTimer()
+{
+    // Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
+    GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UAbilityChooser::UpdateAbilityDisplay, UpdateInterval, true);
+}
+
+void UAbilityChooser::StopTimer()
+{
+    // Check if the timer is currently active before attempting to clear it
+    if (GetWorld()->GetTimerManager().IsTimerActive(UpdateTimerHandle))
+    {
+        GetWorld()->GetTimerManager().ClearTimer(UpdateTimerHandle);
+    }
+}
+
 
 void UAbilityChooser::UpdateAbilityDisplay()
 {

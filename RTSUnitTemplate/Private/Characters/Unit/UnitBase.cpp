@@ -11,11 +11,14 @@
 #include "Actors/Projectile.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Controller/AIController/BuildingControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 
+AControllerBase* ControllerBase;
 // Sets default values
 AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
@@ -35,7 +38,8 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-
+	HealthWidgetComp->SetVisibility(false);
+	
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
 
@@ -51,6 +55,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
+	bCanProcessCollision = true;
 	//SetLODCount(0);
 	/*
 	if (HasAuthority())
@@ -67,12 +72,80 @@ void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
     
-	AUnitBase* OtherUnit = Cast<AUnitBase>(Other);
-	if (OtherUnit)
+	// If collisions can be processed, handle the logic
+	if (bCanProcessCollision)
 	{
-		// Handle collision with another AUnitBase
-		CollisionUnit = OtherUnit;
-		CollisionLocation = GetActorLocation();
+		AUnitBase* OtherUnit = Cast<AUnitBase>(Other);
+		if (OtherUnit)
+		{
+			// Handle collision with another AUnitBase
+			CollisionUnit = OtherUnit;
+			CollisionLocation = GetActorLocation();
+
+			SetCollisionCooldown();
+		}
+	}
+}
+
+void AUnitBase::SetCollisionCooldown()
+{
+	// Re-enable collision processing
+	bCanProcessCollision = false;
+	GetWorld()->GetTimerManager().SetTimer(CollisionCooldownTimer, this, &AUnitBase::ResetCollisionCooldown, CollisionCooldown, false);
+}
+
+void AUnitBase::ResetCollisionCooldown()
+{
+	// Re-enable collision processing
+	bCanProcessCollision = true;
+}
+
+void AUnitBase::CreateHealthWidgetComp()
+{
+	// Check if the HealthWidgetComp is already created
+	if (!HealthCompCreated)
+	{
+		if (ControllerBase)
+		{
+		
+			if (ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount )
+			{
+				return;
+			}
+		}
+		
+		if (HealthWidgetComp && HealthBarWidgetClass)
+		{
+			// Attach it to the RootComponent
+			HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
+
+			// Optionally set the widget class, size, or any other properties
+			HealthWidgetComp->SetWidgetSpace(EWidgetSpace::Screen);
+			HealthWidgetComp->SetDrawSize(FVector2D(200, 200)); // Example size, adjust as needed
+			HealthWidgetComp->SetDrawAtDesiredSize(true);
+			// Set the widget class (if you've assigned a widget class in the editor or dynamically)
+			HealthWidgetComp->SetWidgetClass(HealthBarWidgetClass);  // YourHealthBarWidgetClass should be a reference to your widget
+			HealthWidgetComp->SetPivot(FVector2d(0.5, 0.5));
+			// Activate or make the widget visible, if necessary
+			HealthWidgetComp->SetVisibility(true);
+
+			// Register the component so it gets updated
+			HealthWidgetComp->RegisterComponent();
+		
+
+
+			HealthWidgetComp->SetRelativeLocation(HealthWidgetCompLocation, false, 0, ETeleportType::None);
+
+			UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+
+			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!"));
+			if (HealthBarWidget) {
+				UE_LOG(LogTemp, Warning, TEXT("!!!!!Healthbar successfully cast!!!!!!!"));
+				HealthBarWidget->SetOwnerActor(this);
+				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+				HealthCompCreated = true;
+			}
+		}
 	}
 }
 
@@ -81,25 +154,11 @@ void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
-		if (HealthWidgetComp) {
 
-			HealthWidgetComp->SetRelativeLocation(HealthWidgetCompLocation, false, 0, ETeleportType::None);
-			UUnitBaseHealthBar* Healthbar = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-
-			if (Healthbar) {
-				Healthbar->SetOwnerActor(this);
-			}
-		}
-
+		
+		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 		SetupTimerWidget();
 
-		/*
-		FRotator NewRotation = FRotator(0, -90, 0);
-		FQuat QuatRotation = FQuat(NewRotation);
-		
-		GetMesh()->SetRelativeRotation(QuatRotation, false, 0, ETeleportType::None);
-		GetMesh()->SetRelativeLocation(FVector(0, 0, -75), false, 0, ETeleportType::None);
-		*/
 
 		SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;
@@ -253,19 +312,11 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
-	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
 	
-	if(NewHealth <= Attributes->GetHealth())
-	{
-		if (HealthBarWidget)
-		{
-			if(NewHealth <= 0.f)
-			{
-				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-			}else if(IsOnViewport)
-				HealthBarWidget->ResetCollapseTimer();
-		}
-	}
+	CreateHealthWidgetComp();
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+
+	float OldHealth = Attributes->GetHealth();
 	
 	Attributes->SetAttributeHealth(NewHealth);
 
@@ -281,37 +332,60 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetUnitState(UnitData::Dead);
 		UnitControlTimer = 0.f;
 	}
-	
-	if (HealthBarWidget)
-	{
-		HealthBarWidget->UpdateWidget();
-	}
 
+	if(NewHealth <= OldHealth)
+	{
+		if(HealthBarWidget)
+		{
+			if(ControllerBase && ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount)
+			{
+				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			}
+			else if(NewHealth <= 0.f)
+			{
+				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			}
+			else if(IsOnViewport)
+			{
+				HealthBarWidget->ResetCollapseTimer();
+				HealthBarWidget->UpdateWidget();
+			}
+		}
+	}
 }
 
 void AUnitBase::SetShield_Implementation(float NewShield)
 {
+	CreateHealthWidgetComp();
 	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-	
-	if(NewShield <= Attributes->GetShield() && IsOnViewport)
-	{
-		if (HealthBarWidget)
-		{
-			HealthBarWidget->ResetCollapseTimer();
-		}
-	}
+
+	float OldShield = Attributes->GetHealth();
 	
 	Attributes->SetAttributeShield(NewShield);
 
-	if (HealthBarWidget)
+
+	if(NewShield <= OldShield && IsOnViewport)
 	{
-		HealthBarWidget->UpdateWidget();
+		if (HealthBarWidget)
+		{
+			if(ControllerBase && ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount)
+			{
+				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			}
+			else {
+				HealthBarWidget->ResetCollapseTimer();
+				HealthBarWidget->UpdateWidget();
+			}
+		}
 	}
 }
 
 
 void AUnitBase::UpdateWidget()
 {
+
+	if(!HealthWidgetComp) return;
+	
 	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
 	
 	if (HealthBarWidget)
@@ -554,7 +628,6 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			APawn* PawnBase = Cast<APawn>(UnitBase);
 			if(PawnBase)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Setup Ai Controller!"));
 				UnitController->Possess(PawnBase);
 			}
 		}

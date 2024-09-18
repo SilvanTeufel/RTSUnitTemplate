@@ -19,8 +19,19 @@ class RTSUNITTEMPLATE_API UUnitWidgetSelector : public UUserWidget
 
 	virtual void NativeConstruct() override;
 
-	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+private:
+	// Interval in seconds for how often to update the resource display
+	const float UpdateInterval = 0.5f;
+
+	FTimerHandle UpdateTimerHandle;
+
+	void StartUpdateTimer();
 public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateSelectedUnits();
+	
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* Name;
 

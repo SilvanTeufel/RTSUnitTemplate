@@ -2,14 +2,27 @@
 
 #include "Widgets/DamageIndicator.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Misc/Paths.h" // Include for FPaths
 #include "Fonts/SlateFontInfo.h" // Include for FSlateFontInfo
 
+void UDamageIndicator::NativeConstruct()
+{
+	Super::NativeConstruct();
+	StartUpdateTimer();
+}
 
+/*
 void UDamageIndicator::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	
+	UpdateIndicator();
+}
+*/
+void UDamageIndicator::UpdateIndicator()
+{
+	// Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
 	if (!Damage )
 		return;
 	
@@ -17,6 +30,19 @@ void UDamageIndicator::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	if (!Indicator)
 		return;
 
+	
+	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	if (ControllerBase)
+	{
+		
+		if (ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > MaxUnitCount )
+		{
+			SetVisibility(ESlateVisibility::Collapsed);
+			return;
+		}
+	}
+	
+	
 	FNumberFormattingOptions Opts;
 	Opts.SetMaximumFractionalDigits(0);
 	
@@ -25,6 +51,13 @@ void UDamageIndicator::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	Indicator->SetOpacity(CalculateOpacity());
 	Indicator->SetFont(FSlateFontInfo(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"), CalculateTextSize()));
 	Indicator->SetColorAndOpacity(CalculateTextColor());
+}
+
+
+void UDamageIndicator::StartUpdateTimer()
+{
+	// Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
+	GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UDamageIndicator::UpdateIndicator, UpdateInterval, true);
 }
 
 float UDamageIndicator::CalculateOpacity()

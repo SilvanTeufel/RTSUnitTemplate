@@ -70,4 +70,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoAdjustTalentChooserPosition = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool TabToggled = true;
 };

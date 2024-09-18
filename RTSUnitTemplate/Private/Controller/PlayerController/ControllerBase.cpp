@@ -130,38 +130,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 			SetRunLocationUseDijkstraForAI(HUDBase->EnemyUnitBases[i]->DijkstraEndPoint, HUDBase->EnemyUnitBases[i]->DijkstraStartPoint, HUDBase->EnemyUnitBases, PathPoints, i);
 			HUDBase->EnemyUnitBases[i]->DijkstraSetPath = false;
 		}
-
-	// Optionally, attach the actor to the cursor
-	if(CurrentDraggedUnitBase)
-	{
-		FVector MousePosition, MouseDirection;
-		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-
-		// Raycast from the mouse position into the scene to find the ground
-		FVector Start = MousePosition;
-		FVector End = Start + MouseDirection * 5000; // Extend to a maximum reasonable distance
-
-		FHitResult HitResult;
-		FCollisionQueryParams CollisionParams;
-		CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
-		CollisionParams.AddIgnoredActor(CurrentDraggedUnitBase); // Ignore the dragged actor in the raycast
-
-		// Perform the raycast
-		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
-
-		// Check if something was hit
-		if (bHit && HitResult.GetActor() != nullptr)
-		{
-			CurrentDraggedGround = HitResult.GetActor();
-			// Update the actor's position to the hit location
-			FVector NewActorPosition = HitResult.Location;
-			NewActorPosition.Z += 50.f;
-			CurrentDraggedUnitBase->SetActorLocation(NewActorPosition);
-		}
-
-	}
-
-	
 }
 
 void AControllerBase::ShiftPressed()
@@ -259,7 +227,7 @@ void AControllerBase::LeftClickSelect_Implementation()
 	SelectedUnits.Empty();
 
 }
-
+/*
 void AControllerBase::LeftClickPressed()
 {
 	LeftClickIsPressed = true;
@@ -267,10 +235,17 @@ void AControllerBase::LeftClickPressed()
 		AttackToggled = false;
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+		int32 NumUnits = SelectedUnits.Num();
+		int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			int32 Row = i / GridSize;     // Row index
+			int32 Col = i % GridSize;     // Column index
+
+			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+
 			LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
 		}
 		
@@ -318,40 +293,11 @@ void AControllerBase::LeftClickReleased()
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
 	DropUnitBase();
-	SetWidgets(0);
-}
 
-void AControllerBase::DragUnitBase(AUnitBase* UnitToDrag)
-{
-	if(UnitToDrag->IsOnPlattform && SpawnPlatform)
-	{
-		if(SpawnPlatform->GetEnergy() >= UnitToDrag->EnergyCost)
-		{
-			CurrentDraggedUnitBase = UnitToDrag;
-			CurrentDraggedUnitBase->IsDragged = true;
-			SpawnPlatform->SetEnergy(SpawnPlatform->Energy-UnitToDrag->EnergyCost);
-		}
-	}
-}
 
-void AControllerBase::DropUnitBase()
-{
-	AUnitSpawnPlatform* CurrentSpawnPlatform = Cast<AUnitSpawnPlatform>(CurrentDraggedGround);
-	if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !CurrentSpawnPlatform && SpawnPlatform)
-	{
-		CurrentDraggedUnitBase->IsOnPlattform = false;
-		CurrentDraggedUnitBase->IsDragged = false;
-		CurrentDraggedUnitBase->SetUnitState(UnitData::PatrolRandom);
-		CurrentDraggedUnitBase = nullptr;
-	}else if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && SpawnPlatform)
-	{
-		SpawnPlatform->SetEnergy(SpawnPlatform->Energy+CurrentDraggedUnitBase->EnergyCost);
-		CurrentDraggedUnitBase->IsDragged = false;
-		CurrentDraggedUnitBase->SetUnitState(UnitData::Idle);
-		CurrentDraggedUnitBase = nullptr;
-	}
+	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled) SetWidgets(0);
 }
-
+*/
 void AControllerBase::SetWidgets(int Index)
 {
 	SelectedUnits = HUDBase->SelectedUnits;
@@ -601,9 +547,18 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
+	int32 NumUnits = SelectedUnits.Num();
+	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
-			FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+
+			int32 Row = i / GridSize;     // Row index
+			int32 Col = i % GridSize;     // Column index
+
+			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
 			{
 				// DO NOTHING

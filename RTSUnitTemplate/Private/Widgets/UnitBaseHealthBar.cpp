@@ -4,6 +4,8 @@
 #include "Widgets/UnitBaseHealthBar.h"
 #include <Components/ProgressBar.h>
 #include <Components/TextBlock.h>
+
+#include "Controller/PlayerController/ControllerBase.h"
 /*
 void UUnitBaseHealthBar::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
@@ -64,7 +66,19 @@ void UUnitBaseHealthBar::UpdateWidget()
 {
 	if (!OwnerCharacter)
 		return;
-	
+
+	/*
+	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	if (ControllerBase)
+	{
+		
+		if (ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > MaxUnitCount )
+		{
+			CollapseWidget();
+			return;
+		}
+	}
+	*/
 	// Update Health values
 	HealthBar->SetPercent(OwnerCharacter->Attributes->GetHealth() / OwnerCharacter->Attributes->GetMaxHealth());
 	FNumberFormattingOptions Opts;

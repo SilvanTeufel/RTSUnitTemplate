@@ -19,8 +19,9 @@ void UUnitWidgetSelector::NativeConstruct()
 		ControllerBase->SetInputMode(FInputModeGameAndUI());
 		ControllerBase->bShowMouseCursor = true;
 	}*/
+	StartUpdateTimer();
 }
-
+/*
 void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -30,6 +31,20 @@ void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
 	}
+}*/
+void UUnitWidgetSelector::UpdateSelectedUnits()
+{
+	if(ControllerBase)
+	{
+		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
+		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
+	}
+}
+
+void UUnitWidgetSelector::StartUpdateTimer()
+{
+	// Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
+	GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UUnitWidgetSelector::UpdateSelectedUnits, UpdateInterval, true);
 }
 
 void UUnitWidgetSelector::ChangeButtonColor(UButton* Button, FLinearColor NewColor)
@@ -135,9 +150,15 @@ void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
 	}
 	
 	if(!Count)
+	{
 		Name->SetVisibility(ESlateVisibility::Hidden);
+		SetVisibility(ESlateVisibility::Hidden);
+	}
 	else
+	{
 		Name->SetVisibility(ESlateVisibility::Visible);
+		SetVisibility(ESlateVisibility::Visible);
+	}
 }
 
 void UUnitWidgetSelector::SetButtonLabelCount(int32 Count)

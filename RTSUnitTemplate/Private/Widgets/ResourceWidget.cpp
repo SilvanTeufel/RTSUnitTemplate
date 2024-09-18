@@ -14,23 +14,48 @@ void UResourceWidget::NativeConstruct()
     // Initialize your widget's properties and bindings here
     UpdateTeamResourcesDisplay();
     UpdateWorkerCountDisplay();
+    //StartUpdateTimer();
 }
-
+/*
 void UResourceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
     // You can update things every tick if needed
+    
     UpdateTimer += InDeltaTime;
     
     // Check if the timer has reached the update interval
     if (UpdateTimer >= UpdateInterval)
     {
         
-        // Update the team resources display
-        UpdateTeamResourcesDisplay();
-        UpdateWorkerCountDisplay();
+        UpdateWidget();
         // Reset the timer
         UpdateTimer = 0.0f;
+    }
+}*/
+
+
+void UResourceWidget::UpdateWidget()
+{
+
+        UpdateTeamResourcesDisplay();
+        UpdateWorkerCountDisplay();
+        StartUpdateTimer();
+
+}
+
+void UResourceWidget::StartUpdateTimer()
+{
+    // Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
+    GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UResourceWidget::UpdateWidget, UpdateInterval, true);
+}
+
+void UResourceWidget::StopTimer()
+{
+    // Check if the timer is currently active before attempting to clear it
+    if (GetWorld()->GetTimerManager().IsTimerActive(UpdateTimerHandle))
+    {
+        GetWorld()->GetTimerManager().ClearTimer(UpdateTimerHandle);
     }
 }
 
@@ -49,6 +74,7 @@ void UResourceWidget::AddWorkerToResource(EResourceType ResourceType)
     {
         GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
     }
+    UpdateWidget();
 }
 
 void UResourceWidget::RemoveWorkerFromResource(EResourceType ResourceType)
@@ -58,6 +84,7 @@ void UResourceWidget::RemoveWorkerFromResource(EResourceType ResourceType)
     {
         GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
     }
+    UpdateWidget();
 }
 
 void UResourceWidget::UpdateTeamResourcesDisplay()

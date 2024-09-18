@@ -15,6 +15,10 @@ UCLASS()
 class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
+
+private:
+	FTimerHandle CollisionCooldownTimer;
+	bool bCanProcessCollision;
 	
 public:
 
@@ -32,6 +36,18 @@ public:
 	UFUNCTION()
 	virtual void NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCollisionCooldown();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ResetCollisionCooldown();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float CollisionCooldown = 2.f;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CreateHealthWidgetComp();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CollisionUnit;
 
@@ -55,7 +71,6 @@ public:
 	
 // Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
@@ -65,6 +80,8 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, ReplicatedUsing=OnRep_MeshMaterialPath, Category = RTSUnitTemplate)
 	FString MeshMaterialPath;
+
+	
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnRep_MeshAssetPath();
@@ -140,16 +157,6 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
 	float UnitControlTimer = 0.0f; // This Timer is used in UnitControllerBase Statemachine
 	
-/*
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ToggleUnitDetection = false;
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
-	void SetToggleUnitDetection(bool ToggleTo);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool GetToggleUnitDetection();
-	*/
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitToChase", Keywords = "RTSUnitTemplate UnitToChase"), Category = RTSUnitTemplate)
 	AUnitBase* UnitToChase;
 
