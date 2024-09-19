@@ -78,7 +78,6 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Dead:
 		{
 			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
-				
 			if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
 			{
 				UnitBase->BuildArea->PlannedBuilding = false;
@@ -91,7 +90,6 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Patrol:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -100,7 +98,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::PatrolRandom:
 			{
-				if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUnitState(UnitData::Chase);

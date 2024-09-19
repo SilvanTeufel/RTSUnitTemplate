@@ -38,6 +38,9 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 	{
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
+
+		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
+			ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->DefaultAbilities.Num());
 	}
 }
 
@@ -47,13 +50,33 @@ void UUnitWidgetSelector::StartUpdateTimer()
 	GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UUnitWidgetSelector::UpdateSelectedUnits, UpdateInterval, true);
 }
 
-void UUnitWidgetSelector::ChangeButtonColor(UButton* Button, FLinearColor NewColor)
+void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 {
-
+	for (int32 i = 0; i < AbilityButtons.Num(); i++)
+	{
+		if(AbilityButtons[i])
+			AbilityButtons[i]->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	
+	for (int32 i = 0; i < Count; i++)
+	{
+		if(i < AbilityButtons.Num() && AbilityButtons[i])
+			AbilityButtons[i]->SetVisibility(ESlateVisibility::Visible);
+	}
 }
 
 void UUnitWidgetSelector::GetButtonsFromBP()
 {
+	for (int32 i = 0; i <= MaxAbilityButtonCount; i++)
+	{
+		FString AbilityButtonName = FString::Printf(TEXT("Button_Ability_%d"), i);
+		UButton* AbilityButton = Cast<UButton>(GetWidgetFromName(FName(*AbilityButtonName)));
+		if (AbilityButton)
+		{
+			AbilityButtons.Add(AbilityButton);
+		}
+	}
+	
 	for (int32 i = 0; i <= MaxButtonCount; i++)
 	{
 		FString ButtonName = FString::Printf(TEXT("SelectorButton_%d"), i);

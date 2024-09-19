@@ -36,6 +36,9 @@ public:
 	class UTextBlock* Name;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<class UButton*> AbilityButtons;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class USelectorButton*> SingleSelectButtons;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -45,7 +48,7 @@ public:
 	TArray<class UTextBlock*> ButtonLabels;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ChangeButtonColor(UButton* Button, FLinearColor NewColor);
+	void ChangeAbilityButtonCount(int Count);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetButtonsFromBP();
@@ -68,6 +71,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxButtonCount = 50;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxAbilityButtonCount = 10;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AControllerBase* ControllerBase;
 	
