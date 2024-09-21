@@ -55,4 +55,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickReleased();
 	
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
+	void RightClickPressed();
 };

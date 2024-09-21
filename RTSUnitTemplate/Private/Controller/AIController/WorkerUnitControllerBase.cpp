@@ -70,7 +70,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::Build:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("Build"));
+				UE_LOG(LogTemp, Warning, TEXT("Build"));
 				Build(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}

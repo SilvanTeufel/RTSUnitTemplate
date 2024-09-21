@@ -453,18 +453,6 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
 }
 
-void AControllerBase::RightClickPressed()
-{
-	AttackToggled = false;
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-	
-	if(!CheckResourceExtraction(Hit))
-	{
-		RunUnitsAndSetWaypoints(Hit);
-	}
-}
-
 bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
 {
 	//UE_LOG(LogTemp, Log, TEXT("CheckResourceExtraction called"));

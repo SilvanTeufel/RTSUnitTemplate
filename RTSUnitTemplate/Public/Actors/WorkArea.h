@@ -62,6 +62,9 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int TeamId = 0;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffect;

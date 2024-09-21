@@ -61,8 +61,9 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         AWorkArea* SpawnedWorkArea = GetWorld()->SpawnActor<AWorkArea>(WorkAreaClass, SpawnLocation, SpawnRotation, SpawnParams);
         if (SpawnedWorkArea)
         {
+        	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
-
+        	//CurrentDraggedWorkArea->TeamId = SelectableTeamId;
             // Optionally, you might want to set some initial properties or states on the spawned WorkArea here
 
             // Start moving the WorkArea under the mouse cursor
@@ -94,6 +95,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 		// Check if something was hit
 		if (bHit && HitResult.GetActor() != nullptr)
 		{
+			CurrentDraggedGround = HitResult.GetActor();
 			// Update the work area's position to the hit location
 			FVector NewActorPosition = HitResult.Location;
 			NewActorPosition.Z += 50.f; // Adjust the Z offset if needed
@@ -107,14 +109,23 @@ void AExtendedControllerBase::DropWorkArea()
 	if (CurrentDraggedWorkArea)
 	{
 
-
-		if(SelectedUnits[0])
+		// Check if CurrentDraggedGround is an instance of AWorkArea
+		if (CurrentDraggedGround->IsA(AWorkArea::StaticClass()))
 		{
-			AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
-			if(Worker)
+			// If it is, destroy the CurrentDraggedWorkArea
+			CurrentDraggedWorkArea->Destroy();
+		}
+		else
+		{
+			if(SelectedUnits[0])
 			{
-				Worker->BuildArea = CurrentDraggedWorkArea;
-				Worker->SetUnitState(UnitData::GoToBuild);
+				AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
+				if(Worker)
+				{
+					Worker->BuildArea = CurrentDraggedWorkArea;
+					Worker->BuildArea->TeamId = SelectedUnits[0]->TeamId;
+					Worker->SetUnitState(UnitData::GoToBuild);
+				}
 			}
 		}
 
@@ -255,4 +266,22 @@ void AExtendedControllerBase::LeftClickReleased()
 	DropUnitBase();
 
 	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled) SetWidgets(0);
+}
+
+
+void AExtendedControllerBase::RightClickPressed()
+{
+	AttackToggled = false;
+	FHitResult Hit;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+	
+	if(!CheckResourceExtraction(Hit))
+	{
+		RunUnitsAndSetWaypoints(Hit);
+	}
+
+	if (CurrentDraggedWorkArea)
+	{
+		CurrentDraggedWorkArea->Destroy();
+	}
 }

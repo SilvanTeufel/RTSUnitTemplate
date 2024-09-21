@@ -112,10 +112,6 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
 
-	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
-		void RightClickPressed();
-
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
 	
