@@ -120,9 +120,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void RunUnitsAndSetWaypoints(FHitResult Hit);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		bool CheckResourceExtraction(FHitResult Hit_Pawn);
 	
 	UFUNCTION(meta = (DisplayName = "SetRunLocationUseDijkstra", Keywords = "RTSUnitTemplate SetRunLocationUseDijkstra"), Category = RTSUnitTemplate)
 		void SetRunLocationUseDijkstra(FVector HitLocation, FVector UnitLocation, TArray <AUnitBase*> Units, TArray<FPathPoint>& PathPoints, int i);

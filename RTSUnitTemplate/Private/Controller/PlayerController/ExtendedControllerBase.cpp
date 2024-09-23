@@ -5,6 +5,7 @@
 
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "GameModes/ResourceGameMode.h"
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
@@ -124,7 +125,18 @@ void AExtendedControllerBase::DropWorkArea()
 				{
 					Worker->BuildArea = CurrentDraggedWorkArea;
 					Worker->BuildArea->TeamId = SelectedUnits[0]->TeamId;
-					Worker->SetUnitState(UnitData::GoToBuild);
+					
+					// Check if the worker is overlapping with the build area
+					if (Worker->IsOverlappingActor(Worker->BuildArea))
+					{
+						// If they are overlapping, set the state to 'Build'
+						Worker->SetUnitState(UnitData::Build);
+					}
+					else
+					{
+						// If they are not overlapping, set the state to 'GoToBuild'
+						Worker->SetUnitState(UnitData::GoToBuild);
+					}
 				}
 			}
 		}
@@ -132,7 +144,6 @@ void AExtendedControllerBase::DropWorkArea()
 		CurrentDraggedWorkArea = nullptr;
 	}
 }
-
 
 void AExtendedControllerBase::MoveDraggedUnit_Implementation(float DeltaSeconds)
 {
@@ -268,14 +279,13 @@ void AExtendedControllerBase::LeftClickReleased()
 	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled) SetWidgets(0);
 }
 
-
 void AExtendedControllerBase::RightClickPressed()
 {
 	AttackToggled = false;
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
-	if(!CheckResourceExtraction(Hit))
+	if(!CheckClickOnWorkArea(Hit))
 	{
 		RunUnitsAndSetWaypoints(Hit);
 	}
@@ -284,4 +294,97 @@ void AExtendedControllerBase::RightClickPressed()
 	{
 		CurrentDraggedWorkArea->Destroy();
 	}
+}
+
+void AExtendedControllerBase::StopWork()
+{
+	if(SelectedUnits.Num() && SelectedUnits[0])
+	{
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
+		if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
+		{
+			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->PlannedBuilding = false;
+			AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+			if(ResourceGameMode)
+			{
+				ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, Worker->BuildArea->ConstructionCost.PrimaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, Worker->BuildArea->ConstructionCost.SecondaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, Worker->BuildArea->ConstructionCost.TertiaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, Worker->BuildArea->ConstructionCost.RareCost);
+				ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, Worker->BuildArea->ConstructionCost.EpicCost);
+				ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, Worker->BuildArea->ConstructionCost.LegendaryCost);
+			}
+		}
+	}
+}
+
+bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
+{
+	StopWork();
+	
+	if (Hit_Pawn.bBlockingHit && HUDBase)
+	{
+		//UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
+		AActor* HitActor = Hit_Pawn.GetActor();
+		
+		//if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
+
+		
+		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
+
+		if(WorkArea)
+		{
+			TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkArea->Type;
+		
+			bool isResourceExtractionArea = Type == WorkAreaData::Primary || Type == WorkAreaData::Secondary || 
+									 Type == WorkAreaData::Tertiary || Type == WorkAreaData::Rare ||
+									 Type == WorkAreaData::Epic || Type == WorkAreaData::Legendary;
+
+
+			if(WorkArea && isResourceExtractionArea)
+			{
+				for (int32 i = 0; i < SelectedUnits.Num(); i++)
+				{
+					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
+					{
+						
+						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
+
+						if(Worker)
+						{
+							Worker->ResourcePlace = WorkArea;
+							Worker->SetUnitState(UnitData::GoToResourceExtraction);
+							return true;
+						}
+					}
+				}
+			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea)
+			{
+				if(SelectedUnits[0])
+				{
+					AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
+					if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
+					{
+						Worker->BuildArea = WorkArea;
+						// Check if the worker is overlapping with the build area
+						if (Worker->IsOverlappingActor(Worker->BuildArea))
+						{
+							// If they are overlapping, set the state to 'Build'
+							Worker->SetUnitState(UnitData::Build);
+						}
+						else
+						{
+							// If they are not overlapping, set the state to 'GoToBuild'
+							Worker->SetUnitState(UnitData::GoToBuild);
+						}
+					}
+				}
+			}
+		}
+		
+	}
+
+	return false;
 }

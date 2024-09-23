@@ -57,4 +57,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
 	void RightClickPressed();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool CheckClickOnWorkArea(FHitResult Hit_Pawn);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopWork();
 };

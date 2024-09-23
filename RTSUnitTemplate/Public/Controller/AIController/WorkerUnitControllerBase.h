@@ -22,6 +22,15 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void EvasionWorker(AUnitBase* UnitBase, FVector CollisionLocation);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void IdleWorker(AUnitBase* UnitBase, float DeltaSeconds);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopWork(AUnitBase* UnitBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DeadWorker(AUnitBase* UnitBase, float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds);
@@ -68,6 +77,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool EnableDistanceCheck = false;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsDeadWhileBuilding = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float IdleTime = 4.f;
 };
 
 

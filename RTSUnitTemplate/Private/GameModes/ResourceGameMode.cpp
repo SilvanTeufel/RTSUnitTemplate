@@ -287,6 +287,9 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 	AllAreas.Append(WorkAreaGroups.BuildAreas);
 	// Exclude BaseAreas and BuildAreas if they are not considered resource places
 
+	// Remove null pointers from AllAreas
+	AllAreas.RemoveAll([](AWorkArea* Area) { return Area == nullptr; });
+
 	// Sort all areas by distance to the worker
 	AllAreas.Sort([Worker](const AWorkArea& AreaA, const AWorkArea& AreaB) {
 		return (AreaA.GetActorLocation() - Worker->GetActorLocation()).SizeSquared() < 

@@ -452,8 +452,8 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 	if(!HUDBase->DisablePathFindingOnFriendly && Range >= HUDBase->RangeThreshold && !HUDBase->IsLocationInNoPathFindingAreas(Location))
 		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
 }
-
-bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
+/*
+bool AControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 {
 	//UE_LOG(LogTemp, Log, TEXT("CheckResourceExtraction called"));
 	if (Hit_Pawn.bBlockingHit && HUDBase)
@@ -492,13 +492,16 @@ bool AControllerBase::CheckResourceExtraction(FHitResult Hit_Pawn)
 						}
 					}
 				}
+			} else if(WorkArea && WorkArea->Building)
+			{
+				
 			}
 		}
 	}
 
 	return false;
 }
-
+*/
 void AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
 {
 	UWorld* World = GetWorld();

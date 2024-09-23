@@ -70,7 +70,6 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::Build:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Build"));
 				Build(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -78,13 +77,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Dead:
 		{
 			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
-			if(UnitBase && UnitBase->BuildArea && !UnitBase->BuildArea->Building)
-			{
-				UnitBase->BuildArea->PlannedBuilding = false;
-				UnitBase->BuildArea->StartedBuilding = false;
-			}
-
-				Dead(UnitBase, DeltaSeconds);
+				DeadWorker(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Patrol:
@@ -192,7 +185,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		case UnitData::Idle:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-			Idle(UnitBase, DeltaSeconds);
+			IdleWorker(UnitBase, DeltaSeconds);
 		}
 		break;
 		default:
@@ -216,6 +209,63 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 	}
 }
 
+void AWorkerUnitControllerBase::IdleWorker(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	UnitBase->SetWalkSpeed(0);
+
+	UnitBase->UnitControlTimer += DeltaSeconds;
+	
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
+	{
+		UnitBase->UnitToChase = UnitBase->CollisionUnit;
+		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
+		UnitBase->CollisionUnit = nullptr;
+	}else if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
+	{
+		UnitBase->UnitStatePlaceholder = UnitData::Idle;
+		UnitBase->RunLocation = UnitBase->GetActorLocation();
+		UnitBase->SetUnitState(UnitData::Evasion);
+	}
+
+	if(UnitBase->UnitsToChase.Num() && !UnitBase->IsOnPlattform)
+	{
+		UnitBase->SetUnitState(UnitData::Chase);
+	}else if(!UnitBase->IsOnPlattform)
+	{
+		if(UnitBase->UnitControlTimer > IdleTime) UnitBase->SetUnitState(UnitData::GoToBase);
+	}
+}
+
+void AWorkerUnitControllerBase::StopWork(AUnitBase* UnitBase)
+{
+	if(UnitBase && !IsDeadWhileBuilding)
+	{
+		IsDeadWhileBuilding = true;
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
+		if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Set StartedBuilding false!"));
+			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->PlannedBuilding = false;
+			AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+			if(ResourceGameMode)
+			{
+				ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, Worker->BuildArea->ConstructionCost.PrimaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, Worker->BuildArea->ConstructionCost.SecondaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, Worker->BuildArea->ConstructionCost.TertiaryCost);
+				ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, Worker->BuildArea->ConstructionCost.RareCost);
+				ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, Worker->BuildArea->ConstructionCost.EpicCost);
+				ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, Worker->BuildArea->ConstructionCost.LegendaryCost);
+			}
+		}
+	}
+}
+
+void AWorkerUnitControllerBase::DeadWorker(AUnitBase* UnitBase, float DeltaSeconds)
+{
+	Dead(UnitBase, DeltaSeconds);;
+}
 void AWorkerUnitControllerBase::EvasionWorker(AUnitBase* UnitBase, FVector CollisionLocation)
 {
 	
@@ -345,7 +395,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 
 void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if (!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass) // || !UnitBase->BuildArea->BuildingClass
+	if (!UnitBase || !UnitBase->BuildArea || UnitBase->BuildArea->Building || UnitBase->BuildArea == nullptr || !UnitBase->BuildArea->BuildingClass) // || !UnitBase->BuildArea->BuildingClass
 	{
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
@@ -457,6 +507,10 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
 			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
 			UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+			if(UnitBase->BuildArea->DestroyAfterBuild)
+			{
+				UnitBase->BuildArea->Destroy(true);
+			}
 		}
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);

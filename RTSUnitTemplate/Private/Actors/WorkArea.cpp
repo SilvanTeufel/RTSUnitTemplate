@@ -250,7 +250,6 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 
 		if(this == Worker->BuildArea && CanAffordConstruction && Building == nullptr && !StartedBuilding && AreaIsForTeam)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Start BUILD"));
 
 			StartedBuilding = true;
 			/*
@@ -274,12 +273,9 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			UnitBase->SetUnitState(UnitData::Build);
 		}else if (this == Worker->BuildArea && (Building != nullptr || !StartedBuilding) && CanAffordConstruction)
 		{
-			UE_LOG(LogTemp, Log, TEXT("SwitchBuildArea"));
 			SwitchBuildArea(Worker, UnitBase, ResourceGameMode);
 		}else if(this == Worker->BuildArea &&  Worker->GetUnitState() != UnitData::Build)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Switchto Base or Resource"));
-			
 			UnitBase->SetUEPathfinding = true;
 			if(Worker->WorkResource)
 				Worker->SetUnitState(UnitData::GoToBase);

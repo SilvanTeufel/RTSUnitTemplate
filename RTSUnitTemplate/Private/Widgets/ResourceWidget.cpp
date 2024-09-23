@@ -46,7 +46,7 @@ void UResourceWidget::UpdateWidget()
 
 void UResourceWidget::StartUpdateTimer()
 {
-    UE_LOG(LogTemp, Warning, TEXT("UResourceWidget StartUpdateTimer!"));
+    // UE_LOG(LogTemp, Warning, TEXT("UResourceWidget StartUpdateTimer!"));
     // Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
     GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UResourceWidget::UpdateWidget, UpdateInterval, true);
 }
