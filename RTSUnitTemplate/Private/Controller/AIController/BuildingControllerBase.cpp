@@ -93,7 +93,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		break;
 		}
 
-	if (UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
+	if (UnitBase->Attributes && UnitBase->Attributes->GetHealth() <= 0.f && UnitBase->GetUnitState() != UnitData::Dead) {
 		KillUnitBase(UnitBase);
 		UnitBase->UnitControlTimer = 0.f;
 	}
