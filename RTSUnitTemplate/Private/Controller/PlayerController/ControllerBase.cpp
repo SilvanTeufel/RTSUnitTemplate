@@ -117,7 +117,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 	if(AttackToggled)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
-		if(SelectedUnits[i] && SelectedUnits[i]->GetUnitState() == UnitData::Idle && SelectedUnits[i]->ToggleUnitDetection)
+		if(SelectedUnits[i] && !SelectedUnits[i]->IsA(ABuildingBase::StaticClass()) && SelectedUnits[i]->GetUnitState() == UnitData::Idle && SelectedUnits[i]->ToggleUnitDetection)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 	}
 
@@ -530,6 +530,7 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 			{
 				if(BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
 				else if(BuildingBase->HasWaypoint) CreateAWaypoint(NewWPLocation, BuildingBase);
+				
 				return true;
 			}
 	

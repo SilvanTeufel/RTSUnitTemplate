@@ -58,9 +58,6 @@ public:
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
-	FWorkAreaArrays WorkAreaGroups; // Storage for work areas grouped by type
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	int MaxResourceAreasToSet = 5;
 
@@ -85,6 +82,9 @@ protected:
 	
 public:
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
+	FWorkAreaArrays WorkAreaGroups; // Storage for work areas grouped by type
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = Work)
 	int32 NumberOfTeams = 10;
 	

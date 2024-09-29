@@ -36,6 +36,8 @@ public:
 	void Input_RightClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_G_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_A_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	void Input_Alt_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	void Input_Alt_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Ctrl_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	void Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
@@ -68,6 +70,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoAdjustTalentChooserPosition = true;
 

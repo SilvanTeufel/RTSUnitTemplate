@@ -56,6 +56,84 @@ void AWorkArea::BeginPlay()
 
 }
 
+
+void AWorkArea::AddAreaToGroup()
+{
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+	if(ResourceGameMode)
+	{
+		switch (Type)
+		{
+		case WorkAreaData::Primary:
+			ResourceGameMode->WorkAreaGroups.PrimaryAreas.Add(this);
+			break;
+		case WorkAreaData::Secondary:
+			ResourceGameMode->WorkAreaGroups.SecondaryAreas.Add(this);
+			break;
+		case WorkAreaData::Tertiary:
+			ResourceGameMode->WorkAreaGroups.TertiaryAreas.Add(this);
+			break;
+		case WorkAreaData::Rare:
+			ResourceGameMode->WorkAreaGroups.RareAreas.Add(this);
+			break;
+		case WorkAreaData::Epic:
+			ResourceGameMode->WorkAreaGroups.EpicAreas.Add(this);
+			break;
+		case WorkAreaData::Legendary:
+			ResourceGameMode->WorkAreaGroups.LegendaryAreas.Add(this);
+			break;
+		case WorkAreaData::Base:
+			ResourceGameMode->WorkAreaGroups.BaseAreas.Add(this);
+			break;
+		case WorkAreaData::BuildArea:
+			ResourceGameMode->WorkAreaGroups.BuildAreas.Add(this);
+			break;
+		default:
+			// Handle any cases not explicitly covered
+				break;
+		}
+	}
+}
+
+void AWorkArea::RemoveAreaFromGroup()
+{
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+	if(ResourceGameMode)
+	{
+		switch (Type)
+		{
+		case WorkAreaData::Primary:
+			ResourceGameMode->WorkAreaGroups.PrimaryAreas.Remove(this);
+			break;
+		case WorkAreaData::Secondary:
+			ResourceGameMode->WorkAreaGroups.SecondaryAreas.Remove(this);
+			break;
+		case WorkAreaData::Tertiary:
+			ResourceGameMode->WorkAreaGroups.TertiaryAreas.Remove(this);
+			break;
+		case WorkAreaData::Rare:
+			ResourceGameMode->WorkAreaGroups.RareAreas.Remove(this);
+			break;
+		case WorkAreaData::Epic:
+			ResourceGameMode->WorkAreaGroups.EpicAreas.Remove(this);
+			break;
+		case WorkAreaData::Legendary:
+			ResourceGameMode->WorkAreaGroups.LegendaryAreas.Remove(this);
+			break;
+		case WorkAreaData::Base:
+			ResourceGameMode->WorkAreaGroups.BaseAreas.Remove(this);
+			break;
+		case WorkAreaData::BuildArea:
+			ResourceGameMode->WorkAreaGroups.BuildAreas.Remove(this);
+			break;
+		default:
+			// Handle any cases not explicitly covered
+				break;
+		}
+	}
+}
 // Called every frame
 void AWorkArea::Tick(float DeltaTime)
 {
@@ -153,23 +231,12 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 				DespawnWorkResource(UnitBase->WorkResource);
 			}
 	
-
-			if (Worker->BuildArea && AreaIsForTeam && !Worker->BuildArea->PlannedBuilding && !CanAffordConstruction)
+	
+			if (!SwitchBuildArea(Worker, UnitBase, ResourceGameMode))
 			{
 				SwitchResourceArea(Worker, UnitBase, ResourceGameMode);
-			}else if((Worker->BuildArea && Worker->BuildArea->PlannedBuilding) || !Worker->BuildArea)
-			{
-				SwitchBuildArea(Worker, UnitBase, ResourceGameMode);
-			}else if(Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && CanAffordConstruction && AreaIsForTeam)
-			{
-				Worker->BuildArea->PlannedBuilding = true;
-				UnitBase->SetUEPathfinding = true;
-				Worker->SetUnitState(UnitData::GoToBuild);
-			}else
-			{
-				UnitBase->SetUEPathfinding = true;
-				Worker->SetUnitState(UnitData::GoToResourceExtraction);
 			}
+	
 	
 }
 
@@ -189,14 +256,12 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		Worker->ResourcePlace = NewResourcePlace;
 	}
-	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 
-	
 	UnitBase->SetUEPathfinding = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 }
 
-void AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
+bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
 	BuildAreas.SetNum(3);
@@ -212,27 +277,19 @@ void AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			(Worker->BuildArea->TeamId == 0) || 
 			(Worker->TeamId == Worker->BuildArea->TeamId);
 	}
-	
-	if(!CanAffordConstruction || !Worker->BuildArea)
-	{
-		UnitBase->SetUEPathfinding = true;
-		if(Type == WorkAreaData::Base)
-			Worker->SetUnitState(UnitData::GoToResourceExtraction);
-		else if(Worker->WorkResource)
-			Worker->SetUnitState(UnitData::GoToBase);
-		else
-			Worker->SetUnitState(UnitData::GoToResourceExtraction);
-		
-	}else if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
+
+
+	if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
 	{
 		Worker->BuildArea->PlannedBuilding = true;
 		UnitBase->SetUEPathfinding = true;
 		Worker->SetUnitState(UnitData::GoToBuild);
-	}else
+	} else
 	{
-		UnitBase->SetUEPathfinding = true;
-		Worker->SetUnitState(UnitData::GoToBase);
+		return false;
 	}
+	
+	return true;
 }
 
 void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
@@ -252,14 +309,6 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		{
 
 			StartedBuilding = true;
-			/*
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Primary, -Worker->BuildArea->ConstructionCost.PrimaryCost);
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Secondary, -Worker->BuildArea->ConstructionCost.SecondaryCost);
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Tertiary, -Worker->BuildArea->ConstructionCost.TertiaryCost);
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Rare, -Worker->BuildArea->ConstructionCost.RareCost);
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Epic, -Worker->BuildArea->ConstructionCost.EpicCost);
-			ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, EResourceType::Legendary, -Worker->BuildArea->ConstructionCost.LegendaryCost);
-			*/
 			
 			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.PrimaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.SecondaryCost);
@@ -282,6 +331,7 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			else
 				Worker->SetUnitState(UnitData::GoToResourceExtraction);
 		}
+
 }
 
 EResourceType AWorkArea::ConvertWorkAreaTypeToResourceType(WorkAreaData::WorkAreaType WorkAreaType)
@@ -309,43 +359,3 @@ void AWorkArea::DespawnWorkResource(AWorkResource* WorkResource)
 	}
 }
 
-/*
-bool AWorkArea::CanAffordConstruction(int32 TeamId, int32 NumberOfTeams, TArray<FResourceArray> TeamResources)
-{
-	if (TeamId < 0 || TeamId >= NumberOfTeams || !this)
-		return false;
-
-	// It's crucial to ensure that ConstructionCost is properly initialized.
-	// This example assumes ConstructionCost is valid. If there's a chance it might not be,
-	// consider adding additional checks or initialization logic before this point.
-
-	// Initialize a map to store the total costs for easy comparison
-	TMap<EResourceType, int32> Costs;
-	Costs.Emplace(EResourceType::Primary, ConstructionCost.PrimaryCost);
-	Costs.Emplace(EResourceType::Secondary,ConstructionCost.SecondaryCost);
-	Costs.Emplace(EResourceType::Tertiary, ConstructionCost.TertiaryCost);
-	Costs.Emplace(EResourceType::Rare, ConstructionCost.RareCost);
-	Costs.Emplace(EResourceType::Epic, ConstructionCost.EpicCost);
-	Costs.Emplace(EResourceType::Legendary, ConstructionCost.LegendaryCost);
-
-	// Verify resources for each type
-	for (const FResourceArray& ResourceArray : TeamResources)
-	{
-		// Ensure TeamId is within bounds for the resource array
-		if (!ResourceArray.Resources.IsValidIndex(TeamId))
-		{
-			return false; // This ensures we don't proceed with invalid TeamId
-		}
-
-		int32 ResourceAmount = ResourceArray.Resources[TeamId];
-
-		// Check if the team has enough resources of the current type
-		if (Costs.Contains(ResourceArray.ResourceType) && ResourceAmount < Costs[ResourceArray.ResourceType])
-		{
-			return false; // Not enough resources of this type
-		}
-	}
-
-	// If all costs are affordable
-	return true;
-}*/

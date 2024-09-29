@@ -5,6 +5,7 @@
 
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "GameModes/ResourceGameMode.h"
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
@@ -34,25 +35,7 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         // Perform the raycast
         bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
 
-        FVector SpawnWorkAreaLocation;
-        if (bHit)
-        {
-            SpawnWorkAreaLocation = HitResult.Location;
-        }
-        else
-        {
-            // If nothing was hit, spawn at a default location in front of the player
-            APawn* ControlledPawn = GetPawn();
-            if (ControlledPawn)
-            {
-                SpawnWorkAreaLocation = ControlledPawn->GetActorLocation() + ControlledPawn->GetActorForwardVector() * 200.f;
-            }
-            else
-            {
-                SpawnWorkAreaLocation = FVector::ZeroVector;
-            }
-        }
-
+ 
         FRotator SpawnRotation = FRotator::ZeroRotator;
         FActorSpawnParameters SpawnParams;
         SpawnParams.Owner = this;
@@ -64,11 +47,6 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         {
         	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
-        	//CurrentDraggedWorkArea->TeamId = SelectableTeamId;
-            // Optionally, you might want to set some initial properties or states on the spawned WorkArea here
-
-            // Start moving the WorkArea under the mouse cursor
-            // You can call MoveWorkArea function or set up a flag to start moving it in Tick
         }
     }
 }
@@ -107,13 +85,27 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 
 void AExtendedControllerBase::DropWorkArea()
 {
-	if (CurrentDraggedWorkArea)
+	if (CurrentDraggedWorkArea && CurrentDraggedWorkArea->PlannedBuilding == false)
 	{
+		// Get all actors overlapping with the CurrentDraggedWorkArea
+		TArray<AActor*> OverlappingActors;
+		CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
 
-		// Check if CurrentDraggedGround is an instance of AWorkArea
-		if (CurrentDraggedGround->IsA(AWorkArea::StaticClass()))
+		bool bIsOverlappingWithValidArea = false;
+
+		// Loop through the overlapping actors to check if they are instances of AWorkArea or ABuildingBase
+		for (AActor* OverlappedActor : OverlappingActors)
 		{
-			// If it is, destroy the CurrentDraggedWorkArea
+			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
+			{
+				bIsOverlappingWithValidArea = true;
+				break;
+			}
+		}
+
+		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
+		if (bIsOverlappingWithValidArea)
+		{
 			CurrentDraggedWorkArea->Destroy();
 		}
 		else
@@ -125,7 +117,8 @@ void AExtendedControllerBase::DropWorkArea()
 				{
 					Worker->BuildArea = CurrentDraggedWorkArea;
 					Worker->BuildArea->TeamId = SelectedUnits[0]->TeamId;
-					
+					Worker->BuildArea->PlannedBuilding = true;
+					Worker->BuildArea->AddAreaToGroup();
 					// Check if the worker is overlapping with the build area
 					if (Worker->IsOverlappingActor(Worker->BuildArea))
 					{
@@ -209,10 +202,37 @@ void AExtendedControllerBase::DropUnitBase()
 	}
 }
 
+
+void AExtendedControllerBase::DestoryWorkArea()
+{
+	// Use Hit (FHitResult) and GetHitResultUnderCursor
+	// If you hit AWorkArea with WorkArea->Type == BuildArea
+	// Destory the WorkArea
+	
+	 FHitResult HitResult;
+
+	// Get the hit result under the cursor
+	if (GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+	{
+		// Check if the hit actor is of type AWorkArea
+		AWorkArea* WorkArea = Cast<AWorkArea>(HitResult.GetActor());
+		if (WorkArea && WorkArea->Type == WorkAreaData::BuildArea && WorkArea->TeamId == SelectableTeamId) // Assuming EWorkAreaType is an enum with 'BuildArea'
+		{
+			// Destroy the WorkArea
+			WorkArea->Destroy();
+		}
+	}
+	
+}
+
 void AExtendedControllerBase::LeftClickPressed()
 {
 	LeftClickIsPressed = true;
-	if (AttackToggled) {
+
+	if(AltIsPressed)
+	{
+		DestoryWorkArea();
+	}else if (AttackToggled) {
 		AttackToggled = false;
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
@@ -226,8 +246,12 @@ void AExtendedControllerBase::LeftClickPressed()
 			int32 Col = i % GridSize;     // Column index
 
 			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-
-			LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
+		
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+			{
+				// Do Nothing
+			}else
+				LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
 		}
 		
 	}
@@ -285,13 +309,17 @@ void AExtendedControllerBase::RightClickPressed()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
-	if(!CheckClickOnWorkArea(Hit))
-	{
-		RunUnitsAndSetWaypoints(Hit);
-	}
+
+	if(!CurrentDraggedWorkArea)
+		if(!CheckClickOnWorkArea(Hit))
+		{
+			RunUnitsAndSetWaypoints(Hit);
+		}
 
 	if (CurrentDraggedWorkArea)
 	{
+		CurrentDraggedWorkArea->PlannedBuilding = true;
+		CurrentDraggedWorkArea->RemoveAreaFromGroup();
 		CurrentDraggedWorkArea->Destroy();
 	}
 }
@@ -326,7 +354,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 	
 	if (Hit_Pawn.bBlockingHit && HUDBase)
 	{
-		//UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
+		UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
 		AActor* HitActor = Hit_Pawn.GetActor();
 		
 		//if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
@@ -345,6 +373,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 
 			if(WorkArea && isResourceExtractionArea)
 			{
+				UE_LOG(LogTemp, Log, TEXT("RESOURCE AREA!"));
 				for (int32 i = 0; i < SelectedUnits.Num(); i++)
 				{
 					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
@@ -356,7 +385,6 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 						{
 							Worker->ResourcePlace = WorkArea;
 							Worker->SetUnitState(UnitData::GoToResourceExtraction);
-							return true;
 						}
 					}
 				}
@@ -382,6 +410,8 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 					}
 				}
 			}
+
+			if(WorkArea) return true;
 		}
 		
 	}

@@ -733,6 +733,8 @@ void AUnitControllerBase::IsAttacked(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(0);
+
+	DetectUnits(UnitBase, DeltaSeconds);
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{

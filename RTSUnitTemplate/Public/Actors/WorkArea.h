@@ -57,6 +57,12 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveAreaFromGroup();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddAreaToGroup();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString Tag;
 	
@@ -85,7 +91,7 @@ public:
 	void SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+	bool SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction);

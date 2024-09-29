@@ -509,7 +509,9 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
 			if(UnitBase->BuildArea->DestroyAfterBuild)
 			{
+				UnitBase->BuildArea->RemoveAreaFromGroup();
 				UnitBase->BuildArea->Destroy(true);
+				UnitBase->BuildArea = nullptr;
 			}
 		}
 			UnitBase->SetUEPathfinding = true;
@@ -542,6 +544,7 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 	{
 		if(ActorToLockOn)
 		{
+			if(ActorToLockOn->WorkResource) ActorToLockOn->WorkResource->Destroy(true);
 			//MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
 			MyWorkResource->IsAttached = true;
 			MyWorkResource->ResourceType = ResourceType;

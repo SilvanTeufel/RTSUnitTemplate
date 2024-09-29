@@ -1,5 +1,7 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
+
+#include "Characters/Unit/BuildingBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
@@ -187,6 +189,10 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_5_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 25);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_6_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 26);
 
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Pressed, 0);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Released, 0);
+		
+
 	}
 
 }
@@ -249,6 +255,52 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 	}
 }
 
+void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController)
+{
+	if(!CamController) return;
+	
+	if (CamController->SelectedUnits.Num() > 0)
+	{
+		for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
+		{
+			if (SelectedUnit)
+			{
+				OnAbilityInputDetected(InputID, SelectedUnit, SelectedUnit->DefaultAbilities);
+			}
+		}
+	}else
+	{
+		
+		if(!CamController->HUDBase || !CamController->HUDBase->AllUnits.Num()) return;
+
+		AUnitBase* ClosestUnit = nullptr;
+		float ClosestDistanceSquared = FLT_MAX;
+		FVector CameraLocation = GetActorLocation();
+		for (AActor* UnitActor  : CamController->HUDBase->AllUnits)
+		{
+			// Cast to AGASUnit to make sure it's of the correct type
+			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
+			// Check if the unit is valid and has the same TeamId as the camera
+			if (Unit && Unit->IsWorker && Unit->TeamId == CamController->SelectableTeamId && !Unit->BuildArea)
+			{
+				float DistanceSquared = FVector::DistSquared(CameraLocation, Unit->GetActorLocation());
+				// Check if this unit is closer than the currently tracked closest unit
+				if (DistanceSquared < ClosestDistanceSquared)
+				{
+					ClosestDistanceSquared = DistanceSquared;
+					ClosestUnit = Unit;
+				}
+			}
+		}
+		if (ClosestUnit)
+		{
+			CamController->SelectedUnits.Add(ClosestUnit);
+			CamController->HUDBase->SetUnitSelected(ClosestUnit);
+			OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
+		}
+	}
+}
+
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
 {
 	if(BlockControls) return;
@@ -264,6 +316,7 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	{
 		SetCameraState(CameraData::MoveToClick);
 	}
+	
 }
 
 void AExtendedCameraBase::Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 Camstate)
@@ -311,6 +364,28 @@ void AExtendedCameraBase::Input_A_Pressed(const FInputActionValue& InputActionVa
 	} */
 }
 
+void AExtendedCameraBase::Input_Alt_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
+{
+	if(BlockControls) return;
+	
+	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+	if(CameraControllerBase)
+	{
+		CameraControllerBase->AltIsPressed = true;
+	}
+}
+
+void AExtendedCameraBase::Input_Alt_Released(const FInputActionValue& InputActionValue, int32 Camstate)
+{
+	if(BlockControls) return;
+	
+	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+	if(CameraControllerBase)
+	{
+		CameraControllerBase->AltIsPressed = false;
+	}
+}
+
 void AExtendedCameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
 {
 	if(BlockControls) return;
@@ -332,6 +407,8 @@ void AExtendedCameraBase::Input_Ctrl_Released(const FInputActionValue& InputActi
 		CameraControllerBase->IsStrgPressed = false;
 	}
 }
+
+
 
 void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
 {
@@ -784,69 +861,27 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityOne for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityOne, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
 			} break;
 		case 22:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityTwo for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase);
 			} break;
 		case 23:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityThree for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityThree, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase);
 			} break;
 		case 24:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFour for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityFour, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase);
 			} break;
 		case 25:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilityFive for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilityFive, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase);
 			} break;
 		case 26:
 			{
-				for (AGASUnit* SelectedUnit : CameraControllerBase->SelectedUnits)
-				{
-					if (SelectedUnit)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Activating AbilitySix for unit: %s"), *SelectedUnit->GetName());
-						OnAbilityInputDetected(EGASAbilityInputID::AbilitySix, SelectedUnit, SelectedUnit->DefaultAbilities);
-					}
-				}
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
 			} break;
 		}
 	}

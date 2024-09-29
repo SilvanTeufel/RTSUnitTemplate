@@ -50,6 +50,9 @@ public:
 	void DropUnitBase();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DestoryWorkArea();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickPressed();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

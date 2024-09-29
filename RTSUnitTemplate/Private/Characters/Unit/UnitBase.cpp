@@ -137,10 +137,8 @@ void AUnitBase::CreateHealthWidgetComp()
 			HealthWidgetComp->SetRelativeLocation(HealthWidgetCompLocation, false, 0, ETeleportType::None);
 
 			UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-
-			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!"));
+			
 			if (HealthBarWidget) {
-				UE_LOG(LogTemp, Warning, TEXT("!!!!!Healthbar successfully cast!!!!!!!"));
 				HealthBarWidget->SetOwnerActor(this);
 				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 				HealthCompCreated = true;
