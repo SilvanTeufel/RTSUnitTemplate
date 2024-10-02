@@ -25,7 +25,7 @@ public:
 	class AWorkArea* ResourcePlace;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	class AWorkArea* Base;
+	class ABuildingBase* Base;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;

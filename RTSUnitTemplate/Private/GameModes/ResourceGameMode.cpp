@@ -28,7 +28,7 @@ void AResourceGameMode::BeginPlay()
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
-
+	GatherBases();
 	AResourceGameState* RGState = GetGameState<AResourceGameState>();
 	if (RGState)
 	{
@@ -54,6 +54,27 @@ void AResourceGameMode::InitializeResources(int32 InNumberOfTeams)
 		EResourceType ResourceType = static_cast<EResourceType>(ResourceTypeIndex);
 		TeamResources.Add(FResourceArray(ResourceType, NumberOfTeams));
 	}
+}
+void AResourceGameMode::GatherBases()
+{
+	for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+	{
+		ABuildingBase* BuildingBase = *It;
+		if (!BuildingBase) continue;
+
+		if(BuildingBase->IsBase)
+		{
+			WorkAreaGroups.BaseAreas.Add(BuildingBase);
+			UE_LOG(LogTemp, Warning, TEXT("Added Base"));
+		}
+	}
+
+}
+
+void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)
+{
+		if(BuildingBase->IsBase && BuildingBase->GetUnitState() == UnitData::Dead)
+			WorkAreaGroups.BaseAreas.Remove(BuildingBase);
 }
 
 void AResourceGameMode::GatherWorkAreas()
@@ -83,9 +104,9 @@ void AResourceGameMode::GatherWorkAreas()
 		case WorkAreaData::Legendary:
 			WorkAreaGroups.LegendaryAreas.Add(WorkArea);
 			break;
-		case WorkAreaData::Base:
+		/*case WorkAreaData::Base:
 			WorkAreaGroups.BaseAreas.Add(WorkArea);
-			break;
+			break;*/
 		case WorkAreaData::BuildArea:
 			WorkAreaGroups.BuildAreas.Add(WorkArea);
 			break;
@@ -171,7 +192,7 @@ void AResourceGameMode::AssignWorkAreasToWorkers()
 		if (!Worker) continue;
 
 		// Assign the closest base
-		Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
+		Worker->Base = GetClosestBaseFromArray(Worker, WorkAreaGroups.BaseAreas);
 
 		// Assign one of the five closest resource places randomly
 		TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
@@ -188,7 +209,7 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	if (!Worker) return;
 
 	// Assign the closest base
-	Worker->Base = GetClosestWorkArea(Worker, WorkAreaGroups.BaseAreas);
+	Worker->Base = GetClosestBaseFromArray(Worker, WorkAreaGroups.BaseAreas);
 
 	// Assign one of the five closest resource places randomly
 	TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
@@ -196,6 +217,24 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	//AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(WorkPlace->Type), +1.0f);
 	Worker->ResourcePlace = WorkPlace;
 	//SetAllCurrentWorkers(Worker->TeamId);
+}
+
+ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)
+{
+	ABuildingBase* ClosestBase = nullptr;
+	float MinDistanceSquared = FLT_MAX;
+
+	for (ABuildingBase* Base : Bases)
+	{
+		float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+		if (DistanceSquared < MinDistanceSquared)
+		{
+			MinDistanceSquared = DistanceSquared;
+			ClosestBase = Base;
+		}
+	}
+
+	return ClosestBase;
 }
 
 AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas)
@@ -255,7 +294,7 @@ AWorkArea* AResourceGameMode::GetRandomClosestWorkArea(const TArray<AWorkArea*>&
 
 	return nullptr;
 }
-
+/*
 TArray<AWorkArea*> AResourceGameMode::GetClosestBase(AWorkingUnitBase* Worker)
 {
 	TArray<AWorkArea*> AllAreas;
@@ -278,7 +317,7 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBase(AWorkingUnitBase* Worker)
 	}
 
 	return ClosestAreas;
-}
+}*/
 
 TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Worker)
 {

@@ -135,7 +135,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void LoadLevelDataAndAttributes(const FString& SlotName);
-	
 //protected:
 	// Helper method to handle the actual attribute increase when a point is invested
 	UFUNCTION(BlueprintCallable, Category = "Leveling")

@@ -83,9 +83,9 @@ void AWorkArea::AddAreaToGroup()
 		case WorkAreaData::Legendary:
 			ResourceGameMode->WorkAreaGroups.LegendaryAreas.Add(this);
 			break;
-		case WorkAreaData::Base:
+		/*case WorkAreaData::Base:
 			ResourceGameMode->WorkAreaGroups.BaseAreas.Add(this);
-			break;
+			break;*/
 		case WorkAreaData::BuildArea:
 			ResourceGameMode->WorkAreaGroups.BuildAreas.Add(this);
 			break;
@@ -122,9 +122,9 @@ void AWorkArea::RemoveAreaFromGroup()
 		case WorkAreaData::Legendary:
 			ResourceGameMode->WorkAreaGroups.LegendaryAreas.Remove(this);
 			break;
-		case WorkAreaData::Base:
+		/* case WorkAreaData::Base:
 			ResourceGameMode->WorkAreaGroups.BaseAreas.Remove(this);
-			break;
+			break; */
 		case WorkAreaData::BuildArea:
 			ResourceGameMode->WorkAreaGroups.BuildAreas.Remove(this);
 			break;

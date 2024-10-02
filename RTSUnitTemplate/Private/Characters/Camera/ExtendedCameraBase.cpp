@@ -644,27 +644,27 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);
 			} break;
 		case 22:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase);
 			} break;
 		case 23:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase);
 			} break;
 		case 24:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase);
 			} break;
 		case 25:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEleven, CameraControllerBase);
 			} break;
 		case 26:
 			{
-				
+				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwelve, CameraControllerBase);
 			} break;
 		default:
 			{

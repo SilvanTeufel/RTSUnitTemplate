@@ -17,7 +17,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 }
 
 
-void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass)
+void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {
     if (WorkAreaClass)
     {
@@ -41,10 +41,11 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         SpawnParams.Owner = this;
         SpawnParams.Instigator = GetPawn();
         SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
+    	
         AWorkArea* SpawnedWorkArea = GetWorld()->SpawnActor<AWorkArea>(WorkAreaClass, SpawnLocation, SpawnRotation, SpawnParams);
         if (SpawnedWorkArea)
         {
+        	if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
         	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
         }
@@ -390,7 +391,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 				}
 			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea)
 			{
-				if(SelectedUnits[0])
+				if(SelectedUnits.Num() && SelectedUnits[0])
 				{
 					AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
 					if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))

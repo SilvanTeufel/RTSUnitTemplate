@@ -350,8 +350,10 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 
 void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 1"));
 	if(!UnitBase || !UnitBase->Base) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 2 %s"), *UnitBase->Base->Name);
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
@@ -361,6 +363,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		return;
 	}
 
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 3"));
 	// Check if Base is allready in Range /////////////////////////////
 	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
@@ -368,7 +371,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 
 	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->Base->GetActorLocation()) - Worker->Base->GetSimpleCollisionRadius();
 
-
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 4"));
 	// Check Distance between Worker and Base
 	if (EnableDistanceCheck && DistanceToBase <= BaseArrivalDistance)
 	{
@@ -376,7 +379,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		return;
 	}
 	// Check if Base is allready in Range /////////////////////////////
-	
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 5"));
 	UnitBase->UnitControlTimer+= DeltaSeconds;
 	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
 	{
@@ -389,6 +392,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	const FVector BaseLocation = UnitBase->Base->GetActorLocation();
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 6"));
 
 	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }

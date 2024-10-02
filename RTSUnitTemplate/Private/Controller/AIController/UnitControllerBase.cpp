@@ -945,7 +945,8 @@ FVector AUnitControllerBase::GetCloseLocation(FVector ToLocation, float Distance
 
 void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 {
-	while(true)
+	
+	for(int i = 0; i < 10; i++)
 	{
 		UnitBase->RandomPatrolLocation = UnitBase->NextWaypoint->GetActorLocation()
 		+ FMath::RandPointInBox(FBox(FVector(-UnitBase->NextWaypoint->PatrolCloseOffset.X, -UnitBase->NextWaypoint->PatrolCloseOffset.Y, 0),
@@ -972,7 +973,12 @@ void AUnitControllerBase::SetPatrolCloseLocation(AUnitBase* UnitBase)
 				return;
 			}
 		}
+		
 	}
+	
+	UnitBase->RandomPatrolLocation = UnitBase->NextWaypoint->GetActorLocation();
+	UnitBase->RandomPatrolLocation.X += FMath::RandRange(-300.0f, 300.0f);
+	UnitBase->RandomPatrolLocation.Y += FMath::RandRange(-300.0f, 300.0f);
 }
 
 void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds)
@@ -1040,7 +1046,7 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	if(!UnitBase->SetUEPathfinding)
 		return false;
 		
-
+	UE_LOG(LogTemp, Warning, TEXT("GoToBase 7"));
 	if (ControllerBase)
 	{
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
@@ -1048,7 +1054,7 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 		UnitBase->SetUEPathfinding = false;
-
+		UE_LOG(LogTemp, Warning, TEXT("GoToBase 8"));
 		return MoveToLocationUEPathFinding(UnitBase, Location);
 	}
 

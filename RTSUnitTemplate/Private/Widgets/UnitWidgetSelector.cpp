@@ -39,7 +39,7 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
 
-		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
+		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0] && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
 			ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->DefaultAbilities.Num());
 	}
 }

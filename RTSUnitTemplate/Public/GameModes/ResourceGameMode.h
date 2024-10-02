@@ -7,6 +7,7 @@
 #include "Core/WorkerData.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/WorkingUnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "ResourceGameMode.generated.h"
 
 /**
@@ -38,7 +39,7 @@ public:
 	TArray<AWorkArea*> LegendaryAreas;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
-	TArray<AWorkArea*> BaseAreas;
+	TArray<ABuildingBase*> BaseAreas;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	TArray<AWorkArea*> BuildAreas;
@@ -54,6 +55,9 @@ public:
 	AResourceGameMode();
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveBaseFromGroup(ABuildingBase* BuildingBase);
 	
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay
@@ -67,18 +71,26 @@ protected:
 	// Helper function to initialize resource arrays
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitializeResources(int32 NumberOfTeams);
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GatherWorkAreas();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void GatherBases();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	ABuildingBase* GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas);
-	
+
+	/*
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetClosestBase(AWorkingUnitBase* Worker);
+	*/
 	
 public:
 

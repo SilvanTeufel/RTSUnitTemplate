@@ -23,6 +23,35 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HasWaypoint = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsBase = false;
+
+	virtual void Tick(float DeltaTime) override;
+
+	virtual void Destroyed() override;
+	
+	UFUNCTION()
+	void OnOverlapBegin(
+		UPrimitiveComponent* OverlappedComp, 
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, 
+		int32 OtherBodyIndex,
+		bool bFromSweep, 
+		const FHitResult& SweepResult
+	);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DespawnWorkResource(AWorkResource* ResourceToDespawn);
+	
 };
 
 
