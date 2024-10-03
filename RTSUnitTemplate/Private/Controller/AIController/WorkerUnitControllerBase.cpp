@@ -407,16 +407,16 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		return;
 	}
 	// Check if Base is allready in Range /////////////////////////////
-	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
-	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	const bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
-	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->Base->GetActorLocation()) - Worker->Base->GetSimpleCollisionRadius();
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	const bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+
+	const float DistanceToBase = FVector::Dist(UnitBase->GetActorLocation(),  UnitBase->Base->GetActorLocation()) - UnitBase->Base->GetSimpleCollisionRadius();
 
 	// Check Distance between Worker and Base
 	if (EnableDistanceCheck && DistanceToBase <= BaseArrivalDistance)
 	{
-		Worker->Base->HandleBaseArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
+		UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 		return;
 	}
 	// Check if Base is allready in Range /////////////////////////////
@@ -550,13 +550,17 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			SpawnParameter.StatePlaceholder = UnitData::Idle;
 			SpawnParameter.Material = nullptr;
 			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
-			UnitBase->BuildArea->Building = Cast<ABuildingBase>(SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr));
-			UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
-			if(UnitBase->BuildArea->DestroyAfterBuild)
+			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr);
+			if(NewUnit)
 			{
-				UnitBase->BuildArea->RemoveAreaFromGroup();
-				UnitBase->BuildArea->Destroy(true);
-				UnitBase->BuildArea = nullptr;
+				UnitBase->BuildArea->Building = Cast<ABuildingBase>(NewUnit);
+				UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+				if(UnitBase->BuildArea->DestroyAfterBuild)
+				{
+					UnitBase->BuildArea->RemoveAreaFromGroup();
+					UnitBase->BuildArea->Destroy(true);
+					UnitBase->BuildArea = nullptr;
+				}
 			}
 		}
 			UnitBase->SetUEPathfinding = true;

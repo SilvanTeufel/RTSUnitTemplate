@@ -43,13 +43,13 @@ public:
 	);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction);
+	void HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+	void SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+	bool SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DespawnWorkResource(AWorkResource* ResourceToDespawn);

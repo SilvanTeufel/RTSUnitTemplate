@@ -33,100 +33,99 @@ void ABuildingBase::Destroyed()
 void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
                                    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// Early return if OtherActor is not a AWorkingUnitBase
-	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(OtherActor);
-	if (!Worker) return;
+
 
 	// Since Worker is already AWorkingUnitBase, no need to cast again
-	AUnitBase* UnitBase = Cast<AUnitBase>(Worker);
-	if (!UnitBase) return;
+	AUnitBase* UnitBase = Cast<AUnitBase>(OtherActor);
+	if (!UnitBase || !UnitBase->IsWorker) return;
 	
-
+	UnitBase->Base = this;
+	
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
-	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false;
+	bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false;
 
-	if (IsBase && ResourceGameMode && Worker->GetUnitState() != UnitData::GoToBuild)
+	if (UnitBase->IsWorker && IsBase && ResourceGameMode && UnitBase->GetUnitState() != UnitData::GoToBuild)
 	{
-		HandleBaseArea(Worker, UnitBase, ResourceGameMode, CanAffordConstruction);
+		HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 	}
 
 }
 
-void ABuildingBase::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
+void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
 {
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->SetUEPathfinding = true;
 
 	bool AreaIsForTeam = false;
-	if (Worker->BuildArea)
+	if (UnitBase->BuildArea)
 	{
 		AreaIsForTeam = 
-			(Worker->BuildArea->TeamId == 0) || 
-			(Worker->TeamId == Worker->BuildArea->TeamId);
+			(UnitBase->BuildArea->TeamId == 0) || 
+			(UnitBase->TeamId == UnitBase->BuildArea->TeamId);
 	}
 	
-	if(Worker->WorkResource)
+	if(UnitBase->WorkResource)
 	{
 		//ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
 		//UE_LOG(LogTemp, Warning, TEXT("WorkResource Despawn!"));
-		ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
+		ResourceGameMode->ModifyResource(UnitBase->WorkResource->ResourceType, UnitBase->TeamId, UnitBase->WorkResource->Amount);
 		DespawnWorkResource(UnitBase->WorkResource);
 	}
 	
 	
-	if (!SwitchBuildArea(Worker, UnitBase, ResourceGameMode))
+	if (!SwitchBuildArea( UnitBase, ResourceGameMode))
 	{
-		SwitchResourceArea(Worker, UnitBase, ResourceGameMode);
+		SwitchResourceArea(UnitBase, ResourceGameMode);
 	}
 	
 	
 }
 
-void ABuildingBase::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
+void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
-	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(Worker);
+	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
 	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
-	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
+	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
 
-	if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
+	if(UnitBase->ResourcePlace && NewResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
 	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
-	}else if(!Worker->ResourcePlace && NewResourcePlace)
+		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		UnitBase->ResourcePlace = NewResourcePlace;
+	}else if(!UnitBase->ResourcePlace && NewResourcePlace)
 	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
+		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		UnitBase->ResourcePlace = NewResourcePlace;
 	}
 
 	UnitBase->SetUEPathfinding = true;
-	Worker->SetUnitState(UnitData::GoToResourceExtraction);
+	UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 }
 
-bool ABuildingBase::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
+bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
-	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
+	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(UnitBase);
 	BuildAreas.SetNum(3);
 	
-	Worker->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
+	UnitBase->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
 
-	bool CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
 	bool AreaIsForTeam = false;
-	if (Worker->BuildArea)
+	if (UnitBase->BuildArea)
 	{
 		AreaIsForTeam = 
-			(Worker->BuildArea->TeamId == 0) || 
-			(Worker->TeamId == Worker->BuildArea->TeamId);
+			(UnitBase->BuildArea->TeamId == 0) || 
+			(UnitBase->TeamId == UnitBase->BuildArea->TeamId);
 	}
 
 
-	if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
+	if(CanAffordConstruction && UnitBase->BuildArea && !UnitBase->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
 	{
-		Worker->BuildArea->PlannedBuilding = true;
+		UnitBase->BuildArea->PlannedBuilding = true;
 		UnitBase->SetUEPathfinding = true;
-		Worker->SetUnitState(UnitData::GoToBuild);
+		UnitBase->SetUnitState(UnitData::GoToBuild);
 	} else
 	{
 		return false;
