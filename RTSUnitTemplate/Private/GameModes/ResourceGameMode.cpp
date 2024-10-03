@@ -28,7 +28,7 @@ void AResourceGameMode::BeginPlay()
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
-	GatherBases();
+	//GatherBases();
 	AResourceGameState* RGState = GetGameState<AResourceGameState>();
 	if (RGState)
 	{
@@ -65,10 +65,15 @@ void AResourceGameMode::GatherBases()
 		if(BuildingBase->IsBase)
 		{
 			WorkAreaGroups.BaseAreas.Add(BuildingBase);
-			UE_LOG(LogTemp, Warning, TEXT("Added Base"));
 		}
 	}
 
+}
+
+void AResourceGameMode::AddBaseToGroup(ABuildingBase* BuildingBase)
+{
+	if(BuildingBase->IsBase && BuildingBase->GetUnitState() != UnitData::Dead)
+		WorkAreaGroups.BaseAreas.Add(BuildingBase);
 }
 
 void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)

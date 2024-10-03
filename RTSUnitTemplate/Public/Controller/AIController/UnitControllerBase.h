@@ -222,7 +222,7 @@ public:
 		void SetUEPathfindingRandomLocation(AUnitBase* UnitBase, float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		bool SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
+		bool SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location, AUnitBase* UnitToIgnore = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
@@ -231,7 +231,7 @@ public:
 	//bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
+	bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StopMovementCommand(AUnitBase* Unit);

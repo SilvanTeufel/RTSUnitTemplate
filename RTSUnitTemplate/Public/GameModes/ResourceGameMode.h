@@ -58,6 +58,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveBaseFromGroup(ABuildingBase* BuildingBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddBaseToGroup(ABuildingBase* BuildingBase);
 	
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay

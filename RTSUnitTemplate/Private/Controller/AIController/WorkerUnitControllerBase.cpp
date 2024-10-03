@@ -348,12 +348,56 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 	}
 }
 
+FVector AWorkerUnitControllerBase::GetFloorLocation(AUnitBase* Unit)
+{
+	// Validate the Unit and its Base to ensure they exist
+	if (!Unit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid Unit or Base"));
+		return FVector::ZeroVector;
+	}
+
+	// Get the base actor's location
+	const FVector BaseLocation = Unit->GetActorLocation();
+    
+	// Set up the start and end points of the line trace
+	FVector StartLocation = BaseLocation + FVector(0, 0, 1000); // Start above the Base
+	FVector EndLocation = BaseLocation - FVector(0, 0, 1000);   // Trace downwards to find the floor
+    
+	// Set up the collision query parameters
+	FCollisionQueryParams TraceParams;
+	TraceParams.AddIgnoredActor(Unit); // Ignore the base actor
+	TraceParams.bTraceComplex = true;        // Optional: Trace against complex collision
+	TraceParams.bReturnPhysicalMaterial = false; // Optional: Set to true if physical material is needed
+
+	// Set up the hit result
+	FHitResult HitResult;
+
+	// Perform the line trace
+	bool bHit = Unit->GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		StartLocation,
+		EndLocation,
+		ECC_Visibility, // Trace channel (Visibility or any custom channel)
+		TraceParams
+	);
+
+	// Check the result of the trace
+	if (bHit)
+	{
+		// Return the floor location if hit
+		FVector FloorLocation = HitResult.ImpactPoint;
+		return FloorLocation;
+	}
+    
+	// If no hit, log and return ZeroVector as fallback
+	return Unit->GetActorLocation();
+}
+
 void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 1"));
 	if(!UnitBase || !UnitBase->Base) return;
-
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 2 %s"), *UnitBase->Base->Name);
+	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
@@ -362,8 +406,6 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		UnitBase->UnitStatePlaceholder = UnitData::GoToBase;
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 3"));
 	// Check if Base is allready in Range /////////////////////////////
 	AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
@@ -371,7 +413,6 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 
 	const float DistanceToBase = FVector::Dist(Worker->GetActorLocation(),  Worker->Base->GetActorLocation()) - Worker->Base->GetSimpleCollisionRadius();
 
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 4"));
 	// Check Distance between Worker and Base
 	if (EnableDistanceCheck && DistanceToBase <= BaseArrivalDistance)
 	{
@@ -379,22 +420,22 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 		return;
 	}
 	// Check if Base is allready in Range /////////////////////////////
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 5"));
+
 	UnitBase->UnitControlTimer+= DeltaSeconds;
 	if(UnitBase->UnitControlTimer > ResetPathfindingTime)
 	{
 		UnitBase->UnitControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 	}
-
+	
 	if(!UnitBase->SetUEPathfinding)
 		return;
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-	const FVector BaseLocation = UnitBase->Base->GetActorLocation();
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 6"));
+	//const FVector BaseLocation = UnitBase->Base->GetActorLocation();
+	const FVector BaseLocation = GetFloorLocation(UnitBase->Base);
 
-	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
+	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation, UnitBase->Base);
 }
 
 void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSeconds)

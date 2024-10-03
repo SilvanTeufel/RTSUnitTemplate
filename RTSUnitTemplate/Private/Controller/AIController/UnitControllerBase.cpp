@@ -1038,15 +1038,14 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	}
 }
 
-bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
+bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location, AUnitBase* UnitToIgnore)
 {
 	
 	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
 	
 	if(!UnitBase->SetUEPathfinding)
 		return false;
-		
-	UE_LOG(LogTemp, Warning, TEXT("GoToBase 7"));
+	
 	if (ControllerBase)
 	{
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
@@ -1054,7 +1053,7 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 		UnitBase->SetUEPathfinding = false;
-		UE_LOG(LogTemp, Warning, TEXT("GoToBase 8"));
+		if(UnitToIgnore) return MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
 		return MoveToLocationUEPathFinding(UnitBase, Location);
 	}
 
@@ -1078,14 +1077,15 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 	}
 }
 
-bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation)
+bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
+
 	// Check server authority
 	if(!HasAuthority())
 	{
 		return false;
 	}
-    
+
 	// Check if the unit is valid and can move
 	if (!Unit || !Unit->GetCharacterMovement())
 	{
@@ -1103,6 +1103,9 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	FVector EndLocation = DestinationLocation;
 	FHitResult HitResult;
 	FCollisionQueryParams CollisionParams;
+	
+	if(UnitToIgnore) CollisionParams.AddIgnoredActor(UnitToIgnore);
+	
 	CollisionParams.AddIgnoredActor(Unit); // Ignore the unit that is moving
 
 	PendingUnit = Unit;
@@ -1118,14 +1121,12 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 	FNavPathSharedPtr NavPath;
 	MoveTo(MoveRequest, &NavPath);
-
 	
 	// Check if a valid path was found
 	if (!NavPath || !NavPath->IsValid())
 	{
 		return false;
 	}
-
 	// Check if pathfinding indicates that the location is unreachable
 	if (NavPath->IsPartial())
 	{

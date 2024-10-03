@@ -355,11 +355,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 	
 	if (Hit_Pawn.bBlockingHit && HUDBase)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
 		AActor* HitActor = Hit_Pawn.GetActor();
-		
-		//if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
-
 		
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
 
@@ -374,7 +370,6 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 
 			if(WorkArea && isResourceExtractionArea)
 			{
-				UE_LOG(LogTemp, Log, TEXT("RESOURCE AREA!"));
 				for (int32 i = 0; i < SelectedUnits.Num(); i++)
 				{
 					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)

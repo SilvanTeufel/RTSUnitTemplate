@@ -28,9 +28,11 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void BeginPlay() override;
+	
 	virtual void Destroyed() override;
 	
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnOverlapBegin(
 		UPrimitiveComponent* OverlappedComp, 
 		AActor* OtherActor,

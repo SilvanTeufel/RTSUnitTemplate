@@ -4,11 +4,22 @@
 
 #include "Elements/Framework/TypedElementQueryBuilder.h"
 #include "GameModes/ResourceGameMode.h"
+#include "Components/CapsuleComponent.h"
 
 void ABuildingBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// In your actor's constructor or initialization method
+
+}
+
+void ABuildingBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	ResourceGameMode->AddBaseToGroup(this);
 }
 
 void ABuildingBase::Destroyed()

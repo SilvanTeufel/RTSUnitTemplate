@@ -39,6 +39,9 @@ public:
 	void ResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector GetFloorLocation(AUnitBase* Unit);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GoToBase(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
