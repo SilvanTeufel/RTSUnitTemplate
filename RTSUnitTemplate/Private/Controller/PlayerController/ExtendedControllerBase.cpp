@@ -111,7 +111,7 @@ void AExtendedControllerBase::DropWorkArea()
 		}
 		else
 		{
-			if(SelectedUnits[0])
+			if(SelectedUnits.Num() && SelectedUnits[0])
 			{
 				AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
 				if(Worker)

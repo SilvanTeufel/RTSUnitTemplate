@@ -209,6 +209,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void IncreaseExperience();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void Selected();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void Deselected();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelected();

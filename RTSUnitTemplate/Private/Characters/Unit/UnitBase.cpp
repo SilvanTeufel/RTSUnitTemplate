@@ -404,6 +404,7 @@ void AUnitBase::SetSelected()
 	if(SelectedIcon)
 		SelectedIcon->IconMesh->bHiddenInGame = false;
 
+	Selected();
 }
 
 void AUnitBase::SetDeselected()
@@ -413,6 +414,8 @@ void AUnitBase::SetDeselected()
 		SelectedIcon->IconMesh->bHiddenInGame = true;
 		SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
 	}
+
+	Deselected();
 }
 
 
