@@ -121,7 +121,7 @@ public:
 		bool DetectFriendlyUnits = false;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "OnUnitDetected", Keywords = "RTSUnitTemplate OnUnitDetected"), Category = RTSUnitTemplate)
-		void OnUnitDetected(const TArray<AActor*>& DetectedUnits);
+		void OnUnitDetected(const TArray<AActor*>& DetectedUnits, bool SetState);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateToAttackUnit", Keywords = "RTSUnitTemplate RotateToAttackUnit"), Category = RTSUnitTemplate)
 		void RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack);
@@ -146,7 +146,7 @@ public:
 	float UnitDetectionTimer = 0.0f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float NewDetectionTime = 3.0f;
+	float NewDetectionTime = 0.5f;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsUnitDetected = false;
@@ -155,7 +155,7 @@ public:
 	void CheckUnitDetectionTimer(float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
-	void DetectUnits(AUnitBase* UnitBase, float DeltaSeconds);
+		void DetectUnits(AUnitBase* UnitBase, float DeltaSeconds, bool SetState);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Patrol", Keywords = "RTSUnitTemplate Patrol"), Category = RTSUnitTemplate)
 		void Patrol(AUnitBase* UnitBase, float DeltaSeconds);

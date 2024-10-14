@@ -152,7 +152,6 @@ void AHUDBase::BeginPlay()
 	Super::BeginPlay();
 	
 	AddUnitsToArray();
-	
 }
 
 void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -381,26 +380,34 @@ void AHUDBase::DetectAllUnits()
 			}
 		}
 		
-		UnitControllerBase->OnUnitDetected(DetectedUnits);
+		UnitControllerBase->OnUnitDetected(DetectedUnits, true);
 		
 	}
 }
 
 
-void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, bool DetectFriendlyUnits)
+void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, bool DetectFriendlyUnits, int PlayerTeamId)
 {
+
+	
+	//TArray<int> DetectedCount;
+	DetectingUnit->DetectedFromUnitsCount = 0;
+	
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		//DetectingUnit->Attributes->Range
 	
+		//DetectingUnit->Attributes->Range
+
 		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
 		{
-
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 
 			if (Distance <= Sight)
+			{
+				DetectingUnit->DetectedFromUnitsCount++;
 				DetectedUnits.Emplace(Unit);
+			}
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
 		{
 
@@ -408,8 +415,22 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 
 			if (Distance <= Sight)
 				DetectedUnits.Emplace(Unit);
+			else
+			{
+				//Unit->SetVisibility(false, PlayerTeamId);
+			}
 		}
 	}
+
+	if(DetectingUnit->DetectedFromUnitsCount == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DetectedFromUnitsCount is 0!"));
+		DetectingUnit->SetVisibility(false, PlayerTeamId);
+	}else
+	{
+		DetectingUnit->SetVisibility(true, PlayerTeamId);
+	}
+	
 }
 
 void AHUDBase::ControllDirectionToMouse(AActor* Units, FHitResult Hit)

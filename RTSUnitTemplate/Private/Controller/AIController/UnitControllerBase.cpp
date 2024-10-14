@@ -40,9 +40,13 @@ void AUnitControllerBase::BeginPlay()
 		if(ControllerBase)
 		{
 			HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
+
+			MyUnitBase = Cast<AUnitBase>(GetPawn());
+			
+			if(MyUnitBase)
+				MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
 		}
 	}
-
 }
 
 void AUnitControllerBase::OnPossess(APawn* PawN)
@@ -57,6 +61,9 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 		if(ControllerBase)
 		{
 			HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
+			
+			if(MyUnitBase)
+				MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
 		}
 	}
 	
@@ -74,6 +81,9 @@ void AUnitControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
+	
+	if(ControllerBase)
+		MyUnitBase->CheckVisibility(ControllerBase->SelectableTeamId);
 }
 
 FRotator AUnitControllerBase::GetControlRotation() const
@@ -94,11 +104,11 @@ void AUnitControllerBase::KillUnitBase(AUnitBase* UnitBase)
 	UnitBase->SetUnitState(UnitData::Dead);
 }
 
-void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
+void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, bool SetState)
 {
 	//AUnitBase* CurrentUnit = Cast<AUnitBase>(GetPawn());
 	AUnitBase* CurrentUnit = MyUnitBase;
-	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || (CurrentUnit->GetUnitState() == UnitData::Run && !CurrentUnit->GetToggleUnitDetection()) || CurrentUnit->GetUnitState() == UnitData::Evasion) return;
+	if (!CurrentUnit || CurrentUnit->GetUnitState() == UnitData::Dead || CurrentUnit->GetUnitState() == UnitData::Evasion) return;
 
 	// Loop through each detected unit
 	for (AActor* Actor : DetectedUnits)
@@ -111,16 +121,25 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits)
 			{
 				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
 			}
+			/*
+			if(!isFriendlyUnit)
+			{
+				if(ControllerBase)
+					DetectedUnit->SetVisibility(true, ControllerBase->SelectableTeamId);
+			}*/
 		}
+		
 	}
 
 	// The actual state change logic is refactored here, outside the loop.
 
-	if(!CurrentUnit->UnitToChase)
+	if(!SetState) return;
+	
+	//if(!CurrentUnit->UnitToChase)
 	if (CurrentUnit->SetNextUnitToChase())
 	{
 		bool isUnitChasing = CurrentUnit->GetUnitState() == UnitData::Chase;
-		bool canChangeState = !isUnitChasing && CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Run && CurrentUnit->GetUnitState() != UnitData::Casting;
+		bool canChangeState = !isUnitChasing && CurrentUnit->GetUnitState() != UnitData::Attack && CurrentUnit->GetUnitState() != UnitData::Casting;
         
 		if (DetectFriendlyUnits)
 		{
@@ -197,7 +216,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			DetectUnits(UnitBase, DeltaSeconds);
+			DetectUnits(UnitBase, DeltaSeconds, true);
+			LoseUnitToChase(UnitBase);
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -208,13 +228,16 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolRandom:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-				DetectUnits(UnitBase, DeltaSeconds);
-				
+				DetectUnits(UnitBase, DeltaSeconds, true);
+				LoseUnitToChase(UnitBase);
+				/*
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::Chase);
-				}else
+				}
+				*/
+				if(UnitBase->GetUnitState() != UnitData::Chase)
 				{
 					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 					SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
@@ -404,15 +427,16 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 }
 
-void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds)
+void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
 {
 	if(IsUnitDetected) return;
 	
-	if (HUDBase)
+	if (HUDBase && ControllerBase)
 	{
 		TArray<AActor*> DetectedUnits;
-		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits);
-		OnUnitDetected(DetectedUnits);
+		
+		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits, ControllerBase->SelectableTeamId);
+		OnUnitDetected(DetectedUnits, SetState);
 		IsUnitDetected = true;
 		//UE_LOG(LogTemp, Warning, TEXT("DetectUnits!"));
 	}
@@ -424,10 +448,10 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 	UE_LOG(LogTemp, Warning, TEXT("Patrol"));
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
-	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
+	if(UnitBase->GetUnitState() == UnitData::Chase)//UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
-		if(UnitBase->SetNextUnitToChase())
-			UnitBase->SetUnitState(UnitData::Chase);
+		//if(UnitBase->SetNextUnitToChase())
+			//UnitBase->SetUnitState(UnitData::Chase);
 		
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{
@@ -465,19 +489,20 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 		return;
 	}
 
-	if(UnitBase->GetToggleUnitDetection())
-	{
-		IsUnitDetected = false;
-		DetectUnits(UnitBase, DeltaSeconds);
-	}
-	
+	//if(UnitBase->GetToggleUnitDetection())
+	//{
+		//IsUnitDetected = false;
+		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		LoseUnitToChase(UnitBase);
+	//}
+	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
 		}
-	}
+	}*/
 				
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
@@ -505,13 +530,17 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     if (!UnitBase) return;
 	
     // Check for immediate collision with an enemy unit.
-    if(UnitBase->CollisionUnit 
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	LoseUnitToChase(UnitBase);
+	
+	
+	if(UnitBase->CollisionUnit 
        && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId)
     {
     		UnitBase->UnitToChase = UnitBase->CollisionUnit;
     		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
     		UnitBase->CollisionUnit = nullptr;
-    } else if (!UnitBase->SetNextUnitToChase()) // If no unit is being chased, try to find one, otherwise set the pathfinding.
+    } else if (!UnitBase->UnitToChase) // If no unit is being chased, try to find one, otherwise set the pathfinding.
     {
         UnitBase->SetUEPathfinding = true;
         UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
@@ -519,7 +548,6 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     {
        UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
        RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
-       DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
 
         if (IsUnitToChaseInRange(UnitBase))
         {
@@ -561,10 +589,6 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
         }
 
         // If we lose sight of the unit, reset chase.
-        if (DistanceToUnitToChase > LoseSightRadius) 
-        {
-            LoseUnitToChase(UnitBase);
-        }
     }
 }
 
@@ -588,18 +612,46 @@ FVector AUnitControllerBase::CalculateChaseLocation(AUnitBase* UnitBase)
 
 void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 {
-    UnitBase->UnitsToChase.Remove(UnitBase->UnitToChase);
-    UnitBase->UnitToChase = nullptr;
+	/*
+
+		for (int32 i = UnitBase->UnitsToChase.Num() - 1; i >= 0; i--)
+		{
+			
+			if (ControllerBase)
+			{
+				// Check if the unit to chase is valid
+		
+			
+				if (UnitBase->UnitsToChase[i])
+				{
+					float Distance = GetPawn()->GetDistanceTo(UnitBase->UnitsToChase[i]);
+					if(Distance > LoseSightRadius)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Looping %d!"), i);
+						UnitBase->UnitsToChase[i]->SetVisibility(false, ControllerBase->SelectableTeamId);
+						UnitBase->UnitsToChase.RemoveAt(i);
+					}
+				}
+			}
+
+			// Remove the unit from the array
+		}
+	
+	*/
+
+	/*
     if(!UnitBase->TeamId && UnitBase->FollowPath)
     {
         // Handle path reset logic.
-        ResetPath(UnitBase);
+       ResetPath(UnitBase);
     }
     else
     {
         UnitBase->SetUEPathfinding = true;
         UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+    	
     }
+	*/
 }
 
 void AUnitControllerBase::ResetPath(AUnitBase* UnitBase)
@@ -734,7 +786,8 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(0);
 
-	DetectUnits(UnitBase, DeltaSeconds);
+	DetectUnits(UnitBase, DeltaSeconds, true);
+	LoseUnitToChase(UnitBase);
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
@@ -841,19 +894,20 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		return;
 	}
 
-	if(UnitBase->GetToggleUnitDetection())
-	{
-		IsUnitDetected = false;
-		DetectUnits(UnitBase, DeltaSeconds);
-	}
-	
+	//if(UnitBase->GetToggleUnitDetection())
+	//{
+		//IsUnitDetected = false;
+		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		LoseUnitToChase(UnitBase);
+	//}
+	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
 		}
-	}
+	}*/
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 
@@ -884,13 +938,14 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 		UnitBase->CollisionUnit = nullptr;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Chase);
-	}if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
+	} else if(UnitBase->GetUnitState() == UnitData::Chase )//UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
+		/*
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
-		}
+		}*/
 		
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{

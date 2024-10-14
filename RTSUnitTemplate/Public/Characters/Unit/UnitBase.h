@@ -27,6 +27,9 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool IsPlayer = false;
+
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
+	int DetectedFromUnitsCount = 0;
 	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 

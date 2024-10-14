@@ -22,6 +22,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
+	virtual void BeginPlay() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOnViewport = true;
@@ -46,10 +47,17 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
-private:
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
-	void CheckVisibility();
 
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetVisibility(bool IsVisible, int PlayerTeamId);
+	
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void CheckVisibility(int PlayerTeamId);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void VisibilityTick();
+private:
+	
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	bool IsInViewport(FVector WorldPosition, float Offset);
 

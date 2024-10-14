@@ -64,12 +64,12 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 				UnitBase->CollisionUnit = nullptr;
 			}
 
-				DetectUnits(UnitBase, DeltaSeconds);
-		
+				DetectUnits(UnitBase, DeltaSeconds, true);
+				LoseUnitToChase(UnitBase);
 				
-			if(UnitBase->UnitsToChase.Num())
+			if(UnitBase->GetUnitState() == UnitData::Chase)
 			{
-				UnitBase->SetUnitState(UnitData::Chase);
+				//UnitBase->SetUnitState(UnitData::Chase);
 			}else
 				SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 
@@ -146,6 +146,10 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
 {
     if (!UnitBase) return;
 
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	LoseUnitToChase(UnitBase);
+	
+	// If we lose sight of the unit, reset chase.
 	if (!UnitBase->SetNextUnitToChase()) // If no unit is being chased, try to find one, otherwise set the pathfinding.
     {
         UnitBase->SetUEPathfinding = true;
@@ -154,7 +158,7 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
     {
        //UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
        //RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
-       DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
+       //DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
 
         if (IsUnitToChaseInRange(UnitBase))
         {
@@ -177,24 +181,19 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
             UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
        
         }
-
-        // If we lose sight of the unit, reset chase.
-        if (DistanceToUnitToChase > LoseSightRadius) 
-        {
-            LoseUnitToChase(UnitBase);
-        }
     }
 }
 
 void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	DetectUnits(UnitBase, DeltaSeconds);
-				
+	DetectUnits(UnitBase, DeltaSeconds, true);
+	LoseUnitToChase(UnitBase);
+	/*
 	if(UnitBase->SetNextUnitToChase())
 	{
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Chase);
-	}
+	}*/
 }
 
 

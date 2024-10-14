@@ -32,6 +32,8 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		AUnitBase* UnitBase = Cast<AUnitBase>(GetPawn());
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
+
+		CheckUnitDetectionTimer(DeltaSeconds);
 	
 		switch (UnitBase->UnitState)
 		{
@@ -296,6 +298,8 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 {
 	if(!UnitBase || !UnitBase->ResourcePlace) return;
 
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
@@ -337,6 +341,8 @@ void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float De
 {
 	if(!UnitBase || !UnitBase->ResourcePlace) return;
 
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->UnitControlTimer >= UnitBase->ResourceExtractionTime)
@@ -397,6 +403,8 @@ FVector AWorkerUnitControllerBase::GetFloorLocation(AUnitBase* Unit)
 void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if(!UnitBase || !UnitBase->Base) return;
+
+	DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	
@@ -440,6 +448,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 
 void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	
 	if (!UnitBase || !UnitBase->BuildArea || UnitBase->BuildArea->Building || UnitBase->BuildArea == nullptr || !UnitBase->BuildArea->BuildingClass) // || !UnitBase->BuildArea->BuildingClass
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -447,6 +456,8 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		return;
 	}
 
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
@@ -524,13 +535,16 @@ FVector AWorkerUnitControllerBase::GetGroundLocation(FVector ALocation, AUnitBas
 }
 void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
 	{
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-
+	
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
 	UnitBase->UnitControlTimer += DeltaSeconds;

@@ -6,6 +6,7 @@
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
@@ -13,10 +14,10 @@
 void APerformanceUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	CheckVisibility();
+	
 	CheckHealthBarVisibility();
 	CheckTimerVisibility();
+	//VisibilityTick();
 }
 
 void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -27,14 +28,53 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
 }
 
+void APerformanceUnit::BeginPlay()
+{
+	Super::BeginPlay();
+	
 
-void APerformanceUnit::CheckVisibility()
+	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	if(ControllerBase)
+	{
+		SetVisibility(false, ControllerBase->SelectableTeamId);
+	}
+	
+}
+
+void APerformanceUnit::SetVisibility(bool IsVisible, int PlayerTeamId)
+{
+	bool IsFriendly = PlayerTeamId == TeamId;
+	
+	if (IsInViewport(GetActorLocation(), VisibilityOffset) && IsVisible && !IsFriendly)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
+		USkeletalMeshComponent* SkelMesh = GetMesh();
+		IsOnViewport = true;
+		if(SkelMesh)
+		{
+			SkelMesh->SetVisibility(true);
+			SkelMesh->bPauseAnims = false;
+		}
+	}
+	else if(!IsVisible && !IsFriendly)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Set Invisible!"));
+		USkeletalMeshComponent* SkelMesh = GetMesh();
+		IsOnViewport = false;
+		if(SkelMesh)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Disabled Mesh!"));
+			SkelMesh->SetVisibility(false);
+			SkelMesh->bPauseAnims = true;
+		}
+	}
+}
+
+void APerformanceUnit::VisibilityTick()
 {
 	USkeletalMeshComponent* SkelMesh = GetMesh();
-	
-	if (IsInViewport(GetActorLocation(), VisibilityOffset))
+	if (IsOnViewport)
 	{
-		IsOnViewport = true;
 		if(SkelMesh)
 		{
 			SkelMesh->SetVisibility(true);
@@ -43,6 +83,30 @@ void APerformanceUnit::CheckVisibility()
 	}
 	else
 	{
+		if(SkelMesh)
+		{
+			SkelMesh->SetVisibility(false);
+			SkelMesh->bPauseAnims = true;
+		}
+	}
+}
+void APerformanceUnit::CheckVisibility(int PlayerTeamId)
+{
+
+
+	if (IsInViewport(GetActorLocation(), VisibilityOffset) && PlayerTeamId == TeamId)
+	{
+		USkeletalMeshComponent* SkelMesh = GetMesh();
+		IsOnViewport = true;
+		if(SkelMesh)
+		{
+			SkelMesh->SetVisibility(true);
+			SkelMesh->bPauseAnims = false;
+		}
+	}
+	else if(PlayerTeamId == TeamId)
+	{
+		USkeletalMeshComponent* SkelMesh = GetMesh();
 		IsOnViewport = false;
 		if(SkelMesh)
 		{

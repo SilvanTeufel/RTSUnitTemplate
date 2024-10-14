@@ -43,8 +43,8 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			DetectUnits(UnitBase, DeltaSeconds);
-
+			DetectUnits(UnitBase, DeltaSeconds, true);
+			LoseUnitToChase(UnitBase);
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				HealPatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -55,12 +55,15 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::PatrolRandom:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-			DetectUnits(UnitBase, DeltaSeconds);
-			
+			DetectUnits(UnitBase, DeltaSeconds, true);
+			LoseUnitToChase(UnitBase);
+			/*
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
 				UnitBase->SetUnitState(UnitData::Chase);
 			}else
+		*/
+			if(UnitBase->GetUnitState() != UnitData::Chase)
 			{
 				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
@@ -330,17 +333,18 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		return;
 	}
 	
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	{
+	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
+	//{
 
-		DetectUnits(UnitBase, DeltaSeconds);
-		
-		if(UnitBase->SetNextUnitToChaseHeal())
+		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		LoseUnitToChase(UnitBase);
+	/*
+		if(UnitBase->SetNextUnitToChaseHeal() && UnitBase->GetToggleUnitDetection())
 		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	}
+		}*/
+	//}
 				
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
@@ -374,15 +378,16 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		return;
 	}
 	
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	{
-		DetectUnits(UnitBase, DeltaSeconds);
-		
+	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
+	//{
+		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		LoseUnitToChase(UnitBase);
+		/*
 		if(UnitBase->SetNextUnitToChaseHeal())
 		{
 			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	}
+		}*/
+	//}
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 
@@ -398,8 +403,15 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 {
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
-	if(UnitBase->SetNextUnitToChaseHeal())
+	if(IsUnitToChaseInRange(UnitBase))
 	{
+		UnitBase->SpawnHealActor(UnitBase->UnitToChase);
+		bHealActorSpawned = true;
+		UnitBase->ServerStartHealingEvent_Implementation();
+		UnitBase->SetUnitState(UnitData::Healing);
+	}else if(UnitBase->GetUnitState() == UnitData::Chase)// UnitBase->SetNextUnitToChaseHeal())
+	{
+		/*
 		if(IsUnitToChaseInRange(UnitBase))
 		{
 			UnitBase->SpawnHealActor(UnitBase->UnitToChase);
@@ -408,9 +420,10 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 			UnitBase->SetUnitState(UnitData::Healing);
 		}else if(!IsUnitToChaseInRange(UnitBase))
 		{
-			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+			//UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
+			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
-		}
+		}*/
 
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{
@@ -442,9 +455,16 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 void AHealingUnitController::HealPatrolUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-				
-	if(UnitBase->SetNextUnitToChaseHeal())
+
+	if(IsUnitToChaseInRange(UnitBase))
 	{
+		UnitBase->SpawnHealActor(UnitBase->UnitToChase);
+		bHealActorSpawned = true;
+		UnitBase->ServerStartHealingEvent_Implementation();
+		UnitBase->SetUnitState(UnitData::Healing);
+	}else if(UnitBase->GetUnitState() == UnitData::Chase)// UnitBase->SetNextUnitToChaseHeal())
+	{
+		/*
 		if(IsUnitToChaseInRange(UnitBase))
 		{
 			UnitBase->SpawnHealActor(UnitBase->UnitToChase);
@@ -456,7 +476,7 @@ void AHealingUnitController::HealPatrolUEPathfinding(AHealingUnit* UnitBase, flo
 			//UnitBase->SetWalkSpeed(UnitBase->MaxRunSpeed);
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
-		}
+		}*/
 
 	} else if (UnitBase->NextWaypoint != nullptr)
 	{

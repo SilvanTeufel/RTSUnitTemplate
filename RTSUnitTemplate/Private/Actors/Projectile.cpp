@@ -350,6 +350,9 @@ AUnitBase* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* U
 			{
 				Range = Distance;
 				RUnit = Unit;
+			}else
+			{
+				
 			}
 		}
 	}

@@ -57,6 +57,8 @@ void AControllerBase::DisplayUnitCount()
 
 
 	// Retrieve the count of all units from HUDBase or a similar class
+	if(!HUDBase) return;
+	
 	int UnitsCount = HUDBase->AllUnits.Num();
 	FString UnitsMessage = FString::Printf(TEXT("Unit Count: %d"), UnitsCount);
 	
