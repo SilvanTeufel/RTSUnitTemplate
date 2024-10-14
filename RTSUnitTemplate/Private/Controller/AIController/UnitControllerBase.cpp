@@ -435,7 +435,7 @@ void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds, b
 	{
 		TArray<AActor*> DetectedUnits;
 		
-		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, DetectFriendlyUnits, ControllerBase->SelectableTeamId);
+		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, LoseSightRadius, DetectFriendlyUnits, ControllerBase->SelectableTeamId);
 		OnUnitDetected(DetectedUnits, SetState);
 		IsUnitDetected = true;
 		//UE_LOG(LogTemp, Warning, TEXT("DetectUnits!"));

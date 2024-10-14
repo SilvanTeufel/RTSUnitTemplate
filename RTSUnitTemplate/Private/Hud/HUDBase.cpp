@@ -386,7 +386,7 @@ void AHUDBase::DetectAllUnits()
 }
 
 
-void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, bool DetectFriendlyUnits, int PlayerTeamId)
+void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
 {
 
 	
@@ -403,9 +403,16 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 		{
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 
-			if (Distance <= Sight)
+			if (Distance <= LoseSight)
 			{
 				DetectingUnit->DetectedFromUnitsCount++;
+				Unit->DetectedFromUnitsCount++;
+			}
+				
+			if (Distance <= Sight)
+			{
+				
+				Unit->SetVisibility(true, PlayerTeamId);
 				DetectedUnits.Emplace(Unit);
 			}
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
@@ -428,7 +435,7 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 		DetectingUnit->SetVisibility(false, PlayerTeamId);
 	}else
 	{
-		DetectingUnit->SetVisibility(true, PlayerTeamId);
+		//DetectingUnit->SetVisibility(true, PlayerTeamId);
 	}
 	
 }

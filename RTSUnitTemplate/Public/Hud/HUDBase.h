@@ -111,7 +111,7 @@ public:
 		void DetectAllUnits();
 	
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-		void DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, bool DetectFriendlyUnits, int PlayerTeamId);
+		void DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ControllDirectionToMouse", Keywords = "RTSUnitTemplate ControllDirectionToMouse"), Category = RTSUnitTemplate)
 		void ControllDirectionToMouse(AActor* Units, FHitResult Hit);
