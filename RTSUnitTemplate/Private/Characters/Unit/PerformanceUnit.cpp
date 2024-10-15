@@ -11,6 +11,22 @@
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
 
+APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
+{
+	// Initialize FogOfWarLight (PointLight or SpotLight)
+	FogOfWarLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FogOfWarLight"));
+	// Attach the light component to the root or another component
+	FogOfWarLight->SetupAttachment(RootComponent);
+
+	// Set initial light properties
+	FogOfWarLight->Intensity = 0.2f;             // Adjust intensity as needed
+	FogOfWarLight->bUseInverseSquaredFalloff = false; // Avoid using inverse squared falloff for performance
+	FogOfWarLight->LightFalloffExponent = 0.2f;     // Exponent for smoother falloff (optional)
+	FogOfWarLight->AttenuationRadius = 500.f;      // Default range (will update this to SightRange later)
+	FogOfWarLight->CastShadows = false;
+	
+}
+
 void APerformanceUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -38,7 +54,31 @@ void APerformanceUnit::BeginPlay()
 	{
 		SetVisibility(false, ControllerBase->SelectableTeamId);
 	}
-	
+	if (FogOfWarLight)
+	{
+		FogOfWarLight->SetVisibility(false);
+	}
+}
+
+void APerformanceUnit::UpdateFogOfWarLight(int PlayerTeamId, float SightRange)
+{
+	bool IsFriendly = PlayerTeamId == TeamId;
+
+	UE_LOG(LogTemp, Warning, TEXT("PlayerTeamId: %d"), PlayerTeamId);
+	UE_LOG(LogTemp, Warning, TEXT("TeamId: %d"), TeamId);
+	if (FogOfWarLight && IsFriendly)
+	{
+		// Set light range equal to SightRange
+		FogOfWarLight->AttenuationRadius = SightRange;
+		FogOfWarLight->SetVisibility(true);
+		UE_LOG(LogTemp, Warning, TEXT("Light ON!"));
+	}else if(FogOfWarLight && !IsFriendly)
+	{
+		//FogOfWarLight->AttenuationRadius = 0.f;
+		//FogOfWarLight->SetVisibility(false, true);
+		//FogOfWarLight->Intensity = 0.0f;  
+		UE_LOG(LogTemp, Warning, TEXT("Light OFF!"));
+	}
 }
 
 void APerformanceUnit::SetVisibility(bool IsVisible, int PlayerTeamId)
@@ -47,7 +87,7 @@ void APerformanceUnit::SetVisibility(bool IsVisible, int PlayerTeamId)
 	
 	if (IsInViewport(GetActorLocation(), VisibilityOffset) && IsVisible && !IsFriendly)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
+		//UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
 		USkeletalMeshComponent* SkelMesh = GetMesh();
 		IsOnViewport = true;
 		if(SkelMesh)
@@ -58,12 +98,12 @@ void APerformanceUnit::SetVisibility(bool IsVisible, int PlayerTeamId)
 	}
 	else if(!IsVisible && !IsFriendly)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Set Invisible!"));
+		//UE_LOG(LogTemp, Warning, TEXT("Set Invisible!"));
 		USkeletalMeshComponent* SkelMesh = GetMesh();
 		IsOnViewport = false;
 		if(SkelMesh)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Disabled Mesh!"));
+			//UE_LOG(LogTemp, Warning, TEXT("Disabled Mesh!"));
 			SkelMesh->SetVisibility(false);
 			SkelMesh->bPauseAnims = true;
 		}

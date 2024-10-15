@@ -199,6 +199,9 @@ void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float De
 
 void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if (!UnitBase) return;
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
@@ -270,6 +273,9 @@ void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSec
 
 void ABuildingControllerBase::PauseBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if (!UnitBase) return;
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 				
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);

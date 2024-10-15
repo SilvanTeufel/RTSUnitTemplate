@@ -391,7 +391,7 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 
 	
 	//TArray<int> DetectedCount;
-	DetectingUnit->DetectedFromUnitsCount = 0;
+	DetectingUnit->IsInFog = true;
 	
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
@@ -403,16 +403,33 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 		{
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 
-			if (Distance <= LoseSight)
+			if (Distance <= LoseSight && 
+				(Unit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
+				Unit->GetUnitState() != UnitData::Dead &&
+				DetectingUnit->GetUnitState() != UnitData::Dead)
 			{
-				DetectingUnit->DetectedFromUnitsCount++;
-				Unit->DetectedFromUnitsCount++;
+				DetectingUnit->IsInFog = false;
+			}
+
+			if (Distance <= LoseSight &&
+			(DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
+			Unit->GetUnitState() != UnitData::Dead &&
+			DetectingUnit->GetUnitState() != UnitData::Dead)
+			{
+				Unit->IsInFog = false;
 			}
 				
 			if (Distance <= Sight)
 			{
+				if((DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
+					Unit->GetUnitState() != UnitData::Dead &&
+					DetectingUnit->GetUnitState() != UnitData::Dead)
+				{
+					Unit->IsInFog = false;
+					DetectingUnit->IsInFog = false;
+					Unit->SetVisibility(true, PlayerTeamId);
+				}
 				
-				Unit->SetVisibility(true, PlayerTeamId);
 				DetectedUnits.Emplace(Unit);
 			}
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
@@ -429,9 +446,9 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 		}
 	}
 
-	if(DetectingUnit->DetectedFromUnitsCount == 0)
+	if(DetectingUnit->IsInFog)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DetectedFromUnitsCount is 0!"));
+		//UE_LOG(LogTemp, Warning, TEXT("DetectedFromUnitsCount is 0!"));
 		DetectingUnit->SetVisibility(false, PlayerTeamId);
 	}else
 	{

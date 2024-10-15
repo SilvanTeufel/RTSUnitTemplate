@@ -68,6 +68,7 @@ void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypo
 
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
+	
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
 	{

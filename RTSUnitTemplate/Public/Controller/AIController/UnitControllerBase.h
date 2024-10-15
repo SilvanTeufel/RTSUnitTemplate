@@ -63,6 +63,8 @@ public:
 	
 	virtual FRotator GetControlRotation() const override;
 
+	void DelayedFogOfWarLightUpdate();
+	
 	FOnMoveCompletedDelegate OnMoveCompleted;
 	
 	void OnAdjustedMoveCompleted(FAIRequestID RequestID, const EPathFollowingResult::Type Result)
@@ -117,7 +119,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DistanceToUnitToChase", Keywords = "RTSUnitTemplate DistanceToUnitToChase"), Category = RTSUnitTemplate)
 		float DistanceToUnitToChase = 0.0f;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "DetectFriendlyUnits", Keywords = "RTSUnitTemplate DetectFriendlyUnits"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DetectFriendlyUnits", Keywords = "RTSUnitTemplate DetectFriendlyUnits"), Category = RTSUnitTemplate)
 		bool DetectFriendlyUnits = false;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "OnUnitDetected", Keywords = "RTSUnitTemplate OnUnitDetected"), Category = RTSUnitTemplate)

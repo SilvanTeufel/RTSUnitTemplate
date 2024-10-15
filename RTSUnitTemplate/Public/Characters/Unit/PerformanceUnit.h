@@ -9,6 +9,7 @@
 #include "Actors/DijkstraCenter.h"
 #include "Core/DijkstraMatrix.h"
 #include "Actors/Projectile.h"
+#include "Components/PointLightComponent.h"
 #include "PerformanceUnit.generated.h"
 
 UCLASS()
@@ -16,13 +17,22 @@ class RTSUNITTEMPLATE_API APerformanceUnit : public ALevelUnit
 {
 	GENERATED_BODY()
 
-public:	
+public:
+	APerformanceUnit(const FObjectInitializer& ObjectInitializer);
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 	virtual void BeginPlay() override;
+
+	// Light component for Fog of War
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FogOfWar")
+	UPointLightComponent* FogOfWarLight; // Or USpotLightComponent if using a spotlight
+
+	// Function to update light range
+	UFUNCTION(BlueprintCallable, Category = "FogOfWar")
+	void UpdateFogOfWarLight(int PlayerTeamId, float SightRange);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOnViewport = true;

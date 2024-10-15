@@ -44,7 +44,10 @@ void AUnitControllerBase::BeginPlay()
 			MyUnitBase = Cast<AUnitBase>(GetPawn());
 			
 			if(MyUnitBase)
+			{
 				MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
+				GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::DelayedFogOfWarLightUpdate);
+			}
 		}
 	}
 }
@@ -58,17 +61,28 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 	if(!ControllerBase)
 	{
 		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
-		if(ControllerBase)
-		{
-			HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
+	}
+
+	if(ControllerBase)
+	{
+		HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
 			
-			if(MyUnitBase)
-				MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
+		if(MyUnitBase)
+		{
+			MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
+			GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::DelayedFogOfWarLightUpdate);
 		}
 	}
 	
 	if(MyUnitBase && MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
 
+}
+
+void AUnitControllerBase::DelayedFogOfWarLightUpdate()
+{
+	// Assuming you have access to the PlayerTeamId and SightRange here
+	if(MyUnitBase && ControllerBase)
+	MyUnitBase->UpdateFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
 }
 
 void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -82,8 +96,12 @@ void AUnitControllerBase::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
 	
-	if(ControllerBase)
+	
+	if(ControllerBase && MyUnitBase)
+	{
 		MyUnitBase->CheckVisibility(ControllerBase->SelectableTeamId);
+		//MyUnitBase->UpdateFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
+	}
 }
 
 FRotator AUnitControllerBase::GetControlRotation() const
@@ -376,16 +394,20 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 	UnitBase->UnitControlTimer += DeltaSeconds;
-
+	/*
 	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() == UnitData::Dead)
 	{
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
-	}else if (UnitBase->UnitControlTimer > UnitBase->CastTime)
+	}else
+	*/
+	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
 		if (UnitBase->ActivatedAbilityInstance)
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
@@ -612,32 +634,32 @@ FVector AUnitControllerBase::CalculateChaseLocation(AUnitBase* UnitBase)
 
 void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 {
-	/*
 
-		for (int32 i = UnitBase->UnitsToChase.Num() - 1; i >= 0; i--)
-		{
+
+		//for (int32 i = UnitBase->UnitsToChase.Num() - 1; i >= 0; i--)
+		//{
 			
-			if (ControllerBase)
-			{
+			//if (ControllerBase)
+			//{
 				// Check if the unit to chase is valid
 		
 			
-				if (UnitBase->UnitsToChase[i])
+				if (UnitBase->UnitToChase)
 				{
-					float Distance = GetPawn()->GetDistanceTo(UnitBase->UnitsToChase[i]);
+					float Distance = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
 					if(Distance > LoseSightRadius)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("Looping %d!"), i);
-						UnitBase->UnitsToChase[i]->SetVisibility(false, ControllerBase->SelectableTeamId);
-						UnitBase->UnitsToChase.RemoveAt(i);
+						//UnitBase->UnitsToChase[i]->SetVisibility(false, ControllerBase->SelectableTeamId);
+						UnitBase->UnitsToChase.Remove(UnitBase->UnitToChase);
+						UnitBase->UnitToChase = nullptr;
 					}
 				}
-			}
+			//}
 
 			// Remove the unit from the array
-		}
+		//}
 	
-	*/
+	
 
 	/*
     if(!UnitBase->TeamId && UnitBase->FollowPath)
@@ -668,6 +690,9 @@ void AUnitControllerBase::ResetPath(AUnitBase* UnitBase)
 
 void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if (!UnitBase) return;
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);	
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
@@ -743,6 +768,9 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if (!UnitBase) return;
+	DetectUnits(UnitBase, DeltaSeconds, false);
+	
 	UnitBase->SetWalkSpeed(0);
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 				

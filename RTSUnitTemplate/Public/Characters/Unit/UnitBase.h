@@ -29,7 +29,7 @@ public:
 	bool IsPlayer = false;
 
 	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
-	int DetectedFromUnitsCount = 0;
+	bool IsInFog = false;
 	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 
