@@ -44,8 +44,11 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			DetectUnits(UnitBase, DeltaSeconds, false);
-			LoseUnitToChase(UnitBase);
+			//DetectUnits(UnitBase, DeltaSeconds, false);
+			//LoseUnitToChase(UnitBase);
+	
+			DetectAndLoseUnits();
+		
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				HealPatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -56,8 +59,9 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::PatrolRandom:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-			DetectUnits(UnitBase, DeltaSeconds, false);
-			LoseUnitToChase(UnitBase);
+			//DetectUnits(UnitBase, DeltaSeconds, false);
+			//LoseUnitToChase(UnitBase);
+			DetectAndLoseUnits();
 			
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
@@ -72,6 +76,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 		break;
 	case UnitData::PatrolIdle:
 		{
+			DetectAndLoseUnits();
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
@@ -269,7 +274,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
 void AHealingUnitController::Healing(AHealingUnit* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase) return;
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);	
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
@@ -287,7 +292,7 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 {
 
 		if (!UnitBase) return;
-		DetectUnits(UnitBase, DeltaSeconds, false);
+		//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 		UnitBase->SetWalkSpeed(0);
 		RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
@@ -337,13 +342,16 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		return;
 	}
 	
+	if(UnitBase->GetToggleUnitDetection())
+		DetectAndLoseUnits();
+	
 	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	//{
 
-		DetectUnits(UnitBase, DeltaSeconds, false);
-		LoseUnitToChase(UnitBase);
+		//DetectUnits(UnitBase, DeltaSeconds, false);
+		//LoseUnitToChase(UnitBase);
 	
-		if(UnitBase->SetNextUnitToChaseHeal() && UnitBase->GetToggleUnitDetection())
+		if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
 		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Chase);
@@ -381,15 +389,19 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
+
+
+	if(UnitBase->GetToggleUnitDetection())
+		DetectAndLoseUnits();
 	
 	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	//{
-		DetectUnits(UnitBase, DeltaSeconds, false);
-		LoseUnitToChase(UnitBase);
+		// DetectUnits(UnitBase, DeltaSeconds, false);
+		// LoseUnitToChase(UnitBase);
 		
 		if(UnitBase->SetNextUnitToChaseHeal() && UnitBase->GetToggleUnitDetection())
 		{
-			UnitBase->SetUnitState(UnitData::Chase);
+			//UnitBase->SetUnitState(UnitData::Chase);
 		}
 	//}
 	

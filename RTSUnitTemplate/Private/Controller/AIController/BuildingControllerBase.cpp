@@ -17,7 +17,8 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		if(!UnitBase) return;
 
 		CheckUnitDetectionTimer(DeltaSeconds);
-	
+
+		
 		switch (UnitBase->UnitState)
 		{
 		case UnitData::None:
@@ -32,6 +33,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		break;
 		case UnitData::Chase:
 		{
+				DetectAndLoseUnits();
 			BuildingChase(UnitBase, DeltaSeconds);
 		}
 		break;
@@ -64,8 +66,8 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 				UnitBase->CollisionUnit = nullptr;
 			}
 
-				DetectUnits(UnitBase, DeltaSeconds, true);
-				LoseUnitToChase(UnitBase);
+				//DetectUnits(UnitBase, DeltaSeconds, true);
+				//LoseUnitToChase(UnitBase);
 				
 			if(UnitBase->GetUnitState() == UnitData::Chase)
 			{
@@ -146,8 +148,8 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
 {
     if (!UnitBase) return;
 
-	DetectUnits(UnitBase, DeltaSeconds, false);
-	LoseUnitToChase(UnitBase);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
+	//LoseUnitToChase(UnitBase);
 	
 	// If we lose sight of the unit, reset chase.
 	if (!UnitBase->SetNextUnitToChase()) // If no unit is being chased, try to find one, otherwise set the pathfinding.
@@ -186,8 +188,8 @@ void ABuildingControllerBase::BuildingChase(AUnitBase* UnitBase, float DeltaSeco
 
 void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	DetectUnits(UnitBase, DeltaSeconds, true);
-	LoseUnitToChase(UnitBase);
+	//DetectUnits(UnitBase, DeltaSeconds, true);
+	//LoseUnitToChase(UnitBase);
 	/*
 	if(UnitBase->SetNextUnitToChase())
 	{
@@ -200,7 +202,7 @@ void ABuildingControllerBase::PatrolRandomBuilding(AUnitBase* UnitBase, float De
 void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase) return;
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
@@ -274,7 +276,7 @@ void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSec
 void ABuildingControllerBase::PauseBuilding(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase) return;
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);
 				

@@ -14,6 +14,7 @@
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameInstances/CollisionManager.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
@@ -46,8 +47,12 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	bReplicates = true;
 	
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
-	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
+	
+	if(ensure(AbilitySystemComponent != nullptr))
+	{
+		AbilitySystemComponent->SetIsReplicated(true);
+		AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
+	}
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
 	SelectedIconBaseClass = ASelectedIcon::StaticClass();
@@ -55,7 +60,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
-	bCanProcessCollision = true;
+	//bCanProcessCollision = true;
 	//SetLODCount(0);
 	/*
 	if (HasAuthority())
@@ -67,17 +72,17 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	*/
 }
 
-
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
-    
+	
 	// If collisions can be processed, handle the logic
 	if (bCanProcessCollision)
 	{
 		AUnitBase* OtherUnit = Cast<AUnitBase>(Other);
 		if (OtherUnit)
 		{
+			//CollisionManager->RegisterCollision();
 			// Handle collision with another AUnitBase
 			CollisionUnit = OtherUnit;
 			CollisionLocation = GetActorLocation();
@@ -87,16 +92,29 @@ void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other
 	}
 }
 
+
 void AUnitBase::SetCollisionCooldown()
 {
 	// Re-enable collision processing
 	bCanProcessCollision = false;
+	/*
+	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(GetRootComponent());
+	if (PrimitiveComponent)
+	{
+		PrimitiveComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}*/
 	GetWorld()->GetTimerManager().SetTimer(CollisionCooldownTimer, this, &AUnitBase::ResetCollisionCooldown, CollisionCooldown, false);
 }
 
 void AUnitBase::ResetCollisionCooldown()
 {
 	// Re-enable collision processing
+	/*
+	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(GetRootComponent());
+	if (PrimitiveComponent)
+	{
+		PrimitiveComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	}*/
 	bCanProcessCollision = true;
 }
 
@@ -173,6 +191,7 @@ void AUnitBase::BeginPlay()
 		SetMeshRotationServer();
 	}
 
+	SetCollisionCooldown();
 }
 
 void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const

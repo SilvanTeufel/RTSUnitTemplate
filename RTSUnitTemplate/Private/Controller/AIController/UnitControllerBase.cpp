@@ -23,6 +23,28 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "Widgets/UnitBaseHealthBar.h"
 
+void AUnitControllerBase::DetectAndLoseUnits()
+{
+	// Assuming UnitBase is an accessible variable or parameter
+	 // Replace this with actual reference to UnitBase
+	
+	if (MyUnitBase)
+	{
+		bool SetState = MyUnitBase->GetToggleUnitDetection();
+
+		if(SetState || MyUnitBase->GetUnitState() == UnitData::Patrol || MyUnitBase->GetUnitState() == UnitData::PatrolRandom || MyUnitBase->GetUnitState() == UnitData::PatrolIdle)
+		{
+			DetectUnits(MyUnitBase, 0, true);
+			LoseUnitToChase(MyUnitBase);
+		}
+		else
+		{
+			DetectUnits(MyUnitBase, 0, SetState);
+			LoseUnitToChase(MyUnitBase);
+		}
+	}
+}
+
 AUnitControllerBase::AUnitControllerBase()
 {
 	
@@ -45,8 +67,7 @@ void AUnitControllerBase::BeginPlay()
 			
 			if(MyUnitBase)
 			{
-				MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
-				GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::DelayedFogOfWarLightUpdate);
+				//GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::SetFogOfWarManager);
 			}
 		}
 	}
@@ -69,8 +90,7 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 			
 		if(MyUnitBase)
 		{
-			MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
-			GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::DelayedFogOfWarLightUpdate);
+			//GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::SetFogOfWarManager);
 		}
 	}
 	
@@ -78,11 +98,16 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 
 }
 
-void AUnitControllerBase::DelayedFogOfWarLightUpdate()
+void AUnitControllerBase::SetFogOfWarManager()
 {
 	// Assuming you have access to the PlayerTeamId and SightRange here
 	if(MyUnitBase && ControllerBase)
-	MyUnitBase->UpdateFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
+	{
+		ControllerBase->SetFogManager(MyUnitBase);
+		UE_LOG(LogTemp, Warning, TEXT("SetFogOfWarManager!!!!!!!!!!! %d"), ControllerBase->SelectableTeamId);
+		//MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
+		//MyUnitBase->SetFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
+	}
 }
 
 void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -217,6 +242,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		}
 
 		CheckUnitDetectionTimer(DeltaSeconds);
+
 	
 		switch (UnitBase->UnitState)
 		{
@@ -234,9 +260,10 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			DetectUnits(UnitBase, DeltaSeconds, true);
-			LoseUnitToChase(UnitBase);
-			
+			//DetectUnits(UnitBase, DeltaSeconds, true);
+			//LoseUnitToChase(UnitBase);
+				DetectAndLoseUnits();
+				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -246,8 +273,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolRandom:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-				DetectUnits(UnitBase, DeltaSeconds, true);
-				LoseUnitToChase(UnitBase);
+				//DetectUnits(UnitBase, DeltaSeconds, true);
+				//LoseUnitToChase(UnitBase);
 				/*
 				if(UnitBase->SetNextUnitToChase())
 				{
@@ -255,6 +282,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 					UnitBase->SetUnitState(UnitData::Chase);
 				}
 				*/
+				DetectAndLoseUnits();
+				
 				if(UnitBase->GetUnitState() != UnitData::Chase)
 				{
 					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
@@ -266,6 +295,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolIdle:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
+				DetectAndLoseUnits();
+				
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
@@ -394,7 +425,7 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
@@ -442,6 +473,11 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
+	if(HUDBase)
+	{
+		HUDBase->AllUnits.Remove(UnitBase);
+	}
+	
 	UnitBase->SpawnPickupsArray();
 
 	if (UnitBase->UnitControlTimer >= DespawnTime) {
@@ -511,11 +547,16 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 		return;
 	}
 
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		DetectAndLoseUnits();
+	}
+
 	//if(UnitBase->GetToggleUnitDetection())
 	//{
 		//IsUnitDetected = false;
-		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
-		LoseUnitToChase(UnitBase);
+		//DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		//LoseUnitToChase(UnitBase);
 	//}
 	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
@@ -552,7 +593,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     if (!UnitBase) return;
 	
     // Check for immediate collision with an enemy unit.
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	LoseUnitToChase(UnitBase);
 	
 	
@@ -691,7 +732,7 @@ void AUnitControllerBase::ResetPath(AUnitBase* UnitBase)
 void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase) return;
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);	
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
@@ -769,7 +810,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase) return;
-	DetectUnits(UnitBase, DeltaSeconds, false);
+	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
@@ -814,8 +855,8 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	UnitBase->SetWalkSpeed(0);
 
-	DetectUnits(UnitBase, DeltaSeconds, true);
-	LoseUnitToChase(UnitBase);
+	//DetectUnits(UnitBase, DeltaSeconds, true);
+	//LoseUnitToChase(UnitBase);
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
@@ -922,12 +963,13 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		return;
 	}
 
-	//if(UnitBase->GetToggleUnitDetection())
-	//{
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		DetectAndLoseUnits();
 		//IsUnitDetected = false;
-		DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
-		LoseUnitToChase(UnitBase);
-	//}
+		//DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
+		//LoseUnitToChase(UnitBase);
+	}
 	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{

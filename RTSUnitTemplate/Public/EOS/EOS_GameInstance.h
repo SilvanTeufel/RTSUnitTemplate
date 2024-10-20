@@ -3,16 +3,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/GameInstance.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h" 
+#include "GameInstances/CollisionManager.h"
 #include "EOS_GameInstance.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API UEOS_GameInstance : public UGameInstance
+class RTSUNITTEMPLATE_API UEOS_GameInstance : public UCollisionManager
 {
 	GENERATED_BODY()
 

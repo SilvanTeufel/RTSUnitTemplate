@@ -38,6 +38,15 @@ void AControllerBase::BeginPlay() {
 		ToggleUnitCountDisplay(ShowUnitCount);
 }
 
+void AControllerBase::SetFogManager(AUnitBase* Unit)
+{
+			if (Unit)
+			{
+				Unit->SetVisibility(false, SelectableTeamId);
+				Unit->SetFogOfWarLight(SelectableTeamId, 2000.f);
+			}
+}
+
 void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {
 	if (bEnable)
@@ -123,6 +132,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 	}
 
+	/*
 	TArray<FPathPoint> PathPoints;
 
 	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
@@ -132,6 +142,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 			SetRunLocationUseDijkstraForAI(HUDBase->EnemyUnitBases[i]->DijkstraEndPoint, HUDBase->EnemyUnitBases[i]->DijkstraStartPoint, HUDBase->EnemyUnitBases, PathPoints, i);
 			HUDBase->EnemyUnitBases[i]->DijkstraSetPath = false;
 		}
+	*/
 }
 
 void AControllerBase::ShiftPressed()

@@ -152,6 +152,13 @@ void AHUDBase::BeginPlay()
 	Super::BeginPlay();
 	
 	AddUnitsToArray();
+
+	FogManager = Cast<AFogOfWarManager>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWarManager::StaticClass()));
+
+	if (!FogManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AFogOfWarManager not found in the world! Ensure that an instance of AFogOfWarManager is placed in the level if you need it."));
+	}
 }
 
 void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -349,6 +356,8 @@ void AHUDBase::DetectAllUnits()
 {
 	for (int32 x = 0; x < AllUnits.Num(); x++)
 	{
+
+		
 		AUnitBase* DetectingUnit = Cast<AUnitBase>(AllUnits[x]);
 		if(!DetectingUnit) return;
 		
@@ -388,21 +397,21 @@ void AHUDBase::DetectAllUnits()
 
 void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
 {
-
 	
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
 	
+	
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-	
-		//DetectingUnit->Attributes->Range
+		
 
 		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
 		{
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-
+			
+			/*
 			if (Distance <= LoseSight && 
 				(Unit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
 				Unit->GetUnitState() != UnitData::Dead &&
@@ -418,18 +427,20 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 			{
 				Unit->IsInFog = false;
 			}
-				
-			if (Distance <= Sight)
+				*/
+			if (Distance <= Sight &&
+				Unit->GetUnitState() != UnitData::Dead &&
+				DetectingUnit->GetUnitState() != UnitData::Dead)
 			{
-				if((DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
-					Unit->GetUnitState() != UnitData::Dead &&
-					DetectingUnit->GetUnitState() != UnitData::Dead)
+				/*
+				if(DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0)
 				{
 					Unit->IsInFog = false;
 					DetectingUnit->IsInFog = false;
 					Unit->SetVisibility(true, PlayerTeamId);
+					DetectingUnit->SetVisibility(true, PlayerTeamId);
 				}
-				
+				*/
 				DetectedUnits.Emplace(Unit);
 			}
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
@@ -439,13 +450,11 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 
 			if (Distance <= Sight)
 				DetectedUnits.Emplace(Unit);
-			else
-			{
-				//Unit->SetVisibility(false, PlayerTeamId);
-			}
+
 		}
 	}
 
+	/*
 	if(DetectingUnit->IsInFog)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("DetectedFromUnitsCount is 0!"));
@@ -454,6 +463,8 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 	{
 		//DetectingUnit->SetVisibility(true, PlayerTeamId);
 	}
+*/
+	//if(FogManager) FogManager->SwapStoreToUnits();
 	
 }
 

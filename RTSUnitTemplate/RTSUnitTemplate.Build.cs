@@ -30,5 +30,7 @@ public class RTSUnitTemplate : ModuleRules
 		// Widget dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "UMG", "MoviePlayer" });
 		
+		// FogOfWar dependencies
+		// PublicDependencyModuleNames.AddRange(new string[] {  "RHI", "RenderCore", "Renderer" });
 	}
 }

@@ -72,13 +72,13 @@ void AResourceGameMode::GatherBases()
 
 void AResourceGameMode::AddBaseToGroup(ABuildingBase* BuildingBase)
 {
-	if(BuildingBase->IsBase && BuildingBase->GetUnitState() != UnitData::Dead)
+	if(BuildingBase && BuildingBase->IsBase && BuildingBase->GetUnitState() != UnitData::Dead)
 		WorkAreaGroups.BaseAreas.Add(BuildingBase);
 }
 
 void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)
 {
-		if(BuildingBase->IsBase && BuildingBase->GetUnitState() == UnitData::Dead)
+		if(BuildingBase && BuildingBase->IsBase && BuildingBase->GetUnitState() == UnitData::Dead)
 			WorkAreaGroups.BaseAreas.Remove(BuildingBase);
 }
 

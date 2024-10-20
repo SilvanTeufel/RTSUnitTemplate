@@ -34,7 +34,10 @@ public:
 	// Function called by timer to display FPS
 	void DisplayUnitCount();
 
-	UFUNCTION(BlueprintCallable, Category="Display")
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetFogManager(AUnitBase* Unit);
+	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ToggleUnitCountDisplay(bool bEnable);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)

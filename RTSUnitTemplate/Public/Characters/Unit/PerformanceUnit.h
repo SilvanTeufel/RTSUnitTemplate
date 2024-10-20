@@ -7,9 +7,11 @@
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
+#include "Actors/FogOfWarManager.h"
 #include "Core/DijkstraMatrix.h"
 #include "Actors/Projectile.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "PerformanceUnit.generated.h"
 
 UCLASS()
@@ -26,19 +28,29 @@ public:
 	
 	virtual void BeginPlay() override;
 
-	// Light component for Fog of War
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FogOfWar")
-	UPointLightComponent* FogOfWarLight; // Or USpotLightComponent if using a spotlight
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="FogOfWar")
+	TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
+	
+	UFUNCTION(BlueprintCallable, Category="FogOfWar")
+	void SpawnFogOfWarManager(FVector Scale);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector FogManagerMultiplier = FVector(0.008, 0.008, 0.0004);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector FogManagerPositionOffset = FVector(0, 0, -250.f);
 	// Function to update light range
-	UFUNCTION(BlueprintCallable, Category = "FogOfWar")
-	void UpdateFogOfWarLight(int PlayerTeamId, float SightRange);
+	UFUNCTION(BlueprintCallable, Category = FogOfWar)
+	void SetFogOfWarLight(int PlayerTeamId, float SightRange);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOnViewport = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool EnableFog = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float VisibilityOffset = 0.0f;
+	float VisibilityOffset = -100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HealthCompCreated = false;
@@ -57,31 +69,42 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
-
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	
+	
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetVisibileTeamId( int PlayerTeamId);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetVisibility(bool IsVisible, int PlayerTeamId);
 	
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckVisibility(int PlayerTeamId);
 
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(Client, Reliable)
+	void ClientSetMeshVisibility(bool bIsVisible);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTick();
 private:
 	
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool IsInViewport(FVector WorldPosition, float Offset);
 
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckHealthBarVisibility();
 
-	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckTimerVisibility();
 
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	AFogOfWarManager* SpawnedFogManager;
+	
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ProjectileBaseClass", Keywords = "TopDownRTSTemplate ProjectileBaseClass"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AProjectile> ProjectileBaseClass;
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "Projectile", Keywords = "RTSUnitTemplate Projectile"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	class AProjectile* Projectile;
 	
 };

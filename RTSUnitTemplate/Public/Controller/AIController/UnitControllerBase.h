@@ -29,15 +29,23 @@ class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
 	GENERATED_BODY()
 
 private:
+
+	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	FVector PendingDestination;
+	
+	//FTimerHandle TimerHandle_DetectAndLoseUnits;
+	//float TimerInterval = 0.25f;
 
 public:
 	AUnitControllerBase();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DetectAndLoseUnits();
+	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* MyUnitBase;
 
@@ -63,7 +71,7 @@ public:
 	
 	virtual FRotator GetControlRotation() const override;
 
-	void DelayedFogOfWarLightUpdate();
+	void SetFogOfWarManager();
 	
 	FOnMoveCompletedDelegate OnMoveCompleted;
 	
@@ -148,7 +156,7 @@ public:
 	float UnitDetectionTimer = 0.0f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float NewDetectionTime = 0.5f;
+	float NewDetectionTime = 3.f;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsUnitDetected = false;

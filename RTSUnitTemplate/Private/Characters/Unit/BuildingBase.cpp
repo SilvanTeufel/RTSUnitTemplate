@@ -19,7 +19,9 @@ void ABuildingBase::BeginPlay()
 	Super::BeginPlay();
 
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	ResourceGameMode->AddBaseToGroup(this);
+
+	if(ResourceGameMode)
+		ResourceGameMode->AddBaseToGroup(this);
 }
 
 void ABuildingBase::Destroyed()
@@ -27,7 +29,9 @@ void ABuildingBase::Destroyed()
 	Super::Destroyed();
 	
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	ResourceGameMode->RemoveBaseFromGroup(this);
+	
+	if(ResourceGameMode)
+		ResourceGameMode->RemoveBaseFromGroup(this);
 }
 
 void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,

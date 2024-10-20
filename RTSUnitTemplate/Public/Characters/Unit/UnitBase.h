@@ -18,7 +18,7 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 
 private:
 	FTimerHandle CollisionCooldownTimer;
-	bool bCanProcessCollision;
+	bool bCanProcessCollision = false;
 	
 public:
 
@@ -46,7 +46,7 @@ public:
 	void ResetCollisionCooldown();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float CollisionCooldown = 2.f;
+	float CollisionCooldown = 3.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CreateHealthWidgetComp();
