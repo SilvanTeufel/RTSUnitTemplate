@@ -43,7 +43,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
-
 	bReplicates = true;
 	
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
@@ -125,8 +124,10 @@ void AUnitBase::CreateHealthWidgetComp()
 	{
 		if (ControllerBase)
 		{
-		
-			if (ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount )
+
+			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+			
+			if (RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount )
 			{
 				return;
 			}
@@ -192,6 +193,7 @@ void AUnitBase::BeginPlay()
 	}
 
 	SetCollisionCooldown();
+
 }
 
 void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -354,7 +356,8 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	{
 		if(HealthBarWidget)
 		{
-			if(ControllerBase && ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount)
+			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+			if(ControllerBase && RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount)
 			{
 				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			}
@@ -364,6 +367,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 			}
 			else if(IsOnViewport)
 			{
+				//if(ControllerBase)SetEnemyVisibility(true, ControllerBase->SelectableTeamId);
 				HealthBarWidget->ResetCollapseTimer();
 				HealthBarWidget->UpdateWidget();
 			}
@@ -385,7 +389,8 @@ void AUnitBase::SetShield_Implementation(float NewShield)
 	{
 		if (HealthBarWidget)
 		{
-			if(ControllerBase && ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > HideHealthBarUnitCount)
+			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+			if(ControllerBase && RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount)
 			{
 				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			}

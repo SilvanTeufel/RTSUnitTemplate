@@ -9,6 +9,7 @@
 #include "Core/UnitData.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameplayEffect.h"
+#include "Characters/Unit/SpeakingUnit.h"
 #include "Developer/GraphColor/Private/appconst.h"
 #include "RTSGameModeBase.generated.h"
 
@@ -99,6 +100,12 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	int AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int AssignNewHighestIndex(AUnitBase* Unit);
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 HighestUnitIndex = 0;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -115,4 +122,13 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 HighestSquadId = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <AActor*> AllUnits;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <AWorkingUnitBase*> WorkingUnits;
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <ASpeakingUnit*> SpeakingUnits;
 };

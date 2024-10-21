@@ -5,8 +5,9 @@
 #include "Math/UnrealMathUtility.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Algo/Reverse.h"
+#include "GameModes/RTSGameModeBase.h"
 
-         
+
 void APathProviderHUD::BeginPlay()
 {
 	Super::BeginPlay();
@@ -100,9 +101,11 @@ void APathProviderHUD::Tick(float DeltaSeconds)
     	
 	//MoveUnitsThroughWayPoints(FriendlyUnits);
 	//IsSpeakingUnitClose(FriendlyUnits, SpeakingUnits);
+
+
 	if(!DisablePathFindingOnEnemy)PatrolUnitsThroughWayPoints(EnemyUnitBases);
 	if(!DisablePathFindingOnEnemy)SetNextDijkstra(EnemyUnitBases, DeltaSeconds);
-
+	
 }
 
 
@@ -193,6 +196,10 @@ void APathProviderHUD::SetDijkstraWithClosestZDistance(AUnitBase* UnitBase, floa
 
 TArray<FPathMatrixRow> APathProviderHUD::CreatePathMatrix(int ColCount, int RowCount, float Delta, FVector Offset)
 {
+	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	
+	
 	TArray<FPathMatrixRow> MyPathMatrix;
 	TArray<FPathPoint> PathPointsA;
 	int NextID = 2;
@@ -237,10 +244,11 @@ TArray<FPathMatrixRow> APathProviderHUD::CreatePathMatrix(int ColCount, int RowC
 			float Distance = sqrt((PathPointsA[j].Point.X-PathPointsB[i].Point.X)*(PathPointsA[j].Point.X-PathPointsB[i].Point.X)+(PathPointsA[j].Point.Y-PathPointsB[i].Point.Y)*(PathPointsA[j].Point.Y-PathPointsB[i].Point.Y));
 			FPathMatrixRow Row = {PathPointsB[i].Id, PathPointsB[i].Point, PathPointsA[j].Id,  PathPointsA[j].Point, Distance, false};
 			FHitResult Hit;
-
-			for(int k = 0; k < AllUnits.Num(); k++)
+			
+			if(RTSGameMode)
+			for(int k = 0; k < RTSGameMode->AllUnits.Num(); k++)
 			{
-				QueryParams.AddIgnoredActor(AllUnits[k]);
+				QueryParams.AddIgnoredActor(RTSGameMode->AllUnits[k]);
 			}
 			
 			GetWorld()->LineTraceSingleByChannel(Hit, Row.Point_A, Row.Point_B, TraceChannelProperty, QueryParams);

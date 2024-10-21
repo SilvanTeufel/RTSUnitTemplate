@@ -11,6 +11,7 @@
 #include "Components/WidgetSwitcher.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
@@ -19,10 +20,6 @@ void AHUDBase::DrawHUD()
 {
 	
 	if (bSelectFriendly) {
-	
-		for (int32 i = 0; i < FriendlyUnits.Num(); i++) {
-			//AllFriendlyUnits[i]->AttackCapsule->Scale
-		}
 	
 		DeselectAllUnits();
 		
@@ -140,8 +137,13 @@ void AHUDBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	MoveUnitsThroughWayPoints(FriendlyUnits);
-	IsSpeakingUnitClose(FriendlyUnits, SpeakingUnits);
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	if(GameMode)
+	{
+		MoveUnitsThroughWayPoints(FriendlyUnits);
+		IsSpeakingUnitClose(FriendlyUnits, GameMode->SpeakingUnits);
+	}
 
 }
 
@@ -152,27 +154,23 @@ void AHUDBase::BeginPlay()
 	Super::BeginPlay();
 	
 	AddUnitsToArray();
-
-	FogManager = Cast<AFogOfWarManager>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWarManager::StaticClass()));
-
-	if (!FogManager)
-	{
-		UE_LOG(LogTemp, Error, TEXT("AFogOfWarManager not found in the world! Ensure that an instance of AFogOfWarManager is placed in the level if you need it."));
-	}
 }
 
 void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AHUDBase, AllUnits);
 }
 
 void AHUDBase::SelectUnitsFromSameSquad(AUnitBase* SelectedUnit)
 {
-	if(bSelectFullSquad)
-	for (int32 i = 0; i < AllUnits.Num(); i++)
+	if(!bSelectFullSquad) return;
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	if(GameMode)
+	for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 	{
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
 		if(Unit && Unit->SquadId == SelectedUnit->SquadId && Unit->SquadId != 0)
 		{
 			Unit->SetSelected();
@@ -183,37 +181,21 @@ void AHUDBase::SelectUnitsFromSameSquad(AUnitBase* SelectedUnit)
 
 void AHUDBase::AddUnitsToArray()
 {
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
-	for(int i = 0; i < AllUnits.Num(); i++)
-	{
-		HighestUnitIndex++;
 	
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		Unit->SetUnitIndex(HighestUnitIndex);
-		
-		//UE_LOG(LogTemp, Warning, TEXT("AddUnitsToArray UnitBase-INDEX!!!!!!!!!!!!!!!!!!!! %d"), Unit->UnitIndex);
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	if(GameMode)
+	for(int i = 0; i < GameMode->AllUnits.Num(); i++)
+	{
+
+		AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
 		
 		if(Unit->TeamId)
 			FriendlyUnits.Add(Unit);
 		if(!Unit->TeamId)
 			EnemyUnitBases.Add(Unit);
-
-		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(AllUnits[i]);
-		if(SpeakingUnit)
-			SpeakingUnits.Add(SpeakingUnit);
-
-		AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(AllUnits[i]);
-		if(WorkingUnit)
-		WorkingUnits.Add(WorkingUnit);
 	}
-}
-
-int AHUDBase::AssignNewHighestIndex(AUnitBase* Unit)
-{
-	HighestUnitIndex++;
-	Unit->SetUnitIndex(HighestUnitIndex);
-	return HighestUnitIndex;
-	//UE_LOG(LogTemp, Warning, TEXT("Assigned UnitINDEX! %d"), Unit->UnitIndex);
+	
 }
 
 
@@ -352,95 +334,27 @@ void AHUDBase::DeselectAllUnits()
 		SelectedUnits.Empty();
 }
 
-void AHUDBase::DetectAllUnits()
-{
-	for (int32 x = 0; x < AllUnits.Num(); x++)
-	{
-
-		
-		AUnitBase* DetectingUnit = Cast<AUnitBase>(AllUnits[x]);
-		if(!DetectingUnit) return;
-		
-		AUnitControllerBase* UnitControllerBase = Cast<AUnitControllerBase>(DetectingUnit->GetController());
-		if(!UnitControllerBase) return;
-		
-		float Sight = UnitControllerBase->SightRadius;
-		bool DetectFriendlyUnits = UnitControllerBase->DetectFriendlyUnits;
-		TArray<AActor*> DetectedUnits;
-		for (int32 i = 0; i < AllUnits.Num(); i++)
-		{
-			AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-			//DetectingUnit->Attributes->Range
-	
-			if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
-			{
-
-				float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-
-				if (Distance <= Sight)
-					DetectedUnits.Emplace(Unit);
-			}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
-			{
-
-				float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-
-				if (Distance <= Sight)
-					DetectedUnits.Emplace(Unit);
-			}
-		}
-		
-		UnitControllerBase->OnUnitDetected(DetectedUnits, true);
-		
-	}
-}
-
-
 void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
 {
-	
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	
-	
-	for (int32 i = 0; i < AllUnits.Num(); i++)
+	for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 	{
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
 		
 
 		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
 		{
 			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 			
-			/*
-			if (Distance <= LoseSight && 
-				(Unit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
-				Unit->GetUnitState() != UnitData::Dead &&
-				DetectingUnit->GetUnitState() != UnitData::Dead)
-			{
-				DetectingUnit->IsInFog = false;
-			}
-
-			if (Distance <= LoseSight &&
-			(DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0) &&
-			Unit->GetUnitState() != UnitData::Dead &&
-			DetectingUnit->GetUnitState() != UnitData::Dead)
-			{
-				Unit->IsInFog = false;
-			}
-				*/
 			if (Distance <= Sight &&
 				Unit->GetUnitState() != UnitData::Dead &&
 				DetectingUnit->GetUnitState() != UnitData::Dead)
 			{
-				/*
-				if(DetectingUnit->TeamId == PlayerTeamId || PlayerTeamId == 0)
-				{
-					Unit->IsInFog = false;
-					DetectingUnit->IsInFog = false;
-					Unit->SetVisibility(true, PlayerTeamId);
-					DetectingUnit->SetVisibility(true, PlayerTeamId);
-				}
-				*/
+
 				DetectedUnits.Emplace(Unit);
 			}
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
@@ -453,18 +367,6 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 
 		}
 	}
-
-	/*
-	if(DetectingUnit->IsInFog)
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("DetectedFromUnitsCount is 0!"));
-		DetectingUnit->SetVisibility(false, PlayerTeamId);
-	}else
-	{
-		//DetectingUnit->SetVisibility(true, PlayerTeamId);
-	}
-*/
-	//if(FogManager) FogManager->SwapStoreToUnits();
 	
 }
 

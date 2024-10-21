@@ -12,6 +12,7 @@
 #include "NavigationSystem.h"
 #include "Engine.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "NavMesh/NavMeshPath.h"
 #include "Widgets/UnitBaseHealthBar.h"
 
@@ -50,8 +51,8 @@ public:
 	AUnitBase* MyUnitBase;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	AHUDBase* HUDBase;
-
+	ARTSGameModeBase* RTSGameMode;
+	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AControllerBase* ControllerBase;
 
@@ -70,8 +71,6 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual FRotator GetControlRotation() const override;
-
-	void SetFogOfWarManager();
 	
 	FOnMoveCompletedDelegate OnMoveCompleted;
 	
@@ -88,7 +87,7 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "KillUnitBase", Keywords = "RTSUnitTemplate KillUnitBase"), Category = RTSUnitTemplate)
 		void KillUnitBase(AUnitBase* UnitBase);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightRadius", Keywords = "RTSUnitTemplate SightRadius"), Category = RTSUnitTemplate)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightRadius", Keywords = "RTSUnitTemplate SightRadius"), Category = RTSUnitTemplate)
 		float SightRadius = 1500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightAge", Keywords = "RTSUnitTemplate SightAge"), Category = RTSUnitTemplate)
@@ -163,9 +162,12 @@ public:
 
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
 	void CheckUnitDetectionTimer(float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
+		void DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId);
 	
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
-		void DetectUnits(AUnitBase* UnitBase, float DeltaSeconds, bool SetState);
+		void DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Patrol", Keywords = "RTSUnitTemplate Patrol"), Category = RTSUnitTemplate)
 		void Patrol(AUnitBase* UnitBase, float DeltaSeconds);

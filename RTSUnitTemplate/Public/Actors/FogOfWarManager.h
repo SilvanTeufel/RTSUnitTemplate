@@ -32,10 +32,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int PlayerTeamId;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int TeamId;
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AHUD* HUDBase;
-
-			
+	
 	// Handle collision events to reveal units
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);

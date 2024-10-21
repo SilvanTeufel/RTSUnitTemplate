@@ -5,6 +5,7 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Misc/Paths.h" // Include for FPaths
 #include "Fonts/SlateFontInfo.h" // Include for FSlateFontInfo
+#include "GameModes/RTSGameModeBase.h"
 
 void UDamageIndicator::NativeConstruct()
 {
@@ -32,10 +33,12 @@ void UDamageIndicator::UpdateIndicator()
 
 	
 	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	
 	if (ControllerBase)
 	{
 		
-		if (ControllerBase->HUDBase && ControllerBase->HUDBase->AllUnits.Num() > MaxUnitCount )
+		if (RTSGameMode && RTSGameMode->AllUnits.Num() > MaxUnitCount )
 		{
 			SetVisibility(ESlateVisibility::Collapsed);
 			return;

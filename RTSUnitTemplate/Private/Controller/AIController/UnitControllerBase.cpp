@@ -19,6 +19,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "NavigationSystem.h"
+#include "GameModes/RTSGameModeBase.h"
 
 #include "Navigation/PathFollowingComponent.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -27,19 +28,21 @@ void AUnitControllerBase::DetectAndLoseUnits()
 {
 	// Assuming UnitBase is an accessible variable or parameter
 	 // Replace this with actual reference to UnitBase
-	
+	//UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
 	if (MyUnitBase)
 	{
 		bool SetState = MyUnitBase->GetToggleUnitDetection();
 
 		if(SetState || MyUnitBase->GetUnitState() == UnitData::Patrol || MyUnitBase->GetUnitState() == UnitData::PatrolRandom || MyUnitBase->GetUnitState() == UnitData::PatrolIdle)
 		{
-			DetectUnits(MyUnitBase, 0, true);
+			//UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
+			DetectUnitsAndSetState(MyUnitBase, 0, true);
 			LoseUnitToChase(MyUnitBase);
 		}
 		else
 		{
-			DetectUnits(MyUnitBase, 0, SetState);
+			//UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
+			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 			LoseUnitToChase(MyUnitBase);
 		}
 	}
@@ -55,19 +58,20 @@ AUnitControllerBase::AUnitControllerBase()
 void AUnitControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	if(!ControllerBase)
-	{
-		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
-		if(ControllerBase)
-		{
-			HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
 
-			MyUnitBase = Cast<AUnitBase>(GetPawn());
+	if(MyUnitBase)
+	{
+		if(!ControllerBase)
+		{
+			ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 			
-			if(MyUnitBase)
+			if(ControllerBase)
 			{
-				//GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::SetFogOfWarManager);
+				MyUnitBase = Cast<AUnitBase>(GetPawn());
+				RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+				
+				if(MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
+			
 			}
 		}
 	}
@@ -78,41 +82,34 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 	Super::OnPossess(PawN);
 
 	MyUnitBase = Cast<AUnitBase>(GetPawn());
-	
-	if(!ControllerBase)
-	{
-		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
-	}
 
-	if(ControllerBase)
+	if(MyUnitBase)
 	{
-		HUDBase = Cast<AHUDBase>(ControllerBase->GetHUD());
-			
-		if(MyUnitBase)
+		SightRadius = MyUnitBase->SightRadius;
+		if(!ControllerBase)
 		{
-			//GetWorldTimerManager().SetTimerForNextTick(this, &AUnitControllerBase::SetFogOfWarManager);
+			ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+		
+			if(ControllerBase)
+			{
+				RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+				
+				if(MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
+			
+			}
 		}
 	}
-	
-	if(MyUnitBase && MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
 
 }
 
-void AUnitControllerBase::SetFogOfWarManager()
-{
-	// Assuming you have access to the PlayerTeamId and SightRange here
-	if(MyUnitBase && ControllerBase)
-	{
-		ControllerBase->SetFogManager(MyUnitBase);
-		UE_LOG(LogTemp, Warning, TEXT("SetFogOfWarManager!!!!!!!!!!! %d"), ControllerBase->SelectableTeamId);
-		//MyUnitBase->SetVisibility(false, ControllerBase->SelectableTeamId);
-		//MyUnitBase->SetFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
-	}
-}
 
 void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AUnitControllerBase, UnitDetectionTimer);
+	DOREPLIFETIME(AUnitControllerBase, NewDetectionTime);
+	DOREPLIFETIME(AUnitControllerBase, IsUnitDetected);
+
 }
 
 
@@ -124,7 +121,7 @@ void AUnitControllerBase::Tick(float DeltaSeconds)
 	
 	if(ControllerBase && MyUnitBase)
 	{
-		MyUnitBase->CheckVisibility(ControllerBase->SelectableTeamId);
+		//MyUnitBase->CheckVisibility(ControllerBase->SelectableTeamId);
 		//MyUnitBase->UpdateFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
 	}
 }
@@ -473,10 +470,12 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
-	if(HUDBase)
+	
+	if(RTSGameMode)
 	{
-		HUDBase->AllUnits.Remove(UnitBase);
+		RTSGameMode->AllUnits.Remove(UnitBase);
 	}
+
 	
 	UnitBase->SpawnPickupsArray();
 
@@ -485,18 +484,55 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 }
 
-void AUnitControllerBase::DetectUnits(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
+
+void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId)
 {
+	//TArray<int> DetectedCount;
+	DetectingUnit->IsInFog = true;
+	
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		
+
+		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
+		{
+			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+			
+			if (Distance <= Sight &&
+				Unit->GetUnitState() != UnitData::Dead &&
+				DetectingUnit->GetUnitState() != UnitData::Dead)
+			{
+
+				DetectedUnits.Emplace(Unit);
+			}
+		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
+		{
+
+			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+
+			if (Distance <= Sight)
+				DetectedUnits.Emplace(Unit);
+
+		}
+	}
+	
+}
+
+
+void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
+{
+
 	if(IsUnitDetected) return;
 	
-	if (HUDBase && ControllerBase)
+	if (ControllerBase)
 	{
+	
 		TArray<AActor*> DetectedUnits;
-		
-		HUDBase->DetectUnit(UnitBase, DetectedUnits, SightRadius, LoseSightRadius, DetectFriendlyUnits, ControllerBase->SelectableTeamId);
+		DetectUnitsFromGameMode(UnitBase, DetectedUnits, SightRadius, LoseSightRadius, DetectFriendlyUnits,ControllerBase->SelectableTeamId);
 		OnUnitDetected(DetectedUnits, SetState);
 		IsUnitDetected = true;
-		//UE_LOG(LogTemp, Warning, TEXT("DetectUnits!"));
+
 	}
 
 }

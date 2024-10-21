@@ -14,47 +14,18 @@
 
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
-	/*
-	// Initialize FogOfWarLight (PointLight or SpotLight)
-	//FogOfWarLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FogOfWarLight"));
-	FogOfWarLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("FogOfWarLight"));
-	// Attach the light component to the root or another component
-	FogOfWarLight->SetupAttachment(RootComponent);
 
-	// Set initial light properties
-	FogOfWarLight->Intensity = 2.f;             // Adjust intensity as needed
-	FogOfWarLight->bUseInverseSquaredFalloff = false; // Avoid using inverse squared falloff for performance
-	FogOfWarLight->LightFalloffExponent = 0.5f;     // Exponent for smoother falloff (optional)
-	FogOfWarLight->AttenuationRadius = 500.f;      // Default range (will update this to SightRange later)
-	FogOfWarLight->CastShadows = false;
-
-	// Rotate the light to point downwards at the character
-	FogOfWarLight->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f)); // Point directly down
-	*/
-	/*
-	// Load the light function material
-	static ConstructorHelpers::FObjectFinder<UMaterial> LightFunctionMaterialFinder(*FogMaterial);
-	if (LightFunctionMaterialFinder.Succeeded())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("LightFunctionMaterialFinder Found!"));
-	
-		UMaterialInterface* FogOfWarLightFunctionMaterial = LightFunctionMaterialFinder.Object;
-
-		// Create a dynamic material instance
-		FogOfWarLightFunctionMaterialInstance = UMaterialInstanceDynamic::Create(FogOfWarLightFunctionMaterial, this);
-
-		//FogOfWarLightFunctionMaterialInstance->SetScalarParameterValue(FName("MaxBrightness"), 0.5f);
-		// Assign the material instance to the light function
-		FogOfWarLight->LightFunctionMaterial = FogOfWarLightFunctionMaterialInstance;
-	}*/
 }
 
 void APerformanceUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	//VisibilityTick();
-	//CheckHealthBarVisibility();
-	//CheckTimerVisibility();
+	CheckViewport();
+	CheckTeamVisibility();
+	VisibilityTick();
+	CheckHealthBarVisibility();
+	CheckTimerVisibility();
+	
 }
 
 void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -70,192 +41,179 @@ void APerformanceUnit::BeginPlay()
 	Super::BeginPlay();
 	
 
-	if(!EnableFog) return;
-
 	
-	AControllerBase* ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 
+	//SetCharacterVisibility(false);
+	SpawnFogOfWarManager();
 
-	if(ControllerBase)
-	{
-		//SetVisibility(false, ControllerBase->SelectableTeamId);
-		AUnitControllerBase* UnitController = Cast<AUnitControllerBase>(GetController());
-		
-		if(UnitController)
-		{
-			//SetFogOfWarLight(ControllerBase->SelectableTeamId, UnitController->SightRadius);
-			//SetVisibileTeamId(ControllerBase->SelectableTeamId);
-			ClientSetMeshVisibility(true); 
-		}
-	}
-	
+	//FTimerHandle UnusedHandle;
+	//GetWorldTimerManager().SetTimer(UnusedHandle, this, &APerformanceUnit::SetInvisibileIfNoOverlap, 1.1f, false);
 }
 
-void APerformanceUnit::SpawnFogOfWarManager(FVector Scale)
+void APerformanceUnit::Destroyed()
 {
+	Super::Destroyed();
+
+	if (SpawnedFogManager)
+	{
+		// Detach the FogManager from this unit
+		SpawnedFogManager->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+		// Destroy the FogManager
+		SpawnedFogManager->Destroy();
+		SpawnedFogManager = nullptr;
+	}
+}
+
+void APerformanceUnit::SpawnFogOfWarManager()
+{
+	if(SpawnedFogManager) return;
+	
 	if (FogOfWarManagerClass)
 	{
-		// Get the world reference
-		UWorld* World = GetWorld();
-		if (World)
+		if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 		{
-			// Calculate the spawn location by applying the offset to the current actor location
-			FVector SpawnLocation = GetActorLocation();
-
-			// Spawn the FogOfWarManager at the new location
-			SpawnedFogManager = World->SpawnActor<AFogOfWarManager>(FogOfWarManagerClass, SpawnLocation, FRotator::ZeroRotator);
-
-			// Check if the actor was spawned successfully
-			if (SpawnedFogManager && SpawnedFogManager->Mesh)
+			AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+			// Get the world reference
+			if(ControllerBase && ControllerBase->SelectableTeamId == TeamId)
 			{
-				// Scale the Mesh component of the spawned FogOfWarManager
-				SpawnedFogManager->Mesh->SetWorldScale3D(Scale*FogManagerMultiplier);
-				
-				SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
-				SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
+				UWorld* World = GetWorld();
+				if (World)
+				{
+					// Calculate the spawn location by applying the offset to the current actor location
+					FVector SpawnLocation = GetActorLocation();
 
-				// Bind overlap events using the appropriate class and instance
-				SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
-				SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
-			}
-		}
-	}
-}
-
-void APerformanceUnit::SetFogOfWarLight(int PlayerTeamId, float SightRange)
-{
-	bool IsFriendly = PlayerTeamId == TeamId;
-
-	if (IsFriendly)
-	{
-		SpawnFogOfWarManager(FVector(SightRange, SightRange, 1.f));
-	}
-}
-
-void APerformanceUnit::SetVisibileTeamId(int PlayerTeamId)
-{
-UE_LOG(LogTemp, Warning, TEXT("SetVisibilityTeamId! PlayerTeamId: %d"), PlayerTeamId);
-	bool IsFriendly = PlayerTeamId == TeamId;
-	
-	if( IsFriendly || !IsFriendly)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
-		USkeletalMeshComponent* SkelMesh = GetMesh();
-	
-		if(SkelMesh)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("Disabled Mesh!"));
-			UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
-			SkelMesh->SetVisibility(true);
-			SkelMesh->bPauseAnims = true;
-		}
-	}
-}
-
-void APerformanceUnit::SetVisibility(bool IsVisible, int PlayerTeamId)
-{
-	//UE_LOG(LogTemp, Warning, TEXT("Calle SetVisibility! %d"), IsVisible);
-	//UE_LOG(LogTemp, Warning, TEXT("TeamId! %d"), TeamId);
-	//UE_LOG(LogTemp, Warning, TEXT("PlayerTeamId! %d"), PlayerTeamId);
-	bool IsFriendly = PlayerTeamId == TeamId;
-	UE_LOG(LogTemp, Warning, TEXT("TeamId! %d"), TeamId);
-	UE_LOG(LogTemp, Warning, TEXT("PlayerTeamId! %d"), PlayerTeamId);
-	if (HasAuthority())
-	{
-		if (!IsOnViewport && IsInViewport(GetActorLocation(), VisibilityOffset) && IsVisible && !IsFriendly)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Set Visible!"));
-			USkeletalMeshComponent* SkelMesh = GetMesh();
-			IsOnViewport = true;
-			if(SkelMesh)
-			{
-				SkelMesh->SetVisibility(true);
-				SkelMesh->bPauseAnims = false;
-	
-			}
-		}
-		else if(IsOnViewport && !IsVisible && !IsFriendly)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Set Invisible!"));
-			USkeletalMeshComponent* SkelMesh = GetMesh();
-			IsOnViewport = false;
-			if(SkelMesh)
-			{
-				//UE_LOG(LogTemp, Warning, TEXT("Disabled Mesh!"));
-				SkelMesh->SetVisibility(false);
-				SkelMesh->bPauseAnims = true;
-			}
-		}
-	}else
-	{
-		// Client-specific visibility (only executed on clients)
-		if (IsFriendly)
-		{
-			//ClientSetMeshVisibility(true);  // Call client RPC to set visibility
-		}
-		else
-		{
-			//ClientSetMeshVisibility(false);  // Call client RPC to set visibility
-		}
+					// Spawn the FogOfWarManager at the new location
+					SpawnedFogManager = World->SpawnActor<AFogOfWarManager>(FogOfWarManagerClass, SpawnLocation, FRotator::ZeroRotator);
+					// Check if the actor was spawned successfully
+					if (SpawnedFogManager)
+					{
+						SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
+					}
 		
+					if (SpawnedFogManager && SpawnedFogManager->Mesh)
+					{
+						// Scale the Mesh component of the spawned FogOfWarManager
+			
+							SpawnedFogManager->TeamId = TeamId;
+							SpawnedFogManager->PlayerTeamId = ControllerBase->SelectableTeamId;
+							SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
+							SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
+							// Bind overlap events using the appropriate class and instance
+							SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
+							SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
+							//SpawnedFogManager->Mesh->bHiddenInGame = true;
+						
+					}
+				}
+			}
+		}
 	}
 }
 
-void APerformanceUnit::ClientSetMeshVisibility_Implementation(bool bIsVisible)
+void APerformanceUnit::SetInvisibileIfNoOverlap()
 {
-	USkeletalMeshComponent* SkelMesh = GetMesh();
-	if (SkelMesh)
+	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Client: Setting mesh visibility to %s."), bIsVisible ? TEXT("true") : TEXT("false"));
-		SkelMesh->SetVisibility(bIsVisible);
+		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+
+		if(!ControllerBase) return;
+		
+		if(!IsOverlappingFogOfWarManager(ControllerBase->SelectableTeamId))
+			SetEnemyVisibility(false, ControllerBase->SelectableTeamId);
 	}
 }
+
+bool APerformanceUnit::IsOverlappingFogOfWarManager(int PlayerTeamId)
+{
+	TArray<AActor*> OverlappingActors;
+	GetOverlappingActors(OverlappingActors, AFogOfWarManager::StaticClass());
+
+	for (AActor* Actor : OverlappingActors)
+	{
+		AFogOfWarManager* FogManager = Cast<AFogOfWarManager>(Actor);
+		if (FogManager && FogManager->TeamId != PlayerTeamId)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("!!!!!YESSSSSSSSSSSSSS Overlapped with FOG!!!!"));
+			return true;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("!!!!!NOOOOOOOOOOOOOOOOO Overlapped with FOG!!!!"));
+	return false;
+}
+
+
+void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
+{
+
+	bool IsFriendly = PlayerTeamId == TeamId;
+
+
+		if (IsVisible && !IsFriendly)
+		{
+			IsVisibileEnemy = true;
+			SetCharacterVisibility(true);
+		}
+		else if(!IsVisible && !IsFriendly)
+		{
+			IsVisibileEnemy = false;
+			SetCharacterVisibility(false);
+		}
+
+}
+
+void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
+{
+
+		USkeletalMeshComponent* SkelMesh = GetMesh();
+		if (SkelMesh)
+		{
+			SkelMesh->SetVisibility(desiredVisibility, true);
+			SkelMesh->bPauseAnims = !desiredVisibility;
+			CurrentVisibility = desiredVisibility;
+		}
+}
+
 
 void APerformanceUnit::VisibilityTick()
 {
-	if(EnableFog) return;
 	
-	USkeletalMeshComponent* SkelMesh = GetMesh();
+	if (IsMyTeam)
+	{
+		SetCharacterVisibility(IsOnViewport);
+	}else
+	{
+		if(IsOnViewport)SetCharacterVisibility(IsVisibileEnemy);
+		else SetCharacterVisibility(false);
+	}
+
+}
+
+void APerformanceUnit::CheckViewport()
+{
 	if (IsInViewport(GetActorLocation(), VisibilityOffset))
 	{
-		if(SkelMesh)
-		{
-			SkelMesh->SetVisibility(true);
-			SkelMesh->bPauseAnims = false;
-		}
+		IsOnViewport = true;
 	}
 	else
 	{
-		if(SkelMesh)
-		{
-			SkelMesh->SetVisibility(false);
-			SkelMesh->bPauseAnims = true;
-		}
+		IsOnViewport = false;
 	}
 }
 
-void APerformanceUnit::CheckVisibility(int PlayerTeamId)
+void APerformanceUnit::CheckTeamVisibility()
 {
-
-
-	if (IsInViewport(GetActorLocation(), VisibilityOffset) && PlayerTeamId == TeamId)
+	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
-		USkeletalMeshComponent* SkelMesh = GetMesh();
-		IsOnViewport = true;
-		if(SkelMesh)
+		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+		if(ControllerBase->SelectableTeamId == TeamId)
 		{
-			SkelMesh->SetVisibility(true);
-			SkelMesh->bPauseAnims = false;
+			IsMyTeam = true;
 		}
-	}
-	else if(PlayerTeamId == TeamId)
-	{
-		USkeletalMeshComponent* SkelMesh = GetMesh();
-		IsOnViewport = false;
-		if(SkelMesh)
+		else
 		{
-			SkelMesh->SetVisibility(false);
-			SkelMesh->bPauseAnims = true;
+			IsMyTeam = false;
 		}
 	}
 }

@@ -10,6 +10,7 @@
 #include "Actors/EffectArea.h"
 #include "Actors/UnitSpawnPlatform.h"
 #include "EOS/EOS_PlayerController.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "ControllerBase.generated.h"
 
 /**
@@ -33,9 +34,6 @@ public:
 
 	// Function called by timer to display FPS
 	void DisplayUnitCount();
-
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SetFogManager(AUnitBase* Unit);
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ToggleUnitCountDisplay(bool bEnable);
@@ -43,6 +41,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	ARTSGameModeBase* RTSGameMode;
+	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ACameraBase* CameraBase;
 
@@ -228,5 +229,6 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 		float RelocateWaypointZOffset = 30.f;
+	
 };
 

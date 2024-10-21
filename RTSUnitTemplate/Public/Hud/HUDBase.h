@@ -41,15 +41,15 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SelectUnitsFromSameSquad(AUnitBase* SelectedUnit);
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <AUnitBase*> FriendlyUnits;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <AUnitBase*> EnemyUnitBases;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void AddUnitsToArray();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		int AssignNewHighestIndex(AUnitBase* Unit);
-	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		int32 HighestUnitIndex = 0;
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "bSelectFriendly", Keywords = "TopDownRTSTemplate bSelectFriendly"), Category = TopDownRTSTemplate)
 		bool bSelectFriendly = false;
@@ -75,24 +75,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedEnemyUnits", Keywords = "RTSUnitTemplate SelectedEnemyUnits"), Category = RTSUnitTemplate)
 	    TArray <AUnitBase*> SelectedUnits;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "FriendlyUnits", Keywords = "RTSUnitTemplate FriendlyUnits"), Category = RTSUnitTemplate)
-		TArray <AUnitBase*> FriendlyUnits;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "AllUnits", Keywords = "RTSUnitTemplate AllUnits"), Category = RTSUnitTemplate)
-		TArray <AActor*> AllUnits;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		TArray <AUnitBase*> EnemyUnitBases;
-
-	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	//	TArray <AUnitBase*> AllUnitBases;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		TArray <AWorkingUnitBase*> WorkingUnits;
-	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SpeakingUnits", Keywords = "RTSUnitTemplate SpeakingUnits"), Category = RTSUnitTemplate)
-		TArray <ASpeakingUnit*> SpeakingUnits;
-
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "IsSpeakingUnitClose", Keywords = "RTSUnitTemplate IsSpeakingUnitClose"), Category = TopDownRTSTemplate)
 		void IsSpeakingUnitClose(TArray <AUnitBase*> Units, TArray <ASpeakingUnit*> SpeakUnits);
 	
@@ -110,10 +92,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = TopDownRTSTemplate)
 		void DeselectAllUnits();
-	
-	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
-		void DetectAllUnits();
-	
+
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 		void DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId);
 	

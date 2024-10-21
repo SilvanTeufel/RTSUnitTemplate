@@ -22,7 +22,25 @@ void ARTSGameModeBase::BeginPlay()
 	FTimerHandle TimerHandle;
 	SetTeamIdsAndWaypoints();
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
+	
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
 
+	for(int i = 0; i < AllUnits.Num(); i++)
+	{
+		HighestUnitIndex++;
+	
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		Unit->SetUnitIndex(HighestUnitIndex);
+		
+
+		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(Unit);
+		if(SpeakingUnit)
+			SpeakingUnits.Add(SpeakingUnit);
+
+		AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(Unit);
+		if(WorkingUnit)
+			WorkingUnits.Add(WorkingUnit);
+	}
 }
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
@@ -275,11 +293,9 @@ bool ARTSGameModeBase::RemoveDeadUnitWithIndexFromDataSet(int32 UnitIndex)
 
 				if(PlayerController)
 				{
-					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-					if(HUD)
-					{
-						HUD->AllUnits.Remove(UnitData.UnitBase);
-					}
+	
+						AllUnits.Remove(UnitData.UnitBase);
+					
 				}
 				
 				UnitSpawnDataSets.RemoveAt(i);
@@ -315,11 +331,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 
 				if(PlayerController)
 				{
-					AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-					if(HUD)
-					{
-						HUD->AllUnits.Remove(UnitData.UnitBase);
-					}
+						AllUnits.Remove(UnitData.UnitBase);
 				}
 				
 				UnitSpawnDataSets.RemoveAt(i);
@@ -579,19 +591,28 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	// Enemyspawn
 }
 
+int ARTSGameModeBase::AssignNewHighestIndex(AUnitBase* Unit)
+{
+	HighestUnitIndex++;
+	Unit->SetUnitIndex(HighestUnitIndex);
+	return HighestUnitIndex;
+	//UE_LOG(LogTemp, Warning, TEXT("Assigned UnitINDEX! %d"), Unit->UnitIndex);
+}
+
 int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 
 	if(PlayerController)
 	{
-		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-		if(HUD)
-		{
-				int Index = HUD->AssignNewHighestIndex(UnitBase);
-				HUD->AllUnits.Add(UnitBase);
+		//AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+		//if(HUD)
+		//{
+				int Index = AssignNewHighestIndex(UnitBase);
+				AllUnits.Add(UnitBase);
+				//HUD->AllUnits.Add(UnitBase);
 				return Index;
-		}
+		//}
 	}
 	return 0;
 }
@@ -602,13 +623,14 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 
 	if(PlayerController)
 	{
-		AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-		if(HUD)
-		{
+		//AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
+		//if(HUD)
+		//{
 			if(Index == INDEX_NONE || !AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[Index])
 			{
-				HUD->AssignNewHighestIndex(UnitBase);
-				HUD->AllUnits.Add(UnitBase);
+				AssignNewHighestIndex(UnitBase);
+				AllUnits.Add(UnitBase);
+		
 			}else
 			{
 				UnitBase->SetUnitIndex(AvailableUnitIndexArray[Index]);
@@ -620,8 +642,9 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 				}
 				AvailableUnitIndexArray.RemoveAt(Index);
 				SpawnParameterIdArray.RemoveAt(Index);
-				HUD->AllUnits.Add(UnitBase);
-			}
+				AllUnits.Add(UnitBase);
+			
+			//}
 			
 		}
 	}

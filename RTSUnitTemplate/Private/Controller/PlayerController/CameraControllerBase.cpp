@@ -62,12 +62,15 @@ void ACameraControllerBase::MoveCamToLocation(ACameraBase* Camera, const FVector
 
 bool ACameraControllerBase::CheckSpeakingUnits()
 {
-	if(HUDBase)
-	for (int32 i = 0; i < HUDBase->SpeakingUnits.Num(); i++)
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	
+	if(GameMode)
+	for (int32 i = 0; i < GameMode->SpeakingUnits.Num(); i++)
 	{
-		if(HUDBase->SpeakingUnits[i]->LockCamOnUnit)
+		if(GameMode->SpeakingUnits[i]->LockCamOnUnit)
 		{
-			SpeakingUnit = HUDBase->SpeakingUnits[i];
+			SpeakingUnit = GameMode->SpeakingUnits[i];
 			SetCameraState(CameraData::LockOnSpeaking);
 			return true;
 		}

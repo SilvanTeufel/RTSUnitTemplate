@@ -30,22 +30,23 @@ AControllerBase::AControllerBase() {
 
 
 void AControllerBase::BeginPlay() {
+
+	Super::BeginPlay();
 	
-		CameraBase = Cast<ACameraBase>(GetPawn());
-		HUDBase = Cast<APathProviderHUD>(GetHUD());
-		if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
+	CameraBase = Cast<ACameraBase>(GetPawn());
+	HUDBase = Cast<APathProviderHUD>(GetHUD());
+	if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
 	
-		ToggleUnitCountDisplay(ShowUnitCount);
+	RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+
+	if (RTSGameMode)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!!!!!Found GameMode Inside ControllerBase!!!!"));
+	}
+	ToggleUnitCountDisplay(ShowUnitCount);
 }
 
-void AControllerBase::SetFogManager(AUnitBase* Unit)
-{
-			if (Unit)
-			{
-				Unit->SetVisibility(false, SelectableTeamId);
-				Unit->SetFogOfWarLight(SelectableTeamId, 2000.f);
-			}
-}
+
 
 void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {
@@ -63,19 +64,13 @@ void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 
 void AControllerBase::DisplayUnitCount()
 {
-
-
-	// Retrieve the count of all units from HUDBase or a similar class
-	if(!HUDBase) return;
 	
-	int UnitsCount = HUDBase->AllUnits.Num();
-	FString UnitsMessage = FString::Printf(TEXT("Unit Count: %d"), UnitsCount);
-	
-	// Display the combined message on screen
-	if (GEngine)
+	if (RTSGameMode)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, UnitsMessage, true);
+		int UnitCount = RTSGameMode->AllUnits.Num();
+		UE_LOG(LogTemp, Warning, TEXT("UnitCount: %d"), UnitCount);
 	}
+
 }
 
 void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -132,7 +127,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 	}
 
-	/*
+
 	TArray<FPathPoint> PathPoints;
 
 	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
@@ -142,7 +137,18 @@ void AControllerBase::Tick(float DeltaSeconds)
 			SetRunLocationUseDijkstraForAI(HUDBase->EnemyUnitBases[i]->DijkstraEndPoint, HUDBase->EnemyUnitBases[i]->DijkstraStartPoint, HUDBase->EnemyUnitBases, PathPoints, i);
 			HUDBase->EnemyUnitBases[i]->DijkstraSetPath = false;
 		}
+
+	/*
+	if (RTSGameMode)
+	{
+		for (AActor* Actor : RTSGameMode->AllUnits)
+		{
+			AUnitBase* Unit = Cast<AUnitBase>(Actor);
+			Unit->VisibilityTick();
+		}
+	}
 	*/
+	
 }
 
 void AControllerBase::ShiftPressed()
@@ -415,8 +421,8 @@ void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, i
 void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, bool State)
 {
 	Unit->SetToggleUnitDetection(State);
-	Unit->UnitsToChase.Empty();
-	Unit->UnitToChase = nullptr;
+	//Unit->UnitsToChase.Empty();
+	//Unit->UnitToChase = nullptr;
 }
 void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
 {
@@ -430,8 +436,8 @@ void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector
 	}
 						
 	Unit->RunLocationArray.Add(Location);
-	Unit->UnitsToChase.Empty();
-	Unit->UnitToChase = nullptr;
+	//Unit->UnitsToChase.Empty();
+	//Unit->UnitToChase = nullptr;
 	Unit->SetToggleUnitDetection(false);
 }
 
@@ -780,3 +786,4 @@ void AControllerBase::SetControlerDefaultWaypoint_Implementation(AWaypoint* Wayp
 	if(Waypoint)
 		DefaultWaypoint = Waypoint;
 }
+

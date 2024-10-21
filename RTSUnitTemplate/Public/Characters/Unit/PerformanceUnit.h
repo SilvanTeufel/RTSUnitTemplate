@@ -28,26 +28,53 @@ public:
 	
 	virtual void BeginPlay() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="FogOfWar")
+	virtual void Destroyed() override;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
 	
-	UFUNCTION(BlueprintCallable, Category="FogOfWar")
-	void SpawnFogOfWarManager(FVector Scale);
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SpawnFogOfWarManager();
 
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetInvisibileIfNoOverlap();
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	bool IsOverlappingFogOfWarManager(int PlayerTeamId);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.008, 0.008, 0.0004);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerPositionOffset = FVector(0, 0, -250.f);
 	// Function to update light range
-	UFUNCTION(BlueprintCallable, Category = FogOfWar)
-	void SetFogOfWarLight(int PlayerTeamId, float SightRange);
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightRadius", Keywords = "RTSUnitTemplate SightRadius"), Category = RTSUnitTemplate)
+	float SightRadius = 1500.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOnViewport = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsMyTeam = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool EnemyStartVisibility = true;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float FogSight = 500.0f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool CurrentVisibility = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsVisibileEnemy = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool EnableFog = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int FogManagerOverlaps = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = -100.0f;
@@ -70,19 +97,17 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
 	
-	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetEnemyVisibility(bool IsVisible, int PlayerTeamId);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetVisibileTeamId( int PlayerTeamId);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetVisibility(bool IsVisible, int PlayerTeamId);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void CheckVisibility(int PlayerTeamId);
+	void CheckViewport();
 
-	UFUNCTION(Client, Reliable)
-	void ClientSetMeshVisibility(bool bIsVisible);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CheckTeamVisibility();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCharacterVisibility(bool desiredVisibility);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTick();
@@ -96,9 +121,6 @@ private:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckTimerVisibility();
-
-	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	AFogOfWarManager* SpawnedFogManager;
 	
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -106,5 +128,8 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	class AProjectile* Projectile;
+	
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	AFogOfWarManager* SpawnedFogManager;
 	
 };

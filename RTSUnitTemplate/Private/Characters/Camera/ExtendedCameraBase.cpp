@@ -270,13 +270,14 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 		}
 	}else
 	{
-		
-		if(!CamController->HUDBase || !CamController->HUDBase->AllUnits.Num()) return;
+		ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	
+		if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
 
 		AUnitBase* ClosestUnit = nullptr;
 		float ClosestDistanceSquared = FLT_MAX;
 		FVector CameraLocation = GetActorLocation();
-		for (AActor* UnitActor  : CamController->HUDBase->AllUnits)
+		for (AActor* UnitActor  : RTSGameMode->AllUnits)
 		{
 			// Cast to AGASUnit to make sure it's of the correct type
 			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
