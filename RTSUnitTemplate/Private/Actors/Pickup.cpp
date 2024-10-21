@@ -70,12 +70,12 @@ void APickup::Tick(float DeltaTime)
 		 	
 			case PickUpData::Health:
 				{
-					UnitBase->SetHealth(UnitBase->Attributes->GetHealth() + Amount);
+					UnitBase->SetHealthAndCreateWidget(UnitBase->Attributes->GetHealth() + Amount);
 				}
 				break;
 			case PickUpData::Shield:
 				{
-					UnitBase->SetShield(UnitBase->Attributes->GetShield() + Amount);
+					UnitBase->SetShieldAndCreateWidget(UnitBase->Attributes->GetShield() + Amount);
 					//UnitBase->Attributes->SetAttributeShield(UnitBase->Attributes->GetShield() + Amount);
 				}
 				break;

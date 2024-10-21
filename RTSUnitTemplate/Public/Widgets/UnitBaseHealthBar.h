@@ -32,9 +32,6 @@ public:
 	}
 
 	
-//private:	
-	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-
 	UFUNCTION()
 	void UpdateExperience();
 	
@@ -64,8 +61,7 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UProgressBar* ExperienceProgressBar;
-
-//private:
+	
 	float PreviousShieldValue = -1.0f;
 
 	FTimerHandle CollapseTimerHandle;
@@ -78,13 +74,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CollapseWidget();
-	
-	/*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-    	float UpdateInterval = 0.05;
-    	
-	FTimerHandle TickTimerHandle;
-	*/
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateWidget();

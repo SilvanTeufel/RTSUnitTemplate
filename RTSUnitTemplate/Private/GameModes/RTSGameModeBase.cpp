@@ -289,14 +289,10 @@ bool ARTSGameModeBase::RemoveDeadUnitWithIndexFromDataSet(int32 UnitIndex)
 				//UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
 				UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
 	
-				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-
-				if(PlayerController)
-				{
-	
-						AllUnits.Remove(UnitData.UnitBase);
+		
+				AllUnits.Remove(UnitData.UnitBase);
 					
-				}
+
 				
 				UnitSpawnDataSets.RemoveAt(i);
 				return true;
@@ -327,13 +323,9 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 					SpawnParameterIdArray.Add(SpawnParaId);
 					FoundDeadUnit = true;
 				}
-				APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 
-				if(PlayerController)
-				{
-						AllUnits.Remove(UnitData.UnitBase);
-				}
-				
+				AllUnits.Remove(UnitData.UnitBase);
+
 				UnitSpawnDataSets.RemoveAt(i);
 			}
 			else //if (UnitData.Id == SpawnParaId)
@@ -370,9 +362,9 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 
 	if(SpawnParameter.UnitControllerBaseClass)
 	{
-		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!ControllerBase) return nullptr;
-		ControllerBase->Possess(UnitBase);
+		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+		if(!AIController) return nullptr;
+		AIController->Possess(UnitBase);
 	}
 	
 	if (UnitBase != nullptr)

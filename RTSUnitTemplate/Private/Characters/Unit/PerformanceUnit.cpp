@@ -22,7 +22,10 @@ void APerformanceUnit::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	CheckViewport();
 	CheckTeamVisibility();
-	VisibilityTick();
+	
+	if(EnableFog)VisibilityTickFog();
+	else SetCharacterVisibility(IsOnViewport);
+	
 	CheckHealthBarVisibility();
 	CheckTimerVisibility();
 	
@@ -32,6 +35,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
+	DOREPLIFETIME(APerformanceUnit, OpenHealthWidget);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
 }
@@ -42,12 +46,9 @@ void APerformanceUnit::BeginPlay()
 	
 
 	
-
-	//SetCharacterVisibility(false);
+	
 	SpawnFogOfWarManager();
-
-	//FTimerHandle UnusedHandle;
-	//GetWorldTimerManager().SetTimer(UnusedHandle, this, &APerformanceUnit::SetInvisibileIfNoOverlap, 1.1f, false);
+	
 }
 
 void APerformanceUnit::Destroyed()
@@ -75,8 +76,9 @@ void APerformanceUnit::SpawnFogOfWarManager()
 		{
 			AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 			// Get the world reference
-			if(ControllerBase && ControllerBase->SelectableTeamId == TeamId)
+			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
 			{
+		
 				UWorld* World = GetWorld();
 				if (World)
 				{
@@ -165,7 +167,6 @@ void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
 
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
-
 		USkeletalMeshComponent* SkelMesh = GetMesh();
 		if (SkelMesh)
 		{
@@ -176,7 +177,7 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 }
 
 
-void APerformanceUnit::VisibilityTick()
+void APerformanceUnit::VisibilityTickFog()
 {
 	
 	if (IsMyTeam)
@@ -207,7 +208,7 @@ void APerformanceUnit::CheckTeamVisibility()
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if(ControllerBase->SelectableTeamId == TeamId)
+		if(ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0)
 		{
 			IsMyTeam = true;
 		}
@@ -237,17 +238,44 @@ bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 
 void APerformanceUnit::CheckHealthBarVisibility()
 {
+	if (IsOnViewport && !HasAuthority())
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("!!CheckHealthBarVisibility IsOnViewport!"));;
+	}
+	/*
+	if (HealthWidgetComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!!HealthWidgetComp FOUND!!"));
+	}else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!!HealthWidgetComp NOT FOUND!!"));
+	}
+*/
+	
 	if(HealthWidgetComp)
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
-		if (IsOnViewport)
+		//if(HealthBarWidget && !HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("!!!HealthBarWidget FOUND!!!!!!"));
+		
+		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered)
 		{
+			if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!Visible! Client"));
+			//if(HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!Visible! Server"));
 			//HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			//HealthBarWidget->UpdateWidget();
+
+			//HealthBarWidget->ResetCollapseTimer();
+			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			HealthBarWidget->UpdateWidget();
+			HealthBarUpdateTriggered = true;
 		}
-		else
+		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("!!Collapsed!"));
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			HealthBarUpdateTriggered = false;
 		}
+		
 	}
 }
 

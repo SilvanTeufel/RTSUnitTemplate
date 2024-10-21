@@ -21,7 +21,13 @@ private:
 	bool bCanProcessCollision = false;
 	
 public:
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FTimerHandle HealthWidgetTimerHandle;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float HealthWidgetDisplayDuration = 3.0f;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString Name = "Unit";
 	
@@ -47,9 +53,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CollisionCooldown = 3.f;
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void CreateHealthWidgetComp();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CollisionUnit;
@@ -127,8 +130,7 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void StartAttackEvent();
-
-
+	
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerMeeleImpactEvent();
 
@@ -193,6 +195,27 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetShield(float NewHealth);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void InitHealthbarOwner();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HealthbarCollapseCheck(float NewHealth);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ShieldCollapseCheck(float NewShield, float OldShield);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetHealthAndCreateWidget(float NewHealth);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HideHealthWidget();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetShieldAndCreateWidget(float NewShield);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CreateHealthWidgetComp();
+	
 	/*
 protected:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "HealthWidgetComp", Keywords = "RTSUnitTemplate HealthWidgetComp"), Category = RTSUnitTemplate)

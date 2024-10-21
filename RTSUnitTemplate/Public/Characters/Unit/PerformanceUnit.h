@@ -62,7 +62,7 @@ public:
 	bool EnemyStartVisibility = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float FogSight = 500.0f;
+	float FogSight = 1500.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CurrentVisibility = true;
@@ -84,6 +84,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int HideHealthBarUnitCount = 200;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool OpenHealthWidget = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HealthBarUpdateTriggered = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* HealthWidgetComp;
@@ -110,7 +116,7 @@ public:
 	void SetCharacterVisibility(bool desiredVisibility);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void VisibilityTick();
+	void VisibilityTickFog();
 private:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
