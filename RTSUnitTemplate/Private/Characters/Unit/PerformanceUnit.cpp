@@ -68,6 +68,7 @@ void APerformanceUnit::Destroyed()
 
 void APerformanceUnit::SpawnFogOfWarManager()
 {
+	if(!EnableFog) return;
 	if(SpawnedFogManager) return;
 	
 	if (FogOfWarManagerClass)
@@ -104,8 +105,7 @@ void APerformanceUnit::SpawnFogOfWarManager()
 							// Bind overlap events using the appropriate class and instance
 							SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
 							SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
-							//SpawnedFogManager->Mesh->bHiddenInGame = true;
-						
+
 					}
 				}
 			}
@@ -113,6 +113,7 @@ void APerformanceUnit::SpawnFogOfWarManager()
 	}
 }
 
+/*
 void APerformanceUnit::SetInvisibileIfNoOverlap()
 {
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
@@ -136,15 +137,13 @@ bool APerformanceUnit::IsOverlappingFogOfWarManager(int PlayerTeamId)
 		AFogOfWarManager* FogManager = Cast<AFogOfWarManager>(Actor);
 		if (FogManager && FogManager->TeamId != PlayerTeamId)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("!!!!!YESSSSSSSSSSSSSS Overlapped with FOG!!!!"));
 			return true;
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("!!!!!NOOOOOOOOOOOOOOOOO Overlapped with FOG!!!!"));
 	return false;
 }
-
+*/
 
 void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
 {
@@ -172,7 +171,6 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 		{
 			SkelMesh->SetVisibility(desiredVisibility, true);
 			SkelMesh->bPauseAnims = !desiredVisibility;
-			CurrentVisibility = desiredVisibility;
 		}
 }
 
@@ -238,40 +236,17 @@ bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 
 void APerformanceUnit::CheckHealthBarVisibility()
 {
-	if (IsOnViewport && !HasAuthority())
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("!!CheckHealthBarVisibility IsOnViewport!"));;
-	}
-	/*
-	if (HealthWidgetComp)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("!!HealthWidgetComp FOUND!!"));
-	}else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("!!HealthWidgetComp NOT FOUND!!"));
-	}
-*/
-	
 	if(HealthWidgetComp)
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
-		//if(HealthBarWidget && !HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("!!!HealthBarWidget FOUND!!!!!!"));
-		
-		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered)
+		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (IsVisibileEnemy || IsMyTeam))
 		{
-			if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!Visible! Client"));
-			//if(HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!Visible! Server"));
-			//HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
-			//HealthBarWidget->UpdateWidget();
-
-			//HealthBarWidget->ResetCollapseTimer();
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarWidget->UpdateWidget();
 			HealthBarUpdateTriggered = true;
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("!!Collapsed!"));
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			HealthBarUpdateTriggered = false;
 		}
@@ -283,7 +258,7 @@ void APerformanceUnit::CheckTimerVisibility()
 {
 	if (UUnitTimerWidget* TimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject())) // Assuming you have a UUnitBaseTimer class for the timer widget
 	{
-		if (IsOnViewport)
+		if (IsOnViewport && IsMyTeam)
 		{
 			TimerWidget->SetVisibility(ESlateVisibility::Visible);
 		}

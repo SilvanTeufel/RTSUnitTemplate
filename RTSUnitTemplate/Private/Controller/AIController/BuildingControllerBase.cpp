@@ -224,9 +224,9 @@ void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSec
 						NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetMagicResistance();
 				
 					if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
-						UnitBase->UnitToChase->SetHealthAndCreateWidget(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
+						UnitBase->UnitToChase->SetHealth_Implementation(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
 					else
-						UnitBase->UnitToChase->SetShieldAndCreateWidget(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+						UnitBase->UnitToChase->SetShield_Implementation(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 						//UnitBase->UnitToChase->Attributes->SetAttributeShield(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
 					UnitBase->LevelData.Experience++;

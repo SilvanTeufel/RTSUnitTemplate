@@ -35,13 +35,13 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SpawnFogOfWarManager();
-
+	/*
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SetInvisibileIfNoOverlap();
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	bool IsOverlappingFogOfWarManager(int PlayerTeamId);
-	
+	*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.008, 0.008, 0.0004);
 	
@@ -50,7 +50,7 @@ public:
 	// Function to update light range
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightRadius", Keywords = "RTSUnitTemplate SightRadius"), Category = RTSUnitTemplate)
-	float SightRadius = 1500.0f;
+	float SightRadius = 2000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOnViewport = true;
@@ -63,9 +63,6 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FogSight = 1500.0f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool CurrentVisibility = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsVisibileEnemy = false;

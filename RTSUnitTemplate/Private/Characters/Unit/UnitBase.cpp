@@ -344,17 +344,6 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 	NextWaypoint = NewNextWaypoint;
 }
 
-void AUnitBase::SetHealthAndCreateWidget(float NewHealth)
-{
-	//CreateHealthWidgetComp();
-	SetHealth_Implementation(NewHealth);
-
-	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-	if(NewHealth > 0.f && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
-		OpenHealthWidget = true;
-	//HealthbarCollapseCheck(NewHealth);
-}
-
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	float OldHealth = Attributes->GetHealth();
@@ -363,9 +352,6 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 
 	if(NewHealth <= 0.f)
 	{
-		//if(UnitIndex > 0)
-			//SaveLevelDataAndAttributes(FString::FromInt(UnitIndex));
-		
 		SetWalkSpeed(0);
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		SetActorEnableCollision(false);
@@ -373,34 +359,18 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetUnitState(UnitData::Dead);
 		UnitControlTimer = 0.f;
 	}
+
+	HealthbarCollapseCheck(NewHealth, OldHealth);
 }
 
 
-void AUnitBase::HealthbarCollapseCheck(float NewHealth)
+void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
 {
-	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+		OpenHealthWidget = true;
 	
-	if(HealthBarWidget)
-	{
-		if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("Should HealthBar Visibility: %d"), IsOnViewport);
-		ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-		if(ControllerBase && RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount)
-		{
-			if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!!!!!23423Collapsed!"));
-			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-		}
-		else if(NewHealth <= 0.f)
-		{
-			if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!!!!!11111Collapsed!"));
-			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-		}
-		else // if(IsOnViewport)
-		{
-			//if(ControllerBase)SetEnemyVisibility(true, ControllerBase->SelectableTeamId);
-			HealthBarWidget->ResetCollapseTimer();
-			HealthBarWidget->UpdateWidget();
-		}
-	}
+	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
 }
 
 void AUnitBase::HideHealthWidget()
@@ -409,47 +379,20 @@ void AUnitBase::HideHealthWidget()
 }
 
 
-void AUnitBase::SetShieldAndCreateWidget(float NewShield)
+void AUnitBase::SetShield_Implementation(float NewShield)
 {
 	const float OldShield = Attributes->GetHealth();
-	SetShield_Implementation(NewShield);
-	
+	Attributes->SetAttributeShield(NewShield);
+	ShieldCollapseCheck(NewShield, OldShield);
+}
+
+void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
+{
 	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	if(NewShield <= OldShield && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
 		OpenHealthWidget = true;
 
 	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
-}
-
-void AUnitBase::SetShield_Implementation(float NewShield)
-{
-	Attributes->SetAttributeShield(NewShield);
-}
-
-void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
-{
-	if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!ShieldCollapseCheck"));
-	if(NewShield <= OldShield && IsOnViewport)
-	{
-		if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!ShieldCollapseCheck2"));
-		UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-
-		if (HealthBarWidget)
-		{
-			if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!ShieldCollapseCheck3"));
-			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-			if(ControllerBase && RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount)
-			{
-				if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!ShieldCollapseCheck4"));
-				HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-			}
-			else {
-				if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!ShieldCollapseCheck5"));
-				HealthBarWidget->ResetCollapseTimer();
-				HealthBarWidget->UpdateWidget();
-			}
-		}
-	}
 }
 
 

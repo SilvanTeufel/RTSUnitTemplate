@@ -176,9 +176,9 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
 			
 		if(UnitToHit->Attributes->GetShield() <= 0)
-			UnitToHit->SetHealthAndCreateWidget(UnitToHit->Attributes->GetHealth()-NewDamage);
+			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()-NewDamage);
 		else
-			UnitToHit->SetShieldAndCreateWidget(UnitToHit->Attributes->GetShield()-NewDamage);
+			UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()-NewDamage);
 			//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 
 
@@ -208,9 +208,9 @@ void AProjectile::ImpactHeal_Implementation(AActor* ImpactTarget)
 		float NewDamage = ShootingUnit->Attributes->GetAttackDamage() ;
 		
 		if(UnitToHit->Attributes->GetShield() <= 0)
-			UnitToHit->SetHealthAndCreateWidget(UnitToHit->Attributes->GetHealth()+NewDamage);
+			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()+NewDamage);
 		else
-			UnitToHit->SetShieldAndCreateWidget(UnitToHit->Attributes->GetShield()+NewDamage);
+			UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()+NewDamage);
 			//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()+NewDamage);
 
 

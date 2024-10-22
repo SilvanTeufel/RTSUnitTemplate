@@ -161,12 +161,6 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, b
 			{
 				CurrentUnit->UnitsToChase.Emplace(DetectedUnit);
 			}
-			/*
-			if(!isFriendlyUnit)
-			{
-				if(ControllerBase)
-					DetectedUnit->SetVisibility(true, ControllerBase->SelectableTeamId);
-			}*/
 		}
 		
 	}
@@ -257,8 +251,6 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			//DetectUnits(UnitBase, DeltaSeconds, true);
-			//LoseUnitToChase(UnitBase);
 				DetectAndLoseUnits();
 				
 			if(UnitBase->UsingUEPathfindingPatrol)
@@ -270,15 +262,6 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolRandom:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-				//DetectUnits(UnitBase, DeltaSeconds, true);
-				//LoseUnitToChase(UnitBase);
-				/*
-				if(UnitBase->SetNextUnitToChase())
-				{
-					UnitBase->SetUEPathfinding = true;
-					UnitBase->SetUnitState(UnitData::Chase);
-				}
-				*/
 				DetectAndLoseUnits();
 				
 				if(UnitBase->GetUnitState() != UnitData::Chase)
@@ -587,13 +570,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 	{
 		DetectAndLoseUnits();
 	}
-
-	//if(UnitBase->GetToggleUnitDetection())
-	//{
-		//IsUnitDetected = false;
-		//DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
-		//LoseUnitToChase(UnitBase);
-	//}
+	
 	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
 	{
@@ -711,16 +688,7 @@ FVector AUnitControllerBase::CalculateChaseLocation(AUnitBase* UnitBase)
 
 void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 {
-
-
-		//for (int32 i = UnitBase->UnitsToChase.Num() - 1; i >= 0; i--)
-		//{
-			
-			//if (ControllerBase)
-			//{
-				// Check if the unit to chase is valid
-		
-			
+	
 				if (UnitBase->UnitToChase)
 				{
 					float Distance = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
@@ -731,10 +699,6 @@ void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 						UnitBase->UnitToChase = nullptr;
 					}
 				}
-			//}
-
-			// Remove the unit from the array
-		//}
 	
 	
 
@@ -790,9 +754,9 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 						NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetMagicResistance();
 				
 					if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
-						UnitBase->UnitToChase->SetHealthAndCreateWidget(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
+						UnitBase->UnitToChase->SetHealth_Implementation(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
 					else
-						UnitBase->UnitToChase->SetShieldAndCreateWidget(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+						UnitBase->UnitToChase->SetShield_Implementation(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
 
 					UnitBase->LevelData.Experience++;
 					
@@ -1002,9 +966,6 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	if(UnitBase->GetToggleUnitDetection())
 	{
 		DetectAndLoseUnits();
-		//IsUnitDetected = false;
-		//DetectUnits(UnitBase, DeltaSeconds, UnitBase->GetToggleUnitDetection());
-		//LoseUnitToChase(UnitBase);
 	}
 	/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
