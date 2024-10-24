@@ -24,6 +24,8 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AGASUnit, AbilitySystemComponent);
 	DOREPLIFETIME(AGASUnit, Attributes);
+	DOREPLIFETIME(AGASUnit, ToggleUnitDetection); // Added for BUild
+
 }
 
 // Called every frame

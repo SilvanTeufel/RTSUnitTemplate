@@ -233,7 +233,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		}
 
 		CheckUnitDetectionTimer(DeltaSeconds);
-
+		//DetectAndLoseUnits();
 	
 		switch (UnitBase->UnitState)
 		{
@@ -251,7 +251,6 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::Patrol:
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-				DetectAndLoseUnits();
 				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -262,6 +261,15 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolRandom:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+
+	
+				if(UnitBase->SetNextUnitToChase())
+				{
+					UnitBase->SetUEPathfinding = true;
+					UnitBase->SetUnitState(UnitData::Chase);
+					return;
+				}
+				
 				DetectAndLoseUnits();
 				
 				if(UnitBase->GetUnitState() != UnitData::Chase)
@@ -275,13 +283,16 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		case UnitData::PatrolIdle:
 			{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
-				DetectAndLoseUnits();
-				
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::Chase);
-				}else
+					return;
+				}
+				
+				DetectAndLoseUnits();
+				
+				if(UnitBase->GetUnitState() != UnitData::Chase)
 				{
 					UnitBase->SetWalkSpeed(0);
 					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
@@ -293,6 +304,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 						UnitBase->SetUnitState(UnitData::PatrolRandom);
 					}
 				}
+				
 			}
 			break;
 		case UnitData::Run:
@@ -522,9 +534,18 @@ void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float Delt
 
 void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+
+	if(UnitBase->SetNextUnitToChase())
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+		return;
+	}
+	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-				
+
+	DetectAndLoseUnits();
+	
 	if(UnitBase->GetUnitState() == UnitData::Chase)//UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
 		//if(UnitBase->SetNextUnitToChase())
@@ -558,27 +579,23 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		if(UnitBase->SetNextUnitToChase())
+		{
+			UnitBase->SetUEPathfinding = true;
+			UnitBase->SetUnitState(UnitData::Chase);
+			return;
+		}
+	}
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUnitState(UnitData::Evasion);
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
-
-	if(UnitBase->GetToggleUnitDetection())
-	{
-		DetectAndLoseUnits();
-	}
 	
-	/*
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	{
-		if(UnitBase->SetNextUnitToChase())
-		{
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	}*/
+	DetectAndLoseUnits();
 				
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
@@ -955,6 +972,15 @@ void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSe
 
 void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		if(UnitBase->SetNextUnitToChase())
+		{
+			UnitBase->SetUEPathfinding = true;
+			UnitBase->SetUnitState(UnitData::Chase);
+			return;
+		}
+	}
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -963,19 +989,9 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		return;
 	}
 
-	if(UnitBase->GetToggleUnitDetection())
-	{
-		DetectAndLoseUnits();
-	}
-	/*
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	{
-		if(UnitBase->SetNextUnitToChase())
-		{
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	}*/
-	
+
+	DetectAndLoseUnits();
+
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 
 	const FVector UnitLocation = UnitBase->GetActorLocation();
@@ -995,8 +1011,19 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+
+
+	if(UnitBase->SetNextUnitToChase())
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+		return;
+	}
+	
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+
+	DetectAndLoseUnits();
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId !=  UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
@@ -1005,16 +1032,13 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 		UnitBase->CollisionUnit = nullptr;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::Chase);
-	} else if(UnitBase->GetUnitState() == UnitData::Chase )//UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
+	}
+	else if(UnitBase->GetUnitState() == UnitData::Chase )//UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() != UnitData::Dead)
 	{
-		/*
-		if(UnitBase->SetNextUnitToChase())
-		{
-			UnitBase->SetUEPathfinding = true;
-			UnitBase->SetUnitState(UnitData::Chase);
-		}*/
+
 		
-	} else if (UnitBase->NextWaypoint != nullptr)
+	}
+	else if (UnitBase->NextWaypoint != nullptr)
 	{
 		if(UnitBase->IsFlying)
 		{

@@ -59,14 +59,17 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::PatrolRandom:
 		{
 			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-			//DetectUnits(UnitBase, DeltaSeconds, false);
-			//LoseUnitToChase(UnitBase);
-			DetectAndLoseUnits();
-			
+
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
+				UnitBase->SetUEPathfinding = true;
 				UnitBase->SetUnitState(UnitData::Chase);
-			}else if(UnitBase->GetUnitState() != UnitData::Chase)
+				return;
+			}
+			
+			DetectAndLoseUnits();
+			
+			if(UnitBase->GetUnitState() != UnitData::Chase)
 			{
 				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				SetUEPathfindingRandomLocation(UnitBase, DeltaSeconds);
@@ -76,12 +79,16 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 		break;
 	case UnitData::PatrolIdle:
 		{
-			DetectAndLoseUnits();
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
 			if(UnitBase->SetNextUnitToChaseHeal())
 			{
+				UnitBase->SetUEPathfinding = true;
 				UnitBase->SetUnitState(UnitData::Chase);
-			}else
+				return;
+			}
+			
+			DetectAndLoseUnits();
+			
+			if(UnitBase->GetUnitState() != UnitData::Chase)
 			{
 				UnitBase->SetWalkSpeed(0);
 				
@@ -334,6 +341,12 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 
 void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 {
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+		return;
+	}
 
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
@@ -342,47 +355,44 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		return;
 	}
 	
-	if(UnitBase->GetToggleUnitDetection())
-		DetectAndLoseUnits();
-	
-	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	//{
 
-		//DetectUnits(UnitBase, DeltaSeconds, false);
-		//LoseUnitToChase(UnitBase);
+	DetectAndLoseUnits();
 	
-		if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
-		{
-			UnitBase->SetUEPathfinding = true;
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-	//}
-				
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-				
-	const FVector UnitLocation = UnitBase->GetActorLocation();
-		
-	if(UnitBase->IsFlying)
+	if(UnitBase->GetUnitState() != UnitData::Chase)
 	{
-		UnitBase->RunLocation = FVector(UnitBase->RunLocation.X, UnitBase->RunLocation.Y, UnitBase->FlyHeight);
-	}
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+				
+		const FVector UnitLocation = UnitBase->GetActorLocation();
+		
+		if(UnitBase->IsFlying)
+		{
+			UnitBase->RunLocation = FVector(UnitBase->RunLocation.X, UnitBase->RunLocation.Y, UnitBase->FlyHeight);
+		}
 	
-	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, UnitBase->RunLocation);
-	UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+		const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, UnitBase->RunLocation);
+		UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 
-	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
+		const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 	
-	if (Distance <= UnitBase->StopRunTolerance) {
-		UnitBase->SetUnitState(UnitData::Idle);
+		if (Distance <= UnitBase->StopRunTolerance) {
+			UnitBase->SetUnitState(UnitData::Idle);
+		}
+	
+		UnitBase->UnitControlTimer = 0.f;
 	}
-	
-	UnitBase->UnitControlTimer = 0.f;
 }
 
 
 void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
 
+	if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Chase);
+		return;
+	}
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUnitState(UnitData::Evasion);
@@ -390,28 +400,18 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		return;
 	}
 
-
-	if(UnitBase->GetToggleUnitDetection())
-		DetectAndLoseUnits();
+	DetectAndLoseUnits();
 	
-	//if(UnitBase->GetToggleUnitDetection() && UnitBase->UnitToChase)
-	//{
-		// DetectUnits(UnitBase, DeltaSeconds, false);
-		// LoseUnitToChase(UnitBase);
-		
-		if(UnitBase->SetNextUnitToChaseHeal() && UnitBase->GetToggleUnitDetection())
-		{
-			//UnitBase->SetUnitState(UnitData::Chase);
+	if(UnitBase->GetUnitState() != UnitData::Chase)
+	{
+		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+
+		const FVector UnitLocation = UnitBase->GetActorLocation();
+		const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
+
+		if (Distance <= UnitBase->StopRunTolerance) {
+			UnitBase->SetUnitState(UnitData::Idle);
 		}
-	//}
-	
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-
-	const FVector UnitLocation = UnitBase->GetActorLocation();
-	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
-
-	if (Distance <= UnitBase->StopRunTolerance) {
-		UnitBase->SetUnitState(UnitData::Idle);
 	}
 }
 

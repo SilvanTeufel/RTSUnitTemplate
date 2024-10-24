@@ -58,6 +58,13 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		break;
 		case UnitData::Idle:
 		{
+			if(UnitBase->SetNextUnitToChase())
+			{
+					
+				UnitBase->SetUnitState(UnitData::Chase);
+				return;
+			} 
+				
 
 			if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 			{
@@ -66,8 +73,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 				UnitBase->CollisionUnit = nullptr;
 			}
 
-				//DetectUnits(UnitBase, DeltaSeconds, true);
-				//LoseUnitToChase(UnitBase);
+			DetectAndLoseUnits();
 				
 			if(UnitBase->GetUnitState() == UnitData::Chase)
 			{

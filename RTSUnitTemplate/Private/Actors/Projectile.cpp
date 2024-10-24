@@ -103,6 +103,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, IsBouncingBack);
 	DOREPLIFETIME(AProjectile, IsBouncingNext);
 	DOREPLIFETIME(AProjectile, BouncedBack);
+	DOREPLIFETIME(AProjectile, ProjectileEffect); // Added for Build
 }
 
 // Called every frame

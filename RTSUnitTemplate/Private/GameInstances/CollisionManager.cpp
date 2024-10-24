@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "GameInstances/CollisionManager.h"
+#include "Engine/World.h"  
 
 
 void UCollisionManager::RegisterCollision()

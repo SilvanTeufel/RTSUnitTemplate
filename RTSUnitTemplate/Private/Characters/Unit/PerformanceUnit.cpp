@@ -38,6 +38,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, OpenHealthWidget);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
+	DOREPLIFETIME(APerformanceUnit, HealthWidgetCompLocation);
 }
 
 void APerformanceUnit::BeginPlay()
@@ -242,15 +243,18 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (IsVisibileEnemy || IsMyTeam))
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
-			HealthBarWidget->UpdateWidget();
 			HealthBarUpdateTriggered = true;
+			if(Projectile) Projectile->SetVisibility(false);
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
+			if(Projectile) Projectile->SetVisibility(true);
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			HealthBarUpdateTriggered = false;
 		}
-		
+
+		if(HealthBarUpdateTriggered)	
+			HealthBarWidget->UpdateWidget();
 	}
 }
 

@@ -1,9 +1,12 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/EngineTypes.h"
 #include "FogOfWarManager.generated.h"
 
 
@@ -34,9 +37,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId;
-	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	AHUD* HUDBase;
 	
 	// Handle collision events to reveal units
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

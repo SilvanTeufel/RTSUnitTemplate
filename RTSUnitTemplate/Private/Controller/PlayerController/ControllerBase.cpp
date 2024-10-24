@@ -94,6 +94,7 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, SIsPressedState);
 	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
 	DOREPLIFETIME(AControllerBase, SelectableTeamId);
+	DOREPLIFETIME(AControllerBase, UEPathfindingCornerOffset); // Added for Build
 }
 
 void AControllerBase::SetupInputComponent() {
@@ -246,77 +247,7 @@ void AControllerBase::LeftClickSelect_Implementation()
 	SelectedUnits.Empty();
 
 }
-/*
-void AControllerBase::LeftClickPressed()
-{
-	LeftClickIsPressed = true;
-	if (AttackToggled) {
-		AttackToggled = false;
-		FHitResult Hit;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
-		int32 NumUnits = SelectedUnits.Num();
-		int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
-		
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			int32 Row = i / GridSize;     // Row index
-			int32 Col = i % GridSize;     // Column index
-
-			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-
-			LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
-		}
-		
-	}
-	else {
-		LeftClickSelect();
-
-		FHitResult Hit_Pawn;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
-		
-		if (Hit_Pawn.bBlockingHit && HUDBase)
-		{
-			AActor* HitActor = Hit_Pawn.GetActor();
-			
-			if(!HitActor->IsA(ALandscape::StaticClass()))
-				ClickedActor = Hit_Pawn.GetActor();
-			else
-				ClickedActor = nullptr;
-			
-			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
-			
-			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
-			{
-				HUDBase->DeselectAllUnits();
-				HUDBase->SetUnitSelected(UnitBase);
-				DragUnitBase(UnitBase);
-		
-				
-				if(CameraBase->AutoLockOnSelect)
-					LockCameraToUnit = true;
-			}
-			else {
-				HUDBase->InitialPoint = HUDBase->GetMousePos2D();
-				HUDBase->bSelectFriendly = true;
-			}
-		}
-	}
-
-}
-
-void AControllerBase::LeftClickReleased()
-{
-	LeftClickIsPressed = false;
-	HUDBase->bSelectFriendly = false;
-	SelectedUnits = HUDBase->SelectedUnits;
-	DropUnitBase();
-
-
-	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled) SetWidgets(0);
-}
-*/
 void AControllerBase::SetWidgets(int Index)
 {
 	SelectedUnits = HUDBase->SelectedUnits;
@@ -471,56 +402,7 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 	if(!HUDBase->DisablePathFindingOnFriendly && Range >= HUDBase->RangeThreshold && !HUDBase->IsLocationInNoPathFindingAreas(Location))
 		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
 }
-/*
-bool AControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
-{
-	//UE_LOG(LogTemp, Log, TEXT("CheckResourceExtraction called"));
-	if (Hit_Pawn.bBlockingHit && HUDBase)
-	{
-		//UE_LOG(LogTemp, Log, TEXT("Hit_Pawn is blocking and HUDBase is valid"));
-		AActor* HitActor = Hit_Pawn.GetActor();
-		
-		//if(HitActor)  UE_LOG(LogTemp, Log, TEXT("HitActor Name: %s, Type: %s"), *HitActor->GetName(), *HitActor->GetClass()->GetName());
 
-		
-		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
-
-		if(WorkArea)
-		{
-			TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkArea->Type;
-		
-			bool isResourceExtractionArea = Type == WorkAreaData::Primary || Type == WorkAreaData::Secondary || 
-									 Type == WorkAreaData::Tertiary || Type == WorkAreaData::Rare ||
-									 Type == WorkAreaData::Epic || Type == WorkAreaData::Legendary;
-
-
-			if(WorkArea && isResourceExtractionArea)
-			{
-				for (int32 i = 0; i < SelectedUnits.Num(); i++)
-				{
-					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
-					{
-						
-						AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(SelectedUnits[i]);
-
-						if(WorkingUnit)
-						{
-							WorkingUnit->ResourcePlace = WorkArea;
-							WorkingUnit->SetUnitState(UnitData::GoToResourceExtraction);
-							return true;
-						}
-					}
-				}
-			} else if(WorkArea && WorkArea->Building)
-			{
-				
-			}
-		}
-	}
-
-	return false;
-}
-*/
 void AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
 {
 	UWorld* World = GetWorld();

@@ -97,8 +97,14 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
 				if(UnitBase->SetNextUnitToChase())
 				{
+					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::Chase);
-				}else
+					return;
+				}
+
+				DetectAndLoseUnits();
+				
+				if(UnitBase->GetUnitState() != UnitData::Chase)
 				{
 					UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 					UnitBase->UnitControlTimer = 0.f;
@@ -114,8 +120,15 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
 				if(UnitBase->SetNextUnitToChase())
 				{
+					UnitBase->SetUEPathfinding = true;
 					UnitBase->SetUnitState(UnitData::Chase);
-				}else
+					return;
+				}
+
+
+				DetectAndLoseUnits();
+				
+				if(UnitBase->GetUnitState() != UnitData::Chase)
 				{
 					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 

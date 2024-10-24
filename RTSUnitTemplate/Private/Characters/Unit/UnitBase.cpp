@@ -222,7 +222,13 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
 	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
 	DOREPLIFETIME(AUnitBase, UnitControlTimer);
+	DOREPLIFETIME(AUnitBase, LineTraceZDistance);
 
+	DOREPLIFETIME(AUnitBase, EvadeDistance); // Added for Build
+	DOREPLIFETIME(AUnitBase, EvadeDistanceChase); // Added for Build
+	DOREPLIFETIME(AUnitBase, CastTime); // Added for Build
+	DOREPLIFETIME(AUnitBase, ReduceCastTime); // Added for Build
+	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 }
 
 
@@ -368,8 +374,9 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
 {
 	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+	{
 		OpenHealthWidget = true;
-	
+	}
 	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
 }
 
@@ -390,7 +397,9 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 {
 	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	if(NewShield <= OldShield && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+	{
 		OpenHealthWidget = true;
+	}
 
 	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
 }

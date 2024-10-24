@@ -31,6 +31,10 @@ void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	DOREPLIFETIME(APickup, FollowTarget);
 	DOREPLIFETIME(APickup, LifeTime);
 	DOREPLIFETIME(APickup, MaxLifeTime);
+	DOREPLIFETIME(APickup, DestructionDelayTime);
+	DOREPLIFETIME(APickup, PickUpDistance);
+	DOREPLIFETIME(APickup, Target);
+	DOREPLIFETIME(APickup, MovementSpeed);
 }
 
 // Called when the game starts or when spawned

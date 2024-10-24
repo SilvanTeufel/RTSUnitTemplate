@@ -72,6 +72,10 @@ void AWorkResource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	//DOREPLIFETIME(AWorkResource, Tag);
 	DOREPLIFETIME(AWorkResource, Mesh);
+	DOREPLIFETIME(AWorkResource, PickUpDistance); // Added for Build
+	DOREPLIFETIME(AWorkResource, FollowTarget); // Added for Build
+	DOREPLIFETIME(AWorkResource, MovementSpeed); // Added for Build
+
 }
 
 

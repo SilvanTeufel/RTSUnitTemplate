@@ -74,7 +74,7 @@ public:
 	int FogManagerOverlaps = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float VisibilityOffset = -100.0f;
+	float VisibilityOffset = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HealthCompCreated = false;
