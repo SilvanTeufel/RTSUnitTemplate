@@ -20,8 +20,10 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;
-	
 
+	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
 	

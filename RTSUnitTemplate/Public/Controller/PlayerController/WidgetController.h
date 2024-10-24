@@ -63,7 +63,7 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void HandleInvestmentUnit(const int32 UnitIndex, int32 InvestmentState);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void HandleInvestmentUnitByTag(const int32 UnitIndex, int32 InvestmentState);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)

@@ -248,17 +248,29 @@ void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
 
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
+
 	if(SelectedUnit)
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
 		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray);
 	}
 }
 
 void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController)
 {
+	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))UE_LOG(LogTemp, Warning, TEXT("ExecuteOnAbilityInputDetected"));
+
 	if(!CamController) return;
-	
+
+	for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
+	{
+		if (SelectedUnit)
+		{
+			CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
+		}
+	}
+
+	/*
 	if (CamController->SelectedUnits.Num() > 0)
 	{
 		for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
@@ -300,6 +312,7 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 			OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
 	}
+	*/
 }
 
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
@@ -441,6 +454,25 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 }
 
 void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState)
+{
+	if(BlockControls) return;
+	
+	if(!TabToggled)
+	{
+		HideControlWidget();
+		
+		SetUserWidget(nullptr);
+
+		if (ResourceWidget)
+		{
+			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
+			if(ResourceBar) ResourceBar->StopTimer();
+			ResourceWidget->SetVisibility(false);
+		}
+	}
+}
+
+void AExtendedCameraBase::Input_Tab_Released_BP(int32 CamState)
 {
 	if(BlockControls) return;
 	
@@ -862,26 +894,32 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityOne"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
 			} break;
 		case 22:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityTwo"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase);
 			} break;
 		case 23:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityThree"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase);
 			} break;
 		case 24:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityFour"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase);
 			} break;
 		case 25:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityFive"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase);
 			} break;
 		case 26:
 			{
+				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilitySix"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
 			} break;
 		}

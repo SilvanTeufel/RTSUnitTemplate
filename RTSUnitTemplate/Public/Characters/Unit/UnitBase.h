@@ -60,7 +60,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector CollisionLocation;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tags")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Tags")
 	FGameplayTagContainer UnitTags;
 	
 protected:

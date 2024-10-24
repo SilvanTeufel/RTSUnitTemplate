@@ -11,6 +11,7 @@
 #include "SpawnerUnit.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/AttributeSetBase.h"
+#include "GAS/GameplayAbilityBase.h"
 #include "GASUnit.generated.h"
 
 
@@ -43,6 +44,9 @@ public:
 	virtual void InitializeAttributes();
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void CreateOwnerShip();
+	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void GiveAbilities();
 
 	virtual void PossessedBy(AController* NewController) override;
@@ -61,13 +65,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ServerActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
+
+
+		
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 	
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
+	UPROPERTY(Replicated,BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;
 
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
+	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
 
 protected:

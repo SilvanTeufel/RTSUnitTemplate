@@ -84,6 +84,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID ThrowAbilityID;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	EGASAbilityInputID DefaultAbilityID;
+	
 	UPROPERTY(EditAnywhere, Category = Ability)
 	int32 AutoAbilitySequence[4] = {0, 1, 2, 3};
 

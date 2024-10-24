@@ -119,6 +119,7 @@ void AHUDBase::DrawHUD()
 			
 				if(Controller && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
 				{
+					if (NewUnitBases[i]->GetOwner() == nullptr) NewUnitBases[i]->SetOwner(Controller);
 					NewUnitBases[i]->SetSelected();
 					SelectedUnits.Emplace(NewUnitBases[i]);
 					SelectUnitsFromSameSquad(NewUnitBases[i]);

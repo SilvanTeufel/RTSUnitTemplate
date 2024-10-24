@@ -28,21 +28,51 @@ public:
 	
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
 
 	/** Handles Enhanced Keyboard Inputs */
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_RightClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_G_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_A_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Alt_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Alt_Released(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Ctrl_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Ctrl_Released(const FInputActionValue& InputActionValue, int32 CamState);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Input_Tab_Released_BP(int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
 	/** Handles Enhanced Keyboard Inputs */
 

@@ -229,6 +229,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CastTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, ReduceCastTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
+	DOREPLIFETIME(AUnitBase, UnitTags);
 }
 
 

@@ -16,9 +16,18 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	MoveWorkArea_Implementation(DeltaSeconds);
 }
 
+void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+{
+	UE_LOG(LogTemp, Warning, TEXT("ActivateKeyboardAbilities_Implementation!"));
+	if(UnitBase && UnitBase->DefaultAbilities.Num())
+	{
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities);
+	}
+}
 
 void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {
+	UE_LOG(LogTemp, Warning, TEXT("SpawnWorkArea_Implementation!"));
     if (WorkAreaClass)
     {
         FVector MousePosition, MouseDirection;
@@ -48,6 +57,7 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         	if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
         	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
+        	UE_LOG(LogTemp, Warning, TEXT("Area Spawned!"));
         }
     }
 }

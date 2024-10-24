@@ -693,6 +693,7 @@ void AUnitControllerBase::ActivateCombatAbilities(AUnitBase* UnitBase)
         UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
 }
 
+
 FVector AUnitControllerBase::CalculateChaseLocation(AUnitBase* UnitBase)
 {
     FVector UnitToChaseLocation = UnitBase->UnitToChase->GetActorLocation();
