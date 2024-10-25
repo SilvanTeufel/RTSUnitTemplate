@@ -19,7 +19,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
+	//DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
 }
 
 void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
@@ -29,8 +29,129 @@ void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit*
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities);
 	}
+	
 }
 
+void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID)
+{
+		if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+	
+		AUnitBase* ClosestUnit = nullptr;
+		float ClosestDistanceSquared = FLT_MAX;
+		// If we are on the server, run the logic directly.
+		for (AActor* UnitActor  : RTSGameMode->AllUnits)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("LOOPING1!"));
+			// Cast to AGASUnit to make sure it's of the correct type
+			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
+			// Check if the unit is valid and has the same TeamId as the camera
+
+			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId) // && !Unit->BuildArea
+			{
+		
+				float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
+				// Check if this unit is closer than the currently tracked closest unit
+				if (DistanceSquared < ClosestDistanceSquared)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("LOOPING3!"));
+					ClosestDistanceSquared = DistanceSquared;
+					ClosestUnit = Unit;
+				}
+			}
+		}
+		
+		if (ClosestUnit)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ClosestUnit!"));
+	
+			ClosestUnit->SetSelected();
+			SelectedUnits.Emplace(ClosestUnit);
+			ActivateKeyboardAbilities_Implementation(ClosestUnit, InputID);
+			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
+		}
+}
+
+void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID)
+{
+	UE_LOG(LogTemp, Warning, TEXT("ServerGetClosestUnitTo_Implementation!"));
+
+	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+	
+	AUnitBase* ClosestUnit = nullptr;
+	float ClosestDistanceSquared = FLT_MAX;
+
+	for (AActor* UnitActor : RTSGameMode->AllUnits)
+	{
+		// Cast to AUnitBase to make sure it's of the correct type
+		AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
+		// Check if the unit is valid and has the same TeamId as the player
+		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId) // && !Unit->BuildArea
+		{
+			float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
+			// Check if this unit is closer than the currently tracked closest unit
+			if (DistanceSquared < ClosestDistanceSquared)
+			{
+				ClosestDistanceSquared = DistanceSquared;
+				ClosestUnit = Unit;
+			}
+		}
+	}
+
+	// After finding the closest unit, notify the client
+	ClientReceiveClosestUnit(ClosestUnit, InputID);
+	ActivateKeyboardAbilities_Implementation(ClosestUnit, InputID);
+}
+
+void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
+{
+	UE_LOG(LogTemp, Warning, TEXT("ClientReceiveClosestUnit_Implementation!"));
+	if (ClosestUnit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Received Closest Unit: %s"), *ClosestUnit->GetName());
+
+		ClosestUnit->SetSelected();
+		SelectedUnits.Emplace(ClosestUnit);
+	}
+	// Update your local CloseUnit reference with ClosestUnit here.
+	// Example:
+	// CloseUnit = ClosestUnit;
+}
+
+void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityInputID InputID, FVector CameraLocation, int PlayerTeamId, AHUDBase* HUD)
+{
+	UE_LOG(LogTemp, Warning, TEXT("ActivateKeyboardAbilitiesOnCloseUnits_Implementation!"));
+
+	if (HasAuthority())
+	{
+		GetClosestUnitTo(CameraLocation, PlayerTeamId, InputID);
+	}
+	else
+	{
+		// If we are on the client, request it from the server.
+		ServerGetClosestUnitTo(CameraLocation, PlayerTeamId, InputID);
+	}
+}
+
+void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
+{
+	if (SelectedUnits.Num() > 0)
+	{
+		for (AGASUnit* SelectedUnit : SelectedUnits)
+		{
+			if (SelectedUnit)
+			{
+				//ActivateKeyboardAbilities(SelectedUnit, InputID);
+				//OnAbilityInputDetected(InputID, SelectedUnit, SelectedUnit->DefaultAbilities);
+				ActivateKeyboardAbilities(SelectedUnit, InputID);
+			}
+		}
+	}else if(HUDBase)
+	{
+		FVector CameraLocation = GetPawn()->GetActorLocation();
+		ActivateKeyboardAbilitiesOnCloseUnits(InputID, CameraLocation, SelectableTeamId, HUDBase);
+	}
+}
+/*
 void AExtendedControllerBase::SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {
 	UE_LOG(LogTemp, Warning, TEXT("SpawnWorkArea_Implementation!"));
@@ -63,6 +184,7 @@ void AExtendedControllerBase::SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass
         	if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
         	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
+        	CurrentDraggedWorkArea->SetOwner(this);
         	UE_LOG(LogTemp, Warning, TEXT("Area Spawned! %d"), SelectableTeamId);
         }
     }
@@ -72,11 +194,12 @@ AWorkArea* AExtendedControllerBase::GetDraggedWorkArea()
 {
 	return CurrentDraggedWorkArea;
 }
-
+*/
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 {
 	// Check if there's a CurrentDraggedWorkArea
-	if (CurrentDraggedWorkArea)
+	if(SelectedUnits.Num() && SelectedUnits[0])
+	if (SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		FVector MousePosition, MouseDirection;
 		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
@@ -88,7 +211,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 		FHitResult HitResult;
 		FCollisionQueryParams CollisionParams;
 		CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
-		CollisionParams.AddIgnoredActor(CurrentDraggedWorkArea); // Ignore the dragged actor in the raycast
+		CollisionParams.AddIgnoredActor(SelectedUnits[0]->CurrentDraggedWorkArea); // Ignore the dragged actor in the raycast
 
 		// Perform the raycast
 		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
@@ -100,18 +223,61 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 			// Update the work area's position to the hit location
 			FVector NewActorPosition = HitResult.Location;
 			NewActorPosition.Z += 50.f; // Adjust the Z offset if needed
-			CurrentDraggedWorkArea->SetActorLocation(NewActorPosition);
+			SelectedUnits[0]->CurrentDraggedWorkArea->SetActorLocation(NewActorPosition);
 		}
 	}
 }
 
-void AExtendedControllerBase::DropWorkArea()
+
+void AExtendedControllerBase::SendWorkerToWork_Implementation(AWorkingUnitBase* Worker)
 {
-	if (CurrentDraggedWorkArea && CurrentDraggedWorkArea->PlannedBuilding == false)
+	UE_LOG(LogTemp, Warning, TEXT("SendWorkerToWork_Implementation !!!!!"));
+
+	if (!Worker)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Worker is null! Cannot proceed."));
+		return;
+	}
+
+	if (!Worker->CurrentDraggedWorkArea)
+	{
+		UE_LOG(LogTemp, Error, TEXT("CurrentDraggedWorkArea is null! Cannot assign to Worker."));
+		return;
+	}
+	
+
+		UE_LOG(LogTemp, Warning, TEXT("SendWorkerToWork_Implementation 2222!!!!!"));
+		Worker->BuildArea = Worker->CurrentDraggedWorkArea;
+		Worker->BuildArea->TeamId = Worker->TeamId;
+		Worker->BuildArea->PlannedBuilding = true;
+		Worker->BuildArea->AddAreaToGroup();
+		// Check if the worker is overlapping with the build area
+		if (Worker->IsOverlappingActor(Worker->BuildArea))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Send Worker Build"));
+			// If they are overlapping, set the state to 'Build'
+			Worker->SetUnitState(UnitData::Build);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Send Worker GoToBuild"));
+			// If they are not overlapping, set the state to 'GoToBuild'
+			Worker->SetUnitState(UnitData::GoToBuild);
+		}
+	
+	 Worker->CurrentDraggedWorkArea = nullptr;
+}
+
+
+bool AExtendedControllerBase::DropWorkArea()
+{
+	UE_LOG(LogTemp, Warning, TEXT("DropWorkArea !!!!!"));
+	if(SelectedUnits.Num() && SelectedUnits[0])
+	if (SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->PlannedBuilding == false)
 	{
 		// Get all actors overlapping with the CurrentDraggedWorkArea
 		TArray<AActor*> OverlappingActors;
-		CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
+		SelectedUnits[0]->CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
 
 		bool bIsOverlappingWithValidArea = false;
 
@@ -128,36 +294,21 @@ void AExtendedControllerBase::DropWorkArea()
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
 		if (bIsOverlappingWithValidArea)
 		{
-			CurrentDraggedWorkArea->Destroy();
+			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
+			return true;
 		}
 		else
 		{
 			if(SelectedUnits.Num() && SelectedUnits[0])
 			{
 				AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
-				if(Worker)
-				{
-					Worker->BuildArea = CurrentDraggedWorkArea;
-					Worker->BuildArea->TeamId = SelectedUnits[0]->TeamId;
-					Worker->BuildArea->PlannedBuilding = true;
-					Worker->BuildArea->AddAreaToGroup();
-					// Check if the worker is overlapping with the build area
-					if (Worker->IsOverlappingActor(Worker->BuildArea))
-					{
-						// If they are overlapping, set the state to 'Build'
-						Worker->SetUnitState(UnitData::Build);
-					}
-					else
-					{
-						// If they are not overlapping, set the state to 'GoToBuild'
-						Worker->SetUnitState(UnitData::GoToBuild);
-					}
-				}
+				SendWorkerToWork_Implementation(Worker);
+				return true;
 			}
 		}
-
-		CurrentDraggedWorkArea = nullptr;
+		//CurrentDraggedWorkArea = nullptr;
 	}
+	return false;
 }
 
 void AExtendedControllerBase::MoveDraggedUnit_Implementation(float DeltaSeconds)
@@ -331,19 +482,19 @@ void AExtendedControllerBase::RightClickPressed()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
-
-	if(!CurrentDraggedWorkArea)
+	
+	if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		if(!CheckClickOnWorkArea(Hit))
 		{
 			RunUnitsAndSetWaypoints(Hit);
 		}
 
-	if (CurrentDraggedWorkArea)
+	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
-		CurrentDraggedWorkArea->PlannedBuilding = true;
-		CurrentDraggedWorkArea->RemoveAreaFromGroup();
-		CurrentDraggedWorkArea->Destroy();
-		CurrentDraggedWorkArea = nullptr;
+		SelectedUnits[0]->CurrentDraggedWorkArea->PlannedBuilding = true;
+		SelectedUnits[0]->CurrentDraggedWorkArea->RemoveAreaFromGroup();
+		SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
+		SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
 	}
 }
 

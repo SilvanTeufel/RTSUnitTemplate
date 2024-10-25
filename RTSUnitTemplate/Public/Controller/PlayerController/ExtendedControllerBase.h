@@ -20,23 +20,41 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AWorkArea* CurrentDraggedWorkArea;
+	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//AWorkArea* CurrentDraggedWorkArea;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+
+	UFUNCTION(BlueprintCallable, Category = "Unit")
+	void GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
 	
+	UFUNCTION(Server, Reliable)
+	void ServerGetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
+
+	UFUNCTION(Client, Reliable)
+	void ClientReceiveClosestUnit(AUnitBase* ClosestUnit, EGASAbilityInputID InputID);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityInputID InputID, FVector CameraLocation, int PlayerTeamId, AHUDBase* HUD);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
+	/*
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) // Server, Reliable, 
 	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetDraggedWorkArea();
-	
+	*/
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
 
+	UFUNCTION(Server, Reliable)
+	void SendWorkerToWork(AWorkingUnitBase* Worker);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void DropWorkArea();
+	bool DropWorkArea();
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CurrentDraggedUnitBase = nullptr;

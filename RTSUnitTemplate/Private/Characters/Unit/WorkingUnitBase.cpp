@@ -33,6 +33,11 @@ void AWorkingUnitBase::BeginPlay()
 	
 }
 
+void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWorkingUnitBase, CurrentDraggedWorkArea);
+}
 
 
 void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
@@ -51,7 +56,7 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 			return;
 		}
 	
-		if (WorkAreaClass && !ExtendedControllerBase->GetDraggedWorkArea() && ExtendedControllerBase->SelectableTeamId == TeamId) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
+		if (WorkAreaClass && !CurrentDraggedWorkArea && ExtendedControllerBase->SelectableTeamId == TeamId) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
 		{
 	
 			FVector MousePosition, MouseDirection;
@@ -67,7 +72,7 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 
 			// Perform the raycast
 			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
-
+	
 			FVector SpawnLocation = HitResult.Location; // Assuming you want to use HitResult location as spawn point
 			FRotator SpawnRotation = FRotator::ZeroRotator;
 			FActorSpawnParameters SpawnParams;
@@ -80,8 +85,32 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 			{
 				if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
 				SpawnedWorkArea->TeamId = TeamId;
-				ExtendedControllerBase->CurrentDraggedWorkArea = SpawnedWorkArea;
+				CurrentDraggedWorkArea = SpawnedWorkArea;
+				//BuildArea = SpawnedWorkArea;
 			
 			}
 		}
+}
+
+void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector HitLocation)
+{
+
+
+		FVector SpawnLocation = HitLocation; // Assuming you want to use HitResult location as spawn point
+		FRotator SpawnRotation = FRotator::ZeroRotator;
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		// Assuming we want to set the pawn that is responsible for spawning
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	    
+		AWorkArea* SpawnedWorkArea = GetWorld()->SpawnActor<AWorkArea>(WorkAreaClass, SpawnLocation, SpawnRotation, SpawnParams);
+		if (SpawnedWorkArea)
+		{
+			if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
+			SpawnedWorkArea->TeamId = TeamId;
+			CurrentDraggedWorkArea = SpawnedWorkArea;
+			BuildArea = SpawnedWorkArea;
+			
+		}
+
 }

@@ -57,10 +57,10 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveAreaFromGroup();
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void AddAreaToGroup();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

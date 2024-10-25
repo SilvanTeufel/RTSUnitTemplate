@@ -57,7 +57,7 @@ void AWorkArea::BeginPlay()
 }
 
 
-void AWorkArea::AddAreaToGroup()
+void AWorkArea::AddAreaToGroup_Implementation()
 {
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
@@ -96,7 +96,7 @@ void AWorkArea::AddAreaToGroup()
 	}
 }
 
-void AWorkArea::RemoveAreaFromGroup()
+void AWorkArea::RemoveAreaFromGroup_Implementation()
 {
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 

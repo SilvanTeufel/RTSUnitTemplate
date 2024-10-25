@@ -20,9 +20,14 @@ class RTSUNITTEMPLATE_API AWorkingUnitBase : public AAbilityUnit
 	
 public:
 	virtual void BeginPlay() override;
+
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=Worker)
 	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category=Worker)
+	void ServerSpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector HitLocation);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* ResourcePlace;
@@ -44,6 +49,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool IsWorker = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AWorkArea* CurrentDraggedWorkArea;
 	
 };
 
