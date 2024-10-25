@@ -69,7 +69,21 @@ void APerformanceUnit::Destroyed()
 
 void APerformanceUnit::SpawnFogOfWarManager()
 {
-	if(!EnableFog) return;
+
+	if(!EnableFog || !FogOfWarManagerClass)
+	{
+		if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+		{
+			AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+			// Get the world reference
+			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
+			{
+				OwningPlayerController = PlayerController;
+			}
+		}
+		return;
+	}
+	
 	if(SpawnedFogManager) return;
 	
 	if (FogOfWarManagerClass)
@@ -80,7 +94,7 @@ void APerformanceUnit::SpawnFogOfWarManager()
 			// Get the world reference
 			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
 			{
-		
+				OwningPlayerController = PlayerController;
 				UWorld* World = GetWorld();
 				if (World)
 				{

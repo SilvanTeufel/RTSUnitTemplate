@@ -16,6 +16,12 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	MoveWorkArea_Implementation(DeltaSeconds);
 }
 
+void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
+}
+
 void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
 {
 	UE_LOG(LogTemp, Warning, TEXT("ActivateKeyboardAbilities_Implementation!"));
@@ -25,7 +31,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit*
 	}
 }
 
-void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
+void AExtendedControllerBase::SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {
 	UE_LOG(LogTemp, Warning, TEXT("SpawnWorkArea_Implementation!"));
     if (WorkAreaClass)
@@ -57,9 +63,14 @@ void AExtendedControllerBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea
         	if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
         	SpawnedWorkArea->TeamId = SelectableTeamId;
             CurrentDraggedWorkArea = SpawnedWorkArea;
-        	UE_LOG(LogTemp, Warning, TEXT("Area Spawned!"));
+        	UE_LOG(LogTemp, Warning, TEXT("Area Spawned! %d"), SelectableTeamId);
         }
     }
+}
+
+AWorkArea* AExtendedControllerBase::GetDraggedWorkArea()
+{
+	return CurrentDraggedWorkArea;
 }
 
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
@@ -332,6 +343,7 @@ void AExtendedControllerBase::RightClickPressed()
 		CurrentDraggedWorkArea->PlannedBuilding = true;
 		CurrentDraggedWorkArea->RemoveAreaFromGroup();
 		CurrentDraggedWorkArea->Destroy();
+		CurrentDraggedWorkArea = nullptr;
 	}
 }
 

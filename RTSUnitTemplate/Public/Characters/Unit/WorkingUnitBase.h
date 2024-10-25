@@ -21,6 +21,9 @@ class RTSUNITTEMPLATE_API AWorkingUnitBase : public AAbilityUnit
 public:
 	virtual void BeginPlay() override;
 	
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=Worker)
+	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* ResourcePlace;
 

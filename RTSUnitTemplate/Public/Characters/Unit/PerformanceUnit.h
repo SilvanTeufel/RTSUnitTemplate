@@ -134,5 +134,8 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AFogOfWarManager* SpawnedFogManager;
+
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	APlayerController* OwningPlayerController;
 	
 };

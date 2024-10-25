@@ -65,8 +65,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ServerActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
+	//UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	//void ServerActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
 
 		

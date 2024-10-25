@@ -46,9 +46,15 @@ void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	UnitBase->Base = this;
 	
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	if (!ResourceGameMode) return;
+	
+	bool CanAffordConstruction = false;
 
-	bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false;
-
+	if(UnitBase->BuildArea)
+	{
+		CanAffordConstruction = ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId);
+	}
+	
 	if (UnitBase->IsWorker && IsBase && ResourceGameMode && UnitBase->GetUnitState() != UnitData::GoToBuild)
 	{
 		HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);

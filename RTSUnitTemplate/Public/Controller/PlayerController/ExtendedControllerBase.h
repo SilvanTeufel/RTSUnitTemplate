@@ -17,15 +17,20 @@ class RTSUNITTEMPLATE_API AExtendedControllerBase : public AWidgetController
 public:
 
 	virtual void Tick(float DeltaSeconds) override;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AWorkArea* CurrentDraggedWorkArea;
 
-	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AWorkArea* CurrentDraggedWorkArea;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) // Server, Reliable, 
 	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AWorkArea* GetDraggedWorkArea();
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
@@ -34,7 +39,7 @@ public:
 	void DropWorkArea();
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	AUnitBase* CurrentDraggedUnitBase;
+	AUnitBase* CurrentDraggedUnitBase = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AActor* CurrentDraggedGround;

@@ -154,7 +154,7 @@ bool AGASUnit::GetToggleUnitDetection()
 {
 	return ToggleUnitDetection;
 }
-
+/*
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	// Log the beginning of the function and which input was used
@@ -254,12 +254,12 @@ void AGASUnit::ServerActivateAbilityByInputID_Implementation(EGASAbilityInputID 
 		//ServerActivateAbilityByInputID(InputID, AbilitiesArray);
 	}
 }
+*/
 
-/*
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
-	if (HasAuthority())  // Ensure it only runs if the actor has server authority
-	{
+	//if (HasAuthority())  // Ensure it only runs if the actor has server authority
+	//{
 		if(AbilitySystemComponent)
 		{
 			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
@@ -269,17 +269,17 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray
 				AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
 			}
 		}
-	}else  // Client sends RPC to the server to activate the ability
-	{
-		ServerActivateAbilityByInputID(InputID, AbilitiesArray);
-	}
+	//}else  // Client sends RPC to the server to activate the ability
+	//{
+		//ServerActivateAbilityByInputID(InputID, AbilitiesArray);
+	//}
 }
 
-void AGASUnit::ServerActivateAbilityByInputID_Implementation(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
-{
-	ActivateAbilityByInputID(InputID, AbilitiesArray);  // Execute on server
-}
-*/
+//void AGASUnit::ServerActivateAbilityByInputID_Implementation(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
+//{
+	//ActivateAbilityByInputID(InputID, AbilitiesArray);  // Execute on server
+//}
+
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

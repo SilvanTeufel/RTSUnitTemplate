@@ -147,7 +147,7 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const
 {
 
-	if (TeamId < 0 || TeamId >= NumberOfTeams)
+	if (TeamResources.Num() == 0 || TeamId < 0 || TeamId >= NumberOfTeams)
 		return false;
 
 	// Initialize a map to store the total costs for easy comparison

@@ -261,7 +261,7 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))UE_LOG(LogTemp, Warning, TEXT("ExecuteOnAbilityInputDetected"));
 
 	if(!CamController) return;
-
+	/*
 	for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
 	{
 		if (SelectedUnit)
@@ -269,15 +269,16 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 			CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
 		}
 	}
+	*/
 
-	/*
 	if (CamController->SelectedUnits.Num() > 0)
 	{
 		for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
 		{
 			if (SelectedUnit)
 			{
-				OnAbilityInputDetected(InputID, SelectedUnit, SelectedUnit->DefaultAbilities);
+				CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
+				//OnAbilityInputDetected(InputID, SelectedUnit, SelectedUnit->DefaultAbilities);
 			}
 		}
 	}else
@@ -309,10 +310,11 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 		{
 			CamController->SelectedUnits.Add(ClosestUnit);
 			CamController->HUDBase->SetUnitSelected(ClosestUnit);
-			OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
+			CamController->ActivateKeyboardAbilities(ClosestUnit, InputID);
+			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
 	}
-	*/
+
 }
 
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
