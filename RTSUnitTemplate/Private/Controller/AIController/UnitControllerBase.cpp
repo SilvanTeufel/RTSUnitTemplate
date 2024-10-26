@@ -888,7 +888,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 		UnitBase->SetUnitState(UnitData::Evasion);
 	}
 
-	if(UnitBase->UnitsToChase.Num() && !UnitBase->IsOnPlattform)
+	if(UnitBase->SetNextUnitToChase() && !UnitBase->IsOnPlattform)
 	{
 		UnitBase->SetUnitState(UnitData::Chase);
 	}else if(!UnitBase->IsOnPlattform)

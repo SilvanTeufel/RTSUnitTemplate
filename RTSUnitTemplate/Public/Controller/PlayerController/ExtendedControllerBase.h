@@ -103,5 +103,8 @@ public:
 	bool CheckClickOnWorkArea(FHitResult Hit_Pawn);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void StopWork();
+	void StopWorkOnSelectedUnit();
+
+	UFUNCTION(Server, Reliable)
+	void StopWork(AWorkingUnitBase* Worker);
 };

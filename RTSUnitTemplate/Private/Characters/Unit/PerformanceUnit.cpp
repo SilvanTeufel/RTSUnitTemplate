@@ -159,7 +159,7 @@ bool APerformanceUnit::IsOverlappingFogOfWarManager(int PlayerTeamId)
 	return false;
 }
 */
-
+/*
 void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
 {
 
@@ -178,7 +178,7 @@ void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
 		}
 
 }
-
+*/
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
 		USkeletalMeshComponent* SkelMesh = GetMesh();

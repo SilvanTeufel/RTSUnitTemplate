@@ -100,8 +100,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetEnemyVisibility(bool IsVisible, int PlayerTeamId);
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	//void SetEnemyVisibility(bool IsVisible, int PlayerTeamId);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckViewport();

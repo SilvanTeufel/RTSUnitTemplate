@@ -52,7 +52,7 @@ void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedCompone
 void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 
-    APerformanceUnit* Unit = Cast<APerformanceUnit>(OtherActor);
+    AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
 
     
     if (Unit && PlayerTeamId != Unit->TeamId)
@@ -60,8 +60,11 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
         Unit->FogManagerOverlaps--;
         if(Unit->FogManagerOverlaps < 0) Unit->FogManagerOverlaps = 0;
         if(Unit->FogManagerOverlaps > 0) return;
-    
-        Unit->IsVisibileEnemy = false;
+
+        FTimerHandle TimerHandle;
+        GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {
+            Unit->IsVisibileEnemy = false;
+        }, 2.0f, false);
     }
   
 }

@@ -24,7 +24,6 @@ void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ActivateKeyboardAbilities_Implementation!"));
 	if(UnitBase && UnitBase->DefaultAbilities.Num())
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities);
@@ -41,7 +40,6 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 		// If we are on the server, run the logic directly.
 		for (AActor* UnitActor  : RTSGameMode->AllUnits)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("LOOPING1!"));
 			// Cast to AGASUnit to make sure it's of the correct type
 			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
 			// Check if the unit is valid and has the same TeamId as the camera
@@ -53,7 +51,6 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 				// Check if this unit is closer than the currently tracked closest unit
 				if (DistanceSquared < ClosestDistanceSquared)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("LOOPING3!"));
 					ClosestDistanceSquared = DistanceSquared;
 					ClosestUnit = Unit;
 				}
@@ -62,7 +59,6 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 		
 		if (ClosestUnit)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("ClosestUnit!"));
 	
 			ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
@@ -73,7 +69,6 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 
 void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ServerGetClosestUnitTo_Implementation!"));
 
 	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
 	
@@ -104,13 +99,12 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 
 void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ClientReceiveClosestUnit_Implementation!"));
+
 	if (ClosestUnit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Received Closest Unit: %s"), *ClosestUnit->GetName());
-
 		ClosestUnit->SetSelected();
 		SelectedUnits.Emplace(ClosestUnit);
+		HUDBase->SetUnitSelected(ClosestUnit);
 	}
 	// Update your local CloseUnit reference with ClosestUnit here.
 	// Example:
@@ -119,7 +113,6 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityInputID InputID, FVector CameraLocation, int PlayerTeamId, AHUDBase* HUD)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ActivateKeyboardAbilitiesOnCloseUnits_Implementation!"));
 
 	if (HasAuthority())
 	{
@@ -197,28 +190,19 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker, AWorkArea* DraggedArea)
 {
-	UE_LOG(LogTemp, Warning, TEXT("SendWorkerToWork_Implementation !!!!!"));
 
 	if (!Worker)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Worker is null! Cannot proceed."));
 		return;
 	}
-/*
-	if (!DraggedArea)
-	{
-		UE_LOG(LogTemp, Error, TEXT("DraggedArea is null! Cannot assign to Worker."));
-		return;
-	}
-*/
+
 	if (!Worker->CurrentDraggedWorkArea)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Worker->CurrentDraggedWorkArea is null! Cannot assign to Worker."));
 		return;
 	}
 	
-		UE_LOG(LogTemp, Error, TEXT("CurrentDraggedWorkArea TeamId: %d"), Worker->CurrentDraggedWorkArea->TeamId);
-		UE_LOG(LogTemp, Warning, TEXT("SendWorkerToWork_Implementation 2222!!!!!"));
 		Worker->BuildArea = Worker->CurrentDraggedWorkArea;
 		Worker->BuildArea->TeamId = Worker->TeamId;
 		Worker->BuildArea->PlannedBuilding = true;
@@ -226,14 +210,12 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker,
 		// Check if the worker is overlapping with the build area
 		if (Worker->IsOverlappingActor(Worker->BuildArea))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Send Worker Build"));
 			// If they are overlapping, set the state to 'Build'
 			Worker->SetUnitState(UnitData::Build);
 			Worker->SetUEPathfinding = true;
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Send Worker GoToBuild"));
 			// If they are not overlapping, set the state to 'GoToBuild'
 			Worker->SetUnitState(UnitData::GoToBuild);
 			Worker->SetUEPathfinding = true;
@@ -245,7 +227,6 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker,
 
 bool AExtendedControllerBase::DropWorkArea()
 {
-	UE_LOG(LogTemp, Warning, TEXT("DropWorkArea !!!!!"));
 	if(SelectedUnits.Num() && SelectedUnits[0])
 	if (SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->PlannedBuilding == false)
 	{
@@ -274,9 +255,6 @@ bool AExtendedControllerBase::DropWorkArea()
 		
 		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
 		{
-	
-			
-				UE_LOG(LogTemp, Error, TEXT("Client CurrentDraggedWorkArea TeamId: %d"), SelectedUnits[0]->CurrentDraggedWorkArea->TeamId);
 				SendWorkerToWork(SelectedUnits[0], SelectedUnits[0]->CurrentDraggedWorkArea);
 				return true;
 		}
@@ -482,31 +460,35 @@ void AExtendedControllerBase::RightClickPressed()
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		DestroyDraggedArea(SelectedUnits[0]);
-		//SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
 	}
 }
 
-void AExtendedControllerBase::StopWork()
+void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
+{
+	if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
+	{
+		Worker->BuildArea->StartedBuilding = false;
+		Worker->BuildArea->PlannedBuilding = false;
+		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+		if(ResourceGameMode)
+		{
+			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, Worker->BuildArea->ConstructionCost.PrimaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, Worker->BuildArea->ConstructionCost.SecondaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, Worker->BuildArea->ConstructionCost.TertiaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, Worker->BuildArea->ConstructionCost.RareCost);
+			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, Worker->BuildArea->ConstructionCost.EpicCost);
+			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, Worker->BuildArea->ConstructionCost.LegendaryCost);
+		}
+	}
+}
+
+void AExtendedControllerBase::StopWorkOnSelectedUnit()
 {
 	if(SelectedUnits.Num() && SelectedUnits[0])
 	{
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
-		if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
-		{
-			Worker->BuildArea->StartedBuilding = false;
-			Worker->BuildArea->PlannedBuilding = false;
-			AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-
-			if(ResourceGameMode)
-			{
-				ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, Worker->BuildArea->ConstructionCost.PrimaryCost);
-				ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, Worker->BuildArea->ConstructionCost.SecondaryCost);
-				ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, Worker->BuildArea->ConstructionCost.TertiaryCost);
-				ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, Worker->BuildArea->ConstructionCost.RareCost);
-				ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, Worker->BuildArea->ConstructionCost.EpicCost);
-				ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, Worker->BuildArea->ConstructionCost.LegendaryCost);
-			}
-		}
+		StopWork(Worker);
 	}
 }
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
@@ -535,7 +517,7 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 }
 bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 {
-	StopWork();
+	StopWorkOnSelectedUnit();
 	
 	if (Hit_Pawn.bBlockingHit && HUDBase)
 	{
@@ -562,12 +544,6 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
 
 						SendWorkerToResource(Worker, WorkArea);
-						/*
-						if(Worker)
-						{
-							Worker->ResourcePlace = WorkArea;
-							Worker->SetUnitState(UnitData::GoToResourceExtraction);
-						}*/
 					}
 				}
 			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea)
@@ -578,19 +554,6 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 					if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
 					{
 						SendWorkerToWorkArea(Worker, WorkArea);
-						/*
-						Worker->BuildArea = WorkArea;
-						// Check if the worker is overlapping with the build area
-						if (Worker->IsOverlappingActor(Worker->BuildArea))
-						{
-							// If they are overlapping, set the state to 'Build'
-							Worker->SetUnitState(UnitData::Build);
-						}
-						else
-						{
-							// If they are not overlapping, set the state to 'GoToBuild'
-							Worker->SetUnitState(UnitData::GoToBuild);
-						}*/
 					}
 				}
 			}
