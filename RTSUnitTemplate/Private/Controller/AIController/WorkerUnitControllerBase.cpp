@@ -469,7 +469,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 		return;
 	}
-
+	
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
@@ -513,7 +513,6 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 	const FVector BaseLocation = UnitBase->BuildArea->GetActorLocation();
 
 	//BaseLocation = GetGroundLocation(BaseLocation, UnitBase);
-	
 	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }
 

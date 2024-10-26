@@ -48,13 +48,19 @@ public:
 	AWorkArea* GetDraggedWorkArea();
 	*/
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
 
 	UFUNCTION(Server, Reliable)
-	void SendWorkerToWork(AWorkingUnitBase* Worker);
+	void SendWorkerToWork(AUnitBase* Worker, AWorkArea* DraggedArea);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();
+
+	UFUNCTION(Server, Reliable)
+	void DestroyDraggedArea(AWorkingUnitBase* Worker);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CurrentDraggedUnitBase = nullptr;
@@ -85,7 +91,14 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
 	void RightClickPressed();
+
+	UFUNCTION(Server, Reliable)
+	void SendWorkerToResource(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
+
+	UFUNCTION(Server, Reliable)
+	void SendWorkerToWorkArea(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
 	
+		
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CheckClickOnWorkArea(FHitResult Hit_Pawn);
 

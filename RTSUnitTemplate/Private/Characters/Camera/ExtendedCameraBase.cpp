@@ -258,76 +258,13 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 
 void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController)
 {
-	/*
-for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
-{
-	if (SelectedUnit)
-	{
-		CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
-	}
-}
-*/
+
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))UE_LOG(LogTemp, Warning, TEXT("ExecuteOnAbilityInputDetected"));
 
 	if(!CamController) return;
-	/*
-	for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
-	{
-		if (SelectedUnit)
-		{
-			CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
-		}
-	}
-	*/
 
 	CamController->ActivateKeyboardAbilitiesOnMultipleUnits(InputID);
-
-
-	/*
-	if (CamController->SelectedUnits.Num() > 0)
-	{
-		for (AGASUnit* SelectedUnit : CamController->SelectedUnits)
-		{
-			if (SelectedUnit)
-			{
-				CamController->ActivateKeyboardAbilities(SelectedUnit, InputID);
-				//OnAbilityInputDetected(InputID, SelectedUnit, SelectedUnit->DefaultAbilities);
-			}
-		}
-	}else
-	{
-		ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	
-		if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
-
-		AUnitBase* ClosestUnit = nullptr;
-		float ClosestDistanceSquared = FLT_MAX;
-		FVector CameraLocation = GetActorLocation();
-		for (AActor* UnitActor  : RTSGameMode->AllUnits)
-		{
-			// Cast to AGASUnit to make sure it's of the correct type
-			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
-			// Check if the unit is valid and has the same TeamId as the camera
-			if (Unit && Unit->IsWorker && Unit->TeamId == CamController->SelectableTeamId && !Unit->BuildArea)
-			{
-				float DistanceSquared = FVector::DistSquared(CameraLocation, Unit->GetActorLocation());
-				// Check if this unit is closer than the currently tracked closest unit
-				if (DistanceSquared < ClosestDistanceSquared)
-				{
-					ClosestDistanceSquared = DistanceSquared;
-					ClosestUnit = Unit;
-				}
-			}
-		}
-		if (ClosestUnit)
-		{
-			CamController->SelectedUnits.Add(ClosestUnit);
-			CamController->HUDBase->SetUnitSelected(ClosestUnit);
-			CamController->ActivateKeyboardAbilities(ClosestUnit, InputID);
-			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
-		}
-	}
-	*/
 }
 
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)

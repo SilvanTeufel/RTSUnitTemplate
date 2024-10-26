@@ -41,7 +41,6 @@ AWorkArea::AWorkArea()
 	TriggerCapsule->SetupAttachment(RootComponent);
 	//TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
 
-	
 	if (HasAuthority())
 	{
 		bReplicates = true;

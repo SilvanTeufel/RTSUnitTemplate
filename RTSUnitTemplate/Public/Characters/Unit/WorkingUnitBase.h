@@ -28,14 +28,20 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category=Worker)
 	void ServerSpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector HitLocation);
+
+	UFUNCTION(BlueprintCallable, Category=Worker)
+	void SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	UFUNCTION(Client, Reliable)
+	void ClientReceiveWorkArea(AWorkArea* ClientArea);
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* ResourcePlace;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class ABuildingBase* Base;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)

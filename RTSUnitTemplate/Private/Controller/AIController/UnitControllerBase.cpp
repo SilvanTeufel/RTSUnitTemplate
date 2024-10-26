@@ -1193,8 +1193,8 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	if(!UnitBase->SetUEPathfinding)
 		return false;
 	
-	if (ControllerBase)
-	{
+	//if (ControllerBase)
+	//{
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		// You can use the controller here
 
@@ -1202,10 +1202,9 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->SetUEPathfinding = false;
 		if(UnitToIgnore) return MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
 		return MoveToLocationUEPathFinding(UnitBase, Location);
-	}
+	//}
 
 	
-	return false;
 }
 
 void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
@@ -1226,7 +1225,6 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
-
 	// Check server authority
 	if(!HasAuthority())
 	{
@@ -1238,7 +1236,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	{
 		return false;
 	}
-
+	
 	// Check for a valid navigation system
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)
