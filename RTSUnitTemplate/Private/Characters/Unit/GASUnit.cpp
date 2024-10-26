@@ -154,131 +154,19 @@ bool AGASUnit::GetToggleUnitDetection()
 {
 	return ToggleUnitDetection;
 }
-/*
-void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
-{
-	// Log the beginning of the function and which input was used
-	FString CurrentTime = FDateTime::Now().ToString();
-	UE_LOG(LogTemp, Warning, TEXT("[%s] ActivateAbilityByInputID called with InputID: %d"), *CurrentTime, static_cast<int32>(InputID));
 
-	//if (HasAuthority())  // Ensure it only runs if the actor has server authority
-	//{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Running on server: HasAuthority() is true."), *CurrentTime);
-
-		if (AbilitySystemComponent)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[%s] AbilitySystemComponent is valid."), *CurrentTime);
-
-			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
-			if (AbilityToActivate != nullptr)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[%s] AbilityToActivate is valid. Trying to activate ability."), *CurrentTime);
-
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[%s] Running on client. Trying to activate ability by class."), *CurrentTime);
-				}
-				bool bActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-				if (bActivated)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[%s] Ability activated successfully."), *CurrentTime);
-				}
-				else
-				{
-					UE_LOG(LogTemp, Error, TEXT("[%s] Failed to activate ability."), *CurrentTime);
-				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("[%s] AbilityToActivate is nullptr. Unable to activate ability."), *CurrentTime);
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[%s] AbilitySystemComponent is nullptr. Cannot activate ability."), *CurrentTime);
-		}
-	//}
-	//else  // Client sends RPC to the server to activate the ability
-	//{
-		//UE_LOG(LogTemp, Warning, TEXT("[%s] Running on client: HasAuthority() is false. Sending RPC to server."), *CurrentTime);
-		//ServerActivateAbilityByInputID(InputID, AbilitiesArray);
-	//}
-}
-
-void AGASUnit::ServerActivateAbilityByInputID_Implementation(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
-{
-	// Log the beginning of the function and which input was used
-	FString CurrentTime = FDateTime::Now().ToString();
-	UE_LOG(LogTemp, Warning, TEXT("[%s] Server ActivateAbilityByInputID called with InputID: %d"), *CurrentTime, static_cast<int32>(InputID));
-
-	if (HasAuthority())  // Ensure it only runs if the actor has server authority
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Running on server: HasAuthority() is true."), *CurrentTime);
-
-		if (AbilitySystemComponent)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[%s] AbilitySystemComponent is valid."), *CurrentTime);
-
-			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
-			if (AbilityToActivate != nullptr)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[%s] AbilityToActivate is valid. Trying to activate ability."), *CurrentTime);
-
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[%s] Running on client. Trying to activate ability by class."), *CurrentTime);
-				}
-				bool bActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-				if (bActivated)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[%s] Ability activated successfully."), *CurrentTime);
-				}
-				else
-				{
-					UE_LOG(LogTemp, Error, TEXT("[%s] Failed to activate ability."), *CurrentTime);
-				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("[%s] AbilityToActivate is nullptr. Unable to activate ability."), *CurrentTime);
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[%s] AbilitySystemComponent is nullptr. Cannot activate ability."), *CurrentTime);
-		}
-	}
-	else  // Client sends RPC to the server to activate the ability
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Running on client: HasAuthority() is false. Sending RPC to server."), *CurrentTime);
-		//ServerActivateAbilityByInputID(InputID, AbilitiesArray);
-	}
-}
-*/
 
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
-	//if (HasAuthority())  // Ensure it only runs if the actor has server authority
-	//{
 		if(AbilitySystemComponent)
 		{
 			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 			if(AbilityToActivate != nullptr)
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client))UE_LOG(LogTemp, Warning, TEXT("TryActivateAbilityByClass!"));
 				AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
 			}
 		}
-	//}else  // Client sends RPC to the server to activate the ability
-	//{
-		//ServerActivateAbilityByInputID(InputID, AbilitiesArray);
-	//}
 }
-
-//void AGASUnit::ServerActivateAbilityByInputID_Implementation(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
-//{
-	//ActivateAbilityByInputID(InputID, AbilitiesArray);  // Execute on server
-//}
 
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)

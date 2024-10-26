@@ -119,11 +119,9 @@ void AUnitBase::ResetCollisionCooldown()
 
 void AUnitBase::CreateHealthWidgetComp()
 {
-	if(!HasAuthority())UE_LOG(LogTemp, Warning, TEXT("!!!!!CreateHealthWidgetComp!!!!"));
 	// Check if the HealthWidgetComp is already created
 	//if (!HealthCompCreated)
 	{
-		if(!HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("!!!!!We have to Create one!!!!"));
 		if (ControllerBase)
 		{
 
@@ -137,8 +135,6 @@ void AUnitBase::CreateHealthWidgetComp()
 		
 		if (HealthWidgetComp && HealthBarWidgetClass)
 		{
-			
-			if(!HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("!!!!!Found Class!!!!"))
 			// Attach it to the RootComponent
 			HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
@@ -162,7 +158,6 @@ void AUnitBase::CreateHealthWidgetComp()
 			UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
 		
 			if (HealthBarWidget) {
-				if(!HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("!!!!!Collapsed after creation!!!!"))
 				HealthBarWidget->SetOwnerActor(this);
 				//HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 				HealthCompCreated = true;

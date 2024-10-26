@@ -251,16 +251,13 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 
 	if(SelectedUnit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
+		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
 		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray);
 	}
 }
 
 void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController)
 {
-
-	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))UE_LOG(LogTemp, Warning, TEXT("ExecuteOnAbilityInputDetected"));
-
 	if(!CamController) return;
 
 	CamController->ActivateKeyboardAbilitiesOnMultipleUnits(InputID);
@@ -846,32 +843,26 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 			} break;
 		case 21:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityOne"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
 			} break;
 		case 22:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityTwo"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase);
 			} break;
 		case 23:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityThree"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase);
 			} break;
 		case 24:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityFour"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase);
 			} break;
 		case 25:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilityFive"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase);
 			} break;
 		case 26:
 			{
-				if (GetWorld() && GetWorld()->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("AbilitySix"));
 				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
 			} break;
 		}

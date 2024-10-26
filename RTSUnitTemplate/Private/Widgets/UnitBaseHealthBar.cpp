@@ -26,9 +26,7 @@ void UUnitBaseHealthBar::UpdateExperience()
 }
 
 void UUnitBaseHealthBar::ResetCollapseTimer(float VisibleTime) {
-	UE_LOG(LogTemp, Warning, TEXT("!!ResetCollapseTimer"));
 	if (GetWorld() && !HideWidget) {
-		UE_LOG(LogTemp, Warning, TEXT("!!ResetCollapseTimer2222"));
 		SetVisibility(ESlateVisibility::Visible);
 		GetWorld()->GetTimerManager().ClearTimer(CollapseTimerHandle);
 		GetWorld()->GetTimerManager().SetTimer(CollapseTimerHandle, this, &UUnitBaseHealthBar::CollapseWidget, VisibleTime, false);

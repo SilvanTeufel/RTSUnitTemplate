@@ -260,7 +260,6 @@ void AWorkerUnitControllerBase::StopWork(AUnitBase* UnitBase)
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 		if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Set StartedBuilding false!"));
 			Worker->BuildArea->StartedBuilding = false;
 			Worker->BuildArea->PlannedBuilding = false;
 			AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());

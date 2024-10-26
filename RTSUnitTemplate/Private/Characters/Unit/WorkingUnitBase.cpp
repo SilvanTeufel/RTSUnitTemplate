@@ -62,7 +62,6 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 
 		if (WorkAreaClass && !CurrentDraggedWorkArea && ExtendedControllerBase->SelectableTeamId == TeamId) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
 		{
-			UE_LOG(LogTemp, Error, TEXT("ExtendedControllerBase->SelectableTeamId: %d"), ExtendedControllerBase->SelectableTeamId);
 			FVector MousePosition, MouseDirection;
 			ExtendedControllerBase->DeprojectMousePositionToWorld(MousePosition, MouseDirection);
 
@@ -91,8 +90,6 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 				if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
 				SpawnedWorkArea->TeamId = TeamId;
 				CurrentDraggedWorkArea = SpawnedWorkArea;
-				UE_LOG(LogTemp, Error, TEXT("CurrentDraggedWorkArea: %d"), CurrentDraggedWorkArea->TeamId);
-
 				//BuildArea = SpawnedWorkArea;
 			
 			}
@@ -119,7 +116,6 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 			}
 			SpawnedWorkArea->TeamId = TeamId;
 			CurrentDraggedWorkArea = SpawnedWorkArea;
-			UE_LOG(LogTemp, Error, TEXT("CurrentDraggedWorkArea: %d"), CurrentDraggedWorkArea->TeamId);
 		}
 	}
 }
@@ -127,10 +123,8 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 
 void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {
-	UE_LOG(LogTemp, Error, TEXT("SpawnWorkAreaReplicated!!"));
 		if (WorkAreaClass && !CurrentDraggedWorkArea) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
 		{
-			UE_LOG(LogTemp, Error, TEXT("SpawnWorkAreaReplicated2!"));
 
 			FVector SpawnLocation = GetActorLocation()+FVector(0.f, 0.f, 500.f); // Assuming you want to use HitResult location as spawn point
 			FRotator SpawnRotation = FRotator::ZeroRotator;
@@ -147,8 +141,6 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 				if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
 				SpawnedWorkArea->TeamId = TeamId;
 				CurrentDraggedWorkArea = SpawnedWorkArea;
-				UE_LOG(LogTemp, Error, TEXT("Replicated CurrentDraggedWorkArea: %d"), CurrentDraggedWorkArea->TeamId);
-
 				//BuildArea = SpawnedWorkArea;
 				//ClientReceiveWorkArea_Implementation(CurrentDraggedWorkArea);
 			}
@@ -158,7 +150,6 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 
 void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientArea)
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!ClientReceiveWorkArea_Implementation!!!!!!!!!"));
 	if (!OwningPlayerController)
 	{
 		UE_LOG(LogTemp, Error, TEXT("No OwningPlayerController"));
@@ -175,7 +166,6 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 
 	if( ExtendedControllerBase->SelectableTeamId == TeamId)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ExtendedControllerBase->SelectableTeamId: %d"), ExtendedControllerBase->SelectableTeamId);
 		FVector MousePosition, MouseDirection;
 		ExtendedControllerBase->DeprojectMousePositionToWorld(MousePosition, MouseDirection);
 

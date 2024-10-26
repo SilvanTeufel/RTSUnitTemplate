@@ -59,7 +59,7 @@ public:
 		RTSSessionName = FName(*NewSessionName.ToString());
 		RTSSessionSearchKey = FName(*NewSessionName.ToString());
 		// Log the new RTSSessionName value
-		UE_LOG(LogTemp, Log, TEXT("RTSSessionName set to: %s"), *RTSSessionName.ToString());
+		//UE_LOG(LogTemp, Log, TEXT("RTSSessionName set to: %s"), *RTSSessionName.ToString());
 	}
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="EOSVariables")
