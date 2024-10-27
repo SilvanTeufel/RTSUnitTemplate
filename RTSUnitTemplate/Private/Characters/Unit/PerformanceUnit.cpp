@@ -44,10 +44,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void APerformanceUnit::BeginPlay()
 {
 	Super::BeginPlay();
-	
 
-	
-	
 	SpawnFogOfWarManager();
 	
 }
@@ -208,11 +205,11 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
-			if(Projectile) Projectile->SetVisibility(false);
+			if(Projectile) Projectile->SetVisibility(true);
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
-			if(Projectile) Projectile->SetVisibility(true);
+			if(Projectile) Projectile->SetVisibility(false);
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			HealthBarUpdateTriggered = false;
 		}

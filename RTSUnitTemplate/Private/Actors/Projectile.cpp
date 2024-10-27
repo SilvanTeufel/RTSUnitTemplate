@@ -47,6 +47,17 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
+
+		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
+		{
+
+			SetVisibility(true);
+		}
+		else
+		{
+
+			SetVisibility(false);
+		}
 	}
 }
 
@@ -68,8 +79,20 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	{
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
+
+		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
+		{
+
+			SetVisibility(true);
+		}
+		else
+		{
+
+			SetVisibility(false);
+		}
 		
 	}
+	
 }
 
 // Called when the game starts or when spawned
