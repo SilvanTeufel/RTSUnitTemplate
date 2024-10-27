@@ -35,13 +35,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SpawnFogOfWarManager();
-	/*
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SetInvisibileIfNoOverlap();
 
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	bool IsOverlappingFogOfWarManager(int PlayerTeamId);
-	*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.008, 0.008, 0.0004);
 	

@@ -128,57 +128,7 @@ void APerformanceUnit::SpawnFogOfWarManager()
 	}
 }
 
-/*
-void APerformanceUnit::SetInvisibileIfNoOverlap()
-{
-	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 
-		if(!ControllerBase) return;
-		
-		if(!IsOverlappingFogOfWarManager(ControllerBase->SelectableTeamId))
-			SetEnemyVisibility(false, ControllerBase->SelectableTeamId);
-	}
-}
-
-bool APerformanceUnit::IsOverlappingFogOfWarManager(int PlayerTeamId)
-{
-	TArray<AActor*> OverlappingActors;
-	GetOverlappingActors(OverlappingActors, AFogOfWarManager::StaticClass());
-
-	for (AActor* Actor : OverlappingActors)
-	{
-		AFogOfWarManager* FogManager = Cast<AFogOfWarManager>(Actor);
-		if (FogManager && FogManager->TeamId != PlayerTeamId)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-*/
-/*
-void APerformanceUnit::SetEnemyVisibility(bool IsVisible, int PlayerTeamId)
-{
-
-	bool IsFriendly = PlayerTeamId == TeamId;
-
-
-		if (IsVisible && !IsFriendly)
-		{
-			IsVisibileEnemy = true;
-			SetCharacterVisibility(true);
-		}
-		else if(!IsVisible && !IsFriendly)
-		{
-			IsVisibileEnemy = false;
-			SetCharacterVisibility(false);
-		}
-
-}
-*/
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
 		USkeletalMeshComponent* SkelMesh = GetMesh();
