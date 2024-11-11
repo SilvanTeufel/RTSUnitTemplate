@@ -123,6 +123,8 @@ void APerformanceUnit::SpawnFogOfWarManager()
 			}
 		}
 	}
+
+	IsVisibileEnemy = false;
 }
 
 

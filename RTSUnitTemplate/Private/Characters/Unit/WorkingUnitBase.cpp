@@ -121,7 +121,7 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 }
 
 
-void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
+void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, bool IsPaid)
 {
 		if (WorkAreaClass && !CurrentDraggedWorkArea) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
 		{
@@ -140,6 +140,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			
 				if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
 				SpawnedWorkArea->TeamId = TeamId;
+				SpawnedWorkArea->IsPaid = IsPaid;
 				CurrentDraggedWorkArea = SpawnedWorkArea;
 				//BuildArea = SpawnedWorkArea;
 				//ClientReceiveWorkArea_Implementation(CurrentDraggedWorkArea);

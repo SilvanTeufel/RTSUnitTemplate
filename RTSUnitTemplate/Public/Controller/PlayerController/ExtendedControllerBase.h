@@ -54,7 +54,7 @@ public:
 	void MoveWorkArea(float DeltaSeconds);
 
 	UFUNCTION(Server, Reliable)
-	void SendWorkerToWork(AUnitBase* Worker, AWorkArea* DraggedArea);
+	void SendWorkerToWork(AUnitBase* Worker);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();

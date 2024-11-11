@@ -140,7 +140,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ControlTimer = 0.f;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsPaid = false;
 	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	//bool CanAffordConstruction(int32 TeamId, int32 NumberOfTeams, TArray<FResourceArray> TeamResources);
 

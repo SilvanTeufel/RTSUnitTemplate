@@ -188,7 +188,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 }
 
 
-void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker, AWorkArea* DraggedArea)
+void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
 
 	if (!Worker)
@@ -207,6 +207,18 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker,
 		Worker->BuildArea->TeamId = Worker->TeamId;
 		Worker->BuildArea->PlannedBuilding = true;
 		Worker->BuildArea->AddAreaToGroup();
+		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode);
+
+		if(ResourceGameMode && Worker->BuildArea->IsPaid)
+		{
+			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.PrimaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.SecondaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Tertiary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.TertiaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, -Worker->BuildArea->ConstructionCost.RareCost);
+			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, -Worker->BuildArea->ConstructionCost.EpicCost);
+			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.LegendaryCost);
+		}
+	
 		// Check if the worker is overlapping with the build area
 		if (Worker->IsOverlappingActor(Worker->BuildArea))
 		{
@@ -220,6 +232,10 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker,
 			Worker->SetUnitState(UnitData::GoToBuild);
 			Worker->SetUEPathfinding = true;
 		}
+	
+
+	
+
 	
 	 Worker->CurrentDraggedWorkArea = nullptr;
 }
@@ -255,7 +271,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		
 		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
 		{
-				SendWorkerToWork(SelectedUnits[0], SelectedUnits[0]->CurrentDraggedWorkArea);
+				SendWorkerToWork(SelectedUnits[0]);
 				return true;
 		}
 		
