@@ -93,7 +93,7 @@ void AExtendedCameraBase::SetupResourceWidget()
 			if(CameraControllerBase)
 			{
 				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
-
+				ResourceBar->StartUpdateTimer();
 			}
 		}
 	}
@@ -390,7 +390,7 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 			AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
 			SetUserWidget(SelectedUnit);
 		}
-
+		
 		if (ResourceWidget)
 		{
 			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
@@ -412,12 +412,14 @@ void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActio
 		
 		SetUserWidget(nullptr);
 
+		/*
 		if (ResourceWidget)
 		{
 			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
 			if(ResourceBar) ResourceBar->StopTimer();
 			ResourceWidget->SetVisibility(false);
 		}
+		*/
 	}
 }
 
