@@ -482,6 +482,7 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId)
 {
+	if(!RTSGameMode) return;
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
 	

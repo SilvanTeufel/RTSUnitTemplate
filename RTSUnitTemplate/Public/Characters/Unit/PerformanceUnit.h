@@ -37,10 +37,10 @@ public:
 	void SpawnFogOfWarManager();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector FogManagerMultiplier = FVector(0.008, 0.008, 0.0004);
+	FVector FogManagerMultiplier = FVector(0.01, 0.01, 50);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector FogManagerPositionOffset = FVector(0, 0, -250.f);
+	FVector FogManagerPositionOffset = FVector(0, 0, 50.f);
 	// Function to update light range
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SightRadius", Keywords = "RTSUnitTemplate SightRadius"), Category = RTSUnitTemplate)
