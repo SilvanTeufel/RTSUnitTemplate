@@ -78,6 +78,7 @@ namespace CameraData
 		RotateLeft UMETA(DisplayName = "RotateLeft"),
 		RotateRight UMETA(DisplayName = "RotateRight"),
 		LockOnCharacter UMETA(DisplayName = "LockOnCharacter"),
+		LockOnCharacterWithTag UMETA(DisplayName = "LockOnCharacterWithTag"),
 		LockOnSpeaking UMETA(DisplayName = "LockOnSpeaking"),
 		ZoomToNormalPosition  UMETA(DisplayName = "ZoomToNormalPosition"),
 		ThirdPerson UMETA(DisplayName = "ThirdPerson"),

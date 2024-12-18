@@ -3,6 +3,7 @@
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 
+#include "GameplayTagsManager.h"
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -29,6 +30,30 @@ void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit*
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities);
 	}
 	
+}
+
+void AExtendedControllerBase::ActivateKeyboardAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag)
+{
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && (Unit->TeamId == SelectableTeamId))
+		{
+			ActivateKeyboardAbilities_Implementation(Unit, InputID);
+		}
+	}
+}
+
+void AExtendedControllerBase::ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit)
+{
+	if (Unit && (Unit->TeamId == SelectableTeamId))
+	{
+		if (Unit->GetController()) // Ensure the unit has a valid Controller
+		{
+			Unit->AddMovementInput(Direction, Scale);
+			Unit->SetUnitState(UnitData::Run);
+		}
+	}
 }
 
 void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID)

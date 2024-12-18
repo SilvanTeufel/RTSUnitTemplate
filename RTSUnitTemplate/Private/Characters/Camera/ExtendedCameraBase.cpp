@@ -468,406 +468,506 @@ void AExtendedCameraBase::Input_Shift_Released(const FInputActionValue& InputAct
 
 void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState)
 {
-	if(BlockControls) return;
+    if (BlockControls) return;
+
+    ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+
+    if (CameraControllerBase)
+    {
+        if (CameraControllerBase->IsStrgPressed)
+        {
+            switch (NewCameraState)
+            {
+            case 0:
+            	{
+
+            	}break;
+            case 1: HandleState_MoveW(CameraControllerBase); break;
+            case 111: HandleState_StopMoveW(CameraControllerBase); break;
+            case 2: HandleState_MoveS(CameraControllerBase); break;
+            case 222: HandleState_StopMoveS(CameraControllerBase); break;
+            case 3: HandleState_MoveA(CameraControllerBase); break;
+            case 333: HandleState_StopMoveA(CameraControllerBase); break;
+            case 4: HandleState_MoveD(CameraControllerBase); break;
+            case 444: HandleState_StopMoveD(CameraControllerBase); break;
+            case 5: HandleState_ZoomIn(CameraControllerBase); break;
+            case 555: HandleState_StopZoomIn(CameraControllerBase); break;
+            case 6: HandleState_ZoomOut(CameraControllerBase); break;
+            case 666: HandleState_StopZoomOut(CameraControllerBase); break;
+            case 11: HandleState_LockOnCharacter(); break;
+            case 14: HandleState_OrbitAndMove(); break;
+            case 15: HandleState_SpawnEffects(CameraControllerBase); break;
+            case 7:
+            	{
+            		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
+            			SetCameraState(CameraData::ZoomOutPosition);
+            	} break;
+            case 8:
+            	{
+            		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
+            			SetCameraState(CameraData::ZoomInPosition);
+            	} break;
+            case 9: HandleState_RotateLeft(CameraControllerBase); break;
+            case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
+            case 10: HandleState_RotateRight(CameraControllerBase); break;
+            case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
+            case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
+            case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
+            case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
+            case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
+            case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEleven, CameraControllerBase); break;
+            case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwelve, CameraControllerBase); break;
+            default: break;
+            }
+        }
+        else
+        {
+            switch (NewCameraState)
+            {
+            case 1: HandleState_MoveW_NoStrg(CameraControllerBase); break;
+            case 111: HandleState_StopMoveW_NoStrg(CameraControllerBase); break;
+            case 2: HandleState_MoveS_NoStrg(CameraControllerBase); break;
+            case 222: HandleState_StopMoveS_NoStrg(CameraControllerBase); break;
+            case 3: HandleState_MoveA_NoStrg(CameraControllerBase); break;
+            case 333: HandleState_StopMoveA_NoStrg(CameraControllerBase); break;
+            case 4: HandleState_MoveD_NoStrg(CameraControllerBase); break;
+            case 444: HandleState_StopMoveD_NoStrg(CameraControllerBase); break;
+            case 5: HandleState_ZoomIn_NoStrg(CameraControllerBase); break;
+            case 555: HandleState_StopZoomIn_NoStrg(CameraControllerBase); break;
+            case 6: HandleState_ZoomOut_NoStrg(CameraControllerBase); break;
+            case 666: HandleState_StopZoomOut_NoStrg(CameraControllerBase); break;
+            case 8:
+            	{
+            		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
+            			SetCameraState(CameraData::ZoomInPosition);
+            	} break;
+            case 9: HandleState_RotateLeft_NoStrg(CameraControllerBase); break;
+            case 999: HandleState_StopRotateLeft_NoStrg(CameraControllerBase); break;
+            case 10: HandleState_RotateRight_NoStrg(CameraControllerBase); break;
+            case 101010: HandleState_StopRotateRight_NoStrg(CameraControllerBase); break;
+            case 12: HandleState_TPressed(CameraControllerBase); break;
+            case 13: HandleState_ScrollZoom(InputActionValue, CameraControllerBase); break;
+            case 16: HandleState_MiddleMousePressed(CameraControllerBase); break;
+            case 17: HandleState_MiddleMouseReleased(CameraControllerBase); break;
+            case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);break;
+            case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase); break;
+            case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase); break;
+            case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase); break;
+            case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase); break;
+            case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase); break;
+            default: break;
+            }
+        }
+    }
+}
+
+void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControllerBase)
+{
+
+    if (GetCameraState() == CameraData::OrbitAndMove)
+    {
+        CameraControllerBase->CamIsRotatingLeft = false;
+        CameraControllerBase->CamIsRotatingRight = false;
+    }
+
+    CameraControllerBase->WIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+    SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveW(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->WIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveS(ACameraControllerBase* CameraControllerBase)
+{
+
+    if (GetCameraState() == CameraData::OrbitAndMove)
+    {
+        CameraControllerBase->CamIsRotatingLeft = false;
+        CameraControllerBase->CamIsRotatingRight = false;
+    }
+
+    CameraControllerBase->SIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+    SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveS(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->SIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveA(ACameraControllerBase* CameraControllerBase)
+{
+
+    if (GetCameraState() == CameraData::OrbitAndMove)
+    {
+        CameraControllerBase->CamIsRotatingLeft = false;
+        CameraControllerBase->CamIsRotatingRight = false;
+    }
+
+    CameraControllerBase->AIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+    SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveA(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->AIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveD(ACameraControllerBase* CameraControllerBase)
+{
+
+    if (GetCameraState() == CameraData::OrbitAndMove)
+    {
+        CameraControllerBase->CamIsRotatingLeft = false;
+        CameraControllerBase->CamIsRotatingRight = false;
+    }
+
+    CameraControllerBase->DIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+    SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveD(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->DIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_ZoomIn(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsZoomingInState = 1;
 	
-	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-	
-	if(CameraControllerBase)
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::ZoomIn);
+}
+
+void AExtendedCameraBase::HandleState_StopZoomIn(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsZoomingInState = 2;
+}
+
+void AExtendedCameraBase::HandleState_ZoomOut(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsZoomingOutState = 1;
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::ZoomOut);
+}
+
+void AExtendedCameraBase::HandleState_StopZoomOut(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsZoomingOutState = 2;
+}
+
+void AExtendedCameraBase::HandleState_LockOnCharacter()
+{
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::LockOnCharacter);
+}
+
+void AExtendedCameraBase::HandleState_OrbitAndMove()
+{
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::OrbitAndMove);
+}
+
+void AExtendedCameraBase::HandleState_SpawnEffects(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->SpawnMissileRain(4, FVector(1000.f, -1000.f, 1000.f));
+    CameraControllerBase->SpawnEffectArea(3, FVector(1000.f, -1000.f, 10.f), FVector(5), CameraControllerBase->EffectAreaClass);
+}
+
+void AExtendedCameraBase::HandleState_RotateLeft(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsRotatingLeft = true;
+    if (!CameraControllerBase->LockCameraToCharacter &&
+        !CameraControllerBase->WIsPressedState &&
+        !CameraControllerBase->AIsPressedState &&
+        !CameraControllerBase->SIsPressedState &&
+        !CameraControllerBase->DIsPressedState)
+    {
+        if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+            SetCameraState(CameraData::HoldRotateLeft);
+    }
+}
+
+void AExtendedCameraBase::HandleState_StopRotateLeft(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsRotatingLeft = false;
+}
+
+void AExtendedCameraBase::HandleState_RotateRight(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsRotatingRight = true;
+    if (!CameraControllerBase->LockCameraToCharacter &&
+        !CameraControllerBase->WIsPressedState &&
+        !CameraControllerBase->AIsPressedState &&
+        !CameraControllerBase->SIsPressedState &&
+        !CameraControllerBase->DIsPressedState)
+    {
+        if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+            SetCameraState(CameraData::HoldRotateRight);
+    }
+}
+
+void AExtendedCameraBase::HandleState_StopRotateRight(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->CamIsRotatingRight = false;
+}
+
+
+void AExtendedCameraBase::HandleState_MoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->WIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+
+    CameraControllerBase->WIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveS_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->SIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveS_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+
+    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+
+    CameraControllerBase->SIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveA_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+
+    CameraControllerBase->AIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveA_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+
+    CameraControllerBase->AIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_MoveD_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->DIsPressedState = 1;
+    CameraControllerBase->LockCameraToUnit = false;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::MoveWASD);
+}
+
+void AExtendedCameraBase::HandleState_StopMoveD_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+
+    CameraControllerBase->DIsPressedState = 2;
+}
+
+void AExtendedCameraBase::HandleState_ZoomIn_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsZoomingInState = 1;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::ZoomIn);
+}
+
+void AExtendedCameraBase::HandleState_StopZoomIn_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsZoomingInState = 2;
+}
+
+void AExtendedCameraBase::HandleState_ZoomOut_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsZoomingOutState = 1;
+
+    if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+        SetCameraState(CameraData::ZoomOut);
+}
+
+void AExtendedCameraBase::HandleState_StopZoomOut_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+    CameraControllerBase->CamIsZoomingOutState = 2;
+}
+
+void AExtendedCameraBase::HandleState_RotateLeft_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+
+	if (GetCameraState() != CameraData::LockOnCharacterWithTag)
 	{
-		if(CameraControllerBase->IsStrgPressed)
-			switch (NewCameraState)
-			{
-		case 0:
-			{
-
-			}break;
-		case 1:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->WIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 111:
-			{
-				CameraControllerBase->WIsPressedState = 2;
-			} break;
-		case 2:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->SIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 222:
-			{
-				CameraControllerBase->SIsPressedState = 2;
-			} break;
-		case 3:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->AIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 333:
-			{
-				CameraControllerBase->AIsPressedState = 2;
-			} break;
-		case 4:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->DIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 444:
-			{
-				CameraControllerBase->DIsPressedState = 2;
-			} break;
-		case 5:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					if(!CameraControllerBase->HoldZoomOnLockedCharacter) CameraControllerBase->CamIsZoomingInState = 1;
-				
-					CameraControllerBase->HoldZoomOnLockedCharacter = !CameraControllerBase->HoldZoomOnLockedCharacter;
-				
-				} else
-				{
-					CameraControllerBase->CamIsZoomingInState = 1;
-					SetCameraState(CameraData::ZoomIn);
-				}
-			}
-				break;
-		case 555:
-			{
-					CameraControllerBase->CamIsZoomingInState = 2;
-			}
-			break;
-		case 6:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					if(!CameraControllerBase->HoldZoomOnLockedCharacter) CameraControllerBase->CamIsZoomingOutState = 1;
-				
-					CameraControllerBase->HoldZoomOnLockedCharacter = !CameraControllerBase->HoldZoomOnLockedCharacter;
-				
-				} else
-				{
-					CameraControllerBase->CamIsZoomingOutState = 1;
-					SetCameraState(CameraData::ZoomOut);
-				}
-			}
-			break;
-		case 666:
-			{
-				CameraControllerBase->CamIsZoomingOutState = 2;
-			}
-			break;
-		case 7: SetCameraState(CameraData::ZoomOutPosition); break;
-		case 8: SetCameraState(CameraData::ZoomInPosition); break;
-		case 9:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-					return;
-				
-				SetCameraState(CameraData::RotateLeft);
-			} break;
-		case 10:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-					return;
-				
-				SetCameraState(CameraData::RotateRight);
-			} break;
-		case 11: SetCameraState(CameraData::LockOnCharacter); break;
-		case 12: SetCameraState(CameraData::ZoomToThirdPerson); break;
-		case 14:
-			{	SetCameraState(CameraData::OrbitAndMove); break;
-				//CameraControllerBase->OrbitAtLocation(FVector(1000.f, -1000.f, 500.f), 0.033f);
-			} break;
-		case 15:
-			{
-
-				CameraControllerBase->SpawnMissileRain(4, FVector(1000.f, -1000.f, 1000.f));
-				CameraControllerBase->SpawnEffectArea(3, FVector(1000.f, -1000.f, 10.f), FVector(5), CameraControllerBase->EffectAreaClass);
-			} break;
-		case 16:
-			{
-				float MouseX, MouseY;
-				CameraControllerBase->GetMousePosition(MouseX, MouseY);
-				PreviousMouseLocation.X = MouseX;
-				PreviousMouseLocation.Y = MouseY;
-
-				CameraControllerBase->MiddleMouseIsPressed = true;
-			} break;
-		case 17:
-			{
-				CameraControllerBase->MiddleMouseIsPressed = false;
-			} break;
-		case 21:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);
-			} break;
-		case 22:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase);
-			} break;
-		case 23:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase);
-			} break;
-		case 24:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase);
-			} break;
-		case 25:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEleven, CameraControllerBase);
-			} break;
-		case 26:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwelve, CameraControllerBase);
-			} break;
-		default:
-			{
-				//SetCameraState(CameraData::UseScreenEdges);
-			}break;
-		}
-
-		if(!CameraControllerBase->IsStrgPressed)
-		switch (NewCameraState)
-		{
-		case 1:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->WIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 111:
-			{
-				CameraControllerBase->WIsPressedState = 2;
-			} break;
-		case 2:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->SIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 222:
-			{
-				CameraControllerBase->SIsPressedState = 2;
-			} break;
-		case 3:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->AIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 333:
-			{
-				CameraControllerBase->AIsPressedState = 2;
-			} break;
-		case 4:
-			{
-				if(GetCameraState() == CameraData::OrbitAndMove)
-				{
-					CameraControllerBase->CamIsRotatingLeft = false;
-					CameraControllerBase->CamIsRotatingRight = false;
-				}
-				
-				CameraControllerBase->DIsPressedState = 1;
-				CameraControllerBase->LockCameraToUnit = false;
-				SetCameraState(CameraData::MoveWASD);
-			} break;
-		case 444:
-			{
-				CameraControllerBase->DIsPressedState = 2;
-			} break;
-		case 5:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					if(!CameraControllerBase->HoldZoomOnLockedCharacter) CameraControllerBase->CamIsZoomingInState = 1;
-				
-					CameraControllerBase->HoldZoomOnLockedCharacter = !CameraControllerBase->HoldZoomOnLockedCharacter;
-				
-				} else
-				{
-					CameraControllerBase->CamIsZoomingInState = 1;
-					SetCameraState(CameraData::ZoomIn);
-				}
-			}
-				break;
-		case 555:
-			{
-					CameraControllerBase->CamIsZoomingInState = 2;
-			}
-			break;
-		case 6:
-			{
-				if(CameraControllerBase->LockCameraToCharacter)
-				{
-					if(!CameraControllerBase->HoldZoomOnLockedCharacter) CameraControllerBase->CamIsZoomingOutState = 1;
-				
-					CameraControllerBase->HoldZoomOnLockedCharacter = !CameraControllerBase->HoldZoomOnLockedCharacter;
-				
-				} else
-				{
-					CameraControllerBase->CamIsZoomingOutState = 1;
-					SetCameraState(CameraData::ZoomOut);
-				}
-			}
-			break;
-		case 666:
-			{
-				CameraControllerBase->CamIsZoomingOutState = 2;
-			}
-			break;
-		case 8: SetCameraState(CameraData::ZoomInPosition); break;
-		case 9:
-			{
-				CameraControllerBase->CamIsRotatingLeft = true;
-				
-				if(CameraControllerBase->LockCameraToCharacter ||
-					CameraControllerBase->WIsPressedState ||
-					CameraControllerBase->AIsPressedState ||
-					CameraControllerBase->SIsPressedState ||
-					CameraControllerBase->DIsPressedState)
-					return;
-				
-				SetCameraState(CameraData::HoldRotateLeft);
-			} break;
-		case 10:
-			{
-				CameraControllerBase->CamIsRotatingRight = true;
-				
-				if(CameraControllerBase->LockCameraToCharacter ||
-					CameraControllerBase->WIsPressedState ||
-					CameraControllerBase->AIsPressedState ||
-					CameraControllerBase->SIsPressedState ||
-					CameraControllerBase->DIsPressedState)
-					return;
-				
-				SetCameraState(CameraData::HoldRotateRight);
-			} break;
-		case 999:
-			{
-				CameraControllerBase->CamIsRotatingLeft = false;
-			}
-			break;
-		case 101010:
-			{
-				CameraControllerBase->CamIsRotatingRight = false;
-			}
-			break;
-		case 12:
-			{
-				CameraControllerBase->TPressed();
-			}
-			break;
-		case 13:
-			{
-				float FloatValue = InputActionValue.Get<float>();
-
-				if(CameraControllerBase->ScrollZoomCount <= 10.f)
-				CameraControllerBase->ScrollZoomCount += FloatValue*2;
-				
-				if(CameraControllerBase->LockCameraToCharacter)
-					return;
-				
-				if(FloatValue > 0)
-				{
-					SetCameraState(CameraData::ScrollZoomIn);
-				}
-				else
-				{
-					SetCameraState(CameraData::ScrollZoomOut);
-				}
-			}
-			break;
-		case 15:
-			{
-				UE_LOG(LogTemp, Warning, TEXT("15 pressed!"));
-
-			} break;
-		case 16:
-			{
-				float MouseX, MouseY;
-				CameraControllerBase->GetMousePosition(MouseX, MouseY);
-				PreviousMouseLocation.X = MouseX;
-				PreviousMouseLocation.Y = MouseY;
-				
-				CameraControllerBase->MiddleMouseIsPressed = true;
-			} break;
-		case 17:
-			{
-				CameraControllerBase->MiddleMouseIsPressed = false;
-			} break;
-		case 21:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
-			} break;
-		case 22:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase);
-			} break;
-		case 23:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase);
-			} break;
-		case 24:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase);
-			} break;
-		case 25:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase);
-			} break;
-		case 26:
-			{
-				ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
-			} break;
-		}
+		CameraControllerBase->CamIsRotatingLeft = true;
+		SetCameraState(CameraData::HoldRotateLeft);
+	}else
+	{
+		CameraControllerBase->CamIsRotatingRight = true;
 	}
+	
+}
+
+void AExtendedCameraBase::HandleState_StopRotateLeft_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+	
+	if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+	{
+		CameraControllerBase->CamIsRotatingLeft = false;
+	}else
+		CameraControllerBase->CamIsRotatingRight = false;
+}
+
+void AExtendedCameraBase::HandleState_RotateRight_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+	
+
+	if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+	{
+		CameraControllerBase->CamIsRotatingRight = true;
+		SetCameraState(CameraData::HoldRotateRight);
+	}
+	else
+	{
+		CameraControllerBase->CamIsRotatingLeft = true;
+	}
+}
+
+void AExtendedCameraBase::HandleState_StopRotateRight_NoStrg(ACameraControllerBase* CameraControllerBase)
+{
+
+
+	if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+	{
+		CameraControllerBase->CamIsRotatingRight = false;
+	}else
+	{
+		CameraControllerBase->CamIsRotatingLeft = false;
+	}
+}
+
+
+void AExtendedCameraBase::HandleState_TPressed(ACameraControllerBase* CameraControllerBase)
+{
+	CameraControllerBase->TPressed();
 
 }
+
+void AExtendedCameraBase::HandleState_PPressed(ACameraControllerBase* CameraControllerBase)
+{
+    HandleState_OrbitAndMove();
+}
+
+void AExtendedCameraBase::HandleState_OPressed(ACameraControllerBase* CameraControllerBase)
+{
+    HandleState_SpawnEffects(CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_ScrollZoom(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)
+{
+	float FloatValue = InputActionValue.Get<float>();
+
+	if(CameraControllerBase->ScrollZoomCount <= 10.f)
+		CameraControllerBase->ScrollZoomCount += FloatValue*2;
+				
+	if(CameraControllerBase->LockCameraToCharacter)
+		return;
+				
+	if(FloatValue > 0)
+	{
+		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
+			SetCameraState(CameraData::ScrollZoomIn);
+	}
+	else
+	{
+		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
+			SetCameraState(CameraData::ScrollZoomOut);
+	}
+}
+
+void AExtendedCameraBase::HandleState_MiddleMousePressed(ACameraControllerBase* CameraControllerBase)
+{
+	float MouseX, MouseY;
+	CameraControllerBase->GetMousePosition(MouseX, MouseY);
+	PreviousMouseLocation.X = MouseX;
+	PreviousMouseLocation.Y = MouseY;
+				
+	CameraControllerBase->MiddleMouseIsPressed = true;
+}
+
+void AExtendedCameraBase::HandleState_MiddleMouseReleased(ACameraControllerBase* CameraControllerBase)
+{
+
+
+    CameraControllerBase->MiddleMouseIsPressed = false;
+}
+
+void AExtendedCameraBase::HandleState_AbilityOne(ACameraControllerBase* CameraControllerBase)
+{
+
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilityTwo(ACameraControllerBase* CameraControllerBase)
+{
+
+
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilityThree(ACameraControllerBase* CameraControllerBase)
+{
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilityFour(ACameraControllerBase* CameraControllerBase)
+{
+   
+
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilityFive(ACameraControllerBase* CameraControllerBase)
+{
+
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilitySix(ACameraControllerBase* CameraControllerBase)
+{
+
+    ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
+}
+

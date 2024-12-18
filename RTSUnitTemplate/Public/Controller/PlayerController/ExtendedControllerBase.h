@@ -26,7 +26,14 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
 
-	UFUNCTION(BlueprintCallable, Category = "Unit")
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateKeyboardAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
 	
 	UFUNCTION(Server, Reliable)

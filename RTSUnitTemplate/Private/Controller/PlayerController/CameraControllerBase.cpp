@@ -24,8 +24,32 @@ void ACameraControllerBase::BeginPlay()
 	if(CameraBase) GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
 	
 	GetAutoCamWaypoints();
+}
 
+void ACameraControllerBase::SetCameraUnitWithTag(FGameplayTag Tag)
+{
+	
+		ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
+		UE_LOG(LogTemp, Log, TEXT("!!!!SetCameraUnitWithTag!!!!!!!!!!"));
+	if (GameMode)
+	{
+		UE_LOG(LogTemp, Log, TEXT("RTSGameMode found. Iterating through all units."));
+		for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
+		{
+			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
+			if (Unit && Unit->UnitTags.HasTagExact(Tag))
+			{
+				UE_LOG(LogTemp, Log, TEXT("Unit %s has the tag: %s"), *Unit->GetName(), *Tag.ToString());
+				CameraUnitWithTag = Unit;
+				
+				CameraBase = Cast<ACameraBase>(GetPawn());
+
+				if(CameraBase)
+				CameraBase->SetCameraState(CameraData::LockOnCharacterWithTag);
+			}
+		}
+	}
 }
 
 void ACameraControllerBase::SetupInputComponent()
@@ -81,6 +105,7 @@ bool ACameraControllerBase::CheckSpeakingUnits()
 
 void ACameraControllerBase::SetCameraState(TEnumAsByte<CameraData::CameraState> NewCameraState)
 {
+	
 	CameraBase->SetCameraState(NewCameraState);
 }
 
@@ -102,26 +127,6 @@ void ACameraControllerBase::GetViewPortScreenSizes(int x)
 		break;
 	}
 }
-
-/*
-void ACameraControllerBase::GetViewPortScreenSizes(int x)
-{
-	switch (x)
-	{
-	case 1:
-		{
-			GetViewportSize(CameraBase->ScreenSizeX, CameraBase->ScreenSizeY);
-		}
-		break;
-	case 2:
-		{
-			CameraBase->ScreenSizeX = GSystemResolution.ResX;
-			CameraBase->ScreenSizeY = GSystemResolution.ResY;
-		}
-		break;
-	}
-}*/
-
 
 FVector ACameraControllerBase::GetCameraPanDirection() {
 	float MousePosX = 0;
@@ -552,6 +557,12 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				LockCamToCharacter(0);
 			}
 			break;
+		case CameraData::LockOnCharacterWithTag:
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("LockOnCharacter"));
+				LockCamToCharacterWithTag();
+			}
+			break;
 		case CameraData::LockOnSpeaking:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("LockOnSpeaking"));
@@ -905,7 +916,111 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 	}
 }
 
+void ACameraControllerBase::LockCamToCharacterWithTag()
+{
+        if (CameraUnitWithTag)
+        {
+            FVector SelectedActorLocation = CameraUnitWithTag->GetActorLocation();
+            
+            CameraBase->LockOnUnit(CameraUnitWithTag);
 
+        	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
+        	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
+
+        	if (WIsPressedState == 1)
+        	{
+        		ApplyMovementInputToUnit(SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        	}
+        	if (AIsPressedState == 1)
+        	{
+        		// Move left (negative right vector)
+        		ApplyMovementInputToUnit(-SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        	}
+        	if (SIsPressedState == 1)
+        	{
+        		// Move backward (negative forward vector)
+        		ApplyMovementInputToUnit(-SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        	}
+        	if (DIsPressedState == 1)
+        	{
+        		// Move right (positive right vector)
+        		ApplyMovementInputToUnit(SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        	}
+        	
+        	if (ScrollZoomCount > 0.f)
+            {
+        		if(ScrollZoomCount > 0.f)
+        		{
+        			CameraBase->ZoomIn(1.f);
+        			CameraBase->RotateSpringArm();
+        			SetCameraZDistance(0);
+        		}
+        		if(ScrollZoomCount <= 0.f)
+        		{
+        			CameraBase->ZoomIn(1.f, true);
+        			CameraBase->RotateSpringArm();
+        			SetCameraZDistance(0);
+        		}
+				
+        		if(ScrollZoomCount > 0.f)
+        			ScrollZoomCount -= 0.25f;
+				
+            }
+            else if (ScrollZoomCount < 0.f)
+            {
+            	if(ScrollZoomCount < 0.f)
+            	{
+            		CameraBase->ZoomOut(1.f);
+            		CameraBase->RotateSpringArm(true);
+            		SetCameraZDistance(0);
+            	}
+            	if(ScrollZoomCount >= 0.f)
+            	{
+            		CameraBase->ZoomOut(1.f, true);
+            		CameraBase->RotateSpringArm(true);
+            		SetCameraZDistance(0);
+            	}
+					
+            	if(ScrollZoomCount < 0.f)
+            		ScrollZoomCount += 0.25f;
+				
+		
+            }
+
+            if (RotateBehindCharacterIfLocked)
+            {
+                float CameraYaw = FMath::Fmod(static_cast<float>(CameraBase->SpringArmRotator.Yaw) + 360.f, 360.f);
+                float ActorYaw = FMath::Fmod(static_cast<float>(CameraUnitWithTag->GetActorRotation().Yaw) + 360.f, 360.f);
+                float DeltaYaw = FMath::Fmod(FMath::Fmod(static_cast<float>(ActorYaw + 180.f), 360.f) - CameraYaw + 540.f, 360.f) - 180.f;
+
+                if (!FMath::IsNearlyEqual(CameraYaw, ActorYaw, 10.f))
+                {
+                    if (DeltaYaw > 0)
+                        CameraBase->RotateCamRight(CameraBase->AddCamRotation * 2);
+                    else
+                        CameraBase->RotateCamLeft(CameraBase->AddCamRotation * 2);
+                }
+            }
+
+            if (CamIsRotatingRight)
+            {
+                CamIsRotatingLeft = false;
+                CameraBase->RotateCamRight(CameraBase->AddCamRotation);
+            }
+
+            if (CamIsRotatingLeft)
+            {
+                CamIsRotatingRight = false;
+                CameraBase->RotateCamLeft(CameraBase->AddCamRotation);
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Unit does not have the required tag."));
+        }
+    
+
+}
 
 
 void ACameraControllerBase::LockZDistanceToCharacter()

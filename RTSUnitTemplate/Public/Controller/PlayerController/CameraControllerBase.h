@@ -24,6 +24,12 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SetCameraUnitWithTag(FGameplayTag Tag);
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		AUnitBase* CameraUnitWithTag;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -107,18 +113,22 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LockCamToSpecificUnit", Keywords = "TopDownRTSCamLib LockCamToSpecificUnit"), Category = RTSUnitTemplate)
 	void LockCamToSpecificUnit(AUnitBase* SUnit);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ASpeakingUnit* SpeakingUnit;
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LockCamToCharacter", Keywords = "TopDownRTSCamLib LockCamToCharacter"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockCamToCharacter(int Index);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LockCamToCharacter", Keywords = "TopDownRTSCamLib LockCamToCharacter"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LockCamToCharacterWithTag();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockZDistanceToCharacter();
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetCameraZDistance", Keywords = "TopDownRTSCamLib SetCameraZDistance"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetCameraZDistance(int Index);
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "LockCameraToCharacter", Keywords = "TopDownRTSCamLib LockCameraToCharacter"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool LockCameraToCharacter = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
