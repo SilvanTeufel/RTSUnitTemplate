@@ -12,7 +12,7 @@ void UUnitWidgetSelector::NativeConstruct()
 	SetButtonIds();
 	SetVisibleButtonCount(ShowButtonCount);
 	SetButtonLabelCount(ShowButtonCount);
-	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 	/*
 	if (ControllerBase)
 	{
@@ -41,6 +41,8 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 
 		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0] && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
 			ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->DefaultAbilities.Num());
+
+		Update(ControllerBase->AbilityArrayIndex);
 	}
 }
 

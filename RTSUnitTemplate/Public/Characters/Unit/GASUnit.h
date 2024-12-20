@@ -79,6 +79,18 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
 
+	/** A second set of abilities, could be unlocked later or via some condition */
+	UPROPERTY(Replicated, BlueprintReadWrite , EditDefaultsOnly, Category = "Ability")
+	TArray<TSubclassOf<UGameplayAbilityBase>> SecondAbilities;
+
+	/** A third set of abilities, potentially rare or harder to obtain */
+	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category = "Ability")
+	TArray<TSubclassOf<UGameplayAbilityBase>> ThirdAbilities;
+
+	/** A fourth set of abilities, maybe ultimate or endgame powers */
+	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category = "Ability")
+	TArray<TSubclassOf<UGameplayAbilityBase>> FourthAbilities;
+	
 protected:
 	// Function called when an ability is activated
 	void OnAbilityActivated(UGameplayAbility* ActivatedAbility);

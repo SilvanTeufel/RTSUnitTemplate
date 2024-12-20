@@ -24,11 +24,36 @@ public:
 	//AWorkArea* CurrentDraggedWorkArea;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateKeyboardAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateDefaultAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateSecondAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
 
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateThirdAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateFourthAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ActivateAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& Abilities);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateKeyboardAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag);
+	void ActivateDefaultAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag);
+	
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int AbilityArrayIndex = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxAbilityArrayIndex = 3;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddAbilityIndex(int Add);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit);
@@ -87,6 +112,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DropUnitBase();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void DestoryWorkAreaOnServer(AWorkArea* WorkArea);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DestoryWorkArea();
 	

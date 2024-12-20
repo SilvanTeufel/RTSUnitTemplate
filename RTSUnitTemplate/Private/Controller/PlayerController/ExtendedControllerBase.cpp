@@ -23,7 +23,35 @@ void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	//DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
 }
 
-void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+{
+	if (!UnitBase)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("ActivateAbilitiesByIndex AbilityArrayIndex: %d"), AbilityArrayIndex);
+	switch (AbilityArrayIndex)
+	{
+	case 0:
+		ActivateDefaultAbilities(UnitBase, InputID);
+		break;
+	case 1:
+		ActivateSecondAbilities(UnitBase, InputID);
+		break;
+	case 2:
+		ActivateThirdAbilities(UnitBase, InputID);
+		break;
+	case 3:
+		ActivateFourthAbilities(UnitBase, InputID);
+		break;
+	default:
+		// Optionally handle invalid indices
+			break;
+	}
+}
+
+void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
 {
 	if(UnitBase && UnitBase->DefaultAbilities.Num())
 	{
@@ -32,16 +60,65 @@ void AExtendedControllerBase::ActivateKeyboardAbilities_Implementation(AGASUnit*
 	
 }
 
-void AExtendedControllerBase::ActivateKeyboardAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag)
+void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+{
+	if (UnitBase && UnitBase->SecondAbilities.Num() > 0)
+	{
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities);
+	}
+}
+
+void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+{
+	if (UnitBase && UnitBase->ThirdAbilities.Num() > 0)
+	{
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities);
+	}
+}
+
+void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+{
+	if (UnitBase && UnitBase->FourthAbilities.Num() > 0)
+	{
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities);
+	}
+}
+
+void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& Abilities)
+{
+	if (UnitBase && Abilities.Num() > 0)
+	{
+		UnitBase->ActivateAbilityByInputID(InputID, Abilities);
+	}
+}
+
+void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID InputID, FGameplayTag Tag)
 {
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
 		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && (Unit->TeamId == SelectableTeamId))
 		{
-			ActivateKeyboardAbilities_Implementation(Unit, InputID);
+			ActivateDefaultAbilities_Implementation(Unit, InputID);
 		}
 	}
+}
+
+
+void AExtendedControllerBase::AddAbilityIndex(int Add)
+{
+
+	int NewIndex = AbilityArrayIndex+=Add;
+	
+	if (NewIndex > MaxAbilityArrayIndex)
+		AbilityArrayIndex = 0;
+	else if (NewIndex < 0)
+		AbilityArrayIndex = MaxAbilityArrayIndex;
+	else
+		AbilityArrayIndex=NewIndex;
+
+	UE_LOG(LogTemp, Warning, TEXT("MaxAbilityArrayIndex: %d"), MaxAbilityArrayIndex);
+	UE_LOG(LogTemp, Warning, TEXT("Final AbilityArrayIndex after wrap: %d"), AbilityArrayIndex);
 }
 
 void AExtendedControllerBase::ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit)
@@ -87,7 +164,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 	
 			ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
-			ActivateKeyboardAbilities_Implementation(ClosestUnit, InputID);
+			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID);
 			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
 }
@@ -119,7 +196,7 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 
 	// After finding the closest unit, notify the client
 	ClientReceiveClosestUnit(ClosestUnit, InputID);
-	ActivateKeyboardAbilities_Implementation(ClosestUnit, InputID);
+	ActivateDefaultAbilities_Implementation(ClosestUnit, InputID);
 }
 
 void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
@@ -158,7 +235,8 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		{
 			if (SelectedUnit)
 			{
-				ActivateKeyboardAbilities(SelectedUnit, InputID);
+				//ActivateDefaultAbilities(SelectedUnit, InputID);
+				ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID);
 			}
 		}
 	}else if(HUDBase)
@@ -368,7 +446,74 @@ void AExtendedControllerBase::DropUnitBase()
 		CurrentDraggedUnitBase = nullptr;
 	}
 }
+/*
+void AExtendedControllerBase::DestoryWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
+{
+    UE_LOG(LogTemp, Warning, TEXT("DestoryWorkAreaOnServer_Implementation called on %s"), HasAuthority() ? TEXT("Server") : TEXT("Client"));
 
+    if (WorkArea)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Server: Attempting to destroy WorkArea: %s"), *WorkArea->GetName());
+        WorkArea->Destroy();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Server: WorkArea is nullptr, nothing to destroy."));
+    }
+}
+
+void AExtendedControllerBase::DestoryWorkArea()
+{
+    UE_LOG(LogTemp, Warning, TEXT("DestoryWorkArea called on %s"), HasAuthority() ? TEXT("Server") : TEXT("Client"));
+
+    FHitResult HitResult;
+    bool bHitUnderCursor = GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+
+    UE_LOG(LogTemp, Warning, TEXT("GetHitResultUnderCursor returned: %s"), bHitUnderCursor ? TEXT("True") : TEXT("False"));
+
+    if (bHitUnderCursor)
+    {
+        AActor* HitActor = HitResult.GetActor();
+        if (HitActor)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitActor->GetName());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("HitResult Actor is nullptr."));
+        }
+
+        AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
+        if (WorkArea)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Hit Actor is a WorkArea with Type: %d and TeamId: %d"), (int32)WorkArea->Type, WorkArea->TeamId);
+
+            if (WorkArea->Type == WorkAreaData::BuildArea && WorkArea->TeamId == SelectableTeamId)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("WorkArea is a valid BuildArea for this team. Calling server to destroy."));
+                DestoryWorkAreaOnServer(WorkArea);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("WorkArea type or team does not match. Not destroying."));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Hit Actor is not a WorkArea."));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No valid hit under cursor to destroy WorkArea."));
+    }
+}
+*/
+
+void AExtendedControllerBase::DestoryWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
+{
+	if (WorkArea) WorkArea->Destroy();;
+}
 
 void AExtendedControllerBase::DestoryWorkArea()
 {
@@ -383,10 +528,14 @@ void AExtendedControllerBase::DestoryWorkArea()
 	{
 		// Check if the hit actor is of type AWorkArea
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitResult.GetActor());
+
+		UE_LOG(LogTemp, Warning, TEXT("WorkArea->TeamId: %d"), WorkArea->TeamId);
+		UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId: %d"), SelectableTeamId);
 		if (WorkArea && WorkArea->Type == WorkAreaData::BuildArea && WorkArea->TeamId == SelectableTeamId) // Assuming EWorkAreaType is an enum with 'BuildArea'
 		{
 			// Destroy the WorkArea
-			WorkArea->Destroy();
+			//WorkArea->Destroy();
+			DestoryWorkAreaOnServer(WorkArea);
 		}
 	}
 	

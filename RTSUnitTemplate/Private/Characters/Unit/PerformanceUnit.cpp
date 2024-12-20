@@ -170,7 +170,7 @@ void APerformanceUnit::CheckTeamVisibility()
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if(ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0)
+		if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
 		{
 			IsMyTeam = true;
 		}

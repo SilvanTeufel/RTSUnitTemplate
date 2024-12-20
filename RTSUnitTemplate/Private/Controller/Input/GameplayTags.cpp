@@ -83,6 +83,13 @@ void FGameplayTags::AddAllTags(UGameplayTagsManager& Manager)
 	AddTag(InputTag_4_Pressed, "InputTag.4_Pressed", "4_Pressed");
 	AddTag(InputTag_5_Pressed, "InputTag.5_Pressed", "5_Pressed");
 	AddTag(InputTag_6_Pressed, "InputTag.6_Pressed", "6_Pressed");
+
+	AddTag(InputTag_F1_Pressed, "InputTag.F1_Pressed", "F1_Pressed");
+	AddTag(InputTag_F2_Pressed, "InputTag.F2_Pressed", "F2_Pressed");
+	AddTag(InputTag_F3_Pressed, "InputTag.F3_Pressed", "F3_Pressed");
+	AddTag(InputTag_F4_Pressed, "InputTag.F4_Pressed", "F4_Pressed");
+	AddTag(InputTag_F5_Pressed, "InputTag.F5_Pressed", "F5_Pressed");
+	AddTag(InputTag_F6_Pressed, "InputTag.F6_Pressed", "F6_Pressed");
 	
 }
 

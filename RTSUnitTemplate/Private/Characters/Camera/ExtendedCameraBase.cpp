@@ -189,6 +189,13 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_5_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 25);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_6_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 26);
 
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F1_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 27);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F2_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 28);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F3_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 29);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F4_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 30);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F5_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 31);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F6_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 32);
+		
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Pressed, 0);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Released, 0);
 		
@@ -555,10 +562,22 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase); break;
             case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase); break;
             case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase); break;
+            case 29: F3_Pressed(CameraControllerBase); break;
+            case 30: F4_Pressed(CameraControllerBase); break;
             default: break;
             }
         }
     }
+}
+
+void AExtendedCameraBase::F3_Pressed(ACameraControllerBase* CameraControllerBase)
+{
+	CameraControllerBase->AddAbilityIndex(1);
+}
+
+void AExtendedCameraBase::F4_Pressed(ACameraControllerBase* CameraControllerBase)
+{
+	CameraControllerBase->AddAbilityIndex(-1);
 }
 
 void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControllerBase)

@@ -6,7 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "SelectorButton.h"
 #include "Components/TextBlock.h"
-#include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "UnitWidgetSelector.generated.h"
 
 /**
@@ -31,6 +31,9 @@ private:
 public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateSelectedUnits();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void Update(int AbillityArrayIndex);
 	
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* Name;
@@ -75,6 +78,6 @@ public:
 	int MaxAbilityButtonCount = 10;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AControllerBase* ControllerBase;
+	AExtendedControllerBase* ControllerBase;
 	
 };
