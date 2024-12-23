@@ -18,10 +18,13 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 public:
 	UGameplayAbilityBase();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUniteTemplate")
+	UTexture2D* AbilityIcon;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUniteTemplate")
 	EGASAbilityInputID AbilityInputID = EGASAbilityInputID::None;
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Abilities")
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUniteTemplate")
 	void OnAbilityCastComplete();
-	
+
 };

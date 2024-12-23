@@ -73,12 +73,15 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 	if(UnitBase && UnitBase->GetUnitState() != UnitData::Dead)
 	{
+		// Turn on Healthbar Visibility
+
 		if(Data.EvaluatedData.Attribute == GetEffectDamageAttribute())
 		{
 
 			// Assume DamageAmount is the amount of damage to apply
 			float DamageAmount = Data.EvaluatedData.Magnitude;
 
+			UnitBase->HealthbarCollapseCheck(GetHealth() + DamageAmount, GetHealth());
 			// Check and apply damage to Shield first
 			if(DamageAmount < 0)
 			{
@@ -113,10 +116,13 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 		{
 			float ShieldAmount = Data.EvaluatedData.Magnitude;
 			SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
+			UnitBase->ShieldCollapseCheck(GetShield() + ShieldAmount, GetShield());
 			SetAttributeShield(GetShield() + ShieldAmount);
 			UnitBase->UpdateWidget();
 		}
 	}
+
+	
 	// Call the superclass version for other attributes
 	Super::PostGameplayEffectExecute(Data);
 	

@@ -109,6 +109,18 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 {
 
 	int NewIndex = AbilityArrayIndex+=Add;
+
+
+
+	if (AbilityArrayIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
+		NewIndex++;
+	else if (AbilityArrayIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
+		NewIndex++;
+	else if (AbilityArrayIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
+		NewIndex++;
+	else if (AbilityArrayIndex == 3 && !SelectedUnits[0]->FourthAbilities.Num())
+		NewIndex++;
+
 	
 	if (NewIndex > MaxAbilityArrayIndex)
 		AbilityArrayIndex = 0;
