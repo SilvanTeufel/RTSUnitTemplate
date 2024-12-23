@@ -105,29 +105,67 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 }
 
 
+TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayByIndex()
+{
+	if (!SelectedUnits.Num() || SelectedUnits[0]) return SelectedUnits[0]->DefaultAbilities;
+	
+	switch (AbilityArrayIndex)
+	{
+	case 0:
+		return SelectedUnits[0]->DefaultAbilities;
+		break;
+	case 1:
+		return SelectedUnits[0]->SecondAbilities;
+		break;
+	case 2:
+		return SelectedUnits[0]->ThirdAbilities;
+		break;
+	case 3:
+		return SelectedUnits[0]->FourthAbilities;
+		break;
+	default:
+		return SelectedUnits[0]->DefaultAbilities;
+			break;
+	}
+}
+
 void AExtendedControllerBase::AddAbilityIndex(int Add)
 {
-
+	
+if (!SelectedUnits.Num() || !SelectedUnits[0]) return;
+	
 	int NewIndex = AbilityArrayIndex+=Add;
 
 
+	if (NewIndex < 0)
+		NewIndex = MaxAbilityArrayIndex;
 
-	if (AbilityArrayIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
-		NewIndex++;
-	else if (AbilityArrayIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
-		NewIndex++;
-	else if (AbilityArrayIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
-		NewIndex++;
-	else if (AbilityArrayIndex == 3 && !SelectedUnits[0]->FourthAbilities.Num())
-		NewIndex++;
-
+	if (NewIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
+		NewIndex+=Add;
 	
+	if (NewIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
+		NewIndex+=Add;
+	 
+	if (NewIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
+		NewIndex+=Add;
+	
+	if (NewIndex == 3 && !SelectedUnits[0]->FourthAbilities.Num())
+		NewIndex+=Add;
+
+	if (NewIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
+		NewIndex+=Add;
+
+	if (NewIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
+		NewIndex+=Add;
+
+	if (NewIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
+		NewIndex+=Add;
+
 	if (NewIndex > MaxAbilityArrayIndex)
-		AbilityArrayIndex = 0;
-	else if (NewIndex < 0)
-		AbilityArrayIndex = MaxAbilityArrayIndex;
-	else
-		AbilityArrayIndex=NewIndex;
+		NewIndex = 0;
+
+
+	AbilityArrayIndex=NewIndex;
 
 	UE_LOG(LogTemp, Warning, TEXT("MaxAbilityArrayIndex: %d"), MaxAbilityArrayIndex);
 	UE_LOG(LogTemp, Warning, TEXT("Final AbilityArrayIndex after wrap: %d"), AbilityArrayIndex);

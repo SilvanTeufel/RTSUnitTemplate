@@ -229,6 +229,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleState_OPressed(ACameraControllerBase* CameraControllerBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleState_AbilityArrayIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleState_ScrollZoom(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase);

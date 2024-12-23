@@ -485,6 +485,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
         {
             switch (NewCameraState)
             {
+            	
             case 0:
             	{
 
@@ -518,6 +519,10 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
             case 10: HandleState_RotateRight(CameraControllerBase); break;
             case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
+            case 13:
+	            {
+            		HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase); break;
+	            } break;
             case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
             case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
             case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
@@ -583,6 +588,8 @@ void AExtendedCameraBase::F4_Pressed(ACameraControllerBase* CameraControllerBase
 void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     if (GetCameraState() == CameraData::OrbitAndMove)
     {
         CameraControllerBase->CamIsRotatingLeft = false;
@@ -597,11 +604,14 @@ void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControl
 void AExtendedCameraBase::HandleState_StopMoveW(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     CameraControllerBase->WIsPressedState = 2;
 }
 
 void AExtendedCameraBase::HandleState_MoveS(ACameraControllerBase* CameraControllerBase)
 {
+	if (CameraControllerBase->CameraUnitWithTag) return;
 
     if (GetCameraState() == CameraData::OrbitAndMove)
     {
@@ -617,12 +627,16 @@ void AExtendedCameraBase::HandleState_MoveS(ACameraControllerBase* CameraControl
 void AExtendedCameraBase::HandleState_StopMoveS(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     CameraControllerBase->SIsPressedState = 2;
 }
 
 void AExtendedCameraBase::HandleState_MoveA(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     if (GetCameraState() == CameraData::OrbitAndMove)
     {
         CameraControllerBase->CamIsRotatingLeft = false;
@@ -636,6 +650,7 @@ void AExtendedCameraBase::HandleState_MoveA(ACameraControllerBase* CameraControl
 
 void AExtendedCameraBase::HandleState_StopMoveA(ACameraControllerBase* CameraControllerBase)
 {
+	if (CameraControllerBase->CameraUnitWithTag) return;
 
     CameraControllerBase->AIsPressedState = 2;
 }
@@ -643,6 +658,8 @@ void AExtendedCameraBase::HandleState_StopMoveA(ACameraControllerBase* CameraCon
 void AExtendedCameraBase::HandleState_MoveD(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     if (GetCameraState() == CameraData::OrbitAndMove)
     {
         CameraControllerBase->CamIsRotatingLeft = false;
@@ -657,6 +674,8 @@ void AExtendedCameraBase::HandleState_MoveD(ACameraControllerBase* CameraControl
 void AExtendedCameraBase::HandleState_StopMoveD(ACameraControllerBase* CameraControllerBase)
 {
 
+	if (CameraControllerBase->CameraUnitWithTag) return;
+	
     CameraControllerBase->DIsPressedState = 2;
 }
 
@@ -671,7 +690,6 @@ void AExtendedCameraBase::HandleState_ZoomIn(ACameraControllerBase* CameraContro
 
 void AExtendedCameraBase::HandleState_StopZoomIn(ACameraControllerBase* CameraControllerBase)
 {
-
     CameraControllerBase->CamIsZoomingInState = 2;
 }
 
@@ -912,6 +930,20 @@ void AExtendedCameraBase::HandleState_PPressed(ACameraControllerBase* CameraCont
 void AExtendedCameraBase::HandleState_OPressed(ACameraControllerBase* CameraControllerBase)
 {
     HandleState_SpawnEffects(CameraControllerBase);
+}
+
+void AExtendedCameraBase::HandleState_AbilityArrayIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)
+{
+	float FloatValue = InputActionValue.Get<float>();
+				
+	if(FloatValue > 0)
+	{
+		CameraControllerBase->AddAbilityIndex(1);
+	}
+	else
+	{
+		CameraControllerBase->AddAbilityIndex(-1);
+	}
 }
 
 void AExtendedCameraBase::HandleState_ScrollZoom(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)

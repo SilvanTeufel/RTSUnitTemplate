@@ -77,7 +77,7 @@ public:
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
-	TArray<TSubclassOf<class UGameplayAbilityBase>>DefaultAbilities;
+	TArray<TSubclassOf<UGameplayAbilityBase>>DefaultAbilities;
 
 	/** A second set of abilities, could be unlocked later or via some condition */
 	UPROPERTY(Replicated, BlueprintReadWrite , EditDefaultsOnly, Category = "Ability")

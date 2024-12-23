@@ -51,6 +51,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxAbilityArrayIndex = 3;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddAbilityIndex(int Add);
