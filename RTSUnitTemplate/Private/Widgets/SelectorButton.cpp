@@ -29,7 +29,7 @@ void USelectorButton::SetUnitSelectorId(int newID)
 
 	UUnitWidgetSelector* SelectorR = Cast<UUnitWidgetSelector>(Selector);
 	
-	if(SelectorR && ControllerBase->SelectedUnits[newID])
+	if(SelectorR && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[newID])
 	{
 		SelectorR->SetButtonColours(newID);
 		FString CharacterName = ControllerBase->SelectedUnits[newID]->Name + " / " + FString::FromInt(newID);

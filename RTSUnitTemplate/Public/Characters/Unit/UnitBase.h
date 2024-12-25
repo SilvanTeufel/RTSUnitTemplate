@@ -21,6 +21,9 @@ private:
 	bool bCanProcessCollision = false;
 	
 public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UTexture2D* UnitIcon;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTimerHandle HealthWidgetTimerHandle;

@@ -164,14 +164,37 @@ void AControllerBase::ShiftReleased()
 
 void AControllerBase::SelectUnit(int Index)
 {
+	
+	UE_LOG(LogTemp, Warning, TEXT("SelectUnit!"));
+	if (SelectedUnits[Index] == 0) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("SelectUnit!!"));
+	
+	/*
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
-		if(SelectedUnits[i] && i != Index) SelectedUnits[i]->SetDeselected();
-	}
-	SelectedUnits.Empty();
-	SelectedUnits.Add(HUDBase->SelectedUnits[Index]);
-	HUDBase->SelectedUnits[Index]->SetSelected();
+		if(SelectedUnits[i] && i != Index)
+		{
+			SelectedUnits[i]->SetDeselected();
+			HUDBase->SelectedUnits[i]->SetDeselected();
+			//SelectedUnits.Remove(SelectedUnits[i]);
+			//HUDBase->SelectedUnits.Remove(HUDBase->SelectedUnits[i]);
+		}
+	}*/
+	//SelectedUnits.Empty();
+	//SelectedUnits.Add(HUDBase->SelectedUnits[Index]);
+	HUDBase->DeselectAllUnits();
+	HUDBase->SetUnitSelected( SelectedUnits[Index]);
+	SelectedUnits = HUDBase->SelectedUnits; 
+	//UnitToSelect->SetSelected();
 
+	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
+
+	if(ExtendedCameraBase && SelectedUnits[0])
+	{
+		ExtendedCameraBase->UpdateSelectorWidget();
+		
+	}
 }
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
@@ -250,9 +273,11 @@ void AControllerBase::LeftClickSelect_Implementation()
 
 void AControllerBase::SetWidgets(int Index)
 {
+	if (!HUDBase->SelectedUnits.Num()) return;
+	
 	SelectedUnits = HUDBase->SelectedUnits;
 	
-	if (SelectedUnits.Num()) {
+	if (SelectedUnits.Num() && SelectedUnits[Index]) {
 	
 		AUnitBase* UnitBase = Cast<AUnitBase>(SelectedUnits[Index]);
 		AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);

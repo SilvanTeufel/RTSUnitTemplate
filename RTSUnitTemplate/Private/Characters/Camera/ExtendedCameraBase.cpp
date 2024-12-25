@@ -253,6 +253,16 @@ void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
 	}
 }
 
+void AExtendedCameraBase::UpdateSelectorWidget()
+{
+	UUnitWidgetSelector* WSelector = Cast<UUnitWidgetSelector>(WidgetSelector->GetUserWidgetObject());
+	
+	if(WSelector)
+	{
+		WSelector->UpdateSelectedUnits();
+	}
+}
+
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 

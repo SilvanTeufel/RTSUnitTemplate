@@ -50,6 +50,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UTextBlock*> ButtonLabels;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<class UImage*> UnitIcons;
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ChangeAbilityButtonCount(int Count);
 	
@@ -67,6 +70,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetButtonLabelCount(int32 Count);
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetUnitIcons(TArray<AUnitBase*>& Units);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int ShowButtonCount = 0;

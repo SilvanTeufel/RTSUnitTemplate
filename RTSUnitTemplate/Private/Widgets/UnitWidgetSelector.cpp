@@ -3,6 +3,8 @@
 
 #include "Widgets/UnitWidgetSelector.h"
 
+#include "Components/Image.h"
+
 
 void UUnitWidgetSelector::NativeConstruct()
 {
@@ -38,7 +40,8 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 	{
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
-
+		SetUnitIcons(ControllerBase->SelectedUnits);
+		
 		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0])
 		{
 			if (ControllerBase->AbilityArrayIndex == 0 && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
@@ -112,6 +115,13 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 		{
 			ButtonLabels.Add(TextBlock);
 		}
+
+		FString IconName = FString::Printf(TEXT("UnitIcon_%d"), i);
+		if (UImage* Image = Cast<UImage>(GetWidgetFromName(FName(*IconName))))
+		{
+			UnitIcons.Add(Image);
+		}
+
 	}
 }
 
@@ -169,7 +179,7 @@ void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
 	
 	for (int32 i = 0; i < SelectButtons.Num(); i++)
 	{
-		if (SelectButtons[i])
+		if (SelectButtons[i] && SingleSelectButtons[i])
 		{
 			if (i >= Count)
 			{
@@ -226,3 +236,31 @@ void UUnitWidgetSelector::SetButtonLabelCount(int32 Count)
 	}
 }
 
+void UUnitWidgetSelector::SetUnitIcons(TArray<AUnitBase*>& Units)
+{
+	// If there are no units at all, bail early
+	if (Units.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No Units Available!"));
+		return;
+	}
+    
+	// Figure out how many icons we can actually set
+	const int32 Count = FMath::Min(Units.Num(), UnitIcons.Num());
+    
+	// Iterate and set each icon
+	for (int32 i = 0; i < Count; i++)
+	{
+		// Safety checks: ensure the array slot in UnitIcons is valid,
+		// and that the Unit has a valid Texture2D in UnitIcon
+		if (UnitIcons[i] && Units[i] && Units[i]->UnitIcon)
+		{
+			// Set the brush of the UImage to the texture from your AUnitBase
+			UnitIcons[i]->SetBrushFromTexture(Units[i]->UnitIcon, true);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
+		}
+	}
+}

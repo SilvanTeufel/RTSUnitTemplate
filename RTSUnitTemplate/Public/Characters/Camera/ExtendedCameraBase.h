@@ -96,6 +96,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateSelectorWidget();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
