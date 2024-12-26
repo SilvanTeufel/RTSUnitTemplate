@@ -306,7 +306,168 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
 	DraggedArea->SetActorLocation(NewActorPosition);
 }
 
+void AExtendedControllerBase::SnapToActor(AActor* DraggedActor, AActor* OtherActor)
+{
+    if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
+        return;
 
+    // 1) Get the dragged mesh
+    UStaticMeshComponent* DraggedMesh = DraggedActor->FindComponentByClass<UStaticMeshComponent>();
+    if (!DraggedMesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DraggedActor has no StaticMeshComponent!"));
+        return;
+    }
+
+    // 2) Get the other mesh
+    UStaticMeshComponent* OtherMesh = OtherActor->FindComponentByClass<UStaticMeshComponent>();
+    if (!OtherMesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("OtherActor has no StaticMeshComponent!"));
+        return;
+    }
+
+    // 3) Compute each mesh’s bounds in world space
+    //    (You could also use DraggedMesh->Bounds directly, but CalcBounds is explicit.)
+    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    FBoxSphereBounds OtherBounds   = OtherMesh->CalcBounds(OtherMesh->GetComponentTransform());
+
+    // 4) Extract the centers and half-extents
+    FVector DraggedCenter = DraggedBounds.Origin;
+    FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+    FVector OtherCenter   = OtherBounds.Origin;
+    FVector OtherExtent   = OtherBounds.BoxExtent;
+
+    // 5) Decide on a small gap so they don’t overlap visually
+    float Gap = 10.f;
+
+    // 6) Compute how much to offset on X and Y so they "just touch"
+    //    (i.e. sum of half-extents along that axis + Gap)
+    float XOffset = DraggedExtent.X + OtherExtent.X + Gap;
+    float YOffset = DraggedExtent.Y + OtherExtent.Y + Gap;
+
+    // 7) Determine which axis (X or Y) is already closer
+    //    - dx < dy => line them up on X; offset on Y
+    //    - else => line them up on Y; offset on X
+    float dx = FMath::Abs(DraggedCenter.X - OtherCenter.X);
+    float dy = FMath::Abs(DraggedCenter.Y - OtherCenter.Y);
+
+    // We’ll start with the current ActorLocation’s Z so we only adjust X/Y in snapping.
+    FVector SnappedPos = DraggedActor->GetActorLocation();
+
+    if (dx < dy)
+    {
+        // They’re closer on X, so snap them to the same X
+        SnappedPos.X = OtherCenter.X;
+
+        // Offset Y so they’re side-by-side
+        float SignY = (DraggedCenter.Y >= OtherCenter.Y) ? 1.f : -1.f;
+        SnappedPos.Y = OtherCenter.Y + SignY * YOffset;
+    }
+    else
+    {
+        // They’re closer on Y, so snap them to the same Y
+        SnappedPos.Y = OtherCenter.Y;
+
+        // Offset X so they’re side-by-side
+        float SignX = (DraggedCenter.X >= OtherCenter.X) ? 1.f : -1.f;
+        SnappedPos.X = OtherCenter.X + SignX * XOffset;
+    }
+
+    // 8) (Optional) If you need a specific Z (e.g., ground level), set it here.
+    //    Otherwise, we keep the dragged actor’s original Z.
+
+    // 9) Finally, move the dragged actor
+    DraggedActor->SetActorLocation(SnappedPos);
+}
+
+void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
+{
+	// Check if there's a CurrentDraggedWorkArea
+	if(SelectedUnits.Num() && SelectedUnits[0])
+		if (SelectedUnits[0]->CurrentDraggedWorkArea)
+		{
+
+			FVector MousePosition, MouseDirection;
+			DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+			// Raycast from the mouse position into the scene to find the ground
+			FVector Start = MousePosition;
+			FVector End = Start + MouseDirection * 5000.f; // Extend to a maximum reasonable distance
+
+			FHitResult HitResult;
+			FCollisionQueryParams CollisionParams;
+			CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
+			CollisionParams.AddIgnoredActor(SelectedUnits[0]->CurrentDraggedWorkArea); // Ignore the dragged actor in the raycast
+			
+
+			// Perform the raycast
+			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
+
+			float Distance = FVector::Dist(
+				HitResult.Location,
+				SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation()
+			);
+
+			if (Distance < 100.f)
+			if (UStaticMeshComponent* Mesh = SelectedUnits[0]->CurrentDraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
+			{
+				// 1) Get bounding sphere
+				FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
+				float OverlapRadius = MeshBounds.SphereRadius;
+
+				// 2) Run the sphere overlap
+				TArray<AActor*> OverlappedActors;
+				bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
+					this,                                       
+					SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation(), 
+					OverlapRadius,
+					TArray<TEnumAsByte<EObjectTypeQuery>>(),
+					AActor::StaticClass(),
+					TArray<AActor*>(),
+					OverlappedActors
+				);
+
+				// 3) Check the overlapped actors
+				if (bAnyOverlap && OverlappedActors.Num() > 0)
+				{
+					for (AActor* OverlappedActor : OverlappedActors)
+					{
+						if (!OverlappedActor || OverlappedActor == SelectedUnits[0]->CurrentDraggedWorkArea)
+							continue;
+
+						AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor);
+						ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
+						if (OverlappedWorkArea || OverlappedBuilding)
+						{
+							// Snap logic
+							SnapToActor(SelectedUnits[0]->CurrentDraggedWorkArea, OverlappedActor);
+							// break if you only want one
+							return;
+						}
+					}
+				}
+			}
+			
+			// Check if something was hit
+			if (bHit && HitResult.GetActor() != nullptr)
+			{
+				CurrentDraggedGround = HitResult.GetActor();
+				// Update the work area's position to the hit location
+				FVector NewActorPosition = HitResult.Location;
+				NewActorPosition.Z += 50.f; // Adjust the Z offset if needed
+				SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
+			}
+
+
+
+
+
+
+			
+		}
+}
+/*
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 {
 	// Check if there's a CurrentDraggedWorkArea
@@ -339,7 +500,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 		}
 	}
 }
-
+*/
 
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {

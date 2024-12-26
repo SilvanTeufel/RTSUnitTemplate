@@ -85,6 +85,9 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SnapToActor(AActor* DraggedActor, AActor* OtherActor);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
 
