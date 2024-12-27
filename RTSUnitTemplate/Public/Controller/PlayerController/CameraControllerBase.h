@@ -23,8 +23,14 @@ public:
 	virtual void SetupInputComponent() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SetCameraUnitWithTag(FGameplayTag Tag);
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetCameraUnitWithTag(FGameplayTag Tag, int TeamId);
+
+	UFUNCTION(Client, Reliable)
+	void ClientSetCameraUnit(AUnitBase* CameraUnit, int TeamId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetCameraUnit(AUnitBase* CameraUnit, int TeamId);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 		AUnitBase* CameraUnitWithTag;

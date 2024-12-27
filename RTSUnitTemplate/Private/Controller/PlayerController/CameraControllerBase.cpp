@@ -26,30 +26,55 @@ void ACameraControllerBase::BeginPlay()
 	GetAutoCamWaypoints();
 }
 
-void ACameraControllerBase::SetCameraUnitWithTag(FGameplayTag Tag)
+
+void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
 	
-		ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
-		UE_LOG(LogTemp, Log, TEXT("!!!!SetCameraUnitWithTag!!!!!!!!!!"));
+	UE_LOG(LogTemp, Log, TEXT("!!!!SetCameraUnitWithTag!!!!!!!!!! %d"), TeamId);
 	if (GameMode)
 	{
 		UE_LOG(LogTemp, Log, TEXT("RTSGameMode found. Iterating through all units."));
 		for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 		{
 			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
-			if (Unit && Unit->UnitTags.HasTagExact(Tag))
+			if (Unit && Unit->UnitTags.HasTagExact(Tag) && Unit->TeamId == TeamId)
 			{
 				UE_LOG(LogTemp, Log, TEXT("Unit %s has the tag: %s"), *Unit->GetName(), *Tag.ToString());
-				CameraUnitWithTag = Unit;
-				
-				CameraBase = Cast<ACameraBase>(GetPawn());
-
-				if(CameraBase)
-				CameraBase->SetCameraState(CameraData::LockOnCharacterWithTag);
+				UE_LOG(LogTemp, Log, TEXT("Unit Team: %d"), TeamId);
+				ServerSetCameraUnit(Unit, TeamId);
+				ClientSetCameraUnit(Unit, TeamId);
 			}
 		}
 	}
+}
+void ACameraControllerBase::ServerSetCameraUnit_Implementation(AUnitBase* CameraUnit, int TeamId)
+{
+	if (TeamId != SelectableTeamId) return;
+	
+	CameraUnitWithTag = CameraUnit;
+				
+	CameraBase = Cast<ACameraBase>(GetPawn());
+
+	if(CameraBase)
+		CameraBase->SetCameraState(CameraData::LockOnCharacterWithTag);
+}
+
+void ACameraControllerBase::ClientSetCameraUnit_Implementation(AUnitBase* CameraUnit, int TeamId)
+{
+	if (GetNetMode() == NM_Client) 	UE_LOG(LogTemp, Log, TEXT("!!!!EXECUTED ON CLIENT!!!!!!!!!!"));
+	
+	if (TeamId != SelectableTeamId) return;
+
+
+	if (GetNetMode() == NM_Client) 	UE_LOG(LogTemp, Log, TEXT("!!!!EXECUTED ON CLIENT!2222!!!!!!!!!"));
+	CameraUnitWithTag = CameraUnit;
+				
+	CameraBase = Cast<ACameraBase>(GetPawn());
+
+	if(CameraBase)
+		CameraBase->SetCameraState(CameraData::LockOnCharacterWithTag);
 }
 
 void ACameraControllerBase::SetupInputComponent()
@@ -920,31 +945,34 @@ void ACameraControllerBase::LockCamToCharacterWithTag()
 {
         if (CameraUnitWithTag)
         {
-            FVector SelectedActorLocation = CameraUnitWithTag->GetActorLocation();
-            
+
             CameraBase->LockOnUnit(CameraUnitWithTag);
 
         	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
         	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
-
+        	
         	if (WIsPressedState == 1)
         	{
-        		ApplyMovementInputToUnit(SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        		ApplyMovementInputToUnit(SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
+        		CameraUnitWithTag->SetUnitState(UnitData::Run);
         	}
         	if (AIsPressedState == 1)
         	{
         		// Move left (negative right vector)
-        		ApplyMovementInputToUnit(-SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        		ApplyMovementInputToUnit(-SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
+        		CameraUnitWithTag->SetUnitState(UnitData::Run);
         	}
         	if (SIsPressedState == 1)
         	{
         		// Move backward (negative forward vector)
-        		ApplyMovementInputToUnit(-SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        		ApplyMovementInputToUnit(-SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
+        		CameraUnitWithTag->SetUnitState(UnitData::Run);
         	}
         	if (DIsPressedState == 1)
         	{
         		// Move right (positive right vector)
-        		ApplyMovementInputToUnit(SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag);
+        		ApplyMovementInputToUnit(SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
+        		CameraUnitWithTag->SetUnitState(UnitData::Run);
         	}
         	
         	if (ScrollZoomCount > 0.f)

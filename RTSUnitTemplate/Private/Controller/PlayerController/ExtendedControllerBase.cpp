@@ -171,14 +171,13 @@ if (!SelectedUnits.Num() || !SelectedUnits[0]) return;
 	UE_LOG(LogTemp, Warning, TEXT("Final AbilityArrayIndex after wrap: %d"), AbilityArrayIndex);
 }
 
-void AExtendedControllerBase::ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit)
+void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
 {
-	if (Unit && (Unit->TeamId == SelectableTeamId))
+	if (Unit && (Unit->TeamId == TeamId))
 	{
 		if (Unit->GetController()) // Ensure the unit has a valid Controller
 		{
 			Unit->AddMovementInput(Direction, Scale);
-			Unit->SetUnitState(UnitData::Run);
 		}
 	}
 }

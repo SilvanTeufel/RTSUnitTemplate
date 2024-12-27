@@ -58,8 +58,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddAbilityIndex(int Add);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit);
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
@@ -75,13 +75,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
-	/*
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) // Server, Reliable, 
-	void SpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AWorkArea* GetDraggedWorkArea();
-	*/
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
 
