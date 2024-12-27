@@ -19,7 +19,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-	
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	AUnitBase* CameraUnitWithTag;
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
 	

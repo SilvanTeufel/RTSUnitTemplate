@@ -1011,8 +1011,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag()
 					
             	if(ScrollZoomCount < 0.f)
             		ScrollZoomCount += 0.25f;
-				
-		
+            	
             }
 
             if (RotateBehindCharacterIfLocked)

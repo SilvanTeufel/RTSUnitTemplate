@@ -213,6 +213,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 	
 			ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
+			HUDBase->SetUnitSelected(ClosestUnit);
 			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID);
 			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
@@ -288,7 +289,14 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID);
 			}
 		}
-	}else if(HUDBase)
+	}else if (CameraUnitWithTag)
+	{
+		CameraUnitWithTag->SetSelected();
+		SelectedUnits.Emplace(CameraUnitWithTag);
+		HUDBase->SetUnitSelected(CameraUnitWithTag);
+		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID);
+	}
+	else if(HUDBase)
 	{
 		FVector CameraLocation = GetPawn()->GetActorLocation();
 		ActivateKeyboardAbilitiesOnCloseUnits(InputID, CameraLocation, SelectableTeamId, HUDBase);

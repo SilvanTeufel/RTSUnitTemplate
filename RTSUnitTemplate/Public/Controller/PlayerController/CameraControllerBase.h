@@ -32,9 +32,6 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerSetCameraUnit(AUnitBase* CameraUnit, int TeamId);
 	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-		AUnitBase* CameraUnitWithTag;
-	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation);
 	
