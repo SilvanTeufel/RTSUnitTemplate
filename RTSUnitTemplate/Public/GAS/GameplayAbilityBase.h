@@ -27,4 +27,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUniteTemplate")
 	void OnAbilityCastComplete();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUniteTemplate")
+	void OnAbilityMouseHit(const FHitResult& InHitResult);
+	
 };

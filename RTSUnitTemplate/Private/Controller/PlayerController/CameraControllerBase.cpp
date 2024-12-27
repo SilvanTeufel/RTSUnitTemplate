@@ -949,8 +949,8 @@ void ACameraControllerBase::LockCamToCharacterWithTag()
             CameraBase->LockOnUnit(CameraUnitWithTag);
 
         	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
+        	SpringArmForwardVector.Z = 0.f;
         	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
-        	
         	if (WIsPressedState == 1)
         	{
         		ApplyMovementInputToUnit(SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);

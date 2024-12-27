@@ -26,10 +26,10 @@ public:
 	//AWorkArea* CurrentDraggedWorkArea;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult = FHitResult());
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateDefaultAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);
+	void ActivateDefaultAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult = FHitResult());
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateSecondAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID);

@@ -23,18 +23,18 @@ void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	//DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
 }
 
-void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if (!UnitBase)
 	{
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("ActivateAbilitiesByIndex AbilityArrayIndex: %d"), AbilityArrayIndex);
+	UE_LOG(LogTemp, Warning, TEXT("HitResult: %s"), *HitResult.Location.ToString());
 	switch (AbilityArrayIndex)
 	{
 	case 0:
-		ActivateDefaultAbilities(UnitBase, InputID);
+		ActivateDefaultAbilities(UnitBase, InputID, HitResult);
 		break;
 	case 1:
 		ActivateSecondAbilities(UnitBase, InputID);
@@ -51,11 +51,12 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 	}
 }
 
-void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if(UnitBase && UnitBase->DefaultAbilities.Num())
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities);
+		UE_LOG(LogTemp, Warning, TEXT("HitResult: %s"), *HitResult.Location.ToString());
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities, HitResult);
 	}
 	
 }
@@ -99,7 +100,7 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
 		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && (Unit->TeamId == SelectableTeamId))
 		{
-			ActivateDefaultAbilities_Implementation(Unit, InputID);
+			ActivateDefaultAbilities_Implementation(Unit, InputID, FHitResult());
 		}
 	}
 }
@@ -173,11 +174,17 @@ if (!SelectedUnits.Num() || !SelectedUnits[0]) return;
 
 void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
 {
+	UE_LOG(LogTemp, Warning, TEXT("ApplyMovementInputToUnit_Implementation: %d"), AbilityArrayIndex);
+
 	if (Unit && (Unit->TeamId == TeamId))
 	{
 		if (Unit->GetController()) // Ensure the unit has a valid Controller
 		{
+			
+			UE_LOG(LogTemp, Warning, TEXT("Direction: %s"), *Direction.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("Scale: %f"), Scale);
 			Unit->AddMovementInput(Direction, Scale);
+			Unit->SetUnitState(UnitData::Run);
 		}
 	}
 }
@@ -214,7 +221,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 			ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
 			HUDBase->SetUnitSelected(ClosestUnit);
-			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID);
+			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
 			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
 }
@@ -246,7 +253,7 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 
 	// After finding the closest unit, notify the client
 	ClientReceiveClosestUnit(ClosestUnit, InputID);
-	ActivateDefaultAbilities_Implementation(ClosestUnit, InputID);
+	ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
 }
 
 void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
@@ -279,6 +286,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityI
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
+	FHitResult Hit;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+	
 	if (SelectedUnits.Num() > 0)
 	{
 		for (AGASUnit* SelectedUnit : SelectedUnits)
@@ -286,7 +296,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			if (SelectedUnit)
 			{
 				//ActivateDefaultAbilities(SelectedUnit, InputID);
-				ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID);
+				ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
 			}
 		}
 	}else if (CameraUnitWithTag)
@@ -294,7 +304,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		CameraUnitWithTag->SetSelected();
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag);
-		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID);
+		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
 	}
 	else if(HUDBase)
 	{
