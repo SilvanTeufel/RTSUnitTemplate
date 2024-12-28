@@ -37,13 +37,13 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		ActivateDefaultAbilities(UnitBase, InputID, HitResult);
 		break;
 	case 1:
-		ActivateSecondAbilities(UnitBase, InputID);
+		ActivateSecondAbilities(UnitBase, InputID, HitResult);
 		break;
 	case 2:
-		ActivateThirdAbilities(UnitBase, InputID);
+		ActivateThirdAbilities(UnitBase, InputID, HitResult);
 		break;
 	case 3:
-		ActivateFourthAbilities(UnitBase, InputID);
+		ActivateFourthAbilities(UnitBase, InputID, HitResult);
 		break;
 	default:
 		// Optionally handle invalid indices
@@ -61,27 +61,27 @@ void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* 
 	
 }
 
-void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if (UnitBase && UnitBase->SecondAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities, HitResult);
 	}
 }
 
-void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if (UnitBase && UnitBase->ThirdAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities, HitResult);
 	}
 }
 
-void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID)
+void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if (UnitBase && UnitBase->FourthAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities, HitResult);
 	}
 }
 
@@ -180,7 +180,6 @@ void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVec
 	{
 		if (Unit->GetController()) // Ensure the unit has a valid Controller
 		{
-			
 			UE_LOG(LogTemp, Warning, TEXT("Direction: %s"), *Direction.ToString());
 			UE_LOG(LogTemp, Warning, TEXT("Scale: %f"), Scale);
 			Unit->AddMovementInput(Direction, Scale);
@@ -476,48 +475,8 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 				SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
 			}
 
-
-
-
-
-
-			
 		}
 }
-/*
-void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
-{
-	// Check if there's a CurrentDraggedWorkArea
-	if(SelectedUnits.Num() && SelectedUnits[0])
-	if (SelectedUnits[0]->CurrentDraggedWorkArea)
-	{
-		FVector MousePosition, MouseDirection;
-		DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-
-		// Raycast from the mouse position into the scene to find the ground
-		FVector Start = MousePosition;
-		FVector End = Start + MouseDirection * 5000.f; // Extend to a maximum reasonable distance
-
-		FHitResult HitResult;
-		FCollisionQueryParams CollisionParams;
-		CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
-		CollisionParams.AddIgnoredActor(SelectedUnits[0]->CurrentDraggedWorkArea); // Ignore the dragged actor in the raycast
-
-		// Perform the raycast
-		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
-
-		// Check if something was hit
-		if (bHit && HitResult.GetActor() != nullptr)
-		{
-			CurrentDraggedGround = HitResult.GetActor();
-			// Update the work area's position to the hit location
-			FVector NewActorPosition = HitResult.Location;
-			NewActorPosition.Z += 50.f; // Adjust the Z offset if needed
-			SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
-		}
-	}
-}
-*/
 
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
@@ -674,69 +633,6 @@ void AExtendedControllerBase::DropUnitBase()
 		CurrentDraggedUnitBase = nullptr;
 	}
 }
-/*
-void AExtendedControllerBase::DestoryWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
-{
-    UE_LOG(LogTemp, Warning, TEXT("DestoryWorkAreaOnServer_Implementation called on %s"), HasAuthority() ? TEXT("Server") : TEXT("Client"));
-
-    if (WorkArea)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Server: Attempting to destroy WorkArea: %s"), *WorkArea->GetName());
-        WorkArea->Destroy();
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Server: WorkArea is nullptr, nothing to destroy."));
-    }
-}
-
-void AExtendedControllerBase::DestoryWorkArea()
-{
-    UE_LOG(LogTemp, Warning, TEXT("DestoryWorkArea called on %s"), HasAuthority() ? TEXT("Server") : TEXT("Client"));
-
-    FHitResult HitResult;
-    bool bHitUnderCursor = GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
-
-    UE_LOG(LogTemp, Warning, TEXT("GetHitResultUnderCursor returned: %s"), bHitUnderCursor ? TEXT("True") : TEXT("False"));
-
-    if (bHitUnderCursor)
-    {
-        AActor* HitActor = HitResult.GetActor();
-        if (HitActor)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitActor->GetName());
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("HitResult Actor is nullptr."));
-        }
-
-        AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
-        if (WorkArea)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Hit Actor is a WorkArea with Type: %d and TeamId: %d"), (int32)WorkArea->Type, WorkArea->TeamId);
-
-            if (WorkArea->Type == WorkAreaData::BuildArea && WorkArea->TeamId == SelectableTeamId)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("WorkArea is a valid BuildArea for this team. Calling server to destroy."));
-                DestoryWorkAreaOnServer(WorkArea);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("WorkArea type or team does not match. Not destroying."));
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Hit Actor is not a WorkArea."));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No valid hit under cursor to destroy WorkArea."));
-    }
-}
-*/
 
 void AExtendedControllerBase::DestoryWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
 {

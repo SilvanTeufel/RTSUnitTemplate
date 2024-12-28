@@ -585,7 +585,7 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		case CameraData::LockOnCharacterWithTag:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("LockOnCharacter"));
-				LockCamToCharacterWithTag();
+				LockCamToCharacterWithTag(DeltaTime);
 			}
 			break;
 		case CameraData::LockOnSpeaking:
@@ -941,38 +941,82 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 	}
 }
 
-void ACameraControllerBase::LockCamToCharacterWithTag()
+void ACameraControllerBase::MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
+{
+	if (!Unit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MoveAndRotateUnit: Invalid Unit pointer!"));
+		return;
+	}
+    
+	// Move
+	FVector CurrentLocation = Unit->GetActorLocation();
+	float SpeedScale = (Unit->Attributes) ? Unit->Attributes->GetRunSpeedScale()*2.f : 4.0f;
+    
+	Unit->SetActorLocation(CurrentLocation + Direction * SpeedScale);
+    
+	// Smoothly Rotate
+	FRotator CurrentRotation = Unit->GetActorRotation();
+	FRotator TargetRotation  = Direction.Rotation();
+    
+	// Flatten pitch/roll if only rotating around Yaw
+	TargetRotation.Pitch = 0.f;
+	TargetRotation.Roll  = 0.f;
+
+	// Interp speed - tweak as needed
+	float RotationSpeed = 10.0f;
+    
+	// Smooth interpolation from CurrentRotation to TargetRotation
+	FRotator SmoothedRotation = FMath::RInterpTo(
+		CurrentRotation, 
+		TargetRotation, 
+		DeltaTime, 
+		RotationSpeed
+	);
+    
+	Unit->SetActorRotation(SmoothedRotation);
+    
+	// Update state
+	SetUnitState_Multi(Unit, 1);
+}
+
+void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)
         {
 
             CameraBase->LockOnUnit(CameraUnitWithTag);
 
+        
         	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
         	SpringArmForwardVector.Z = 0.f;
         	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
+        	SpringArmRightVector.Z = 0.f;
+    
+        	FVector MoveDirection = FVector::ZeroVector;
+
         	if (WIsPressedState == 1)
         	{
-        		ApplyMovementInputToUnit(SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
-        		CameraUnitWithTag->SetUnitState(UnitData::Run);
+        		MoveDirection += SpringArmForwardVector;
         	}
         	if (AIsPressedState == 1)
         	{
-        		// Move left (negative right vector)
-        		ApplyMovementInputToUnit(-SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
-        		CameraUnitWithTag->SetUnitState(UnitData::Run);
+        		MoveDirection += -SpringArmRightVector;
         	}
         	if (SIsPressedState == 1)
         	{
-        		// Move backward (negative forward vector)
-        		ApplyMovementInputToUnit(-SpringArmForwardVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
-        		CameraUnitWithTag->SetUnitState(UnitData::Run);
+        		MoveDirection += -SpringArmForwardVector;
         	}
         	if (DIsPressedState == 1)
         	{
-        		// Move right (positive right vector)
-        		ApplyMovementInputToUnit(SpringArmRightVector, CameraUnitWithTag->Attributes->GetRunSpeedScale(), CameraUnitWithTag, SelectableTeamId);
-        		CameraUnitWithTag->SetUnitState(UnitData::Run);
+        		MoveDirection += SpringArmRightVector;
+        	}
+
+        	// Normalize the resulting vector
+        	if (!MoveDirection.IsNearlyZero())
+        	{
+        		MoveDirection.Normalize(); // Avoid faster diagonals
+        		MoveAndRotateUnit(CameraUnitWithTag, MoveDirection, DeltaTime);
         	}
         	
         	if (ScrollZoomCount > 0.f)
@@ -1045,7 +1089,6 @@ void ACameraControllerBase::LockCamToCharacterWithTag()
         {
             UE_LOG(LogTemp, Warning, TEXT("Unit does not have the required tag."));
         }
-    
 
 }
 

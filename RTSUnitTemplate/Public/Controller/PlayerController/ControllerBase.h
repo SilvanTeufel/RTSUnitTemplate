@@ -97,6 +97,9 @@ public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUnitState_Replication(AUnitBase* Unit, int State);
+
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void SetUnitState_Multi(AUnitBase* Unit, int State);
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 		bool UseUnrealEnginePathFinding = true;

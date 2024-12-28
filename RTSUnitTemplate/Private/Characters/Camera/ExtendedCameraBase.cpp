@@ -778,7 +778,6 @@ void AExtendedCameraBase::HandleState_StopRotateRight(ACameraControllerBase* Cam
 
 void AExtendedCameraBase::HandleState_MoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
-
     CameraControllerBase->WIsPressedState = 1;
     CameraControllerBase->LockCameraToUnit = false;
 
@@ -789,7 +788,7 @@ void AExtendedCameraBase::HandleState_MoveW_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->WIsPressedState = 2;
 }
@@ -807,7 +806,7 @@ void AExtendedCameraBase::HandleState_StopMoveS_NoStrg(ACameraControllerBase* Ca
 {
 
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->SIsPressedState = 2;
 }
@@ -825,7 +824,7 @@ void AExtendedCameraBase::HandleState_MoveA_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveA_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->AIsPressedState = 2;
 }
@@ -842,7 +841,7 @@ void AExtendedCameraBase::HandleState_MoveD_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveD_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-        CameraControllerBase->CameraUnitWithTag->SetUnitState(UnitData::Idle);
+    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->DIsPressedState = 2;
 }

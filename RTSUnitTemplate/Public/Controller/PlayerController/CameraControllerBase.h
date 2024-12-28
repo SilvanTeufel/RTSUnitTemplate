@@ -123,7 +123,10 @@ public:
 	void LockCamToCharacter(int Index);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void LockCamToCharacterWithTag();
+	void MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LockCamToCharacterWithTag(float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockZDistanceToCharacter();
@@ -163,5 +166,7 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "ScrollZoomCount", Keywords = "TopDownRTSCamLib ScrollZoomCount"), Category = RTSUnitTemplate)
 	float ScrollZoomCount = 0.f;
-
+	
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//FVector LastSpringArmForwardVector = FVector(0.f);
 };

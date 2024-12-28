@@ -346,6 +346,34 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 	}
 }
 
+void AControllerBase::SetUnitState_Multi_Implementation(AUnitBase* Unit, int State)
+{
+	if(Unit)
+		switch (State)
+		{
+	case 0:
+		Unit->SetUnitState(UnitData::Idle);
+			break;
+
+	case 1:
+		Unit->SetUnitState(UnitData::Run);
+			break;
+
+	case 2:
+		Unit->SetUnitState(UnitData::Attack);
+			break;
+		
+	case 3:
+		Unit->SetUnitState(UnitData::Chase);
+			break;
+			// ... other cases
+
+	default:
+		// Handle invalid state
+			break;
+		}
+}
+
 void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, int State)
 {
 	if(Unit)
