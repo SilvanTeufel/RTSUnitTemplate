@@ -29,6 +29,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitForLocationPosition(FVector Aim, AActor* ShootingActor);
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool UseAttributeDamage = true;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)
 	AActor* Target;

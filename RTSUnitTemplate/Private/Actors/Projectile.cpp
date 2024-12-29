@@ -80,7 +80,8 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
 	{
-		Damage = ShootingUnit->Attributes->GetAttackDamage();
+		//Damage = ShootingUnit->Attributes->GetAttackDamage();
+		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
 
 		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
@@ -115,7 +116,8 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
 	{
-		Damage = ShootingUnit->Attributes->GetAttackDamage();
+		//Damage = ShootingUnit->Attributes->GetAttackDamage();
+		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
 
 		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
@@ -275,11 +277,22 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 
 	if(UnitToHit && UnitToHit->TeamId != TeamId && ShootingUnit)
 	{
-		float NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
+		float NewDamage = Damage;
+		
+		if (UseAttributeDamage)
+		{
+			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
 			
-		if(ShootingUnit->IsDoingMagicDamage)
-			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
+			if(ShootingUnit->IsDoingMagicDamage)
+				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
+		}else
+		{
+			NewDamage = Damage - UnitToHit->Attributes->GetArmor();
 			
+			if(ShootingUnit->IsDoingMagicDamage)
+				NewDamage = Damage - UnitToHit->Attributes->GetMagicResistance();
+		}
+		
 		if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()-NewDamage);
 		else
@@ -310,7 +323,10 @@ void AProjectile::ImpactHeal_Implementation(AActor* ImpactTarget)
 	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
 	if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
 	{
-		float NewDamage = ShootingUnit->Attributes->GetAttackDamage() ;
+		float NewDamage = Damage;
+		
+		if (UseAttributeDamage)
+			NewDamage = ShootingUnit->Attributes->GetAttackDamage();
 		
 		if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()+NewDamage);
