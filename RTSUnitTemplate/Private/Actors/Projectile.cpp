@@ -53,10 +53,13 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 
 			SetVisibility(true);
 		}
-		else
+		else if (ShootingUnit->EnableFog)
 		{
 
 			SetVisibility(false);
+		}else
+		{
+			SetVisibility(true);
 		}
 	}
 }
@@ -85,14 +88,51 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 
 			SetVisibility(true);
 		}
-		else
+		else if (ShootingUnit->EnableFog)
 		{
 
 			SetVisibility(false);
+		}else
+		{
+			SetVisibility(true);
 		}
 		
 	}
+}
+
+void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
+{
+
+	Shooter = ShootingActor;
+	TargetLocation = Aim;
+
 	
+	if(ShootingActor)
+		ShooterLocation = ShootingActor->GetActorLocation();
+	
+	UE_LOG(LogTemp, Warning, TEXT("Shooter location is: %s"), *ShooterLocation.ToString());
+	
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	if(ShootingUnit)
+	{
+		Damage = ShootingUnit->Attributes->GetAttackDamage();
+		TeamId = ShootingUnit->TeamId;
+
+		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
+		{
+
+			SetVisibility(true);
+		}
+		else if (ShootingUnit->EnableFog)
+		{
+
+			SetVisibility(false);
+		}else
+		{
+			SetVisibility(true);
+		}
+		
+	}
 }
 
 // Called when the game starts or when spawned
@@ -133,6 +173,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 void AProjectile::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	CheckViewport();
 	LifeTime += DeltaTime;
 	
 	if(RotateMesh)
@@ -156,42 +197,82 @@ void AProjectile::Tick(float DeltaTime)
 		Destroy(true, false);
 	}else if(Target)
 	{
-		AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
-		
-		if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead && FollowTarget) 
-		{
-			if(FollowTarget)
-			{
-				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
-				AddActorWorldOffset(Direction * MovementSpeed);
-			}
-		}else if(FollowTarget)
-		{
-				Destroy(true, false);
-		}else
-		{
-				const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-            	AddActorWorldOffset(Direction * MovementSpeed);
-		}
-
-		// Calculate the distance between the projectile and the target
-		float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-		if(DistanceToTarget <= MovementSpeed && FollowTarget)
-		{
-			Impact(Target);
-			Destroy(true, false);
-		}
-		
+		FlyToUnitTarget();
+	}else
+	{
+		FlyToLocationTarget();
 	}
 	
 	
 }
 
+void AProjectile::CheckViewport()
+{
+	if (IsInViewport(GetActorLocation(), VisibilityOffset))
+	{
+		IsOnViewport = true;
+	}
+	else
+	{
+		IsOnViewport = false;
+	}
+}
+
+bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
+{
+	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+	{
+		FVector2D ScreenPosition;
+		UGameplayStatics::ProjectWorldToScreen(PlayerController, WorldPosition, ScreenPosition);
+
+		int32 ViewportSizeX, ViewportSizeY;
+		PlayerController->GetViewportSize(ViewportSizeX, ViewportSizeY);
+
+		return ScreenPosition.X >= -Offset && ScreenPosition.X <= ViewportSizeX + Offset && ScreenPosition.Y >= -Offset && ScreenPosition.Y <= ViewportSizeY + Offset;
+	}
+
+	return false;
+}
+
+void AProjectile::FlyToUnitTarget()
+{
+	AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
+		
+	if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead && FollowTarget) 
+	{
+		if(FollowTarget)
+		{
+			const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
+			AddActorWorldOffset(Direction * MovementSpeed);
+		}
+	}else if(FollowTarget)
+	{
+		Destroy(true, false);
+	}else
+	{
+		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+		AddActorWorldOffset(Direction * MovementSpeed);
+	}
+
+	// Calculate the distance between the projectile and the target
+	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+	if(DistanceToTarget <= MovementSpeed && FollowTarget)
+	{
+		Impact(Target);
+		Destroy(true, false);
+	}
+}
+
+void AProjectile::FlyToLocationTarget()
+{
+	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+	AddActorWorldOffset(Direction * MovementSpeed);
+}
 void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
-	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
+
 	if(UnitToHit && UnitToHit->TeamId != TeamId && ShootingUnit)
 	{
 		float NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
@@ -267,7 +348,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && IsHealing)
 		{
 			ImpactEvent();
-			ImpactHeal(Target);
+			ImpactHeal(UnitToHit);
 			DestroyProjectileWithDelay();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && !IsHealing)
 		{
@@ -276,13 +357,13 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
 			ImpactEvent();
-			Impact(Target);
+			Impact(UnitToHit);
 			SetIsAttacked(UnitToHit);
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
 			ImpactEvent();
-			ImpactHeal(Target);
+			ImpactHeal(UnitToHit);
 			DestroyWhenMaxPierced();
 		}
 			

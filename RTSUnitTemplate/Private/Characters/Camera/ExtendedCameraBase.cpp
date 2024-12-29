@@ -38,7 +38,18 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 
 	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
 	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-	
+
+	ControlWidgetComp->SetOnlyOwnerSee(true);
+	TalentChooser->SetOnlyOwnerSee(true);
+	AbilityChooser->SetOnlyOwnerSee(true);
+	WidgetSelector->SetOnlyOwnerSee(true);
+	ResourceWidget->SetOnlyOwnerSee(true);
+
+	ControlWidgetComp->SetIsReplicated(false);
+	TalentChooser->SetIsReplicated(false);
+	AbilityChooser->SetIsReplicated(false);
+	WidgetSelector->SetIsReplicated(false);
+	ResourceWidget->SetIsReplicated(false);
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
@@ -75,6 +86,25 @@ void AExtendedCameraBase::BeginPlay()
 	Super::BeginPlay();
 	SetupResourceWidget();
 
+	HideWidgetsWhenNoControl();
+}
+
+void AExtendedCameraBase::HideWidgetsWhenNoControl()
+{
+	if (ControlWidgetComp)ControlWidgetComp->SetHiddenInGame(true);
+	if (TalentChooser) TalentChooser->SetHiddenInGame(true);
+	if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
+	if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
+	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
+	if (IsLocallyControlled())
+	{
+		// Hide all widgets if we are not locally controlled
+		if (ControlWidgetComp) ControlWidgetComp->SetHiddenInGame(false, true);
+		if (TalentChooser) TalentChooser->SetHiddenInGame(false, true);
+		if (AbilityChooser) AbilityChooser->SetHiddenInGame(false, true);
+		if (WidgetSelector) WidgetSelector->SetHiddenInGame(false, true);
+		if (ResourceWidget) ResourceWidget->SetHiddenInGame(false, true);
+	}
 }
 
 void AExtendedCameraBase::SetupResourceWidget()
@@ -262,6 +292,7 @@ void AExtendedCameraBase::UpdateSelectorWidget()
 		WSelector->UpdateSelectedUnits();
 	}
 }
+
 
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
@@ -788,7 +819,7 @@ void AExtendedCameraBase::HandleState_MoveW_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
+    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->WIsPressedState = 2;
 }
@@ -806,7 +837,7 @@ void AExtendedCameraBase::HandleState_StopMoveS_NoStrg(ACameraControllerBase* Ca
 {
 
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
+    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->SIsPressedState = 2;
 }
@@ -824,7 +855,7 @@ void AExtendedCameraBase::HandleState_MoveA_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveA_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
+    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->AIsPressedState = 2;
 }
@@ -841,7 +872,7 @@ void AExtendedCameraBase::HandleState_MoveD_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveD_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
     if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Multi( CameraControllerBase->CameraUnitWithTag, 0);
+    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
 
     CameraControllerBase->DIsPressedState = 2;
 }

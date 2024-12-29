@@ -41,6 +41,7 @@ void ARTSGameModeBase::BeginPlay()
 		if(WorkingUnit)
 			WorkingUnits.Add(WorkingUnit);
 	}
+	
 }
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)

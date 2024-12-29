@@ -241,7 +241,7 @@ void UUnitWidgetSelector::SetUnitIcons(TArray<AUnitBase*>& Units)
 	// If there are no units at all, bail early
 	if (Units.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No Units Available!"));
+		//UE_LOG(LogTemp, Warning, TEXT("No Units Available!"));
 		return;
 	}
     

@@ -122,7 +122,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockCamToCharacter(int Index);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -27,6 +27,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitForAbility(AActor* TargetActor, AActor* ShootingActor);
 
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void InitForLocationPosition(FVector Aim, AActor* ShootingActor);
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)
 	AActor* Target;
@@ -40,6 +42,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector ShooterLocation;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float VisibilityOffset = 0.0f;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool FollowTarget = false;
 
@@ -100,6 +105,21 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsOnViewport = true;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CheckViewport();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsInViewport(FVector WorldPosition, float Offset);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void FlyToUnitTarget();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void FlyToLocationTarget();
+	
 	UFUNCTION(Server, Reliable)
 	void Impact(AActor* ImpactTarget);
 

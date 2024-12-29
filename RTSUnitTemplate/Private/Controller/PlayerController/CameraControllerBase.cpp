@@ -940,8 +940,8 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 		CameraBase->SetCameraState(CameraData::ZoomInPosition);
 	}
 }
-
-void ACameraControllerBase::MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
+/*
+void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
 {
 	if (!Unit)
 	{
@@ -978,8 +978,36 @@ void ACameraControllerBase::MoveAndRotateUnit(AUnitBase* Unit, const FVector& Di
     
 	// Update state
 	SetUnitState_Multi(Unit, 1);
-}
+}*/
+void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
+{
+	if (!Unit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MoveAndRotateUnit: Invalid Unit pointer!"));
+		return;
+	}
 
+	// 1) Compute the movement speed (just like before).
+	const float DefaultSpeedScale = 4.0f;
+	float SpeedScale = (Unit->Attributes)
+		? Unit->Attributes->GetRunSpeedScale() * 2.f
+		: DefaultSpeedScale;
+
+	// 2) Add input vector to the Unit’s movement component.
+	//    Make sure AUnitBase::InitializeComponents() has created/assigned UnitMovementComponent.
+	if ( UPawnMovementComponent* MovementComponent = Unit->GetMovementComponent())
+	{
+		// "Direction * SpeedScale" will be interpreted by your movement component.
+		MovementComponent->AddInputVector(Direction * SpeedScale);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UnitMovementComponent not found on %s"), *Unit->GetName());
+	}
+
+	SetUnitState_Multi(Unit, 1);
+	Unit->ForceNetUpdate(); 
+}
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)
@@ -1017,6 +1045,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	{
         		MoveDirection.Normalize(); // Avoid faster diagonals
         		MoveAndRotateUnit(CameraUnitWithTag, MoveDirection, DeltaTime);
+        		//MoveAndRotateUnit_Implementation(CameraUnitWithTag, MoveDirection, DeltaTime);
         	}
         	
         	if (ScrollZoomCount > 0.f)

@@ -22,6 +22,9 @@ public:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HideWidgetsWhenNoControl();
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupResourceWidget();
 	// Override the Tick function
 	virtual void Tick(float DeltaTime) override;

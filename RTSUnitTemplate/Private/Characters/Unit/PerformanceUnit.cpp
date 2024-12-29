@@ -203,7 +203,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 	if(HealthWidgetComp)
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
-		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (IsVisibileEnemy || IsMyTeam))
+		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (!EnableFog || IsVisibileEnemy || IsMyTeam))
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
@@ -211,11 +211,11 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
-			if(Projectile) Projectile->SetVisibility(false);
+			//if(Projectile) Projectile->SetVisibility(false);
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			HealthBarUpdateTriggered = false;
 		}
-
+		
 		if(HealthBarUpdateTriggered)	
 			HealthBarWidget->UpdateWidget();
 	}

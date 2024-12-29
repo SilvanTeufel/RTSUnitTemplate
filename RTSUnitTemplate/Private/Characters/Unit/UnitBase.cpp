@@ -32,7 +32,8 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 600.0f, 0.0f);
-
+	GetCharacterMovement()->SetIsReplicated(true);
+	
 	if (RootComponent == nullptr) {
 		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
 	}
@@ -44,7 +45,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	SetReplicates(true);
 	GetMesh()->SetIsReplicated(true);
 	bReplicates = true;
-	
+
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
 	
 	if(ensure(AbilitySystemComponent != nullptr))
@@ -58,7 +59,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-
 	//bCanProcessCollision = true;
 	//SetLODCount(0);
 	/*
@@ -508,7 +508,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			MyProjectile->Init(Target, Attacker);
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
-			if(!IsOnViewport) MyProjectile->Mesh->SetVisibility(false);
+			if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
 			
 		
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
@@ -565,11 +565,69 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!IsOnViewport) MyProjectile->Mesh->SetVisibility(false);
+				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
 				
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			}
 		}
+	}
+}
+
+void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
+	TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread,
+	bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale)
+{
+
+	UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!SpawnProjectileFromClass!!!!!!!!!!!!"));
+	if( !ProjectileClass)
+		return;
+
+
+	UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!AFTER HERE WE START LOOP!!!!!!!!!!!!"));
+
+	for(int Count = 0; Count < ProjectileCount; Count++){
+		UE_LOG(LogTemp, Warning, TEXT("!!!!LOOPING!!!!!"));
+		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
+		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Aim);
+		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
+		
+		FVector LocationToShoot = Aim+ShootOffset*Spread;
+		
+		LocationToShoot.Z += GetActorLocation().Z;
+		LocationToShoot.Z += ZOffset;
+		
+	
+			UE_LOG(LogTemp, Warning, TEXT("FOUND SHOOTING UNIT!!!"));
+			FTransform Transform;
+			Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
+
+
+			FVector Direction = (LocationToShoot - GetActorLocation()).GetSafeNormal(); // Target->GetActorLocation()
+			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+
+			Transform.SetRotation(FQuat(InitialRotation));
+			Transform.SetScale3D(ProjectileScale*Scale);
+			
+			const auto MyProjectile = Cast<AProjectile>
+								(UGameplayStatics::BeginDeferredActorSpawnFromClass
+								(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+			if (MyProjectile != nullptr)
+			{
+
+				MyProjectile->TargetLocation = LocationToShoot;
+				MyProjectile->InitForLocationPosition(LocationToShoot, this);
+			
+				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
+				MyProjectile->IsBouncingNext = IsBouncingNext;
+				MyProjectile->IsBouncingBack = IsBouncingBack;
+
+				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
+				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+
+				UE_LOG(LogTemp, Warning, TEXT("SPAWNED PROJECTILE!!!"));
+			}
+		
 	}
 }
 
