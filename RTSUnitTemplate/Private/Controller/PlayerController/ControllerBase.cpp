@@ -170,23 +170,10 @@ void AControllerBase::SelectUnit(int Index)
 
 	UE_LOG(LogTemp, Warning, TEXT("SelectUnit!!"));
 	
-	/*
-	for (int32 i = 0; i < SelectedUnits.Num(); i++)
-	{
-		if(SelectedUnits[i] && i != Index)
-		{
-			SelectedUnits[i]->SetDeselected();
-			HUDBase->SelectedUnits[i]->SetDeselected();
-			//SelectedUnits.Remove(SelectedUnits[i]);
-			//HUDBase->SelectedUnits.Remove(HUDBase->SelectedUnits[i]);
-		}
-	}*/
-	//SelectedUnits.Empty();
-	//SelectedUnits.Add(HUDBase->SelectedUnits[Index]);
+	CurrentUnitWidgetIndex = 0;
 	HUDBase->DeselectAllUnits();
 	HUDBase->SetUnitSelected( SelectedUnits[Index]);
 	SelectedUnits = HUDBase->SelectedUnits; 
-	//UnitToSelect->SetSelected();
 
 	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
 
@@ -199,7 +186,7 @@ void AControllerBase::SelectUnit(int Index)
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
-	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Red, false, 1.5, 0, 1);
+	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Red, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
 	MoveToLocationUEPathFinding(Unit, Location);
 }
@@ -271,6 +258,41 @@ void AControllerBase::LeftClickSelect_Implementation()
 
 }
 
+int AControllerBase::GetHighestPriorityWidgetIndex()
+{
+	// Index of the highest-priority unit found so far
+	int32 BestIndex = 0;  
+	// Store the best priority found so far; start with -1 so any non-empty set is better
+	int32 BestPriority = -1;    
+
+	for (int32 i = 0; i < SelectedUnits.Num(); i++)
+	{
+		// If this is the special CameraUnitWithTag, return immediately
+		if (SelectedUnits[i] == CameraUnitWithTag)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[GetHighestPriorityWidgetIndex] Found CameraUnitWithTag at index %d"), i);
+			return i;
+		}
+
+		// Compute a priority score based on how many ability arrays are non-empty
+		int32 Priority = 0;
+		Priority += (SelectedUnits[i]->DefaultAbilities.Num() > 0) ? 1 : 0;
+		Priority += (SelectedUnits[i]->SecondAbilities.Num()  > 0) ? 1 : 0;
+		Priority += (SelectedUnits[i]->ThirdAbilities.Num()   > 0) ? 1 : 0;
+		Priority += (SelectedUnits[i]->FourthAbilities.Num()  > 0) ? 1 : 0;
+
+		// Update BestIndex if this unit has an equal or greater priority
+		// (so we get the last unit among equals)
+		if (Priority >= BestPriority)
+		{
+			BestIndex = i;
+			BestPriority = Priority;
+		}
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[GetHighestPriorityWidgetIndex] Final best widget index: %d"), BestIndex);
+	return BestIndex;
+}
+
 void AControllerBase::SetWidgets(int Index)
 {
 	if (!HUDBase->SelectedUnits.Num()) return;
@@ -284,6 +306,7 @@ void AControllerBase::SetWidgets(int Index)
 		
 		if(UnitBase && ExtendedCameraBase)
 		{
+			CurrentUnitWidgetIndex = Index;
 			ExtendedCameraBase->SetUserWidget(UnitBase);
 			ExtendedCameraBase->SetSelectorWidget(Index, UnitBase);
 		}else
@@ -490,14 +513,16 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	
 	return false;
 }
-/*
+
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
 	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
+		if (SelectedUnits[i] != CameraUnitWithTag)
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
+			
 			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
 			int32 Row = i / GridSize;     // Row index
 			int32 Col = i % GridSize;     // Column index
@@ -519,7 +544,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 		}
 	}
 }
-*/
+
 void AControllerBase::SetRunLocationUseDijkstra(FVector HitLocation, FVector UnitLocation, TArray <AUnitBase*> Units, TArray<FPathPoint>& PathPoints, int i)
 {
 	HUDBase->SetNextDijkstraTo(Units, HitLocation);

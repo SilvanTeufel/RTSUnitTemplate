@@ -27,7 +27,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-	
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	AUnitBase* CameraUnitWithTag;
 
 	// Timer handle for managing FPS display updates
 	FTimerHandle FPSTimerHandle;
@@ -86,6 +88,13 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
 		void LeftClickReleased();
 	*/
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+		int CurrentUnitWidgetIndex = 0;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		int GetHighestPriorityWidgetIndex();
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetWidgets(int Index);
 
@@ -124,6 +133,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void RunUnitsAndSetWaypoints(FHitResult Hit);
+
 	
 	UFUNCTION(meta = (DisplayName = "SetRunLocationUseDijkstra", Keywords = "RTSUnitTemplate SetRunLocationUseDijkstra"), Category = RTSUnitTemplate)
 		void SetRunLocationUseDijkstra(FVector HitLocation, FVector UnitLocation, TArray <AUnitBase*> Units, TArray<FPathPoint>& PathPoints, int i);

@@ -108,32 +108,33 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 
 TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayByIndex()
 {
-	if (!SelectedUnits.Num() || SelectedUnits[0]) return SelectedUnits[0]->DefaultAbilities;
+	UE_LOG(LogTemp, Warning, TEXT("GetAbilityArrayByIndex CurrentUnitWidgetIndex: %d"), CurrentUnitWidgetIndex);
+	UE_LOG(LogTemp, Warning, TEXT("SelectedUnits.Num(): %d"), SelectedUnits.Num());
+	if (!SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
+	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
+	if (!SelectedUnits[CurrentUnitWidgetIndex]) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	
 	switch (AbilityArrayIndex)
 	{
 	case 0:
-		return SelectedUnits[0]->DefaultAbilities;
-		break;
+		return SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities;
 	case 1:
-		return SelectedUnits[0]->SecondAbilities;
-		break;
+		return SelectedUnits[CurrentUnitWidgetIndex]->SecondAbilities;
 	case 2:
-		return SelectedUnits[0]->ThirdAbilities;
-		break;
+		return SelectedUnits[CurrentUnitWidgetIndex]->ThirdAbilities;
 	case 3:
-		return SelectedUnits[0]->FourthAbilities;
-		break;
+		return SelectedUnits[CurrentUnitWidgetIndex]->FourthAbilities;
 	default:
-		return SelectedUnits[0]->DefaultAbilities;
-			break;
+		return SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities;
 	}
 }
 
 void AExtendedControllerBase::AddAbilityIndex(int Add)
 {
+	if (!SelectedUnits.Num()) return;
+	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return;
+	if (!SelectedUnits[CurrentUnitWidgetIndex]) return;
 	
-if (!SelectedUnits.Num() || !SelectedUnits[0]) return;
 	
 	int NewIndex = AbilityArrayIndex+=Add;
 
@@ -141,25 +142,25 @@ if (!SelectedUnits.Num() || !SelectedUnits[0]) return;
 	if (NewIndex < 0)
 		NewIndex = MaxAbilityArrayIndex;
 
-	if (NewIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
+	if (NewIndex == 0 && !SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num())
 		NewIndex+=Add;
 	
-	if (NewIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
+	if (NewIndex == 1 && !SelectedUnits[CurrentUnitWidgetIndex]->SecondAbilities.Num())
 		NewIndex+=Add;
 	 
-	if (NewIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
+	if (NewIndex == 2 && !SelectedUnits[CurrentUnitWidgetIndex]->ThirdAbilities.Num())
 		NewIndex+=Add;
 	
-	if (NewIndex == 3 && !SelectedUnits[0]->FourthAbilities.Num())
+	if (NewIndex == 3 && !SelectedUnits[CurrentUnitWidgetIndex]->FourthAbilities.Num())
 		NewIndex+=Add;
 
-	if (NewIndex == 2 && !SelectedUnits[0]->ThirdAbilities.Num())
+	if (NewIndex == 2 && !SelectedUnits[CurrentUnitWidgetIndex]->ThirdAbilities.Num())
 		NewIndex+=Add;
 
-	if (NewIndex == 1 && !SelectedUnits[0]->SecondAbilities.Num())
+	if (NewIndex == 1 && !SelectedUnits[CurrentUnitWidgetIndex]->SecondAbilities.Num())
 		NewIndex+=Add;
 
-	if (NewIndex == 0 && !SelectedUnits[0]->DefaultAbilities.Num())
+	if (NewIndex == 0 && !SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num())
 		NewIndex+=Add;
 
 	if (NewIndex > MaxAbilityArrayIndex)
@@ -682,18 +683,22 @@ void AExtendedControllerBase::LeftClickPressed()
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			if (SelectedUnits[i] == CameraUnitWithTag) break;
-			
-			int32 Row = i / GridSize;     // Row index
-			int32 Col = i % GridSize;     // Column index
-
-			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-		
-			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+			if (SelectedUnits[i] != CameraUnitWithTag)
 			{
-				// Do Nothing
-			}else
-				LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
+				int32 Row = i / GridSize;     // Row index
+				int32 Col = i % GridSize;     // Column index
+
+				FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+		
+				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+				{
+					// Do Nothing
+				}else
+				{
+					DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Red, false, 1.5, 0, 1);
+					LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
+				}
+			}
 		}
 		
 	}
@@ -741,8 +746,12 @@ void AExtendedControllerBase::LeftClickReleased()
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
 	DropUnitBase();
-
-	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled) SetWidgets(0);
+	int BestIndex = GetHighestPriorityWidgetIndex();
+	CurrentUnitWidgetIndex = BestIndex;
+	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled)
+	{
+		SetWidgets(BestIndex);
+	}
 }
 
 
@@ -776,37 +785,6 @@ void AExtendedControllerBase::RightClickPressed()
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		DestroyDraggedArea(SelectedUnits[0]);
-	}
-}
-
-void AExtendedControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
-{
-	int32 NumUnits = SelectedUnits.Num();
-	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
-	
-	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-		if (SelectedUnits[i] == CameraUnitWithTag) break;
-		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
-			
-			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-			int32 Row = i / GridSize;     // Row index
-			int32 Col = i % GridSize;     // Column index
-
-			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-
-			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
-			{
-				// DO NOTHING
-			}else if (IsShiftPressed) {
-				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
-			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
-			{
-				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation);
-			}
-			else {
-				RightClickRunDijkstraPF_Implementation(SelectedUnits[i], RunLocation, i);
-			}
-		}
 	}
 }
 

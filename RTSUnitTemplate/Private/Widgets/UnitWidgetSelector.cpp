@@ -41,21 +41,27 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
 		SetUnitIcons(ControllerBase->SelectedUnits);
+
+		Update(ControllerBase->AbilityArrayIndex);
 		
-		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[0])
+		if (!ControllerBase->SelectedUnits.Num()) return;
+		if (ControllerBase->CurrentUnitWidgetIndex < 0 || ControllerBase->CurrentUnitWidgetIndex >= ControllerBase->SelectedUnits.Num()) return;
+		if (!ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]) return;
+		
+		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex])
 		{
-			if (ControllerBase->AbilityArrayIndex == 0 && ControllerBase->SelectedUnits[0]->DefaultAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->DefaultAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 1 && ControllerBase->SelectedUnits[0]->SecondAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->SecondAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 2 && ControllerBase->SelectedUnits[0]->ThirdAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->ThirdAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 3 && ControllerBase->SelectedUnits[0]->FourthAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[0]->FourthAbilities.Num());
+			if (ControllerBase->AbilityArrayIndex == 0 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities.Num())
+				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 1 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities.Num())
+				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 2 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities.Num())
+				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 3 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities.Num())
+				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities.Num());
 			else
 			    ChangeAbilityButtonCount(0);
 			
-			Update(ControllerBase->AbilityArrayIndex);
+			//Update(ControllerBase->AbilityArrayIndex);
 		}
 	}
 }

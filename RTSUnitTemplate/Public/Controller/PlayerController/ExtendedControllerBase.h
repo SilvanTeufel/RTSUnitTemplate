@@ -19,9 +19,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	AUnitBase* CameraUnitWithTag;
+	
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
 	
@@ -50,7 +48,7 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int AbilityArrayIndex = 0;
-
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxAbilityArrayIndex = 3;
 
@@ -129,9 +127,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressed();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void RunUnitsAndSetWaypoints(FHitResult Hit);
-	
+
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToResource(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
 
