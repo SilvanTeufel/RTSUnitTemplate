@@ -490,7 +490,7 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	
 	return false;
 }
-
+/*
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
@@ -499,7 +499,6 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
 			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-
 			int32 Row = i / GridSize;     // Row index
 			int32 Col = i % GridSize;     // Column index
 
@@ -520,7 +519,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 		}
 	}
 }
-
+*/
 void AControllerBase::SetRunLocationUseDijkstra(FVector HitLocation, FVector UnitLocation, TArray <AUnitBase*> Units, TArray<FPathPoint>& PathPoints, int i)
 {
 	HUDBase->SetNextDijkstraTo(Units, HitLocation);

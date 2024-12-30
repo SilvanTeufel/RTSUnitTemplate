@@ -278,7 +278,6 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 	if(UnitToHit && UnitToHit->TeamId != TeamId && ShootingUnit)
 	{
 		float NewDamage = Damage;
-		
 		if (UseAttributeDamage)
 		{
 			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();

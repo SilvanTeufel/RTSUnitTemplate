@@ -126,9 +126,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickReleased();
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RightClickPressed", Keywords = "RTSUnitTemplate RightClickPressed"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressed();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RunUnitsAndSetWaypoints(FHitResult Hit);
+	
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToResource(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
 

@@ -682,6 +682,8 @@ void AExtendedControllerBase::LeftClickPressed()
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
+			if (SelectedUnits[i] == CameraUnitWithTag) break;
+			
 			int32 Row = i / GridSize;     // Row index
 			int32 Col = i % GridSize;     // Column index
 
@@ -774,6 +776,37 @@ void AExtendedControllerBase::RightClickPressed()
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		DestroyDraggedArea(SelectedUnits[0]);
+	}
+}
+
+void AExtendedControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
+{
+	int32 NumUnits = SelectedUnits.Num();
+	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+	
+	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
+		if (SelectedUnits[i] == CameraUnitWithTag) break;
+		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
+			
+			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			int32 Row = i / GridSize;     // Row index
+			int32 Col = i % GridSize;     // Column index
+
+			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+			{
+				// DO NOTHING
+			}else if (IsShiftPressed) {
+				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
+			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
+			{
+				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation);
+			}
+			else {
+				RightClickRunDijkstraPF_Implementation(SelectedUnits[i], RunLocation, i);
+			}
+		}
 	}
 }
 

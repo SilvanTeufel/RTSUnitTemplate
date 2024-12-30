@@ -125,9 +125,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit);
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void RunUnitsAndSetWaypoints(FHitResult Hit);
-	
 	UFUNCTION(meta = (DisplayName = "SetRunLocationUseDijkstra", Keywords = "RTSUnitTemplate SetRunLocationUseDijkstra"), Category = RTSUnitTemplate)
 		void SetRunLocationUseDijkstra(FVector HitLocation, FVector UnitLocation, TArray <AUnitBase*> Units, TArray<FPathPoint>& PathPoints, int i);
 

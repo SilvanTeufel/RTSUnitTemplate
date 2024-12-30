@@ -485,7 +485,6 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 	if(!RTSGameMode) return;
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
-	UE_LOG(LogTemp, Warning, TEXT("DetectUnitsFromGameMode!!!!!!!! %d "), RTSGameMode->AllUnits.Num());
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
