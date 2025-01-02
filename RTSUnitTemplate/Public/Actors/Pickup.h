@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound\SoundCue.h"
 #include "GameplayEffect.h"
+#include "GAS/GameplayAbilityBase.h"
 #include "Pickup.generated.h"
 
 UCLASS()
@@ -41,6 +42,9 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxLifeTime = 0.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UGameplayAbilityBase> PickupAbility;
 protected:
 	// Called when the game starts or when spawneds
 	virtual void BeginPlay() override;

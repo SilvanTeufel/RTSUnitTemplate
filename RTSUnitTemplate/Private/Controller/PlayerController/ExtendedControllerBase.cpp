@@ -30,7 +30,6 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("HitResult: %s"), *HitResult.Location.ToString());
 	switch (AbilityArrayIndex)
 	{
 	case 0:
@@ -55,7 +54,6 @@ void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* 
 {
 	if(UnitBase && UnitBase->DefaultAbilities.Num())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HitResult: %s"), *HitResult.Location.ToString());
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities, HitResult);
 	}
 	
@@ -108,8 +106,7 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 
 TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayByIndex()
 {
-	UE_LOG(LogTemp, Warning, TEXT("GetAbilityArrayByIndex CurrentUnitWidgetIndex: %d"), CurrentUnitWidgetIndex);
-	UE_LOG(LogTemp, Warning, TEXT("SelectedUnits.Num(): %d"), SelectedUnits.Num());
+
 	if (!SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	if (!SelectedUnits[CurrentUnitWidgetIndex]) return TArray<TSubclassOf<UGameplayAbilityBase>>();
@@ -169,20 +166,14 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 
 	AbilityArrayIndex=NewIndex;
 
-	UE_LOG(LogTemp, Warning, TEXT("MaxAbilityArrayIndex: %d"), MaxAbilityArrayIndex);
-	UE_LOG(LogTemp, Warning, TEXT("Final AbilityArrayIndex after wrap: %d"), AbilityArrayIndex);
 }
 
 void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ApplyMovementInputToUnit_Implementation: %d"), AbilityArrayIndex);
-
 	if (Unit && (Unit->TeamId == TeamId))
 	{
 		if (Unit->GetController()) // Ensure the unit has a valid Controller
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Direction: %s"), *Direction.ToString());
-			UE_LOG(LogTemp, Warning, TEXT("Scale: %f"), Scale);
 			Unit->AddMovementInput(Direction, Scale);
 			Unit->SetUnitState(UnitData::Run);
 		}
@@ -654,8 +645,6 @@ void AExtendedControllerBase::DestoryWorkArea()
 		// Check if the hit actor is of type AWorkArea
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitResult.GetActor());
 
-		UE_LOG(LogTemp, Warning, TEXT("WorkArea->TeamId: %d"), WorkArea->TeamId);
-		UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId: %d"), SelectableTeamId);
 		if (WorkArea && WorkArea->Type == WorkAreaData::BuildArea && WorkArea->TeamId == SelectableTeamId) // Assuming EWorkAreaType is an enum with 'BuildArea'
 		{
 			// Destroy the WorkArea

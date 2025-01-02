@@ -35,6 +35,7 @@ void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	DOREPLIFETIME(APickup, PickUpDistance);
 	DOREPLIFETIME(APickup, Target);
 	DOREPLIFETIME(APickup, MovementSpeed);
+	DOREPLIFETIME(APickup, PickupAbility);
 }
 
 // Called when the game starts or when spawned
@@ -87,6 +88,12 @@ void APickup::Tick(float DeltaTime)
 				{
 					UnitBase->ApplyInvestmentEffect(PickupEffect);
 					UnitBase->ApplyInvestmentEffect(PickupEffectTwo);
+				}
+				break;
+			case PickUpData::Ability:
+				{
+					if (PickupAbility)
+						UnitBase->SelectableAbilities.Emplace(PickupAbility);
 				}
 				break;
 			default:

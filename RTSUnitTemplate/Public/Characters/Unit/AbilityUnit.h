@@ -61,6 +61,9 @@ public:
 	///////////////////////////////////////////////////////////////////
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>SelectableAbilities;
+	
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>OffensiveAbilities;
 	
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)

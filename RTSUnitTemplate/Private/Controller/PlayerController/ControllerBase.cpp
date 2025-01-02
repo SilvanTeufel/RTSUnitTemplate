@@ -39,9 +39,9 @@ void AControllerBase::BeginPlay() {
 	
 	RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
-	if (RTSGameMode)
+	if (!RTSGameMode)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("!!!!!Found GameMode Inside ControllerBase!!!!"));
+		UE_LOG(LogTemp, Warning, TEXT("!!!!!DONT Found GameMode Inside ControllerBase!!!!"));
 	}
 	ToggleUnitCountDisplay(ShowUnitCount);
 }
@@ -165,10 +165,7 @@ void AControllerBase::ShiftReleased()
 void AControllerBase::SelectUnit(int Index)
 {
 	
-	UE_LOG(LogTemp, Warning, TEXT("SelectUnit!"));
 	if (SelectedUnits[Index] == 0) return;
-
-	UE_LOG(LogTemp, Warning, TEXT("SelectUnit!!"));
 	
 	CurrentUnitWidgetIndex = 0;
 	HUDBase->DeselectAllUnits();
@@ -270,7 +267,6 @@ int AControllerBase::GetHighestPriorityWidgetIndex()
 		// If this is the special CameraUnitWithTag, return immediately
 		if (SelectedUnits[i] == CameraUnitWithTag)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[GetHighestPriorityWidgetIndex] Found CameraUnitWithTag at index %d"), i);
 			return i;
 		}
 
@@ -289,7 +285,7 @@ int AControllerBase::GetHighestPriorityWidgetIndex()
 			BestPriority = Priority;
 		}
 	}
-	UE_LOG(LogTemp, Warning, TEXT("[GetHighestPriorityWidgetIndex] Final best widget index: %d"), BestIndex);
+
 	return BestIndex;
 }
 

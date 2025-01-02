@@ -165,7 +165,6 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray
 			{
 				// 1) Activate the ability:
 				AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-				UE_LOG(LogTemp, Warning, TEXT("HitResult: %s"), *HitResult.Location.ToString());
 				if (HitResult.IsValidBlockingHit())ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
 			}
 		}

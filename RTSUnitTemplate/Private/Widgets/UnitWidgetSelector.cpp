@@ -178,7 +178,6 @@ void UUnitWidgetSelector::SetButtonIds()
 	}
 }
 
-
 void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
 {
 

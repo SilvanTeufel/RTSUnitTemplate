@@ -31,7 +31,6 @@ void AEOS_GameMode::PostLogin(APlayerController* NewPlayer)
 void AEOS_GameMode::Register(APlayerController* NewPlayer)
 {
    // Super::PostLogin(NewPlayer);
-	UE_LOG(LogTemp, Warning, TEXT("Register EOS"));
     if (NewPlayer)
     {
        
@@ -102,16 +101,6 @@ void AEOS_GameMode::Register(APlayerController* NewPlayer)
                 		UE_LOG(LogTemp, Error, TEXT("GameInstance is null"));
                 	}
                 	
-                	
-                	/*
-                    if (SessionRef.IsValid())
-                    {
-                        bool bRegistrationSuccess = SessionRef->RegisterPlayer(FName("RTSSession"), *UniqueNetId, false);
-                        if (bRegistrationSuccess)
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("Registration Successful"));
-                        }
-                    }*/
                 }
             }
             else

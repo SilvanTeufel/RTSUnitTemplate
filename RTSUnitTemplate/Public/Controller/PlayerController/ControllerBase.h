@@ -27,7 +27,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CameraUnitWithTag;
 

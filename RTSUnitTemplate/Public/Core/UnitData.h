@@ -135,6 +135,7 @@ namespace PickUpData
 		Health     UMETA(DisplayName = "Health"),
 		Shield   UMETA(DisplayName = "Shield "),
 		Effect UMETA(DisplayName = "Effect"),
+		Ability UMETA(DisplayName = "Ability"),
 	};
 }
 

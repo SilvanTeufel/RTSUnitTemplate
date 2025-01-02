@@ -111,8 +111,6 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
 	
-	UE_LOG(LogTemp, Warning, TEXT("Shooter location is: %s"), *ShooterLocation.ToString());
-	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
 	{

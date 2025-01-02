@@ -558,18 +558,6 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
 				AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
 
-				/*
-				if(SummoningUnit != nullptr && SummonIndex != -1) // SummoningUnit->SummonedUnitsIndexes.Num()
-				{
-					UE_LOG(LogTemp, Log, TEXT("SummoningUnit->SummonedUnitsIndexes.Num() = %d"), SummoningUnit->SummonedUnitsIndexes.Num());
-					UE_LOG(LogTemp, Log, TEXT("SummonIndex = %d"), SummonIndex);
-					// This is not needed then ?
-					SummoningUnit->SummonedUnitsIndexes[SummonIndex] = UnitBase->UnitIndex;
-
-					// Perhaps do better this ?
-					SummoningUnit->SummonedUnits.Add(UnitBase);;
-				}
-				*/
 				FUnitSpawnData UnitSpawnDataSet;
 				UnitSpawnDataSet.Id = SpawnParameter.Id;
 				UnitSpawnDataSet.UnitBase = UnitBase;

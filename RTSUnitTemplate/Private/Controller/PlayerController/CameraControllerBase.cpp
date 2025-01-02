@@ -32,17 +32,13 @@ void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag
 	
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
-	UE_LOG(LogTemp, Log, TEXT("!!!!SetCameraUnitWithTag!!!!!!!!!! %d"), TeamId);
 	if (GameMode)
 	{
-		UE_LOG(LogTemp, Log, TEXT("RTSGameMode found. Iterating through all units."));
 		for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 		{
 			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
 			if (Unit && Unit->UnitTags.HasTagExact(Tag) && Unit->TeamId == TeamId)
 			{
-				UE_LOG(LogTemp, Log, TEXT("Unit %s has the tag: %s"), *Unit->GetName(), *Tag.ToString());
-				UE_LOG(LogTemp, Log, TEXT("Unit Team: %d"), TeamId);
 				ServerSetCameraUnit(Unit, TeamId);
 				ClientSetCameraUnit(Unit, TeamId);
 			}
@@ -940,45 +936,7 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 		CameraBase->SetCameraState(CameraData::ZoomInPosition);
 	}
 }
-/*
-void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
-{
-	if (!Unit)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveAndRotateUnit: Invalid Unit pointer!"));
-		return;
-	}
-    
-	// Move
-	FVector CurrentLocation = Unit->GetActorLocation();
-	float SpeedScale = (Unit->Attributes) ? Unit->Attributes->GetRunSpeedScale()*2.f : 4.0f;
-    
-	Unit->SetActorLocation(CurrentLocation + Direction * SpeedScale);
-    
-	// Smoothly Rotate
-	FRotator CurrentRotation = Unit->GetActorRotation();
-	FRotator TargetRotation  = Direction.Rotation();
-    
-	// Flatten pitch/roll if only rotating around Yaw
-	TargetRotation.Pitch = 0.f;
-	TargetRotation.Roll  = 0.f;
 
-	// Interp speed - tweak as needed
-	float RotationSpeed = 10.0f;
-    
-	// Smooth interpolation from CurrentRotation to TargetRotation
-	FRotator SmoothedRotation = FMath::RInterpTo(
-		CurrentRotation, 
-		TargetRotation, 
-		DeltaTime, 
-		RotationSpeed
-	);
-    
-	Unit->SetActorRotation(SmoothedRotation);
-    
-	// Update state
-	SetUnitState_Multi(Unit, 1);
-}*/
 void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
 {
 	if (!Unit)
@@ -1008,6 +966,7 @@ void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, co
 	SetUnitState_Multi(Unit, 1);
 	Unit->ForceNetUpdate(); 
 }
+
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)

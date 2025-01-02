@@ -578,15 +578,11 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 	bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale)
 {
 
-	UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!SpawnProjectileFromClass!!!!!!!!!!!!"));
 	if( !ProjectileClass)
 		return;
 
 
-	UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!AFTER HERE WE START LOOP!!!!!!!!!!!!"));
-
 	for(int Count = 0; Count < ProjectileCount; Count++){
-		UE_LOG(LogTemp, Warning, TEXT("!!!!LOOPING!!!!!"));
 		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
 		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Aim);
 		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
@@ -597,7 +593,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 		LocationToShoot.Z += ZOffset;
 		
 	
-			UE_LOG(LogTemp, Warning, TEXT("FOUND SHOOTING UNIT!!!"));
 			FTransform Transform;
 			Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
 
@@ -625,7 +620,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 
-				UE_LOG(LogTemp, Warning, TEXT("SPAWNED PROJECTILE!!!"));
 			}
 		
 	}
