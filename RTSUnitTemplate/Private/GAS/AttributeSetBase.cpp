@@ -312,6 +312,26 @@ void UAttributeSetBase::OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBase
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, BaseRunSpeed, OldBaseRunSpeed);
 }
 
+void UAttributeSetBase::OnRep_Mana(const FGameplayAttributeData& OldMana)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Mana, OldMana);
+}
+
+void UAttributeSetBase::OnRep_SpellSize(const FGameplayAttributeData& OldSpellSize)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, SpellSize, OldSpellSize);
+}
+
+void UAttributeSetBase::OnRep_SpellForce(const FGameplayAttributeData& OldSpellForce)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, SpellForce, OldSpellForce);
+}
+
+void UAttributeSetBase::OnRep_SpellCapacity(const FGameplayAttributeData& OldSpellCapacity)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, SpellCapacity, OldSpellCapacity);
+}
+
 void UAttributeSetBase::SetAttributeMaxHealth(float NewValue)
 {
     SetMaxHealth(NewValue);
@@ -412,4 +432,23 @@ void UAttributeSetBase::SetAttributeBaseRunSpeed(float NewValue)
     SetBaseRunSpeed(NewValue);
 }
 
+void UAttributeSetBase::SetAttributeMana(float NewValue)
+{
+	SetMana(NewValue); 
+}
+
+void UAttributeSetBase::SetAttributeSpellSize(float NewValue)
+{
+	SetSpellSize(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeSpellForce(float NewValue)
+{
+	SetSpellForce(NewValue);
+}
+
+void UAttributeSetBase::SetAttributeSpellCapacity(float NewValue)
+{
+	SetSpellCapacity(NewValue);
+}
 

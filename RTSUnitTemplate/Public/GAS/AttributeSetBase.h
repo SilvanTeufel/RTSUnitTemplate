@@ -265,13 +265,48 @@ public:
 	virtual void OnRep_BaseAttackDamage(const FGameplayAttributeData& OldBaseAttackDamage);
 	// BaseAttackDamage //
 	
-	// BaseMaxWalkSpeed //
+	// BaseRunSpeed //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_BaseRunSpeed)
 	FGameplayAttributeData BaseRunSpeed;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, BaseRunSpeed);
 	UFUNCTION()
 	virtual void OnRep_BaseRunSpeed(const FGameplayAttributeData& OldBaseRunSpeed);
-	// BaseMaxWalkSpeed //
+	// BaseRunSpeed //
+
+
+	// Mana //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Mana)
+	FGameplayAttributeData Mana;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, Mana);
+	UFUNCTION()
+	virtual void OnRep_Mana(const FGameplayAttributeData& OldMana);
+	// Mana //
+
+
+	// SpellSize //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_SpellSize)
+	FGameplayAttributeData SpellSize;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, SpellSize);
+	UFUNCTION()
+	virtual void OnRep_SpellSize(const FGameplayAttributeData& OldSpellSize);
+	// SpellSize //
+
+
+	// SpellForce //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_SpellForce)
+	FGameplayAttributeData SpellForce;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, SpellForce);
+	UFUNCTION()
+	virtual void OnRep_SpellForce(const FGameplayAttributeData& OldSpellForce);
+	// SpellForce //
+
+	// SpellCapacity //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_SpellCapacity)
+	FGameplayAttributeData SpellCapacity;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, SpellCapacity);
+	UFUNCTION()
+	virtual void OnRep_SpellCapacity(const FGameplayAttributeData& OldSpellCapacity);
+	// SpellCapacity //
 
 	// BlueprintCallable setters for each attribute with "Attribute" as a prefix
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
@@ -333,4 +368,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeBaseRunSpeed(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeMana(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeSpellSize(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeSpellForce(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeSpellCapacity(float NewValue);
 };
