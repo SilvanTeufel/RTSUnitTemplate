@@ -33,6 +33,11 @@ void AControllerBase::BeginPlay() {
 
 	Super::BeginPlay();
 	
+	InitCameraHUDGameMode();
+	ToggleUnitCountDisplay(ShowUnitCount);
+}
+void AControllerBase::InitCameraHUDGameMode()
+{
 	CameraBase = Cast<ACameraBase>(GetPawn());
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
 	if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
@@ -43,10 +48,7 @@ void AControllerBase::BeginPlay() {
 	{
 		UE_LOG(LogTemp, Warning, TEXT("!!!!!DONT Found GameMode Inside ControllerBase!!!!"));
 	}
-	ToggleUnitCountDisplay(ShowUnitCount);
 }
-
-
 
 void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {

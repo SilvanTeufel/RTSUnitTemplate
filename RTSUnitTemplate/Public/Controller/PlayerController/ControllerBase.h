@@ -34,6 +34,9 @@ public:
 	// Timer handle for managing FPS display updates
 	FTimerHandle FPSTimerHandle;
 
+	FTimerHandle CheckSelectionTimerHandle;
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void InitCameraHUDGameMode();
 	// Function called by timer to display FPS
 	void DisplayUnitCount();
 	

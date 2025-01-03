@@ -12,14 +12,16 @@ APickup::APickup()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickInterval = TickInterval; 
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+	//Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	//SetRootComponent(Mesh);
 	
 	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is Pickup Capsule"));
 	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
-	TriggerCapsule->SetupAttachment(RootComponent);
+	//TriggerCapsule->SetupAttachment(RootComponent);
+	SetRootComponent(TriggerCapsule);
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &APickup::OnOverlapBegin);
+
 }
 
 void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -62,7 +64,7 @@ void APickup::Tick(float DeltaTime)
 		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Target->GetActorLocation());
 		AddActorWorldOffset(Direction * MovementSpeed);
 		float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-		if(Distance <= PickUpDistance)
+		if(Distance <= PickUpDistance && !Executed)
 		{
 			AUnitBase* UnitBase = Cast<AUnitBase>(Target);
 			
@@ -92,8 +94,11 @@ void APickup::Tick(float DeltaTime)
 				break;
 			case PickUpData::Ability:
 				{
+					UE_LOG(LogTemp, Warning, TEXT("Ability!"));
+					
 					if (PickupAbility)
-						UnitBase->SelectableAbilities.Emplace(PickupAbility);
+						UnitBase->SelectableAbilities.AddUnique(PickupAbility);
+					
 				}
 				break;
 			default:
@@ -107,6 +112,7 @@ void APickup::Tick(float DeltaTime)
 				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
 		 	
 			DestroySelectableWithDelay();
+			Executed = true;
 		}
 	}
 

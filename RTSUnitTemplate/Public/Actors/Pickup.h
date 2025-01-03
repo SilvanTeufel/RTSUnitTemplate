@@ -25,8 +25,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.025f;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UStaticMeshComponent* Mesh;
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//UStaticMeshComponent* Mesh;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UCapsuleComponent* TriggerCapsule;
@@ -43,6 +43,9 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxLifeTime = 0.f;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool Executed = false;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayAbilityBase> PickupAbility;
 protected:
