@@ -7,6 +7,7 @@
 #include "SelectorButton.h"
 #include "Components/TextBlock.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+
 #include "UnitWidgetSelector.generated.h"
 
 /**
@@ -32,6 +33,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateSelectedUnits();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateAbilityCooldowns();
+	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void Update(int AbillityArrayIndex);
 	
@@ -40,6 +44,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UButton*> AbilityButtons;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<UTextBlock*> AbilityCooldownTexts;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class USelectorButton*> SingleSelectButtons;

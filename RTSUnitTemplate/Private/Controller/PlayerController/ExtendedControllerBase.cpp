@@ -659,6 +659,8 @@ void AExtendedControllerBase::LeftClickPressed()
 {
 	LeftClickIsPressed = true;
 
+	if (!CameraBase || CameraBase->TabToggled) return;
+	
 	if(AltIsPressed)
 	{
 		DestoryWorkArea();
@@ -710,7 +712,7 @@ void AExtendedControllerBase::LeftClickPressed()
 			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
 			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
 			
-			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
+			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
 			{
 				HUDBase->DeselectAllUnits();
 				HUDBase->SetUnitSelected(UnitBase);

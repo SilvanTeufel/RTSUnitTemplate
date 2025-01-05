@@ -48,6 +48,9 @@ public:
 	UInputConfig* InputConfig;
 
 	bool BlockControls = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool TabToggled = true;
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

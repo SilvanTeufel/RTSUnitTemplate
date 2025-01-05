@@ -63,7 +63,104 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 			
 			//Update(ControllerBase->AbilityArrayIndex);
 		}
+
+		UpdateAbilityCooldowns();
+		
 	}
+}
+
+
+void UUnitWidgetSelector::UpdateAbilityCooldowns()
+{
+
+    if (!ControllerBase || !ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex))
+        return;
+	
+	// ControllerBase->AbilityArrayIndex == 0 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities
+	// ControllerBase->AbilityArrayIndex == 1 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities	
+	// ControllerBase->AbilityArrayIndex == 2 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities
+	// ControllerBase->AbilityArrayIndex == 3 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities	
+	AUnitBase* SelectedUnit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
+	UAbilitySystemComponent* ASC = SelectedUnit->GetAbilitySystemComponent();
+	if (!ASC)
+		return;
+
+
+	// Loop through each ability up to AbilityButtonCount
+	for (int32 AbilityIndex = 0; AbilityIndex < MaxAbilityButtonCount; ++AbilityIndex)
+	{
+		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
+
+	
+		if (!AbilityArray.IsValidIndex(AbilityIndex)) // Adjust index as needed
+			return;
+	
+		UGameplayAbilityBase* Ability = AbilityArray[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>();
+		if (!Ability)
+			return;
+		
+		UGameplayEffect* CooldownGEInstance =  Ability->GetCooldownGameplayEffect();
+		if (!CooldownGEInstance)
+			return;
+
+		// Step 2: Extract the UClass* from the instance
+		TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
+		if (!CooldownGEClass)
+			return;
+		
+		       if (!CooldownGEClass)
+                {
+                    // If class extraction fails, clear the cooldown text
+                    if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
+                    {
+                        AbilityCooldownTexts[AbilityIndex]->SetText(FText::GetEmpty());
+                    }
+                    continue;
+                }
+		// Create a query to find active cooldown effects matching the CooldownGEClass
+		FGameplayEffectQuery CooldownQuery;
+		CooldownQuery.EffectDefinition = CooldownGEClass;
+
+		// Retrieve all active cooldown effects that match the query
+		TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
+
+	
+		float RemainingTime = 0.f;
+
+		if (ActiveCooldownHandles.Num() > 0)
+		{
+			// Assuming only one cooldown effect per ability, take the first handle
+			FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
+			const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
+			if (ActiveEffect)
+			{
+				// Get the current world time
+				float CurrentTime = ASC->GetWorld()->GetTimeSeconds();
+        
+				// Calculate the remaining duration
+				RemainingTime = ActiveEffect->GetTimeRemaining(CurrentTime);
+			}
+		}
+
+		if (RemainingTime > 0.f)
+		{
+			//FString CooldownStr = FString::Printf(TEXT("%.1f"), FMath::RoundToFloat(RemainingTime * 10) / 10.0f);
+			FString CooldownStr = FString::Printf(TEXT("%.0f"), RemainingTime);
+			if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
+			{
+				AbilityCooldownTexts[AbilityIndex]->SetText(FText::FromString(CooldownStr));
+			}
+		}
+		else
+		{
+			if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
+			{
+				FString CooldownRdy = FString::Printf(TEXT("-"));
+				AbilityCooldownTexts[AbilityIndex]->SetText(FText::FromString(CooldownRdy));
+			}
+		}
+	}
+    
 }
 
 void UUnitWidgetSelector::StartUpdateTimer()
@@ -96,6 +193,13 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 		if (AbilityButton)
 		{
 			AbilityButtons.Add(AbilityButton);
+		}
+
+		FString TextBlockName = FString::Printf(TEXT("AbilityCooldownText_%d"), i);
+		UTextBlock* TextBlock = Cast<UTextBlock>(GetWidgetFromName(FName(*TextBlockName)));
+		if (TextBlock)
+		{
+			AbilityCooldownTexts.Add(TextBlock);
 		}
 	}
 	
