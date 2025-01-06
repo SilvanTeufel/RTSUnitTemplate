@@ -64,7 +64,7 @@ public:
 	
 	virtual void BeginPlay() override;
 
-	virtual void OnPossess(APawn* Pawn) override;
+	virtual void OnPossess(APawn* PawN) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	

@@ -118,7 +118,9 @@ void ABuildingControllerBase::CastingUnit(AUnitBase* UnitBase, float DeltaSecond
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
 		if (UnitBase->ActivatedAbilityInstance)
+		{
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+		}
 		
 		UnitBase->SetWalkSpeed(0);
 		UnitBase->UnitControlTimer = 0.f;

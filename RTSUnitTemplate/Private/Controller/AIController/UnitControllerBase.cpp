@@ -433,7 +433,11 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
 		if (UnitBase->ActivatedAbilityInstance)
-			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+		{
+			FHitResult Hit;
+			ControllerBase->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
+		}
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;

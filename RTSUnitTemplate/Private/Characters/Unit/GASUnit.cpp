@@ -164,8 +164,8 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray
 			if(AbilityToActivate != nullptr)
 			{
 				// 1) Activate the ability:
-				AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-				if (HitResult.IsValidBlockingHit())ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
+				bool IsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
+				if (IsActivated && HitResult.IsValidBlockingHit())ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
 			}
 		}
 }

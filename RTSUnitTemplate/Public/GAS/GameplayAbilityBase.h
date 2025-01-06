@@ -25,8 +25,8 @@ public:
 	EGASAbilityInputID AbilityInputID = EGASAbilityInputID::None;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
-	void OnAbilityCastComplete();
-
+	void OnAbilityCastComplete( const FHitResult& InHitResult = FHitResult());
+	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnAbilityMouseHit(const FHitResult& InHitResult);
 
