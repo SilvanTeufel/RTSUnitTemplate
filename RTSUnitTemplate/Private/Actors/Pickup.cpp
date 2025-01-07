@@ -94,7 +94,6 @@ void APickup::Tick(float DeltaTime)
 				break;
 			case PickUpData::Ability:
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Ability!"));
 					
 					if (PickupAbility)
 						UnitBase->SelectableAbilities.AddUnique(PickupAbility);

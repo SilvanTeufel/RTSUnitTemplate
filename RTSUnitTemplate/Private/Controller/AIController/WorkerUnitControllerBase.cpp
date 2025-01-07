@@ -430,7 +430,12 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 	// Check if Base is allready in Range /////////////////////////////
 
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-	const bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	bool CanAffordConstruction = false;
+
+	if(UnitBase->BuildArea && UnitBase->BuildArea->IsPaid)
+		CanAffordConstruction = true;
+	else	
+		CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
 	const float DistanceToBase = FVector::Dist(UnitBase->GetActorLocation(),  UnitBase->Base->GetActorLocation()) - UnitBase->Base->GetSimpleCollisionRadius();
 
@@ -496,7 +501,7 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 
 	bool CanAffordConstruction;
 	
-	if(Worker->BuildArea->IsPaid)
+	if(Worker->BuildArea && Worker->BuildArea->IsPaid)
 		CanAffordConstruction = true;
 	else
 		CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
@@ -551,9 +556,9 @@ FVector AWorkerUnitControllerBase::GetGroundLocation(FVector ALocation, AUnitBas
 		}
 	}
 }
+
 void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -566,9 +571,8 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);
 	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
 	UnitBase->UnitControlTimer += DeltaSeconds;
-	if(UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
+	if(UnitBase->BuildArea && UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
 	{
-
 		if(!UnitBase->BuildArea->Building)
 		{
 			FUnitSpawnParameter SpawnParameter;
@@ -582,17 +586,26 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			SpawnParameter.StatePlaceholder = UnitData::Idle;
 			SpawnParameter.Material = nullptr;
 			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
-			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, UnitBase->BuildArea->GetActorLocation(), nullptr, UnitBase->TeamId, nullptr);
+
+			FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
+			if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
+			{
+				UnitBase->BuildArea->RemoveAreaFromGroup();
+				UnitBase->BuildArea->Destroy(true);
+				UnitBase->BuildArea = nullptr;
+			}
+			
+			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
+
 			if(NewUnit)
 			{
-				UnitBase->BuildArea->Building = Cast<ABuildingBase>(NewUnit);
-				UnitBase->BuildArea->Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
-				if(UnitBase->BuildArea->DestroyAfterBuild)
-				{
-					UnitBase->BuildArea->RemoveAreaFromGroup();
-					UnitBase->BuildArea->Destroy(true);
-					UnitBase->BuildArea = nullptr;
-				}
+				
+				ABuildingBase* Building = Cast<ABuildingBase>(NewUnit);
+				if (Building && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
+					Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+
+				if (Building && UnitBase->BuildArea)
+					UnitBase->BuildArea->Building = Building;
 			}
 		}
 			UnitBase->SetUEPathfinding = true;
@@ -600,8 +613,11 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		
 	}else if (UnitBase->GetUnitState() == UnitData::Dead)
 	{
+		if(UnitBase->BuildArea)
+		{
 			UnitBase->BuildArea->PlannedBuilding = false;
 			UnitBase->BuildArea->StartedBuilding = false;
+		}
 	}
 }
 

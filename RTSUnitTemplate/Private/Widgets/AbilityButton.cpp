@@ -20,7 +20,6 @@ void UAbilityButton::OnClick()
 void UAbilityButton::SetAbility(int AbilityIndex)
 {
 
-	UE_LOG(LogTemp, Warning, TEXT("UAbilityButton SetAbility!")); 
 	AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 
 	if(!ControllerBase) return;

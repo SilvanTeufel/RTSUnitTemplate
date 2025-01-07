@@ -130,6 +130,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 }
 
 
+
 void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset) // FVector TargetLocation
 {
 

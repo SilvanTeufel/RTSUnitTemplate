@@ -120,6 +120,7 @@ void AResourceGameMode::GatherWorkAreas()
 			break;
 		}
 	}
+	
 }
 
 // Adjusting the ModifyResource function to use the ResourceType within FResourceArray
@@ -296,7 +297,7 @@ AWorkArea* AResourceGameMode::GetRandomClosestWorkArea(const TArray<AWorkArea*>&
 		int32 Index = FMath::RandRange(0, WorkAreas.Num() - 1);
 		return WorkAreas[Index];
 	}
-
+	
 	return nullptr;
 }
 /*

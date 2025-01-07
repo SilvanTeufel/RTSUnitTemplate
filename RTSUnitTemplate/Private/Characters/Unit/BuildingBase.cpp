@@ -52,7 +52,11 @@ void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 
 	if(UnitBase->BuildArea)
 	{
-		CanAffordConstruction = ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId);
+	
+		if(UnitBase->BuildArea->IsPaid)
+			CanAffordConstruction = true;
+		else	
+			CanAffordConstruction = ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId);
 	}
 	
 	if (UnitBase->IsWorker && IsBase && ResourceGameMode && UnitBase->GetUnitState() != UnitData::GoToBuild)
@@ -66,14 +70,6 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 {
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->SetUEPathfinding = true;
-
-	bool AreaIsForTeam = false;
-	if (UnitBase->BuildArea)
-	{
-		AreaIsForTeam = 
-			(UnitBase->BuildArea->TeamId == 0) || 
-			(UnitBase->TeamId == UnitBase->BuildArea->TeamId);
-	}
 	
 	if(UnitBase->WorkResource)
 	{
@@ -116,12 +112,19 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(UnitBase);
-	BuildAreas.SetNum(3);
+
+	if (BuildAreas.Num() > 3) BuildAreas.SetNum(3);
 	
 	UnitBase->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
 
-	bool CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+	bool CanAffordConstruction = false;
 
+	if(UnitBase->BuildArea && UnitBase->BuildArea->IsPaid)
+		CanAffordConstruction = true;
+	else	
+		CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+
+	
 	bool AreaIsForTeam = false;
 	if (UnitBase->BuildArea)
 	{
@@ -130,9 +133,9 @@ bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* Reso
 			(UnitBase->TeamId == UnitBase->BuildArea->TeamId);
 	}
 
-
 	if(CanAffordConstruction && UnitBase->BuildArea && !UnitBase->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
 	{
+	
 		UnitBase->BuildArea->PlannedBuilding = true;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBuild);
