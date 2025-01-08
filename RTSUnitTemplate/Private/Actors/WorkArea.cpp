@@ -149,7 +149,7 @@ void AWorkArea::Tick(float DeltaTime)
 	ControlTimer += DeltaTime;
 	if(ControlTimer >= ResetStartBuildTime)
 	{
-		if(!Building)
+		if(!Building || PlannedBuilding && !StartedBuilding)
 		{
 			PlannedBuilding = false;
 			StartedBuilding = false;
@@ -295,6 +295,7 @@ bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 	if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
 	{
 		Worker->BuildArea->PlannedBuilding = true;
+		Worker->BuildArea->ControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 		Worker->SetUnitState(UnitData::GoToBuild);
 	} else

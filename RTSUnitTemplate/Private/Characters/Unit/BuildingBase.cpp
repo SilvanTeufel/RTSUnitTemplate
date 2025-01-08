@@ -137,6 +137,7 @@ bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* Reso
 	{
 	
 		UnitBase->BuildArea->PlannedBuilding = true;
+		UnitBase->BuildArea->ControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBuild);
 	} else

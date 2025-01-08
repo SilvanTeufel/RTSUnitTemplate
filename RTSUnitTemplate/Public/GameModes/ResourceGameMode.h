@@ -84,18 +84,12 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
 
+public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	ABuildingBase* GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas);
-
-	/*
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	TArray<AWorkArea*> GetClosestBase(AWorkingUnitBase* Worker);
-	*/
-	
-public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	FWorkAreaArrays WorkAreaGroups; // Storage for work areas grouped by type

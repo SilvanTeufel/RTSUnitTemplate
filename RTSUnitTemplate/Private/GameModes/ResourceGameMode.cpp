@@ -232,11 +232,14 @@ ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Work
 
 	for (ABuildingBase* Base : Bases)
 	{
-		float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
-		if (DistanceSquared < MinDistanceSquared)
+		if (Worker->TeamId == Base->TeamId)
 		{
-			MinDistanceSquared = DistanceSquared;
-			ClosestBase = Base;
+			float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+			if (DistanceSquared < MinDistanceSquared)
+			{
+				MinDistanceSquared = DistanceSquared;
+				ClosestBase = Base;
+			}
 		}
 	}
 

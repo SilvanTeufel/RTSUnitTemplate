@@ -488,6 +488,7 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		Worker->BuildArea = Worker->CurrentDraggedWorkArea;
 		Worker->BuildArea->TeamId = Worker->TeamId;
 		Worker->BuildArea->PlannedBuilding = true;
+		Worker->BuildArea->ControlTimer = 0.f;
 		Worker->BuildArea->AddAreaToGroup();
 		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode);
 
@@ -755,6 +756,7 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 	}
 
 	Worker->CurrentDraggedWorkArea->PlannedBuilding = true;
+	Worker->CurrentDraggedWorkArea->ControlTimer = 0.f;
 	Worker->CurrentDraggedWorkArea->RemoveAreaFromGroup();
 	Worker->CurrentDraggedWorkArea->Destroy();
 	Worker->CurrentDraggedWorkArea = nullptr;

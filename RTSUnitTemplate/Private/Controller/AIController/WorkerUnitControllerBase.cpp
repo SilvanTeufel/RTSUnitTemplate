@@ -415,7 +415,25 @@ FVector AWorkerUnitControllerBase::GetFloorLocation(AUnitBase* Unit)
 
 void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if(!UnitBase || !UnitBase->Base) return;
+	if(!UnitBase) return;
+	
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+	if (!ResourceGameMode)
+	{
+		UnitBase->SetUnitState(UnitData::Idle);
+	}
+	
+	if(!UnitBase->Base)
+	{
+		UnitBase->Base = ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
+
+		if (!UnitBase->Base)
+		{
+			UnitBase->SetUnitState(UnitData::Idle);
+			return;
+		}
+	}
 
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
@@ -429,7 +447,7 @@ void AWorkerUnitControllerBase::GoToBase(AUnitBase* UnitBase, float DeltaSeconds
 	}
 	// Check if Base is allready in Range /////////////////////////////
 
-	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	
 	bool CanAffordConstruction = false;
 
 	if(UnitBase->BuildArea && UnitBase->BuildArea->IsPaid)
@@ -604,7 +622,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 				if (Building && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
 					Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
 
-				if (Building && UnitBase->BuildArea)
+				if (Building && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 					UnitBase->BuildArea->Building = Building;
 			}
 		}
