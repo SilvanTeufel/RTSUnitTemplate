@@ -634,9 +634,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		{
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			return true;
-		}
-		
-		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
+		}else if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
 		{
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
