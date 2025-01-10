@@ -48,8 +48,17 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int AbilityArrayIndex = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
+	float SnapGap = 50.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
+	float SnapDistance = 100.f;
 	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
+	float DraggedAreaZOffset = 10.f;
+	
+	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	int MaxAbilityArrayIndex = 3;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -80,7 +89,7 @@ public:
 	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SnapToActor(AActor* DraggedActor, AActor* OtherActor);
+	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);

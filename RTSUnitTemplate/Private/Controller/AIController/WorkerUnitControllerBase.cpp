@@ -712,7 +712,7 @@ void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
 }
 
 
-
+/*
 AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
 	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
@@ -784,6 +784,144 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnP
 	}
 
 	return nullptr;
+}*/
+
+
+AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
+    FUnitSpawnParameter SpawnParameter,
+    FVector Location,
+    AUnitBase* UnitToChase,
+    int TeamId,
+    AWaypoint* Waypoint)
+{
+    // 1) Transformation mit (vorläufigem) Spawn-Ort
+    FTransform EnemyTransform;
+    EnemyTransform.SetLocation(
+        FVector(Location.X + SpawnParameter.UnitOffset.X,
+                Location.Y + SpawnParameter.UnitOffset.Y,
+                Location.Z + SpawnParameter.UnitOffset.Z)
+    );
+
+    // 2) Deferrten Actor-Spawn starten
+    AUnitBase* UnitBase = Cast<AUnitBase>(
+        UGameplayStatics::BeginDeferredActorSpawnFromClass(
+            this,
+            SpawnParameter.UnitBaseClass,
+            EnemyTransform,
+            ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn
+        )
+    );
+
+    if (!UnitBase)
+    {
+        return nullptr;
+    }
+
+    // 3) (Optional) AI-Controller spawnen und zuweisen
+    if (SpawnParameter.UnitControllerBaseClass)
+    {
+        AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(
+            SpawnParameter.UnitControllerBaseClass, 
+            FTransform()
+        );
+        if (!UnitController) 
+        {
+            return nullptr;
+        }
+        UnitController->Possess(UnitBase);
+    }
+
+    // --------------------------------------------
+    // 4) Hier folgt nun der Part mit dem LineTrace
+    // --------------------------------------------
+
+    // Wir versuchen, das Mesh zu holen (falls vorhanden),
+    // um dessen Bounds und Höhe zu bestimmen
+    USkeletalMeshComponent* MeshComponent = UnitBase->GetMesh();
+    if (MeshComponent)
+    {
+        // Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
+        FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
+        float HalfHeight = MeshBounds.BoxExtent.Z;
+
+        // Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
+        FVector TraceStart = Location + FVector(0.f, 0.f, 5000.f);
+        FVector TraceEnd   = Location - FVector(0.f, 0.f, 5000.f);
+
+        FHitResult HitResult;
+        FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
+        TraceParams.bTraceComplex = true;
+        TraceParams.AddIgnoredActor(UnitBase);
+
+        bool bHit = GetWorld()->LineTraceSingleByChannel(
+            HitResult,
+            TraceStart,
+            TraceEnd,
+            ECC_Visibility,
+            TraceParams
+        );
+
+        if (bHit)
+        {
+            // Wenn wir etwas treffen (z.B. Boden),
+            // setzen wir den Z-Wert so, dass die Unterseite des Meshes
+            // auf der Boden-Kollisionsstelle aufsitzt.
+            // -> ImpactPoint.Z plus "halbe Mesh-Höhe"
+            Location.Z = HitResult.ImpactPoint.Z + HalfHeight;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SpawnSingleUnit: Kein Boden getroffen, verwende Standard-Z"));
+        }
+
+        // Aktualisiere EnemyTransform mit dem angepassten Z-Wert
+        EnemyTransform.SetLocation(Location);
+    }
+
+    // --------------------------------------------
+    // 5) Jetzt wird der Actor final in die Welt gesetzt
+    // --------------------------------------------
+    UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
+    // 6) Ab hier folgt dein bisheriger Setup-Code
+    if (UnitBase->UnitToChase)
+    {
+        UnitBase->UnitToChase = UnitToChase;
+        UnitBase->SetUnitState(UnitData::Chase);
+    }
+
+    if (TeamId)
+    {
+        UnitBase->TeamId = TeamId;
+    }
+
+    UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+    UnitBase->OnRep_MeshAssetPath();
+    UnitBase->OnRep_MeshMaterialPath();
+
+    UnitBase->SetReplicateMovement(true);
+    SetReplicates(true);
+    UnitBase->GetMesh()->SetIsReplicated(true);
+
+    // Meshrotation-Server
+    UnitBase->SetMeshRotationServer();
+
+    UnitBase->UnitState = SpawnParameter.State;
+    UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
+    // Attribute & GameMode-Handling
+    UnitBase->InitializeAttributes();
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+    if (!GameMode)
+    {
+        UnitBase->SetUEPathfinding = true;
+        UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+        return nullptr;
+    }
+
+    GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+
+    return UnitBase;
 }
 
 

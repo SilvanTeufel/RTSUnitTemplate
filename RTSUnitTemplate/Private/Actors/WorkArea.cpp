@@ -15,8 +15,13 @@ AWorkArea::AWorkArea()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+
+	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
+	
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+	Mesh->SetupAttachment(RootComponent);
+	//SetRootComponent(Mesh);
 	
 	// Set collision enabled 
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // Query Only (No Physics Collision)
@@ -183,7 +188,7 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
                                      Type == WorkAreaData::Epic || Type == WorkAreaData::Legendary;
     bool isValidStateForExtraction = UnitBase->GetUnitState() == UnitData::GoToResourceExtraction || 
                                      UnitBase->GetUnitState() == UnitData::Evasion;
-
+	
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 	if(!ResourceGameMode) return;
@@ -212,6 +217,8 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 void AWorkArea::HandleResourceExtractionArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase)
 {
 
+		if (this != UnitBase->ResourcePlace) return;
+		
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->ExtractingWorkResourceType = ConvertWorkAreaTypeToResourceType(Type);
 		UnitBase->SetUnitState(UnitData::ResourceExtraction);
@@ -219,21 +226,13 @@ void AWorkArea::HandleResourceExtractionArea(AWorkingUnitBase* Worker, AUnitBase
 
 void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
 {
+	
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
-
-			bool AreaIsForTeam = false;
-			if (Worker->BuildArea)
-			{
-				AreaIsForTeam = 
-					(Worker->BuildArea->TeamId == 0) || 
-					(Worker->TeamId == Worker->BuildArea->TeamId);
-			}
 	
 			if(Worker->WorkResource)
 			{
 				//ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
-				//UE_LOG(LogTemp, Warning, TEXT("WorkResource Despawn!"));
 				ResourceGameMode->ModifyResource(Worker->WorkResource->ResourceType, Worker->TeamId, Worker->WorkResource->Amount);
 				DespawnWorkResource(UnitBase->WorkResource);
 			}

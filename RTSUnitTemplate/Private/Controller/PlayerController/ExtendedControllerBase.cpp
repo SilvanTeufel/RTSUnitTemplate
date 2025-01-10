@@ -212,7 +212,10 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 			ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
 			HUDBase->SetUnitSelected(ClosestUnit);
+
+			//ActivateAbilitiesByIndex_Implementation(ClosestUnit, InputID, FHitResult());
 			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
+			AbilityArrayIndex = 0;
 			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
 }
@@ -282,12 +285,19 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	if (SelectedUnits.Num() > 0)
 	{
-		for (AGASUnit* SelectedUnit : SelectedUnits)
+		if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(SelectedUnits[0]))
 		{
-			if (SelectedUnit)
+			ActivateAbilitiesByIndex_Implementation(WorkingUnit, InputID, Hit);
+		}else{
+			for (AGASUnit* SelectedUnit : SelectedUnits)
 			{
-				//ActivateDefaultAbilities(SelectedUnit, InputID);
-				ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+				AWorkingUnitBase* WUnit = Cast<AWorkingUnitBase>(SelectedUnit);
+				
+				if (SelectedUnit && !WUnit)
+				{
+					//ActivateDefaultAbilities(SelectedUnit, InputID);
+					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+				}
 			}
 		}
 	}else if (CameraUnitWithTag)
@@ -306,15 +316,87 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
 {
-	if (!DraggedArea)
-	{
-		return; // Exit the function if DraggedArea is null
-	}
+   if (!DraggedArea) return;
 
-	DraggedArea->SetActorLocation(NewActorPosition);
+    UStaticMeshComponent* MeshComponent = DraggedArea->FindComponentByClass<UStaticMeshComponent>();
+    if (!MeshComponent)
+    {
+        DraggedArea->SetActorLocation(NewActorPosition);
+        return;
+    }
+
+    // 1) Zunächst nur XY setzen, Z bleibt unverändert (oder so, wie es reinkommt)
+    FVector TempLocation = FVector(NewActorPosition.X, NewActorPosition.Y, NewActorPosition.Z);
+    DraggedArea->SetActorLocation(TempLocation);
+
+    // 2) Bounds neu holen (jetzt mit richtiger Weltposition)
+    FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
+    // „halbe Höhe“ des Meshes (inkl. Scale & Rotation, da in Weltkoordinaten)
+    float HalfHeight = MeshBounds.BoxExtent.Z;
+
+	/*
+    // Nur zum Debuggen
+    DrawDebugBox(
+        GetWorld(),
+        MeshBounds.Origin,
+        MeshBounds.BoxExtent,
+        FColor::Yellow,
+        false,  // bPersistentLines
+        5.0f    // Lebensdauer in Sekunden
+    );
+    DrawDebugPoint(
+        GetWorld(),
+        MeshBounds.Origin,
+        20.f,
+        FColor::Green,
+        false,
+        5.0f
+    );*/
+
+    // 3) LineTrace von etwas über dem Bodensatz des Meshes nach unten
+    FVector MeshBottomWorld = MeshBounds.Origin - FVector(0.f, 0.f, HalfHeight);
+    FVector TraceStart = MeshBottomWorld + FVector(0.f, 0.f, 1000.f);
+    FVector TraceEnd   = MeshBottomWorld - FVector(0.f, 0.f, 5000.f);
+
+    FHitResult HitResult;
+    FCollisionQueryParams TraceParams(FName(TEXT("WorkAreaGroundTrace")), true, DraggedArea);
+    TraceParams.AddIgnoredActor(DraggedArea);
+
+    if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, TraceParams))
+    {
+    	/*
+        // Debug: Zeichne die Tracelinie
+        DrawDebugLine(
+            GetWorld(),
+            TraceStart,
+            HitResult.ImpactPoint,
+            FColor::Green,
+            false,
+            5.f
+        );
+        DrawDebugLine(
+            GetWorld(),
+            HitResult.ImpactPoint,
+            TraceEnd,
+            FColor::Red,
+            false,
+            5.f
+        );
+*/
+        // Setze die neue Z-Position so, dass MeshBottomWorld auf dem Boden liegt
+        float DeltaZ = HitResult.ImpactPoint.Z - MeshBottomWorld.Z;
+        NewActorPosition.Z += DeltaZ;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SetWorkAreaPosition_Implementation: Kein Boden getroffen!"));
+    }
+
+    // 4) Schlussendlich Actor anpassen
+    DraggedArea->SetActorLocation(NewActorPosition);
 }
 
-void AExtendedControllerBase::SnapToActor(AActor* DraggedActor, AActor* OtherActor)
+void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
 {
     if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
         return;
@@ -347,7 +429,7 @@ void AExtendedControllerBase::SnapToActor(AActor* DraggedActor, AActor* OtherAct
     FVector OtherExtent   = OtherBounds.BoxExtent;
 
     // 5) Decide on a small gap so they don’t overlap visually
-    float Gap = 10.f;
+    float Gap = SnapGap;
 
     // 6) Compute how much to offset on X and Y so they "just touch"
     //    (i.e. sum of half-extents along that axis + Gap)
@@ -386,7 +468,8 @@ void AExtendedControllerBase::SnapToActor(AActor* DraggedActor, AActor* OtherAct
     //    Otherwise, we keep the dragged actor’s original Z.
 
     // 9) Finally, move the dragged actor
-    DraggedActor->SetActorLocation(SnappedPos);
+   // DraggedActor->SetActorLocation(SnappedPos);
+	SetWorkAreaPosition(DraggedActor, SnappedPos);
 }
 
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
@@ -416,54 +499,55 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 				HitResult.Location,
 				SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation()
 			);
-
-			if (Distance < 100.f)
-			if (UStaticMeshComponent* Mesh = SelectedUnits[0]->CurrentDraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
-			{
-				// 1) Get bounding sphere
-				FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
-				float OverlapRadius = MeshBounds.SphereRadius;
-
-				// 2) Run the sphere overlap
-				TArray<AActor*> OverlappedActors;
-				bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
-					this,                                       
-					SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation(), 
-					OverlapRadius,
-					TArray<TEnumAsByte<EObjectTypeQuery>>(),
-					AActor::StaticClass(),
-					TArray<AActor*>(),
-					OverlappedActors
-				);
-
-				// 3) Check the overlapped actors
-				if (bAnyOverlap && OverlappedActors.Num() > 0)
+			
+			
+			if (Distance < SnapDistance+SnapGap){
+				if (UStaticMeshComponent* Mesh = SelectedUnits[0]->CurrentDraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
 				{
-					for (AActor* OverlappedActor : OverlappedActors)
-					{
-						if (!OverlappedActor || OverlappedActor == SelectedUnits[0]->CurrentDraggedWorkArea)
-							continue;
+					// 1) Get bounding sphere
+					FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
+					float OverlapRadius = MeshBounds.SphereRadius;
 
-						AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor);
-						ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
-						if (OverlappedWorkArea || OverlappedBuilding)
+					// 2) Run the sphere overlap
+					TArray<AActor*> OverlappedActors;
+					bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
+						this,                                       
+						SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation(), 
+						OverlapRadius,
+						TArray<TEnumAsByte<EObjectTypeQuery>>(),
+						AActor::StaticClass(),
+						TArray<AActor*>(),
+						OverlappedActors
+					);
+
+					// 3) Check the overlapped actors
+					if (bAnyOverlap && OverlappedActors.Num() > 0)
+					{
+						for (AActor* OverlappedActor : OverlappedActors)
 						{
-							// Snap logic
-							SnapToActor(SelectedUnits[0]->CurrentDraggedWorkArea, OverlappedActor);
-							// break if you only want one
-							return;
+							if (!OverlappedActor || OverlappedActor == SelectedUnits[0]->CurrentDraggedWorkArea)
+								continue;
+
+							AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor);
+							ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
+							if (OverlappedWorkArea || OverlappedBuilding)
+							{
+								// Snap logic
+								SnapToActor(SelectedUnits[0]->CurrentDraggedWorkArea, OverlappedActor);
+								// break if you only want one
+								return;
+							}
 						}
 					}
 				}
 			}
-			
-			// Check if something was hit
-			if (bHit && HitResult.GetActor() != nullptr)
+
+			if (bHit && HitResult.GetActor() != nullptr)// Check if something was hit
 			{
 				CurrentDraggedGround = HitResult.GetActor();
 				// Update the work area's position to the hit location
 				FVector NewActorPosition = HitResult.Location;
-				NewActorPosition.Z += 50.f; // Adjust the Z offset if needed
+				NewActorPosition.Z += DraggedAreaZOffset; // Adjust the Z offset if needed
 				SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
 			}
 
