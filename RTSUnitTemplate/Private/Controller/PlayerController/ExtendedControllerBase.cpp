@@ -438,13 +438,13 @@ AActor* AExtendedControllerBase::CheckForSnapOverlap(AWorkArea* DraggedActor, co
 
 	return nullptr; // No relevant overlaps
 }
-
+/*
 void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
 {
 	TSet<AActor*> Visited;
 	SnapToActorVisited(DraggedActor, OtherActor, Visited);
 }
-
+*/
 void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor,
 	TSet<AActor*>& AlreadyVisited)
 {
@@ -516,7 +516,7 @@ void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor
 
         // Example: Attempt chain snap by recursively calling SnapToActor 
         // with the overlapped actor. 
-       // UE_LOG(LogTemp, Log, TEXT("Overlap found (%s). Attempting chain snap..."), *Overlapped->GetName());
+        UE_LOG(LogTemp, Log, TEXT("Overlap found (%s). Attempting chain snap..."), *Overlapped->GetName());
 
         // We'll *first* move to the ProposedSnapPos (or you might skip moving it until chain resolves).
         // Let's do a minimal approach: *don't* set the position until chain tries to fix it.
@@ -531,6 +531,7 @@ void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor
             // Good, the chain snap resolved it, we can finalize
             // If we didn't set the position inside the recursion,
             // do it now.  If we *did* set it in recursion, no need.
+        	UE_LOG(LogTemp, Warning, TEXT("No Overlap Anymore!"));
             SetWorkAreaPosition(DraggedActor, ProposedSnapPos);
         	WorkAreaIsSnapped = true;
         }
@@ -538,13 +539,13 @@ void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor
         {
             // We still overlap. Decide what to do. 
             // Possibly we do nothing or revert to original location.
-            //UE_LOG(LogTemp, Warning, TEXT("Chain snapping did not resolve overlap!"));
+            UE_LOG(LogTemp, Warning, TEXT("Still Overlap!"));
         	WorkAreaIsSnapped = false;
         }
     }
 }
 
-/*
+
 void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
 {
     if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
@@ -619,7 +620,8 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     // 9) Finally, move the dragged actor
    // DraggedActor->SetActorLocation(SnappedPos);
 	SetWorkAreaPosition(DraggedActor, SnappedPos);
-}*/
+	WorkAreaIsSnapped = true;
+}
 
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 {
@@ -673,10 +675,11 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     // check. For example, add the length of the bounding box’s diagonal 
     // to your snap threshold, or just the largest dimension, or X/Y extents, etc.
     // Here, we do a quick example adding the entire box extent size.
-    float DraggedBoxExtentSize = Extent.Size(); 
+    float DraggedBoxExtentSize = Extent.Size() * 2.f; 
     // e.g. can consider just .X/.Y if ignoring Z
 
     // If the distance < SnapDistance + SnapGap + "some factor of the box size"
+	//  + SnapGap + DraggedBoxExtentSize
     if (Distance < (SnapDistance + SnapGap + DraggedBoxExtentSize))
     {
         // Try to overlap to see if we’re near something we can snap to
@@ -689,7 +692,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
             TArray<AActor*> OverlappedActors;
             bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
                 this,
-                DraggedWorkArea->GetActorLocation(),
+                HitResult.Location,
                 OverlapRadius,
                 TArray<TEnumAsByte<EObjectTypeQuery>>(),
                 AActor::StaticClass(),
@@ -748,7 +751,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     //---------------------------------
     // If no snap, move the WorkArea
     //---------------------------------
-    if (bHit && HitResult.GetActor() != nullptr)
+    if (bHit && HitResult.GetActor() != nullptr) // && !bAnyOverlap
     {
         CurrentDraggedGround = HitResult.GetActor();
 
@@ -921,11 +924,13 @@ bool AExtendedControllerBase::DropWorkArea()
 		}
 
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
-		if (bIsOverlappingWithValidArea && !WorkAreaIsSnapped)
+		if (bIsOverlappingWithValidArea && !WorkAreaIsSnapped) // bIsOverlappingWithValidArea &&
 		{
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			return true;
-		}else if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
+		}
+
+		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
 		{
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
