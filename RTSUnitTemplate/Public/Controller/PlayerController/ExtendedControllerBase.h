@@ -49,6 +49,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int AbilityArrayIndex = 0;
 
+	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
+	bool WorkAreaIsSnapped = false;
+	
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	float SnapGap = 50.f;
 

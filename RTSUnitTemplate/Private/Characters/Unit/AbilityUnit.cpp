@@ -161,13 +161,24 @@ void AAbilityUnit::Tick(float DeltaTime)
 	
 
 }
+void AAbilityUnit::GetSelectedAbilitiesArray(TSubclassOf<UGameplayAbilityBase>& SAbility)
+{
+	AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(SAbility, 1, static_cast<int32>(SAbility.GetDefaultObject()->AbilityInputID), this));
+}
+
 
 void AAbilityUnit::GetAbilitiesArrays()
 {
 	
 	if(HasAuthority() && AbilitySystemComponent)
 	{
-
+		if(SelectableAbilities.Num())
+			for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : SelectableAbilities)
+			{
+				if(StartupAbility)
+					AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+			}
+		
 		if(OffensiveAbilities.Num())
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : OffensiveAbilities)
 		{

@@ -95,8 +95,11 @@ void APickup::Tick(float DeltaTime)
 			case PickUpData::Ability:
 				{
 					
-					if (PickupAbility)
+					if (PickupAbility && !UnitBase->SelectableAbilities.Contains(PickupAbility))
+					{
 						UnitBase->SelectableAbilities.AddUnique(PickupAbility);
+						UnitBase->GetSelectedAbilitiesArray(PickupAbility);
+					}
 					
 				}
 				break;

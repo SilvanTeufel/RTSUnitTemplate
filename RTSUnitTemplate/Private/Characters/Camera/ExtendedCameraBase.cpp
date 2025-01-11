@@ -207,7 +207,7 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_O_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 15);
 		
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Scroll_D1, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 13);
-		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Scroll_D2, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 13);
+		//EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Scroll_D2, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 13);
 
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Middle_Mouse_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 16);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Middle_Mouse_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 17);
@@ -560,10 +560,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
             case 10: HandleState_RotateRight(CameraControllerBase); break;
             case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
-            case 13:
-	            {
-            		HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase); break;
-	            } break;
+            case 13: HandleState_ScrollZoom(InputActionValue, CameraControllerBase); break;
             case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
             case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
             case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
@@ -599,7 +596,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 10: HandleState_RotateRight_NoStrg(CameraControllerBase); break;
             case 101010: HandleState_StopRotateRight_NoStrg(CameraControllerBase); break;
             case 12: HandleState_TPressed(CameraControllerBase); break;
-            case 13: HandleState_ScrollZoom(InputActionValue, CameraControllerBase); break;
+            case 13: HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase); break;
             case 16: HandleState_MiddleMousePressed(CameraControllerBase); break;
             case 17: HandleState_MiddleMouseReleased(CameraControllerBase); break;
             case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);break;

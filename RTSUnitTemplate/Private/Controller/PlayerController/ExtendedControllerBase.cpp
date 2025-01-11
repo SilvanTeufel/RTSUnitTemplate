@@ -29,7 +29,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 	{
 		return;
 	}
-
+	
 	switch (AbilityArrayIndex)
 	{
 	case 0:
@@ -132,7 +132,7 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return;
 	if (!SelectedUnits[CurrentUnitWidgetIndex]) return;
 	
-	
+
 	int NewIndex = AbilityArrayIndex+=Add;
 
 
@@ -165,7 +165,6 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 
 
 	AbilityArrayIndex=NewIndex;
-
 }
 
 void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
@@ -280,6 +279,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityI
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
+	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
@@ -534,6 +534,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 							{
 								// Snap logic
 								SnapToActor(SelectedUnits[0]->CurrentDraggedWorkArea, OverlappedActor);
+								WorkAreaIsSnapped = true;
 								// break if you only want one
 								return;
 							}
@@ -549,6 +550,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 				FVector NewActorPosition = HitResult.Location;
 				NewActorPosition.Z += DraggedAreaZOffset; // Adjust the Z offset if needed
 				SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
+				WorkAreaIsSnapped = false;
 			}
 
 		}
@@ -630,7 +632,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		}
 
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
-		if (bIsOverlappingWithValidArea)
+		if (bIsOverlappingWithValidArea && !WorkAreaIsSnapped)
 		{
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			return true;

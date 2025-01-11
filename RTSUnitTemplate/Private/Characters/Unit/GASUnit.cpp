@@ -30,7 +30,9 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AGASUnit, ToggleUnitDetection); // Added for BUild
 	DOREPLIFETIME(AGASUnit, DefaultAttributeEffect);
 	DOREPLIFETIME(AGASUnit, DefaultAbilities);
-
+	DOREPLIFETIME(AGASUnit, SecondAbilities);
+	DOREPLIFETIME(AGASUnit, ThirdAbilities);
+	DOREPLIFETIME(AGASUnit, FourthAbilities);
 }
 
 
@@ -72,6 +74,21 @@ void AGASUnit::GiveAbilities()
 	if(HasAuthority() && AbilitySystemComponent)
 	{
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : DefaultAbilities)
+		{
+			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+		}
+
+		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :SecondAbilities)
+		{
+			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+		}
+		
+		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :ThirdAbilities)
+		{
+			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+		}
+
+		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :FourthAbilities)
 		{
 			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
@@ -161,6 +178,8 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray
 		if(AbilitySystemComponent)
 		{
 			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
+
+			//UE_LOG(LogTemp, Warning, TEXT("AbilityToActivate! %s"), *AbilityToActivate->GetName());
 			if(AbilityToActivate != nullptr)
 			{
 				// 1) Activate the ability:
@@ -180,6 +199,6 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 	{
 		return AbilitiesArray[AbilityIndex];
 	}
-
+	
 	return nullptr;
 }
