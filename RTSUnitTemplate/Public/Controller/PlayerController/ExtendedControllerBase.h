@@ -63,7 +63,7 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	int MaxAbilityArrayIndex = 3;
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
 	
@@ -92,7 +92,13 @@ public:
 	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AActor* CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor, TSet<AActor*>& AlreadyVisited);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);

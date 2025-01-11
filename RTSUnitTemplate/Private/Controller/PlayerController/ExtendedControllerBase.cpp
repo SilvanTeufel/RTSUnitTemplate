@@ -397,6 +397,154 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
     DraggedArea->SetActorLocation(NewActorPosition);
 }
 
+
+AActor* AExtendedControllerBase::CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation)
+{
+	if (!DraggedActor) return nullptr;
+
+	// Get the bounding box of DraggedActor’s mesh
+	UStaticMeshComponent* DraggedMesh = DraggedActor->FindComponentByClass<UStaticMeshComponent>();
+	if (!DraggedMesh) return nullptr;
+
+	FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+	FVector Extent = DraggedBounds.BoxExtent; // half-size
+	// We'll test with a BoxOverlap at the new position
+	TArray<AActor*> OverlappedActors;
+
+	bool bAnyOverlap = UKismetSystemLibrary::BoxOverlapActors(
+		this,                              // WorldContext
+		TestLocation,                      // Location for the box center
+		Extent,                            // Half-size extents
+		TArray<TEnumAsByte<EObjectTypeQuery>>(),  // Object types to consider
+		AActor::StaticClass(),             // Class filter
+		TArray<AActor*>(),                 // Actors to ignore
+		OverlappedActors
+	);
+
+	if (bAnyOverlap)
+	{
+		for (AActor* Overlapped : OverlappedActors)
+		{
+			if (!Overlapped || Overlapped == DraggedActor)
+				continue;
+
+			// If it’s a WorkArea or Building, it's a snap-relevant overlap
+			if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
+			{
+				return Overlapped; // Return the first relevant overlap
+			}
+		}
+	}
+
+	return nullptr; // No relevant overlaps
+}
+
+void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
+{
+	TSet<AActor*> Visited;
+	SnapToActorVisited(DraggedActor, OtherActor, Visited);
+}
+
+void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor,
+	TSet<AActor*>& AlreadyVisited)
+{
+	 if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
+        return;
+
+    // Avoid infinite loop if we’ve already tried snapping these two in this chain
+    if (AlreadyVisited.Contains(OtherActor))
+        return;
+    AlreadyVisited.Add(OtherActor);
+
+    // ------------------
+    // Phase 1: Compute the would-be snap position
+    // ------------------
+    UStaticMeshComponent* DraggedMesh = DraggedActor->FindComponentByClass<UStaticMeshComponent>();
+    UStaticMeshComponent* OtherMesh   = OtherActor->FindComponentByClass<UStaticMeshComponent>();
+    if (!DraggedMesh || !OtherMesh)
+        return; // skip if missing meshes
+
+    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    FBoxSphereBounds OtherBounds   = OtherMesh->CalcBounds(OtherMesh->GetComponentTransform());
+
+    const FVector DraggedCenter = DraggedBounds.Origin;
+    const FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+    const FVector OtherCenter   = OtherBounds.Origin;
+    const FVector OtherExtent   = OtherBounds.BoxExtent;
+
+    float Gap       = SnapGap; 
+    float XOffset   = DraggedExtent.X + OtherExtent.X + Gap;
+    float YOffset   = DraggedExtent.Y + OtherExtent.Y + Gap;
+    float dx        = FMath::Abs(DraggedCenter.X - OtherCenter.X);
+    float dy        = FMath::Abs(DraggedCenter.Y - OtherCenter.Y);
+
+    // Start from current Z
+    FVector ProposedSnapPos = DraggedActor->GetActorLocation();
+
+    // Snap logic: choose which axis to align
+    if (dx < dy)
+    {
+        // Closer on X, line them up on X
+        ProposedSnapPos.X = OtherCenter.X;
+        // Offset Y
+        const float SignY = (DraggedCenter.Y >= OtherCenter.Y) ? 1.f : -1.f;
+        ProposedSnapPos.Y = OtherCenter.Y + SignY * YOffset;
+    }
+    else
+    {
+        // Closer on Y, line them up on Y
+        ProposedSnapPos.Y = OtherCenter.Y;
+        // Offset X
+        const float SignX = (DraggedCenter.X >= OtherCenter.X) ? 1.f : -1.f;
+        ProposedSnapPos.X = OtherCenter.X + SignX * XOffset;
+    }
+
+    // ------------------
+    // Phase 2: Check overlap at the new position (before actually setting it)
+    // ------------------
+    AActor* Overlapped = CheckForSnapOverlap(DraggedActor, ProposedSnapPos);
+
+    if (!Overlapped)
+    {
+        // Great! No overlaps -> finalize move
+        SetWorkAreaPosition(DraggedActor, ProposedSnapPos);
+    }
+    else
+    {
+        // We have an overlap with some actor we care about snapping
+        // -> You can attempt a "chain snap" or skip
+
+        // Example: Attempt chain snap by recursively calling SnapToActor 
+        // with the overlapped actor. 
+       // UE_LOG(LogTemp, Log, TEXT("Overlap found (%s). Attempting chain snap..."), *Overlapped->GetName());
+
+        // We'll *first* move to the ProposedSnapPos (or you might skip moving it until chain resolves).
+        // Let's do a minimal approach: *don't* set the position until chain tries to fix it.
+
+        // Recursively snap
+        SnapToActorVisited(DraggedActor, Overlapped, AlreadyVisited);
+
+        // Now check again if we're still overlapping:
+        AActor* StillOverlaps = CheckForSnapOverlap(DraggedActor, DraggedActor->GetActorLocation());
+        if (!StillOverlaps)
+        {
+            // Good, the chain snap resolved it, we can finalize
+            // If we didn't set the position inside the recursion,
+            // do it now.  If we *did* set it in recursion, no need.
+            SetWorkAreaPosition(DraggedActor, ProposedSnapPos);
+        	WorkAreaIsSnapped = true;
+        }
+        else
+        {
+            // We still overlap. Decide what to do. 
+            // Possibly we do nothing or revert to original location.
+            //UE_LOG(LogTemp, Warning, TEXT("Chain snapping did not resolve overlap!"));
+        	WorkAreaIsSnapped = false;
+        }
+    }
+}
+
+/*
 void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
 {
     if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
@@ -471,7 +619,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     // 9) Finally, move the dragged actor
    // DraggedActor->SetActorLocation(SnappedPos);
 	SetWorkAreaPosition(DraggedActor, SnappedPos);
-}
+}*/
 
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 {
@@ -516,18 +664,16 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     //---------------------------------------
     // Get DraggedWorkArea bounding box info
     //---------------------------------------
-    FVector DraggedOrigin(0.f), DraggedBoxExtent(0.f);
-    {
-        // bOnlyCollidingComponents = true, 
-        // bIncludeFromChildActors = false (default)
-        DraggedWorkArea->GetActorBounds(/*bOnlyCollidingComponents=*/true, DraggedOrigin, DraggedBoxExtent);
-    }
+	UStaticMeshComponent* DraggedMesh = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>();
+
+	FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+	FVector Extent = DraggedBounds.BoxExtent; // half-size
 
     // Decide how you want to incorporate the bounding box size into your 
     // check. For example, add the length of the bounding box’s diagonal 
     // to your snap threshold, or just the largest dimension, or X/Y extents, etc.
     // Here, we do a quick example adding the entire box extent size.
-    float DraggedBoxExtentSize = DraggedBoxExtent.Size(); 
+    float DraggedBoxExtentSize = Extent.Size(); 
     // e.g. can consider just .X/.Y if ignoring Z
 
     // If the distance < SnapDistance + SnapGap + "some factor of the box size"
@@ -566,12 +712,14 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
                     if (OverlappedWorkArea || OverlappedBuilding)
                     {
+
+                    	UStaticMeshComponent* OverlappedMesh = OverlappedActor->FindComponentByClass<UStaticMeshComponent>();
+
+                    	FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+                    	FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
                         //-------------------------------------------------
                         // Also factor in the OverlappedActor's box extent
                         //-------------------------------------------------
-                        FVector OverlappedOrigin(0.f), OverlappedBoxExtent(0.f);
-                        OverlappedActor->GetActorBounds(/*bOnlyColliding=*/true, OverlappedOrigin, OverlappedBoxExtent);
-
                         // Example: we only care about XY distance for snapping
                         float XYDistance = FVector::Dist2D(
                             DraggedWorkArea->GetActorLocation(),
@@ -580,8 +728,8 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 
                         // Combine XY extents: (X1 + X2) + (Y1 + Y2)
                         // 0.5f is optional if you want some average
-                        float CombinedXYExtent = (DraggedBoxExtent.X + OverlappedBoxExtent.X +
-                                                  DraggedBoxExtent.Y + OverlappedBoxExtent.Y) * 0.5f;
+                        float CombinedXYExtent = (Extent.X + OverlappedExtent.X +
+                                                  Extent.Y + OverlappedExtent.Y) * 0.5f;
 
                         float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
 
@@ -589,7 +737,6 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                         {
                             // Snap logic
                             SnapToActor(DraggedWorkArea, OverlappedActor);
-                            WorkAreaIsSnapped = true;
                             return; // Break out if you only want one snap
                         }
                     }
