@@ -36,4 +36,6 @@ public:
 	UUserWidget* Selector;
 
 	bool SelectUnit = false;
+
+	bool ToggleWidget = false;
 };

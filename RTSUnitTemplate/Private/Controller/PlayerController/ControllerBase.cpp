@@ -296,22 +296,24 @@ void AControllerBase::SetWidgets(int Index)
 	if (!HUDBase->SelectedUnits.Num()) return;
 	
 	SelectedUnits = HUDBase->SelectedUnits;
+
+	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
 	
-	if (SelectedUnits.Num() && SelectedUnits[Index]) {
+	if (SelectedUnits.IsValidIndex(Index) && SelectedUnits.Num() && SelectedUnits[Index] && ExtendedCameraBase) {
 	
 		AUnitBase* UnitBase = Cast<AUnitBase>(SelectedUnits[Index]);
-		AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
 		
-		if(UnitBase && ExtendedCameraBase)
+		if(UnitBase)
 		{
 			CurrentUnitWidgetIndex = Index;
 			ExtendedCameraBase->SetUserWidget(UnitBase);
 			ExtendedCameraBase->SetSelectorWidget(Index, UnitBase);
-		}else
-		{
-			ExtendedCameraBase->SetUserWidget(nullptr);
+			return;
 		}
 	}
+	
+	ExtendedCameraBase->SetUserWidget(nullptr);
+	
 }
 
 void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)

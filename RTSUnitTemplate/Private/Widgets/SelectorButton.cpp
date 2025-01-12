@@ -25,7 +25,19 @@ void USelectorButton::SetUnitSelectorId(int newID)
 	if(!ControllerBase) return;
 
 
-	ControllerBase->SetWidgets(newID);
+	if(!SelectUnit)
+	{
+		if (!ToggleWidget)
+		{
+			ControllerBase->SetWidgets(newID);
+			ToggleWidget = true;
+		}
+		else
+		{
+			ControllerBase->SetWidgets(-1);
+			ToggleWidget = false;
+		}
+	}
 
 	UUnitWidgetSelector* SelectorR = Cast<UUnitWidgetSelector>(Selector);
 	

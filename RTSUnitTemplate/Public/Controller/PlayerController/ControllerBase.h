@@ -100,7 +100,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetWidgets(int Index);
-
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	
