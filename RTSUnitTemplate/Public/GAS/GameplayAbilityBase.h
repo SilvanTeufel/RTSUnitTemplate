@@ -17,7 +17,7 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 
 public:
 	UGameplayAbilityBase();
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* AbilityIcon;
 	
@@ -32,4 +32,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClass(FVector Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f);
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Ability)
+	bool UseAbilityQue = false;
 };

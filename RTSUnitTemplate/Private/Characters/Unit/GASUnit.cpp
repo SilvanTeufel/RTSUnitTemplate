@@ -142,6 +142,7 @@ void AGASUnit::SetupAbilitySystemDelegates()
 	{
 		// Register a delegate to be called when an ability is activated
 		AbilitySystemComponent->AbilityActivatedCallbacks.AddUObject(this, &AGASUnit::OnAbilityActivated);
+		AbilitySystemComponent->AbilityEndedCallbacks.AddUObject(this, &AGASUnit::OnAbilityEnded);
 		//UE_LOG(LogTemp, Log, TEXT("SetupAbilitySystemDelegates: Delegate for ability activation registered successfully."));
 	}
 	else
@@ -154,6 +155,8 @@ void AGASUnit::SetupAbilitySystemDelegates()
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
+	UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated: %s"), *ActivatedAbility->GetName());
+
 	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
 	// Assuming ActivatedAbilityInstance is a class member
 	// Cast to UGameplayAbilityBase if necessary, depending on your class hierarchy
@@ -173,6 +176,114 @@ bool AGASUnit::GetToggleUnitDetection()
 }
 
 
+void AGASUnit::ActivateAbilityByInputID(
+	EGASAbilityInputID InputID,
+	const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray,
+	const FHitResult& HitResult)
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
+	
+	
+	if (!AbilityToActivate)
+	{
+		return;
+	}
+	
+	if (ActivatedAbilityInstance)
+	{
+
+		UE_LOG(LogTemp, Warning, TEXT("Enqueue!!1"));
+		// ASC is busy, so let's queue the ability
+		FQueuedAbility Queued;
+		Queued.AbilityClass = AbilityToActivate;
+		Queued.HitResult    = HitResult;
+		
+		AbilityQueue.Enqueue(Queued);
+	}
+	else
+	{
+		// 2) Try to activate
+		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
+		if (bIsActivated && HitResult.IsValidBlockingHit())
+		{
+			// If you have a pointer to the active ability instance:
+			if (ActivatedAbilityInstance) 
+			{
+				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
+			}
+		}
+		else if (!bIsActivated)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Enqueue!!2"));
+			// Optionally queue the ability if activation fails 
+			// (e.g. on cooldown). Depends on your desired flow.
+			FQueuedAbility Queued;
+			Queued.AbilityClass = AbilityToActivate;
+			Queued.HitResult    = HitResult;
+			AbilityQueue.Enqueue(Queued);
+		}
+	}
+}
+
+void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
+{
+	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityEnded: %s"), *EndedAbility->GetName());
+		// Example: delay by half a second
+		const float DelayTime = 0.1f; 
+		FTimerHandle TimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+			TimerHandle,
+			this, 
+			&AGASUnit::ActivateNextQueuedAbility, 
+			DelayTime, 
+			/*bLoop=*/false
+		);
+
+
+}
+
+void AGASUnit::ActivateNextQueuedAbility()
+{
+	// 1) Check if there's something waiting in the queue
+	if (!AbilityQueue.IsEmpty())
+	{
+		FQueuedAbility Next;
+		bool bDequeued = AbilityQueue.Dequeue(Next);
+		if (bDequeued && AbilitySystemComponent)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Dequeued next ability: %s"), *Next.AbilityClass->GetName());
+
+			ActivatedAbilityInstance = nullptr;
+			// 2) Activate the next queued ability
+			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
+			if (bIsActivated) UE_LOG(LogTemp, Warning, TEXT("Activation Succeeded : %s"), *Next.AbilityClass->GetName());
+			if (bIsActivated && Next.HitResult.IsValidBlockingHit())
+			{
+				
+				if (ActivatedAbilityInstance)
+				{
+					ActivatedAbilityInstance->OnAbilityMouseHit(Next.HitResult);
+				}
+			}
+			else
+			{
+				ActivatedAbilityInstance = nullptr;
+				// Optionally: If we fail again (cooldown, cost, or still "busy"), 
+				// do you want to re-queue it or just discard?
+				// AbilityQueue.Enqueue(Next); // if you want to retry
+			}
+		}
+	}else
+	{
+		ActivatedAbilityInstance = nullptr;
+	}
+}
+/*
 void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult)
 {
 		if(AbilitySystemComponent)
@@ -188,7 +299,7 @@ void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray
 			}
 		}
 }
-
+*/
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

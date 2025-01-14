@@ -9,7 +9,6 @@ UGameplayAbilityBase::UGameplayAbilityBase()
 	
 }
 
-
 void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale) // FVector TargetLocation
 {
 	if(!Attacker || !ProjectileClass)

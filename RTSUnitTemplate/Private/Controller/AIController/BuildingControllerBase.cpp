@@ -23,7 +23,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		{
 		case UnitData::None:
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("None"));
+			UE_LOG(LogTemp, Warning, TEXT("None"));
 		}
 		break;
 		case UnitData::Dead:
@@ -46,18 +46,21 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		break;
 		case UnitData::Pause:
 		{
+				//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Pause"));
+				
 				AutoExecuteAbilitys(UnitBase, DeltaSeconds);
 			PauseBuilding(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Casting:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Casting"));
 			CastingUnit(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Idle:
 		{
+			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 			if(UnitBase->SetNextUnitToChase())
 			{
 					

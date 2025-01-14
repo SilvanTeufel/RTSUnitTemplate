@@ -12,8 +12,24 @@
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "Containers/Queue.h"
 #include "GASUnit.generated.h"
 
+USTRUCT(BlueprintType)
+struct FQueuedAbility
+{
+	GENERATED_BODY()
+    
+	// The actual GameplayAbility class to activate
+	UPROPERTY()
+	TSubclassOf<UGameplayAbilityBase> AbilityClass;
+
+	// If your abilities need HitResult data (mouse hit, etc.), store it here
+	UPROPERTY()
+	FHitResult HitResult;
+    
+	// You can add anything else you need to queue, e.g. InputID, cost, etc.
+};
 
 UCLASS()
 class RTSUNITTEMPLATE_API AGASUnit : public ASpawnerUnit, public IAbilitySystemInterface
@@ -28,7 +44,17 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAttributeSetBase* Attributes;
+
+
+	// A queue to store "next" abilities if the current one can't be activated or is still running
+	TQueue<FQueuedAbility> AbilityQueue;
 	
+	// Callback when an ability ends so we can pop the next one from the queue
+	UFUNCTION()
+	void OnAbilityEnded(UGameplayAbility* EndedAbility);
+
+	UFUNCTION()
+	void ActivateNextQueuedAbility();
 //protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -80,15 +106,15 @@ public:
 	TArray<TSubclassOf<UGameplayAbilityBase>>DefaultAbilities;
 
 	/** A second set of abilities, could be unlocked later or via some condition */
-	UPROPERTY(Replicated, BlueprintReadWrite , EditDefaultsOnly, Category = "Ability")
+	UPROPERTY(Replicated, BlueprintReadWrite , EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<UGameplayAbilityBase>> SecondAbilities;
 
 	/** A third set of abilities, potentially rare or harder to obtain */
-	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category = "Ability")
+	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<UGameplayAbilityBase>> ThirdAbilities;
 
 	/** A fourth set of abilities, maybe ultimate or endgame powers */
-	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category = "Ability")
+	UPROPERTY(Replicated, BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<UGameplayAbilityBase>> FourthAbilities;
 	
 protected:

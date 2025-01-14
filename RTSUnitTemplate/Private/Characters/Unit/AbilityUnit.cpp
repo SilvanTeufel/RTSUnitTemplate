@@ -13,6 +13,7 @@
 #include "Core/TalentSaveGame.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Components/CapsuleComponent.h"
 #include "Sound\SoundCue.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -242,6 +243,16 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		StoppedMoving();
 		IsDead();
 	} 
+
+
+	if (NewUnitState == UnitData::GoToResourceExtraction)
+	{
+		// Set Collision to Overlap Pawn
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	}else
+	{
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	}
 	
 	UnitState = NewUnitState;
 }
