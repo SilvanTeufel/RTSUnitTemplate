@@ -222,6 +222,7 @@ void AWorkArea::HandleResourceExtractionArea(AWorkingUnitBase* Worker, AUnitBase
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->ExtractingWorkResourceType = ConvertWorkAreaTypeToResourceType(Type);
 		UnitBase->SetUnitState(UnitData::ResourceExtraction);
+		StartedResourceExtraction();
 }
 
 void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
@@ -322,6 +323,8 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		{
 
 			StartedBuilding = true;
+			StartedBuild();
+
 
 			if(!IsPaid)
 			{

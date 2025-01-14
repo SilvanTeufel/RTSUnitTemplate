@@ -2,6 +2,8 @@
 
 #include "Characters/Unit/AbilityUnit.h"
 
+#include <rapidjson/reader.h>
+
 #include "AIController.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
@@ -214,6 +216,33 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
+	if (NewUnitState == UnitData::Run ||
+		NewUnitState == UnitData::Chase ||
+		NewUnitState == UnitData::Patrol ||
+		NewUnitState == UnitData::PatrolRandom ||
+		NewUnitState == UnitData::GoToBase ||
+		NewUnitState == UnitData::GoToResourceExtraction ||
+		NewUnitState == UnitData::GoToBuild)
+	{
+		StartedMoving();
+	}else if (NewUnitState == UnitData::Idle ||
+				NewUnitState == UnitData::PatrolIdle ||
+				NewUnitState == UnitData::Attack ||
+				NewUnitState == UnitData::Pause ||
+				NewUnitState == UnitData::Build ||
+				NewUnitState == UnitData::ResourceExtraction ||
+				NewUnitState == UnitData::Healing)
+	{
+		StoppedMoving();
+	} else if (NewUnitState == UnitData::IsAttacked)
+	{
+		GotAttacked();
+	}  else if (NewUnitState == UnitData::Dead)
+	{
+		StoppedMoving();
+		IsDead();
+	} 
+	
 	UnitState = NewUnitState;
 }
 

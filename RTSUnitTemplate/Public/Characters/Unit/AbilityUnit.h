@@ -47,6 +47,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void IsDead();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void StartedMoving();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void StoppedMoving();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void GotAttacked();
+	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	TEnumAsByte<UnitData::EState> GetUnitState() const;
 

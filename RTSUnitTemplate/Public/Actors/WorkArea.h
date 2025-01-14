@@ -131,6 +131,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DestroyAfterBuild = true;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void StartedBuild();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void StartedResourceExtraction();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost;
