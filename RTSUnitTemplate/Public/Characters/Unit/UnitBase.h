@@ -192,6 +192,9 @@ public:
 // related to Healthbar  //////////////////////////////////////////
 public:
 
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void UnitWillDespawn();
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);
 

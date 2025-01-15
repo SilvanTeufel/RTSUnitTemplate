@@ -479,7 +479,20 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SpawnPickupsArray();
 
 	if (UnitBase->UnitControlTimer >= DespawnTime) {
-		if(UnitBase->DestroyAfterDeath) UnitBase->Destroy(true, false);
+		UnitBase->UnitWillDespawn();
+
+		// If the unit should be destroyed, delay the destruction
+		if (UnitBase->DestroyAfterDeath)
+		{
+			FTimerHandle DestroyTimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+				DestroyTimerHandle,
+				[UnitBase]() { UnitBase->Destroy(true, false); },
+				1.0f, // Delay duration in seconds (change this to your desired delay)
+				false // This is a one-time timer, so it's not looping
+			);
+		}
+		//if(UnitBase->DestroyAfterDeath) UnitBase->Destroy(true, false);
 	}
 }
 
