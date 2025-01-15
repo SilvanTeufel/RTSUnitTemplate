@@ -12,71 +12,7 @@ void UUnitTimerWidget::NativeConstruct()
 
 	TimerBar->SetVisibility(ESlateVisibility::Collapsed);
 }
-/*
-void UUnitTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!OwnerCharacter.IsValid())
-		return;
-
-
-
-
-	AUnitBase* UnitBase = Cast<AUnitBase>(OwnerCharacter);
-	
-	switch (UnitBase->GetUnitState())
-	{
-	case UnitData::Build:
-		{
-			IsVisible = true;
-			AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
-			TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->BuildArea->BuildTime);
-			TimerBar->SetFillColorAndOpacity(BuildColor);
-		}
-		break;
-	case UnitData::ResourceExtraction:
-		{
-			IsVisible = true;
-			AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
-			TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->ResourceExtractionTime);
-			TimerBar->SetFillColorAndOpacity(ExtractionColor);
-		}
-		break;
-	case UnitData::Casting:
-		{
-			IsVisible = true;
-			TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
-			TimerBar->SetFillColorAndOpacity(CastingColor);
-		}
-		break;
-	case UnitData::Pause:
-		{
-			IsVisible = true;
-			TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->PauseDuration);
-			TimerBar->SetFillColorAndOpacity(PauseColor);
-		}
-		break;
-	default:
-		{
-			IsVisible = false;
-		}
-		break;
-	}
-	
-	
-	if(!IsVisible && SetVisible)
-	{
-		TimerBar->SetVisibility(ESlateVisibility::Collapsed);
-		SetVisible = false;
-	}else if(IsVisible && !SetVisible)
-	{
-		TimerBar->SetVisibility(ESlateVisibility::Visible);
-		SetVisible = true;
-	}
-	
-}
-*/
 void UUnitTimerWidget::TimerTick()
 {
 	if (!OwnerCharacter.IsValid())

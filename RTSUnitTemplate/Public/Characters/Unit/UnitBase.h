@@ -314,8 +314,8 @@ public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ReduceRootedTime = 0.1f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		FVector TimerWidgetCompLocation = FVector (0.f, 0.f, -180.f);
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		//FVector TimerWidgetCompLocation = FVector (0.f, 0.f, -180.f);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerWidget();

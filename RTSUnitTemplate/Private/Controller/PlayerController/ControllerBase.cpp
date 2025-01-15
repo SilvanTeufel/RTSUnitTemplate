@@ -20,6 +20,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Engine/Engine.h"
+#include "Engine/EngineTypes.h"    // For FOverlapResult and related collision types
+#include "Engine/OverlapResult.h"
 
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
@@ -479,9 +481,10 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
 }
 
-void AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
+AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
 {
 	UWorld* World = GetWorld();
+
 	if (World && WaypointClass)
 	{
 		// Define the spawn parameters (can customize this further if needed)
@@ -496,28 +499,52 @@ void AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* Buil
 		{
 			// Assign the new waypoint to the building
 			BuildingBase->NextWaypoint = NewWaypoint;
+			BuildingBase->NextWaypoint->TeamId = BuildingBase->TeamId;
+			return BuildingBase->NextWaypoint;
 		}
 	}
+
+	return nullptr;
 }
-bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit)
+
+
+bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint)
 {
+
 			ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
-			NewWPLocation.Z += RelocateWaypointZOffset;
-			if(BuildingBase)
-			{
-				if(BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
-				else if(BuildingBase->HasWaypoint) CreateAWaypoint(NewWPLocation, BuildingBase);
-				
-				return true;
-			}
+
+	if (!BuildingBase) return false;
+	if (!BuildingBase->HasWaypoint) return false;
 	
-	return false;
+	NewWPLocation.Z += RelocateWaypointZOffset;
+	if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+	{
+		if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+
+		BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+	}
+	else if (BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+	{
+		if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+
+		BuildingBase->NextWaypoint = BuildingWaypoint;
+			
+	}
+	else if( BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+	else 
+	{
+		BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+	}
+				
+	return true;
 }
 
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
 	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+
+	AWaypoint* BWaypoint = nullptr;
 	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] != CameraUnitWithTag)
@@ -529,7 +556,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 
 			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 
-			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
 			{
 				// DO NOTHING
 			}else if (IsShiftPressed) {

@@ -1050,6 +1050,7 @@ void AExtendedControllerBase::LeftClickPressed()
 
 		int32 NumUnits = SelectedUnits.Num();
 		int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+		AWaypoint* BWaypoint = nullptr;
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
@@ -1060,7 +1061,7 @@ void AExtendedControllerBase::LeftClickPressed()
 
 				FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 		
-				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i]))
+				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
 				{
 					// Do Nothing
 				}else

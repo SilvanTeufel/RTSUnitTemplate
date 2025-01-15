@@ -28,7 +28,11 @@ struct FQueuedAbility
 	UPROPERTY()
 	FHitResult HitResult;
     
-	// You can add anything else you need to queue, e.g. InputID, cost, etc.
+	bool operator==(const FQueuedAbility& Other) const
+	{
+		return AbilityClass == Other.AbilityClass
+			&& HitResult.Location.Equals(Other.HitResult.Location, 0.001f);
+	}
 };
 
 UCLASS()
@@ -48,11 +52,23 @@ public:
 
 	// A queue to store "next" abilities if the current one can't be activated or is still running
 	TQueue<FQueuedAbility> AbilityQueue;
+
+	TArray<FQueuedAbility> QueSnapshot;
 	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	const TArray<FQueuedAbility>& GetQueuedAbilities();
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	bool DequeueAbility(int Index);
+
+
 	// Callback when an ability ends so we can pop the next one from the queue
 	UFUNCTION()
 	void OnAbilityEnded(UGameplayAbility* EndedAbility);
 
+	UFUNCTION()
+	void CancelCurrentAbility();
+	
 	UFUNCTION()
 	void ActivateNextQueuedAbility();
 //protected:
@@ -128,4 +144,5 @@ public:
 	// Reference to the activated ability instance
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	UGameplayAbilityBase* ActivatedAbilityInstance;
+	
 };

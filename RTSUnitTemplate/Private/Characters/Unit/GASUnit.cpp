@@ -155,8 +155,7 @@ void AGASUnit::SetupAbilitySystemDelegates()
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
-	UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated: %s"), *ActivatedAbility->GetName());
-
+	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated: %s"), *ActivatedAbility->GetName());
 	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
 	// Assuming ActivatedAbilityInstance is a class member
 	// Cast to UGameplayAbilityBase if necessary, depending on your class hierarchy
@@ -187,9 +186,18 @@ void AGASUnit::ActivateAbilityByInputID(
 	}
 
 	TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
-	
-	
+
 	if (!AbilityToActivate)
+	{
+		return;
+	}
+	
+	UGameplayAbilityBase* Ability;
+
+
+	if (UGameplayAbilityBase* AbilityB = AbilityToActivate->GetDefaultObject<UGameplayAbilityBase>())
+		Ability = AbilityB;
+	else
 	{
 		return;
 	}
@@ -197,13 +205,17 @@ void AGASUnit::ActivateAbilityByInputID(
 	if (ActivatedAbilityInstance)
 	{
 
-		UE_LOG(LogTemp, Warning, TEXT("Enqueue!!1"));
-		// ASC is busy, so let's queue the ability
-		FQueuedAbility Queued;
-		Queued.AbilityClass = AbilityToActivate;
-		Queued.HitResult    = HitResult;
-		
-		AbilityQueue.Enqueue(Queued);
+		//UE_LOG(LogTemp, Warning, TEXT("Ability->UseAbilityQue! %d"), Ability->UseAbilityQue);
+		if (Ability->UseAbilityQue)
+		{
+			//UE_LOG(LogTemp, Warning, TEXT("Enqueue!!1"));
+			// ASC is busy, so let's queue the ability
+			FQueuedAbility Queued;
+			Queued.AbilityClass = AbilityToActivate;
+			Queued.HitResult    = HitResult;
+			QueSnapshot.Add(Queued);
+			AbilityQueue.Enqueue(Queued);
+		}
 	}
 	else
 	{
@@ -219,13 +231,17 @@ void AGASUnit::ActivateAbilityByInputID(
 		}
 		else if (!bIsActivated)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Enqueue!!2"));
-			// Optionally queue the ability if activation fails 
-			// (e.g. on cooldown). Depends on your desired flow.
-			FQueuedAbility Queued;
-			Queued.AbilityClass = AbilityToActivate;
-			Queued.HitResult    = HitResult;
-			AbilityQueue.Enqueue(Queued);
+			if (Ability->UseAbilityQue)
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("Enqueue!!2"));
+				// Optionally queue the ability if activation fails 
+				// (e.g. on cooldown). Depends on your desired flow.
+				FQueuedAbility Queued;
+				Queued.AbilityClass = AbilityToActivate;
+				Queued.HitResult    = HitResult;
+				QueSnapshot.Add(Queued);
+				AbilityQueue.Enqueue(Queued);
+			}
 		}
 	}
 }
@@ -256,12 +272,12 @@ void AGASUnit::ActivateNextQueuedAbility()
 		bool bDequeued = AbilityQueue.Dequeue(Next);
 		if (bDequeued && AbilitySystemComponent)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Dequeued next ability: %s"), *Next.AbilityClass->GetName());
-
+			//UE_LOG(LogTemp, Warning, TEXT("Dequeued next ability: %s"), *Next.AbilityClass->GetName());
+			QueSnapshot.Remove(Next);
 			ActivatedAbilityInstance = nullptr;
 			// 2) Activate the next queued ability
 			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
-			if (bIsActivated) UE_LOG(LogTemp, Warning, TEXT("Activation Succeeded : %s"), *Next.AbilityClass->GetName());
+			//if (bIsActivated) UE_LOG(LogTemp, Warning, TEXT("Activation Succeeded : %s"), *Next.AbilityClass->GetName());
 			if (bIsActivated && Next.HitResult.IsValidBlockingHit())
 			{
 				
@@ -312,4 +328,51 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 	}
 	
 	return nullptr;
+}
+
+bool AGASUnit::DequeueAbility(int Index)
+{
+	TArray<FQueuedAbility> TempArray;
+	FQueuedAbility TempItem;
+
+	// 1) Transfer all items from the queue into the array
+	while (AbilityQueue.Dequeue(TempItem))
+	{
+		TempArray.Add(TempItem);
+	}
+
+	// 2) Remove item at 'Index'
+	bool bRemoved = false;
+	if (TempArray.IsValidIndex(Index))
+	{
+		TempArray.RemoveAt(Index);
+		bRemoved = true;
+	}
+
+	// 3) Rebuild the queue without the removed item
+	for (const FQueuedAbility& Item : TempArray)
+	{
+		AbilityQueue.Enqueue(Item);
+	}
+
+	// Also update your 'QueSnapshot' if you’re mirroring
+	QueSnapshot = TempArray;
+
+	return bRemoved;
+}
+
+const TArray<FQueuedAbility>& AGASUnit::GetQueuedAbilities()
+{
+	return QueSnapshot;
+}
+
+
+void AGASUnit::CancelCurrentAbility()
+{
+	
+	if (ActivatedAbilityInstance)
+	{
+		ActivatedAbilityInstance->K2_CancelAbility();
+		ActivatedAbilityInstance = nullptr;
+	}
 }

@@ -3,7 +3,6 @@
 
 #include "Widgets/UnitWidgetSelector.h"
 
-#include "Components/Image.h"
 
 
 void UUnitWidgetSelector::NativeConstruct()
@@ -47,6 +46,7 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		if (!ControllerBase->SelectedUnits.Num()) return;
 		if (ControllerBase->CurrentUnitWidgetIndex < 0 || ControllerBase->CurrentUnitWidgetIndex >= ControllerBase->SelectedUnits.Num()) return;
 		if (!ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]) return;
+		if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
 		
 		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex])
 		{
@@ -65,11 +65,49 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		}
 
 		UpdateAbilityCooldowns();
-		
+		UpdateCurrentAbility();
+		UpdateQueuedAbilityIcons();
 	}
 }
 
+void UUnitWidgetSelector::UpdateCurrentAbility()
+{
+	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
+	AUnitBase* UnitBase = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
+	
+	if (!UnitBase) return;
 
+	if (UnitBase->GetUnitState() != UnitData::Casting)
+	{
+		CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Hidden);
+	
+	}else
+	{
+		CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Visible);
+		CurrentAbilityTimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
+		CurrentAbilityTimerBar->SetFillColorAndOpacity(CurrentAbilityTimerBarColor);
+	}
+
+	// Now update the current ability icon
+
+		if (UnitBase->ActivatedAbilityInstance && 
+			UnitBase->ActivatedAbilityInstance->AbilityIcon)
+		{
+			// Set the brush from the texture
+			CurrentAbilityIcon->SetBrushFromTexture(
+				UnitBase->ActivatedAbilityInstance->AbilityIcon, true
+			);
+
+	
+			CurrentAbilityButton->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			// Hide the icon or set to a default if no ability or icon is set
+			CurrentAbilityButton->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	
+}
 void UUnitWidgetSelector::UpdateAbilityCooldowns()
 {
 
@@ -163,6 +201,99 @@ void UUnitWidgetSelector::UpdateAbilityCooldowns()
     
 }
 
+
+void UUnitWidgetSelector::UpdateQueuedAbilityIcons()
+{
+    if (!ControllerBase) return;
+    if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
+
+    // Cast to your AGASUnit or whichever class holds the queue
+    AGASUnit* GASUnit = Cast<AGASUnit>(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]);
+    if (!GASUnit) return;
+
+    // Get a snapshot of the queued abilities
+    TArray<FQueuedAbility> QueuedAbilities = GASUnit->GetQueuedAbilities();
+
+    // Loop over the “queue icons” you placed in your widget
+    for (int32 i = 0; i < AbilityQueIcons.Num(); i++)
+    {
+        // If we have an icon widget, do something with it
+        if (AbilityQueIcons[i])
+        {
+            if (QueuedAbilities.IsValidIndex(i))
+            {
+                // The queued ability
+                const FQueuedAbility& QueuedAbility = QueuedAbilities[i];
+                if (QueuedAbility.AbilityClass)
+                {
+                    // Get the default object to read its icon
+                    UGameplayAbilityBase* AbilityCDO = QueuedAbility.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+                    if (AbilityCDO && AbilityCDO->AbilityIcon)
+                    {
+                        AbilityQueIcons[i]->SetBrushFromTexture(AbilityCDO->AbilityIcon, true);
+                    }
+                    else
+                    {
+                        // If there's no icon, set a blank or some fallback
+                        AbilityQueIcons[i]->SetBrushFromTexture(nullptr);
+                    }
+                }
+                else
+                {
+                    // No ability class? Clear or fallback
+                    AbilityQueIcons[i]->SetBrushFromTexture(nullptr);
+                }
+            }
+            else
+            {
+                // No queued ability at this slot, so clear the icon
+                AbilityQueIcons[i]->SetBrushFromTexture(nullptr);
+            }
+        }
+
+        // (Optional) If you want to adjust the visibility of Buttons as well:
+        if (AbilityQueButtons.IsValidIndex(i) && AbilityQueButtons[i])
+        {
+            bool bHasAbility = QueuedAbilities.IsValidIndex(i) && QueuedAbilities[i].AbilityClass != nullptr;
+            AbilityQueButtons[i]->SetVisibility(bHasAbility ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        }
+    }
+}
+
+void UUnitWidgetSelector::OnAbilityQueueButtonClicked(int32 ButtonIndex)
+{
+	// This will remove the *front* of the queue, ignoring ButtonIndex
+	// if you want to truly remove only the front item from TQueue.
+    
+	if (!ControllerBase) return;
+	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
+
+	AGASUnit* GASUnit = Cast<AGASUnit>(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]);
+	if (!GASUnit) return;
+	
+	if (GASUnit->DequeueAbility(ButtonIndex))
+	{
+		// success—front item removed
+	}
+
+	// Refresh UI
+	UpdateQueuedAbilityIcons();
+}
+
+
+void UUnitWidgetSelector::OnCurrentAbilityButtonClicked()
+{
+	if (!ControllerBase) return;
+	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
+
+	AUnitBase* UnitBase = Cast<AUnitBase>(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]);
+	if (!UnitBase) return;
+	
+	UnitBase->CancelCurrentAbility();
+	UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+}
+
+
 void UUnitWidgetSelector::StartUpdateTimer()
 {
 	// Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
@@ -186,6 +317,39 @@ void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 
 void UUnitWidgetSelector::GetButtonsFromBP()
 {
+/*
+	FString CurrentAbilityIconName = FString::Printf(TEXT("CurrentAbilityIcon"));
+	if (UImage* ImageWidget = Cast<UImage>(GetWidgetFromName(FName(*CurrentAbilityIconName))))
+		CurrentAbilityIcon = ImageWidget;
+	//class UImage* CurrentAbilityIcon;
+
+	FString CurrentAbilityButtonName = FString::Printf(TEXT("CurrentAbilityButton"));
+	if (UButton* AbilityButton = Cast<UButton>(GetWidgetFromName(FName(*CurrentAbilityButtonName))))
+		CurrentAbilityButton = AbilityButton;
+
+		
+	FString CurrentAbilityTimerBarName = FString::Printf(TEXT("CurrentAbilityTimerBar"));
+	if (UProgressBar* AbilityProgressbar= Cast<UProgressBar>(GetWidgetFromName(FName(*CurrentAbilityTimerBarName))))
+		CurrentAbilityTimerBar = AbilityProgressbar;
+*/
+	
+	
+	for (int32 i = 0; i <= MaxQueButtonCount; i++)
+	{
+		FString AbilityQueButtonName = FString::Printf(TEXT("AbilityQueButtons_%d"), i);
+		UButton* AbilityQueButton = Cast<UButton>(GetWidgetFromName(FName(*AbilityQueButtonName)));
+		if (AbilityQueButton)
+		{
+			AbilityQueButtons.Add(AbilityQueButton);
+		}
+
+		FString AbilityQueIconName = FString::Printf(TEXT("AbilityQueIcons_%d"), i);
+		if (UImage* Image = Cast<UImage>(GetWidgetFromName(FName(*AbilityQueIconName))))
+		{
+			AbilityQueIcons.Add(Image);
+		}
+	}
+	
 	for (int32 i = 0; i <= MaxAbilityButtonCount; i++)
 	{
 		FString AbilityButtonName = FString::Printf(TEXT("Button_Ability_%d"), i);

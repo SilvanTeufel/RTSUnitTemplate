@@ -132,10 +132,10 @@ public:
 		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
+		AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit);
+		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void RunUnitsAndSetWaypoints(FHitResult Hit);

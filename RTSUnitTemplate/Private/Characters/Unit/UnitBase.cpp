@@ -462,7 +462,7 @@ void AUnitBase::SetupTimerWidget()
 {
 	if (TimerWidgetComp) {
 
-		TimerWidgetComp->SetRelativeLocation(TimerWidgetCompLocation, false, 0, ETeleportType::None);
+		//TimerWidgetComp->SetRelativeLocation(TimerWidgetCompLocation, false, 0, ETeleportType::None);
 		UUnitTimerWidget* Timerbar = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject());
 
 		if (Timerbar) {
