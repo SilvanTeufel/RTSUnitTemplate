@@ -94,7 +94,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 				
 				UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 				
-				if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+				if(UnitBase->NextWaypoint && UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
 				{
 					UnitBase->UnitControlTimer = 0.f;
 					UnitBase->SetUEPathfinding = true;

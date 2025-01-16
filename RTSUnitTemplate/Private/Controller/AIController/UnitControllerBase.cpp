@@ -297,7 +297,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 					UnitBase->SetWalkSpeed(0);
 					UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 				
-					if(UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
+					if(UnitBase->NextWaypoint && UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime)
 					{
 						UnitBase->UnitControlTimer = 0.f;
 						UnitBase->SetUEPathfinding = true;
@@ -468,7 +468,7 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
-
+	UnitBase->HideHealthWidget();
 	
 	if(RTSGameMode)
 	{
