@@ -161,4 +161,11 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void StopWork(AWorkingUnitBase* Worker);
+
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SelectUnitsWithTag(FGameplayTag Tag);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddToCurrentUnitWidgetIndex(int Add);
 };

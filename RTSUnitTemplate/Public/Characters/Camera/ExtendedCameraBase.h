@@ -112,6 +112,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AutoAdjustTalentChooserPosition = true;
 
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void F1_Pressed(ACameraControllerBase* CameraControllerBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void F2_Pressed(ACameraControllerBase* CameraControllerBase);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void F3_Pressed(ACameraControllerBase* CameraControllerBase);
 
@@ -235,6 +242,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleState_AbilityArrayIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleState_AbilityUnitIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleState_ScrollZoom(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase);

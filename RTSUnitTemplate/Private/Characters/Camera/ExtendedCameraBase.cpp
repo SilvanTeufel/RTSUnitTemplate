@@ -522,6 +522,22 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 
     if (CameraControllerBase)
     {
+
+    	if (CameraControllerBase->AltIsPressed)
+    	{  switch (NewCameraState)
+    		{
+    			case 0:
+    				{
+
+    				}break;
+    			case 13:
+    				{
+    					HandleState_ScrollZoom(InputActionValue, CameraControllerBase);
+    				}break;
+    			default: break;
+    		}
+    	}
+    	
         if (CameraControllerBase->IsStrgPressed)
         {
             switch (NewCameraState)
@@ -560,13 +576,17 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
             case 10: HandleState_RotateRight(CameraControllerBase); break;
             case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
-            case 13: HandleState_ScrollZoom(InputActionValue, CameraControllerBase); break;
-            case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
-            case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
-            case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
-            case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
+            case 13: HandleState_AbilityUnitIndex(InputActionValue, CameraControllerBase); break;
+            case 21: F1_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
+            case 22: F2_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
+            case 23: F3_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
+            case 24: F4_Pressed(CameraControllerBase); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
             case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEleven, CameraControllerBase); break;
             case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwelve, CameraControllerBase); break;
+            case 27: F1_Pressed(CameraControllerBase); break;
+            case 28: F2_Pressed(CameraControllerBase); break;
+            case 29: F3_Pressed(CameraControllerBase); break;
+            case 30: F4_Pressed(CameraControllerBase); break;
             default: break;
             }
         }
@@ -605,6 +625,8 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase); break;
             case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase); break;
             case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase); break;
+            case 27: F1_Pressed(CameraControllerBase); break;
+            case 28: F2_Pressed(CameraControllerBase); break;
             case 29: F3_Pressed(CameraControllerBase); break;
             case 30: F4_Pressed(CameraControllerBase); break;
             default: break;
@@ -613,14 +635,34 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
     }
 }
 
+void AExtendedCameraBase::F1_Pressed(ACameraControllerBase* CameraControllerBase)
+{
+	// Example gameplay tag for F1
+	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F1"));
+    
+	CameraControllerBase->SelectUnitsWithTag(TagForF1);
+}
+
+void AExtendedCameraBase::F2_Pressed(ACameraControllerBase* CameraControllerBase)
+{
+	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F2"));
+    
+	CameraControllerBase->SelectUnitsWithTag(TagForF1);
+}
+
+
 void AExtendedCameraBase::F3_Pressed(ACameraControllerBase* CameraControllerBase)
 {
-	CameraControllerBase->AddAbilityIndex(1);
+	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F3"));
+    
+	CameraControllerBase->SelectUnitsWithTag(TagForF1);
 }
 
 void AExtendedCameraBase::F4_Pressed(ACameraControllerBase* CameraControllerBase)
 {
-	CameraControllerBase->AddAbilityIndex(-1);
+	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F4"));
+    
+	CameraControllerBase->SelectUnitsWithTag(TagForF1);
 }
 
 void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControllerBase)
@@ -971,15 +1013,29 @@ void AExtendedCameraBase::HandleState_OPressed(ACameraControllerBase* CameraCont
 
 void AExtendedCameraBase::HandleState_AbilityArrayIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)
 {
-	float FloatValue = InputActionValue.Get<float>();
 				
-	if(FloatValue > 0)
+	if(InputActionValue.Get<float>() > 0)
 	{
 		CameraControllerBase->AddAbilityIndex(1);
 	}
 	else
 	{
 		CameraControllerBase->AddAbilityIndex(-1);
+	}
+}
+
+void AExtendedCameraBase::HandleState_AbilityUnitIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)
+{
+			
+	if (InputActionValue.Get<float>() > 0)
+	{
+		CameraControllerBase->AbilityArrayIndex = 0;
+		CameraControllerBase->AddToCurrentUnitWidgetIndex(1);
+	}
+	else
+	{
+		CameraControllerBase->AbilityArrayIndex = 0;
+		CameraControllerBase->AddToCurrentUnitWidgetIndex(-1);
 	}
 }
 

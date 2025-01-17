@@ -612,12 +612,22 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 				UnitBase->BuildArea->Destroy(true);
 				UnitBase->BuildArea = nullptr;
 			}
+
+			UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 			
 			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
 
+			
+			FTimerHandle DestroyTimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+					DestroyTimerHandle,
+					[UnitBase]() { UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block); },
+					5.0f, // Delay duration in seconds (change this to your desired delay)
+					false // This is a one-time timer, so it's not looping
+			);
+			
 			if(NewUnit)
 			{
-				
 				ABuildingBase* Building = Cast<ABuildingBase>(NewUnit);
 				if (Building && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
 					Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;

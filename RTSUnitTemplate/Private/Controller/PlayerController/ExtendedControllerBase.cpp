@@ -668,6 +668,11 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     //---------------------------------------
 	UStaticMeshComponent* DraggedMesh = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>();
 
+	if (!DraggedMesh)
+	{
+		// If there's no mesh on the dragged work area, bail out or handle gracefully
+		return;
+	}
 	FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
 	FVector Extent = DraggedBounds.BoxExtent; // half-size
 
@@ -718,6 +723,12 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 
                     	UStaticMeshComponent* OverlappedMesh = OverlappedActor->FindComponentByClass<UStaticMeshComponent>();
 
+                    	if (!OverlappedMesh)
+                    	{
+                    		// If there's no mesh on this overlapped actor, skip to the next actor
+                    		continue;
+                    	}
+                    	
                     	FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
                     	FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
                         //-------------------------------------------------
@@ -1187,6 +1198,45 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
 		StopWork(Worker);
 	}
+}
+
+void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag)
+{
+	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+
+	this->HUDBase->DeselectAllUnits();
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && (Unit->TeamId == this->SelectableTeamId))
+		{
+			Unit->SetSelected();
+			this->HUDBase->SelectedUnits.Emplace(Unit);
+			
+	
+		}
+	}
+	this->SelectedUnits = HUDBase->SelectedUnits;
+}
+
+void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
+{
+	// If there are no units, do nothing
+	if (SelectedUnits.Num() == 0)
+	{
+		return;
+	}
+
+	// Add the offset
+	int NewIndex = CurrentUnitWidgetIndex + Add;
+
+	// Clamp to the valid array range [0, Num-1]
+	NewIndex = FMath::Clamp(NewIndex, 0, SelectedUnits.Num() - 1);
+
+	if (NewIndex == SelectedUnits.Num()-1) NewIndex = 0;
+	if (CurrentUnitWidgetIndex == 0) NewIndex = SelectedUnits.Num()-1;
+	// Assign
+	CurrentUnitWidgetIndex = NewIndex;
 }
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
