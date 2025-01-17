@@ -65,6 +65,9 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Tags")
 	FGameplayTagContainer UnitTags;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Tags")
+	FGameplayTag SelectionTag = FGameplayTag::RequestGameplayTag(FName("Selection.UnitA"));
 	
 protected:
 // Called when the game starts or when spawned

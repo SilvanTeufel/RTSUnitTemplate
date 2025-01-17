@@ -286,20 +286,33 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	if (SelectedUnits.Num() > 0)
 	{
-		if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(SelectedUnits[0]))
+		if (SelectedUnits[CurrentUnitWidgetIndex]->IsWorker)
 		{
-			ActivateAbilitiesByIndex_Implementation(WorkingUnit, InputID, Hit);
+			ActivateAbilitiesByIndex_Implementation(SelectedUnits[CurrentUnitWidgetIndex], InputID, Hit);
 		}else{
-			for (AGASUnit* SelectedUnit : SelectedUnits)
+			bool bAnyHasTag = false;
+
+			
+			for (AUnitBase* SelectedUnit : SelectedUnits)
 			{
-				AWorkingUnitBase* WUnit = Cast<AWorkingUnitBase>(SelectedUnit);
-				
-				if (SelectedUnit && !WUnit)
+				if (SelectedUnit && !SelectedUnit->IsWorker &&  SelectedUnit->SelectionTag == SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag)
 				{
-					//ActivateDefaultAbilities(SelectedUnit, InputID);
+					bAnyHasTag = true;
 					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
 				}
 			}
+
+			if (!bAnyHasTag)
+			{
+				for (AUnitBase* SelectedUnit : SelectedUnits)
+				{
+					if (SelectedUnit && !SelectedUnit->IsWorker)
+					{
+						ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+					}
+				}
+			}
+			
 		}
 	}else if (CameraUnitWithTag)
 	{
@@ -1219,25 +1232,46 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	this->SelectedUnits = HUDBase->SelectedUnits;
 }
 
+
 void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 {
-	// If there are no units, do nothing
 	if (SelectedUnits.Num() == 0)
 	{
 		return;
 	}
 
-	// Add the offset
-	int NewIndex = CurrentUnitWidgetIndex + Add;
+	int StartIndex = CurrentUnitWidgetIndex;
+	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag;
 
-	// Clamp to the valid array range [0, Num-1]
-	NewIndex = FMath::Clamp(NewIndex, 0, SelectedUnits.Num() - 1);
+	while (true)
+	{
+		// Move index
+		CurrentUnitWidgetIndex += Add;
 
-	if (NewIndex == SelectedUnits.Num()-1) NewIndex = 0;
-	if (CurrentUnitWidgetIndex == 0) NewIndex = SelectedUnits.Num()-1;
-	// Assign
-	CurrentUnitWidgetIndex = NewIndex;
+		// Wrap around
+		if (CurrentUnitWidgetIndex < 0)
+		{
+			CurrentUnitWidgetIndex = SelectedUnits.Num() - 1;
+		}
+		else if (CurrentUnitWidgetIndex >= SelectedUnits.Num())
+		{
+			CurrentUnitWidgetIndex = 0;
+		}
+
+		// If the newly selected unit has a different tag, stop
+		if (SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag != CurrentTag)
+		{
+			break;
+		}
+
+		// If we've come back to the original index, stop
+		if (CurrentUnitWidgetIndex == StartIndex)
+		{
+			break;
+		}
+	}
 }
+
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
 	if(Worker)
