@@ -63,11 +63,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector CollisionLocation;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Tags")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTagContainer UnitTags;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Tags")
-	FGameplayTag SelectionTag = FGameplayTag::RequestGameplayTag(FName("Selection.UnitA"));
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag AbilitySelectionTag = FGameplayTag::RequestGameplayTag(FName("Selection.UnitA"));
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag TalentTag = FGameplayTag::RequestGameplayTag(FName("Talent.UnitA"));
 	
 protected:
 // Called when the game starts or when spawned

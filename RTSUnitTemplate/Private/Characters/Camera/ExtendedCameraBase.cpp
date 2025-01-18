@@ -198,6 +198,7 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Q_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 9);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_E_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 10);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_R_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 18);
 
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Q_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 999);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_E_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 101010);
@@ -534,6 +535,12 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
     				{
     					HandleState_ScrollZoom(InputActionValue, CameraControllerBase);
     				}break;
+    			case 21: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt1, CameraControllerBase->SelectableTeamId); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
+    			case 22: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt2, CameraControllerBase->SelectableTeamId); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
+    			case 23: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt3, CameraControllerBase->SelectableTeamId); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
+    			case 24: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt4, CameraControllerBase->SelectableTeamId); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
+    			case 25: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt5, CameraControllerBase->SelectableTeamId); break;
+    			case 26: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagAlt6, CameraControllerBase->SelectableTeamId); break;
     			default: break;
     		}
     	}
@@ -547,7 +554,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             	{
 
             	}break;
-            case 1: HandleState_MoveW(CameraControllerBase); break;
+            case 1: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlW, CameraControllerBase->SelectableTeamId); break; break;
             case 111: HandleState_StopMoveW(CameraControllerBase); break;
             case 2: HandleState_MoveS(CameraControllerBase); break;
             case 222: HandleState_StopMoveS(CameraControllerBase); break;
@@ -572,21 +579,22 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
             			SetCameraState(CameraData::ZoomInPosition);
             	} break;
-            case 9: HandleState_RotateLeft(CameraControllerBase); break;
+            case 9: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlQ, CameraControllerBase->SelectableTeamId); break;
             case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
-            case 10: HandleState_RotateRight(CameraControllerBase); break;
+            case 10: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlE, CameraControllerBase->SelectableTeamId); break;
             case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
             case 13: HandleState_AbilityUnitIndex(InputActionValue, CameraControllerBase); break;
-            case 21: F1_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
-            case 22: F2_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
-            case 23: F3_Pressed(CameraControllerBase); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
-            case 24: F4_Pressed(CameraControllerBase); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
-            case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEleven, CameraControllerBase); break;
-            case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwelve, CameraControllerBase); break;
-            case 27: F1_Pressed(CameraControllerBase); break;
-            case 28: F2_Pressed(CameraControllerBase); break;
-            case 29: F3_Pressed(CameraControllerBase); break;
-            case 30: F4_Pressed(CameraControllerBase); break;
+            case 18: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlR, CameraControllerBase->SelectableTeamId); break;
+            case 21: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl1, CameraControllerBase->SelectableTeamId); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
+            case 22: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl2, CameraControllerBase->SelectableTeamId); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
+            case 23: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl3, CameraControllerBase->SelectableTeamId); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityNine, CameraControllerBase); break;
+            case 24: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl4, CameraControllerBase->SelectableTeamId); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTen, CameraControllerBase); break;
+            case 25: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl5, CameraControllerBase->SelectableTeamId); break;
+            case 26: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl6, CameraControllerBase->SelectableTeamId); break;
+            case 27: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF1, CameraControllerBase->SelectableTeamId); break;
+            case 28: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF2, CameraControllerBase->SelectableTeamId); break;
+            case 29: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF3, CameraControllerBase->SelectableTeamId); break;
+            case 30: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF4, CameraControllerBase->SelectableTeamId); break;
             default: break;
             }
         }
@@ -625,44 +633,14 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase); break;
             case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase); break;
             case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase); break;
-            case 27: F1_Pressed(CameraControllerBase); break;
-            case 28: F2_Pressed(CameraControllerBase); break;
-            case 29: F3_Pressed(CameraControllerBase); break;
-            case 30: F4_Pressed(CameraControllerBase); break;
+            case 27: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF1, CameraControllerBase->SelectableTeamId); break;
+            case 28: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF2, CameraControllerBase->SelectableTeamId); break;
+            case 29: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF3, CameraControllerBase->SelectableTeamId); break;
+            case 30: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF4, CameraControllerBase->SelectableTeamId); break;
             default: break;
             }
         }
     }
-}
-
-void AExtendedCameraBase::F1_Pressed(ACameraControllerBase* CameraControllerBase)
-{
-	// Example gameplay tag for F1
-	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F1"));
-    
-	CameraControllerBase->SelectUnitsWithTag(TagForF1);
-}
-
-void AExtendedCameraBase::F2_Pressed(ACameraControllerBase* CameraControllerBase)
-{
-	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F2"));
-    
-	CameraControllerBase->SelectUnitsWithTag(TagForF1);
-}
-
-
-void AExtendedCameraBase::F3_Pressed(ACameraControllerBase* CameraControllerBase)
-{
-	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F3"));
-    
-	CameraControllerBase->SelectUnitsWithTag(TagForF1);
-}
-
-void AExtendedCameraBase::F4_Pressed(ACameraControllerBase* CameraControllerBase)
-{
-	FGameplayTag TagForF1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.F4"));
-    
-	CameraControllerBase->SelectUnitsWithTag(TagForF1);
 }
 
 void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControllerBase)

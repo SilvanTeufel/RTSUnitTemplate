@@ -22,6 +22,70 @@ public:
 	
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF1 = FGameplayTag::RequestGameplayTag(FName("Key.F1"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF2 = FGameplayTag::RequestGameplayTag(FName("Key.F2"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF3 = FGameplayTag::RequestGameplayTag(FName("Key.F3"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF4 = FGameplayTag::RequestGameplayTag(FName("Key.F4"));
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl1 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl1"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl2 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl2"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl3 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl3"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl4 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl4"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl5 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl5"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrl6 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl6"));
+	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrlQ = FGameplayTag::RequestGameplayTag(FName("Key.CtrlQ"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrlW = FGameplayTag::RequestGameplayTag(FName("Key.CtrlW"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrlE = FGameplayTag::RequestGameplayTag(FName("Key.CtrlE"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagCtrlR = FGameplayTag::RequestGameplayTag(FName("Key.CtrlR"));
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt1 = FGameplayTag::RequestGameplayTag(FName("Key.Alt1"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt2 = FGameplayTag::RequestGameplayTag(FName("Key.Alt2"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt3 = FGameplayTag::RequestGameplayTag(FName("Key.Alt3"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt4 = FGameplayTag::RequestGameplayTag(FName("Key.Alt4"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt5 = FGameplayTag::RequestGameplayTag(FName("Key.Alt5"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagAlt6 = FGameplayTag::RequestGameplayTag(FName("Key.Alt6"));
+
+
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult = FHitResult());
@@ -164,8 +228,11 @@ public:
 
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SelectUnitsWithTag(FGameplayTag Tag);
+	void SelectUnitsWithTag(FGameplayTag Tag, int TeamId);
 
+	UFUNCTION(Client, Reliable)
+	void Client_UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);
 };

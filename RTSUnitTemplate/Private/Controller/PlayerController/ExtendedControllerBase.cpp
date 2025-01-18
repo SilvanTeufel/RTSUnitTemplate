@@ -295,7 +295,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			
 			for (AUnitBase* SelectedUnit : SelectedUnits)
 			{
-				if (SelectedUnit && !SelectedUnit->IsWorker &&  SelectedUnit->SelectionTag == SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag)
+				if (SelectedUnit && !SelectedUnit->IsWorker &&  SelectedUnit->AbilitySelectionTag == SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag)
 				{
 					bAnyHasTag = true;
 					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
@@ -787,90 +787,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
         WorkAreaIsSnapped = false;
     }
 }
-/*
-void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
-{
-	// Check if there's a CurrentDraggedWorkArea
-	if(SelectedUnits.Num() && SelectedUnits[0])
-		if (SelectedUnits[0]->CurrentDraggedWorkArea)
-		{
 
-			FVector MousePosition, MouseDirection;
-			DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-
-			// Raycast from the mouse position into the scene to find the ground
-			FVector Start = MousePosition;
-			FVector End = Start + MouseDirection * 5000.f; // Extend to a maximum reasonable distance
-
-			FHitResult HitResult;
-			FCollisionQueryParams CollisionParams;
-			CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
-			CollisionParams.AddIgnoredActor(SelectedUnits[0]->CurrentDraggedWorkArea); // Ignore the dragged actor in the raycast
-			
-
-			// Perform the raycast
-			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
-
-			float Distance = FVector::Dist(
-				HitResult.Location,
-				SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation()
-			);
-			
-			
-			if (Distance < SnapDistance+SnapGap){
-				if (UStaticMeshComponent* Mesh = SelectedUnits[0]->CurrentDraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
-				{
-					// 1) Get bounding sphere
-					FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
-					float OverlapRadius = MeshBounds.SphereRadius;
-
-					// 2) Run the sphere overlap
-					TArray<AActor*> OverlappedActors;
-					bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
-						this,                                       
-						SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation(), 
-						OverlapRadius,
-						TArray<TEnumAsByte<EObjectTypeQuery>>(),
-						AActor::StaticClass(),
-						TArray<AActor*>(),
-						OverlappedActors
-					);
-
-					// 3) Check the overlapped actors
-					if (bAnyOverlap && OverlappedActors.Num() > 0)
-					{
-						for (AActor* OverlappedActor : OverlappedActors)
-						{
-							if (!OverlappedActor || OverlappedActor == SelectedUnits[0]->CurrentDraggedWorkArea)
-								continue;
-
-							AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor);
-							ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
-							if (OverlappedWorkArea || OverlappedBuilding)
-							{
-								// Snap logic
-								SnapToActor(SelectedUnits[0]->CurrentDraggedWorkArea, OverlappedActor);
-								WorkAreaIsSnapped = true;
-								// break if you only want one
-								return;
-							}
-						}
-					}
-				}
-			}
-
-			if (bHit && HitResult.GetActor() != nullptr)// Check if something was hit
-			{
-				CurrentDraggedGround = HitResult.GetActor();
-				// Update the work area's position to the hit location
-				FVector NewActorPosition = HitResult.Location;
-				NewActorPosition.Z += DraggedAreaZOffset; // Adjust the Z offset if needed
-				SetWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea, NewActorPosition);
-				WorkAreaIsSnapped = false;
-			}
-
-		}
-}*/
 
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
@@ -1213,25 +1130,41 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 	}
 }
 
-void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag)
+void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
 	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
-
-	this->HUDBase->DeselectAllUnits();
+	
+	TArray<AUnitBase*> NewSelection;
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && (Unit->TeamId == this->SelectableTeamId))
+		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId ==TeamId)
 		{
-			Unit->SetSelected();
-			this->HUDBase->SelectedUnits.Emplace(Unit);
-			
-	
+			NewSelection.Add(Unit);
 		}
 	}
-	this->SelectedUnits = HUDBase->SelectedUnits;
+
+	Client_UpdateHUDSelection_Implementation(NewSelection, TeamId);
 }
 
+void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
+{
+	if (SelectableTeamId != TeamId) return;
+
+	HUDBase = Cast<APathProviderHUD>(GetHUD());
+	
+	if (!HUDBase) return;
+	
+	HUDBase->DeselectAllUnits();
+
+	for (AUnitBase* NewUnit : NewSelection)
+	{
+		NewUnit->SetSelected();
+		HUDBase->SelectedUnits.Emplace(NewUnit);
+	}
+	
+	SelectedUnits = HUDBase->SelectedUnits;
+}
 
 void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 {
@@ -1241,7 +1174,7 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 	}
 
 	int StartIndex = CurrentUnitWidgetIndex;
-	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag;
+	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag;
 
 	while (true)
 	{
@@ -1259,7 +1192,7 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 		}
 
 		// If the newly selected unit has a different tag, stop
-		if (SelectedUnits[CurrentUnitWidgetIndex]->SelectionTag != CurrentTag)
+		if (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag)
 		{
 			break;
 		}

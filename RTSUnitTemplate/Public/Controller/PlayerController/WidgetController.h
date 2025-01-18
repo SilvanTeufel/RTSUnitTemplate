@@ -63,9 +63,12 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void HandleInvestmentUnit(const int32 UnitIndex, int32 InvestmentState);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void HandleInvestmentUnitByTag(const int32 UnitIndex, int32 InvestmentState);
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void HandleInvestmentUnitByTagServer(const int32 UnitIndex,int32 InvestmentState);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void HandleInvestmentUnitByTag(const int32 UnitIndex,int32 InvestmentState);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpendAbilityPoints(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
 

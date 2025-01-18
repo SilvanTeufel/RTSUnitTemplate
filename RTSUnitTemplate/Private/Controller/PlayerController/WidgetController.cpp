@@ -21,6 +21,7 @@
 #include "Engine/Engine.h"
 
 
+
 float AWidgetController::GetResource(int TeamId, EResourceType RType)
 {
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
@@ -137,6 +138,8 @@ void AWidgetController::HandleInvestment_Implementation(int32 InvestmentState)
 
 void AWidgetController::SaveLevelUnit_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
@@ -151,6 +154,8 @@ void AWidgetController::SaveLevelUnit_Implementation(const int32 UnitIndex, cons
 
 void AWidgetController::LoadLevelUnit_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
@@ -162,7 +167,9 @@ void AWidgetController::LoadLevelUnit_Implementation(const int32 UnitIndex, cons
 
 void AWidgetController::LoadLevelUnitByTag_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 
 	// Find the target unit and get its tags
 	int TeamId = 0;
@@ -170,9 +177,9 @@ void AWidgetController::LoadLevelUnitByTag_Implementation(const int32 UnitIndex,
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -182,7 +189,7 @@ void AWidgetController::LoadLevelUnitByTag_Implementation(const int32 UnitIndex,
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->LoadAbilityAndLevelData(SlotName);
 		}
@@ -191,6 +198,8 @@ void AWidgetController::LoadLevelUnitByTag_Implementation(const int32 UnitIndex,
 
 void AWidgetController::LevelUpUnit_Implementation(const int32 UnitIndex)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
@@ -203,15 +212,17 @@ void AWidgetController::LevelUpUnit_Implementation(const int32 UnitIndex)
 
 void AWidgetController::LevelUpUnitByTag_Implementation(const int32 UnitIndex)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 	int TeamId = 0;
 	// Find the target unit and get its tags
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex) // && IsLocalController()
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -221,7 +232,7 @@ void AWidgetController::LevelUpUnitByTag_Implementation(const int32 UnitIndex)
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->LevelUp();
 		}
@@ -230,10 +241,12 @@ void AWidgetController::LevelUpUnitByTag_Implementation(const int32 UnitIndex)
 
 void AWidgetController::ResetTalentsUnit_Implementation(const int32 UnitIndex)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
 			Unit->ResetTalents();
 		}
@@ -242,15 +255,17 @@ void AWidgetController::ResetTalentsUnit_Implementation(const int32 UnitIndex)
 
 void AWidgetController::ResetTalentsUnitByTag_Implementation(const int32 UnitIndex)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 	int TeamId = 0;
 	// Find the target unit and get its tags
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex) //  && IsLocalController()
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -260,7 +275,7 @@ void AWidgetController::ResetTalentsUnitByTag_Implementation(const int32 UnitInd
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->ResetTalents();
 		}
@@ -269,6 +284,8 @@ void AWidgetController::ResetTalentsUnitByTag_Implementation(const int32 UnitInd
 
 void AWidgetController::HandleInvestmentUnit_Implementation(const int32 UnitIndex, int32 InvestmentState)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
@@ -318,10 +335,16 @@ void AWidgetController::HandleInvestmentUnit_Implementation(const int32 UnitInde
 	}
 }
 
+void AWidgetController::HandleInvestmentUnitByTag(const int32 UnitIndex, int32 InvestmentState) // const int32 UnitIndex,
+{
+	HandleInvestmentUnitByTagServer(UnitIndex, InvestmentState);
+}
 
-void AWidgetController::HandleInvestmentUnitByTag(const int32 UnitIndex, int32 InvestmentState)
+void AWidgetController::HandleInvestmentUnitByTagServer_Implementation(const int32 UnitIndex, int32 InvestmentState) // const int32 UnitIndex,
 {
 
+	if (!RTSGameMode) return;
+	
 	// Lambda to handle the investment
 	auto Invest = [&](AUnitBase* Unit) {
 		switch (InvestmentState)
@@ -336,36 +359,39 @@ void AWidgetController::HandleInvestmentUnitByTag(const int32 UnitIndex, int32 I
 		default: break;
 		}
 	};
-	
-	FGameplayTagContainer TargetUnitTags;
+
+	FGameplayTag TargetTags;
 	int TeamId = 0;
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
-			TargetUnitTags = Unit->UnitTags; // FGameplayTagContainer UnitTags; Get the Tags from here
+			TargetTags = Unit->TalentTag; // FGameplayTagContainer UnitTags; Get the Tags from here
 			TeamId = Unit->TeamId;
 			break;
 		}
 	}
-
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTags && (Unit->TeamId == TeamId))
 		{
 			Invest(Unit);
 		}
 	}
+
 }
 
 void AWidgetController::SpendAbilityPoints_Implementation(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
 			Unit->SpendAbilityPoints(AbilityID, Ability);
 		}
@@ -374,15 +400,17 @@ void AWidgetController::SpendAbilityPoints_Implementation(EGASAbilityInputID Abi
 
 void AWidgetController::SpendAbilityPointsByTag_Implementation(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 	int TeamId = 0;
 	// Find the target unit and get its tags
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -392,7 +420,7 @@ void AWidgetController::SpendAbilityPointsByTag_Implementation(EGASAbilityInputI
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->SpendAbilityPoints(AbilityID, Ability);
 		}
@@ -401,10 +429,12 @@ void AWidgetController::SpendAbilityPointsByTag_Implementation(EGASAbilityInputI
 
 void AWidgetController::ResetAbility_Implementation(const int32 UnitIndex)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
 			Unit->ResetAbility();
 		}
@@ -413,15 +443,17 @@ void AWidgetController::ResetAbility_Implementation(const int32 UnitIndex)
 
 void AWidgetController::ResetAbilityByTag_Implementation(const int32 UnitIndex)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 	int TeamId = 0;
 	// Find the target unit and get its tags
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -431,7 +463,7 @@ void AWidgetController::ResetAbilityByTag_Implementation(const int32 UnitIndex)
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->ResetAbility();
 		}
@@ -440,10 +472,12 @@ void AWidgetController::ResetAbilityByTag_Implementation(const int32 UnitIndex)
 
 void AWidgetController::SaveAbility_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
 			Unit->SaveAbilityAndLevelData(SlotName);
 		}
@@ -452,10 +486,12 @@ void AWidgetController::SaveAbility_Implementation(const int32 UnitIndex, const 
 
 void AWidgetController::LoadAbility_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
+	if (!RTSGameMode) return;
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
 			Unit->LoadAbilityAndLevelData(SlotName);
 		}
@@ -464,15 +500,17 @@ void AWidgetController::LoadAbility_Implementation(const int32 UnitIndex, const 
 
 void AWidgetController::LoadAbilityByTag_Implementation(const int32 UnitIndex, const FString& SlotName)
 {
-	FGameplayTagContainer TargetUnitTags;
+	if (!RTSGameMode) return;
+	
+	FGameplayTag TargetTag;
 	int TeamId = 0;
 	// Find the target unit and get its tags
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
+		if (Unit && Unit->UnitIndex == UnitIndex)
 		{
-			TargetUnitTags = Unit->UnitTags;
+			TargetTag = Unit->TalentTag;
 			TeamId = Unit->TeamId;
 			break;
 		}
@@ -482,7 +520,7 @@ void AWidgetController::LoadAbilityByTag_Implementation(const int32 UnitIndex, c
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(TargetUnitTags) && (Unit->TeamId == TeamId))
+		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
 		{
 			Unit->LoadAbilityAndLevelData(SlotName);
 		}
