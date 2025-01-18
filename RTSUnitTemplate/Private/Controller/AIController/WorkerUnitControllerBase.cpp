@@ -613,7 +613,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 				UnitBase->BuildArea = nullptr;
 			}
 
-			UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+			UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 			
 			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
 
@@ -818,7 +818,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
             this,
             SpawnParameter.UnitBaseClass,
             EnemyTransform,
-            ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn
         )
     );
 
@@ -862,6 +862,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
         FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
         TraceParams.bTraceComplex = true;
         TraceParams.AddIgnoredActor(UnitBase);
+    	TraceParams.AddIgnoredActor(GetPawn());
 
         bool bHit = GetWorld()->LineTraceSingleByChannel(
             HitResult,

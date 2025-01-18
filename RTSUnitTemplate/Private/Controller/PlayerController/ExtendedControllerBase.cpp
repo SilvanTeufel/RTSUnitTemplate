@@ -1178,6 +1178,11 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 	{
 		return;
 	}
+	
+		if (!SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex))
+    	{
+    		return;
+    	}
 
 	int StartIndex = CurrentUnitWidgetIndex;
 	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag;
