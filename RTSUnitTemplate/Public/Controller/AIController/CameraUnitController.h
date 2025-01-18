@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Characters/Unit/UnitBase.h"
-#include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "CameraUnitController.generated.h"
 
 /**
@@ -24,7 +24,7 @@ public:
 	AUnitBase* MyUnitBase;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	AControllerBase* ControllerBase;
+	AExtendedControllerBase* ControllerBase;
 	
 	virtual void OnPossess(APawn* PawN) override;
 	

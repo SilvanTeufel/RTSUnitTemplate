@@ -1130,6 +1130,7 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 	}
 }
 
+
 void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
 	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
@@ -1138,22 +1139,27 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId ==TeamId)
+		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId == TeamId)
 		{
 			NewSelection.Add(Unit);
 		}
 	}
 
-	Client_UpdateHUDSelection_Implementation(NewSelection, TeamId);
+
+	Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
-	if (SelectableTeamId != TeamId) return;
-
-	HUDBase = Cast<APathProviderHUD>(GetHUD());
+	if (SelectableTeamId != TeamId)
+	{
+		return;
+	}
 	
-	if (!HUDBase) return;
+	if (!HUDBase)
+	{
+		return;
+	}
 	
 	HUDBase->DeselectAllUnits();
 
@@ -1279,3 +1285,19 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 
 	return false;
 }
+
+void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
+{
+	if (!UnitBase) return;
+	//if (UnitBase->TeamId == SelectableTeamId){
+		UE_LOG(LogTemp, Warning, TEXT("On Server!"));
+		FHitResult Hit;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+		if (UnitBase->ActivatedAbilityInstance)
+		{
+			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
+		}
+	//}
+}
+
+

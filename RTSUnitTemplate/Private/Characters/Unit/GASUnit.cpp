@@ -19,6 +19,7 @@ void AGASUnit::BeginPlay()
 	Super::BeginPlay();
 	CreateOwnerShip();
 	AbilitySystemComponent->SetIsReplicated(true);
+	AddReplicatedSubObject(ActivatedAbilityInstance);
 	//bReplicates = true;
 }
 

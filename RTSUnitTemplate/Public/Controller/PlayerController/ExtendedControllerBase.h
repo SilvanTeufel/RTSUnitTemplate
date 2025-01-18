@@ -235,4 +235,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CastEndsEvent(AUnitBase* UnitBase);
+	
 };

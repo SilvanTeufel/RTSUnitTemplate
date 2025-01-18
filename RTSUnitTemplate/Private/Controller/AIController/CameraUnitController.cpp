@@ -11,7 +11,7 @@ void ACameraUnitController::BeginPlay()
 
 	if(!ControllerBase)
 	{
-		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+		ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 	}
 }
 
@@ -38,12 +38,14 @@ void ACameraUnitController::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
+		/*
 		if (UnitBase->ActivatedAbilityInstance)
 		{
 			FHitResult Hit;
 			ControllerBase->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
-		}
+		}*/
+		ControllerBase->CastEndsEvent(UnitBase);
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;

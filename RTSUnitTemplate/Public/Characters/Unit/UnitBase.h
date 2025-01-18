@@ -71,7 +71,7 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag TalentTag = FGameplayTag::RequestGameplayTag(FName("Talent.UnitA"));
-	
+
 protected:
 // Called when the game starts or when spawned
 	virtual void BeginPlay() override;

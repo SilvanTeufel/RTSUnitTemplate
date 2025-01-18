@@ -12,6 +12,7 @@
 #include "NavigationSystem.h"
 #include "Engine.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "NavMesh/NavMeshPath.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -54,7 +55,7 @@ public:
 	ARTSGameModeBase* RTSGameMode;
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	AControllerBase* ControllerBase;
+	AExtendedControllerBase* ControllerBase;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	UUnitBaseHealthBar* HealthBarWidget;

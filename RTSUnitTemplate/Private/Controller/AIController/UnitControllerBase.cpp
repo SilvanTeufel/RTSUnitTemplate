@@ -19,6 +19,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "NavigationSystem.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 
 #include "Navigation/PathFollowingComponent.h"
@@ -63,7 +64,7 @@ void AUnitControllerBase::BeginPlay()
 	{
 		if(!ControllerBase)
 		{
-			ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+			ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 			
 			if(ControllerBase)
 			{
@@ -88,7 +89,7 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 		SightRadius = MyUnitBase->SightRadius;
 		if(!ControllerBase)
 		{
-			ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+			ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 		
 			if(ControllerBase)
 			{
@@ -417,27 +418,20 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 {
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
-	//DetectUnits(UnitBase, DeltaSeconds, false);
-	
 	UnitBase->SetWalkSpeed(0);
 	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
 	UnitBase->UnitControlTimer += DeltaSeconds;
-	/*
-	if(UnitBase->UnitToChase && UnitBase->UnitToChase->GetUnitState() == UnitData::Dead)
-	{
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-		UnitBase->UnitControlTimer = 0.f;
-		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
-	}else
-	*/
+
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
+		/*
 		if (UnitBase->ActivatedAbilityInstance)
 		{
 			FHitResult Hit;
 			ControllerBase->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
-		}
+		}*/
+		ControllerBase->CastEndsEvent(UnitBase);
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;
