@@ -245,13 +245,27 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	} 
 
 
-	if (NewUnitState == UnitData::GoToResourceExtraction)
+	if (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build)
 	{
 		// Set Collision to Overlap Pawn
 		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	}else
 	{
-		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		FTimerHandle CollisionTimerHandle;
+
+		// 2) Create a delegate that calls the desired code:
+		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([this]()
+		{
+			GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		});
+
+		// 3) Set the timer with that delegate
+		GetWorld()->GetTimerManager().SetTimer(
+			CollisionTimerHandle,
+			TimerDelegate,
+			5.0f,  // Delay
+			false  // One-shot
+		);
 	}
 	
 	UnitState = NewUnitState;

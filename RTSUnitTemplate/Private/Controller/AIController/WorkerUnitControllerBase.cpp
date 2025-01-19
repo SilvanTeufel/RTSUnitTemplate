@@ -612,19 +612,10 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 				UnitBase->BuildArea->Destroy(true);
 				UnitBase->BuildArea = nullptr;
 			}
-
-			UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 			
+
 			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
-
 			
-			FTimerHandle DestroyTimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(
-					DestroyTimerHandle,
-					[UnitBase]() { UnitBase->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block); },
-					5.0f, // Delay duration in seconds (change this to your desired delay)
-					false // This is a one-time timer, so it's not looping
-			);
 			
 			if(NewUnit)
 			{
@@ -720,81 +711,6 @@ void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
 		WorkResource->IsAttached = false;
 	}
 }
-
-
-/*
-AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
-	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
-{
-	// Waypointspawn
-
-	FTransform EnemyTransform;
-	
-	EnemyTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
-		
-		
-	const auto UnitBase = Cast<AUnitBase>
-		(UGameplayStatics::BeginDeferredActorSpawnFromClass
-		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
-
-		
-
-	if(SpawnParameter.UnitControllerBaseClass)
-	{
-		AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!UnitController) return nullptr;
-		UnitController->Possess(UnitBase);
-	}
-	
-	if (UnitBase != nullptr)
-	{
-		if(UnitBase->UnitToChase)
-		{
-			UnitBase->UnitToChase = UnitToChase;
-			UnitBase->SetUnitState(UnitData::Chase);
-		}
-		
-		if(TeamId)
-		{
-			UnitBase->TeamId = TeamId;
-		}
-
-		UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
-			
-		UnitBase->OnRep_MeshAssetPath();
-		UnitBase->OnRep_MeshMaterialPath();
-
-		UnitBase->SetReplicateMovement(true);
-		SetReplicates(true);
-		UnitBase->GetMesh()->SetIsReplicated(true);
-
-		// Does this have to be replicated?
-		UnitBase->SetMeshRotationServer();
-		
-		UnitBase->UnitState = SpawnParameter.State;
-		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
-		
-		
-		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
-
-
-		UnitBase->InitializeAttributes();
-		AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-		if (!GameMode){
-			UnitBase->SetUEPathfinding = true;
-			UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-			return nullptr;
-		}
-		
-		GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-		
-		
-		return UnitBase;
-	}
-
-	return nullptr;
-}*/
 
 
 AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(

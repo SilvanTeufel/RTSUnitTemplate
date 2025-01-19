@@ -9,6 +9,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
+#include "Landscape.h" 
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
@@ -288,6 +289,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	{
 		if (SelectedUnits[CurrentUnitWidgetIndex]->IsWorker)
 		{
+			HUDBase->SetUnitSelected(SelectedUnits[CurrentUnitWidgetIndex]);
+			CurrentUnitWidgetIndex = 0;
+			SelectedUnits = HUDBase->SelectedUnits;
 			ActivateAbilitiesByIndex_Implementation(SelectedUnits[CurrentUnitWidgetIndex], InputID, Hit);
 		}else{
 			bool bAnyHasTag = false;
@@ -633,7 +637,65 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     // 9) Finally, move the dragged actor
    // DraggedActor->SetActorLocation(SnappedPos);
 	SetWorkAreaPosition(DraggedActor, SnappedPos);
-	WorkAreaIsSnapped = true;
+
+	//
+	// ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
+	//
+
+	// 1. Create an array of object types to test against
+	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+	// You can include as many object types as needed (e.g. WorldStatic, WorldDynamic, Pawn, etc.):
+
+	// 2. Create an array of actors to ignore
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(DraggedActor);
+	ActorsToIgnore.Add(OtherActor);
+
+	// 3. We'll store any overlapping actors here
+	TArray<AActor*> OverlappingActors;
+
+	// 4. Perform the box overlap at the snapped position
+	//    using the dragged actor's half-extents.
+	bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
+		GetWorld(),
+		SnappedPos,       // Box center
+		DraggedExtent,    // Half-extent (X, Y, Z)
+		TArray<TEnumAsByte<EObjectTypeQuery>>(),
+		nullptr,          // (Optional) Class filter. Could be AStaticMeshActor::StaticClass(), etc.
+		ActorsToIgnore,
+		OverlappingActors
+	);
+
+	bool bAnyOverlap = false;
+
+	// bSuccess tells you if the query was *able* to run. Then we check OverlappingActors
+	// to see if we collided with anything.
+	if (bSuccess)
+	{
+		for (AActor* Overlapped : OverlappingActors)
+		{
+			if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
+				continue;
+
+
+
+			// If it’s a WorkArea or Building, it's a snap-relevant overlap
+			if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
+			{
+				// Log to see which actor we are overlapping
+				bAnyOverlap = true;
+			}
+		}
+	}
+
+	if (!bAnyOverlap)
+	{
+		WorkAreaIsSnapped = true;
+	}
+	else
+	{
+		WorkAreaIsSnapped = false;
+	}
 }
 
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)

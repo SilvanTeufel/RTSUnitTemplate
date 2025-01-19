@@ -121,12 +121,12 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 }
 
 
-void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, bool IsPaid)
+void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector SpawnLocation, bool IsPaid)
 {
 		if (WorkAreaClass && !CurrentDraggedWorkArea) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
 		{
 
-			FVector SpawnLocation = GetActorLocation()+FVector(0.f, 0.f, 500.f); // Assuming you want to use HitResult location as spawn point
+			//FVector SpawnLocation = GetActorLocation()+FVector(0.f, 0.f, 500.f); // Assuming you want to use HitResult location as spawn point
 			FRotator SpawnRotation = FRotator::ZeroRotator;
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = this;
