@@ -95,6 +95,9 @@ public:
 	class UWidgetComponent* WidgetSelector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	class UWidgetComponent* TaggedSelector;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* ResourceWidget;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -247,23 +247,52 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 
 	if (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build)
 	{
-		// Set Collision to Overlap Pawn
-		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		// Ensure CapsuleComponent is valid
+		if (GetCapsuleComponent())
+		{
+			// Set Collision to Overlap Pawn
+			GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		}
+		else
+		{
+			//UE_LOG(LogTemp, Warning, TEXT("SetUnitState: GetCapsuleComponent() returned nullptr when setting to Overlap."));
+		}
 	}else
 	{
+		if (!GetWorld())
+		{
+			//UE_LOG(LogTemp, Error, TEXT("SetUnitState: GetWorld() returned nullptr."));
+			return;
+		}
+
+		// Define a member variable for the timer handle if needed
 		FTimerHandle CollisionTimerHandle;
 
-		// 2) Create a delegate that calls the desired code:
-		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([this]()
+		// Create a delegate that safely captures a weak reference to 'this'
+		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([WeakThis = TWeakObjectPtr<AAbilityUnit>(this)]()
 		{
-			GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+			if (AAbilityUnit* StrongThis = WeakThis.Get())
+			{
+				if (StrongThis->GetCapsuleComponent())
+				{
+					StrongThis->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+				}
+				else
+				{
+					//UE_LOG(LogTemp, Warning, TEXT("TimerDelegate: GetCapsuleComponent() returned nullptr."));
+				}
+			}
+			else
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("TimerDelegate: 'this' is no longer valid."));
+			}
 		});
 
-		// 3) Set the timer with that delegate
+		// Set the timer with that delegate
 		GetWorld()->GetTimerManager().SetTimer(
-			CollisionTimerHandle,
+			CollisionTimerHandle,  // Ensure CollisionTimerHandle is a member variable if you need to manage it
 			TimerDelegate,
-			5.0f,  // Delay
+			5.0f,  // Delay in seconds
 			false  // One-shot
 		);
 	}

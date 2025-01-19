@@ -215,7 +215,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 			HUDBase->SetUnitSelected(ClosestUnit);
 
 			//ActivateAbilitiesByIndex_Implementation(ClosestUnit, InputID, FHitResult());
-			ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
+			//ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
 			AbilityArrayIndex = 0;
 			//OnAbilityInputDetected(InputID, ClosestUnit, ClosestUnit->DefaultAbilities);
 		}
@@ -248,7 +248,7 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 
 	// After finding the closest unit, notify the client
 	ClientReceiveClosestUnit(ClosestUnit, InputID);
-	ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
+	//ActivateDefaultAbilities_Implementation(ClosestUnit, InputID, FHitResult());
 }
 
 void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
@@ -287,12 +287,13 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	if (SelectedUnits.Num() > 0)
 	{
-		if (SelectedUnits[CurrentUnitWidgetIndex]->IsWorker)
+		if (SelectedUnits[0]->IsWorker)
 		{
-			HUDBase->SetUnitSelected(SelectedUnits[CurrentUnitWidgetIndex]);
+			ActivateAbilitiesByIndex_Implementation(SelectedUnits[0], InputID, Hit);
+			HUDBase->SetUnitSelected(SelectedUnits[0]);
 			CurrentUnitWidgetIndex = 0;
 			SelectedUnits = HUDBase->SelectedUnits;
-			ActivateAbilitiesByIndex_Implementation(SelectedUnits[CurrentUnitWidgetIndex], InputID, Hit);
+			//ActivateAbilitiesByIndex_Implementation(SelectedUnits[0], InputID, Hit);
 		}else{
 			bool bAnyHasTag = false;
 
@@ -1201,13 +1202,41 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId == TeamId)
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId == TeamId)
 		{
 			NewSelection.Add(Unit);
 		}
 	}
 
+	// Check if there are units to sort
+	if (NewSelection.Num() > 1)
+	{
+		// Sort the NewSelection array by tag
+		NewSelection.Sort([Tag](const AUnitBase& A, const AUnitBase& B) -> bool
+		{
+			// Example Sorting Logic:
+			// If both units have the tag, sort by unit name
+			// Otherwise, prioritize units that have the tag
+			bool AHasTag = A.UnitTags.HasTag(Tag);
+			bool BHasTag = B.UnitTags.HasTag(Tag);
 
+			if (AHasTag && BHasTag)
+			{
+				return A.GetName() < B.GetName();
+			}
+			if (AHasTag)
+			{
+				return true; // A comes before B
+			}
+			if (BHasTag)
+			{
+				return false; // B comes before A
+			}
+			return A.GetName() < B.GetName(); // Fallback sorting
+		});
+	}
+
+	// Update the HUD with the sorted selection
 	Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 

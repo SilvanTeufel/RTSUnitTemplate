@@ -9,6 +9,7 @@
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"
 #include "Widgets/ResourceWidget.h"
+#include "Widgets/TaggedUnitSelector.h"
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
 
@@ -36,6 +37,10 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	WidgetSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("WidgetSelector"));
 	WidgetSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 
+	TaggedSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("TaggedSelector"));
+	TaggedSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+
+	
 	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
 	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 
@@ -43,12 +48,14 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	TalentChooser->SetOnlyOwnerSee(true);
 	AbilityChooser->SetOnlyOwnerSee(true);
 	WidgetSelector->SetOnlyOwnerSee(true);
+	TaggedSelector->SetOnlyOwnerSee(true);
 	ResourceWidget->SetOnlyOwnerSee(true);
 
 	ControlWidgetComp->SetIsReplicated(false);
 	TalentChooser->SetIsReplicated(false);
 	AbilityChooser->SetIsReplicated(false);
 	WidgetSelector->SetIsReplicated(false);
+	TaggedSelector->SetIsReplicated(false);
 	ResourceWidget->SetIsReplicated(false);
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
@@ -95,6 +102,7 @@ void AExtendedCameraBase::HideWidgetsWhenNoControl()
 	if (TalentChooser) TalentChooser->SetHiddenInGame(true);
 	if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
 	if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
+	if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
 	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
 	if (IsLocallyControlled())
 	{
@@ -103,6 +111,7 @@ void AExtendedCameraBase::HideWidgetsWhenNoControl()
 		if (TalentChooser) TalentChooser->SetHiddenInGame(false, true);
 		if (AbilityChooser) AbilityChooser->SetHiddenInGame(false, true);
 		if (WidgetSelector) WidgetSelector->SetHiddenInGame(false, true);
+		if (TaggedSelector) TaggedSelector->SetHiddenInGame(false, true);
 		if (ResourceWidget) ResourceWidget->SetHiddenInGame(false, true);
 	}
 }
