@@ -18,10 +18,10 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 
 private:
 	FTimerHandle CollisionCooldownTimer;
-	bool bCanProcessCollision = false;
 	
 public:
-
+	bool bCanProcessCollision = false;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* UnitIcon;
 	

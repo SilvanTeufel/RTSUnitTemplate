@@ -1211,8 +1211,8 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 		UnitBase->SetUEPathfinding = false;
-		if(UnitToIgnore) return MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
-		return MoveToLocationUEPathFinding(UnitBase, Location);
+		if(UnitToIgnore) return MoveToUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
+		return MoveToUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
 	//}
 
 	
@@ -1234,9 +1234,127 @@ void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSec
 	}
 }
 
+FVector AUnitControllerBase::CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+	FVector CurrentLocation = Unit->GetActorLocation();
+	FVector Direction = DestinationLocation - CurrentLocation;
+    
+	// Zero out the Z component to ensure movement in the XY plane
+	Direction.Z = 0.0f;
+    
+
+	if (Direction.IsNearlyZero())
+	{
+		return DestinationLocation; // Fallback to original destination
+	}
+    
+	Direction = Direction.GetSafeNormal();
+    
+	// Calculate the right vector perpendicular to the direction in the XY plane
+	FVector RightVector = FVector::CrossProduct(Direction, FVector::UpVector).GetSafeNormal();
+    
+	if (RightVector.IsNearlyZero())
+	{
+		return DestinationLocation; // Fallback to original destination
+	}
+    
+	// Calculate a new location offset by 90 degrees to the right
+
+	// Randomly choose direction (50% chance for left or right)
+	float DirectionSign = FMath::RandBool() ? 1.f : -1.f;
+	
+	FVector AlternateLocation = CurrentLocation + (RightVector * DirectionSign * 500.f);
+
+	//DrawDebugSphere(GetWorld(), AlternateLocation, 50.0f, 12, FColor::Blue, false, 5.0f);
+
+	return AlternateLocation;
+}
+
+bool AUnitControllerBase::MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+    if (!HasAuthority() || !Unit)
+    {
+        return false;
+    }
+
+    // Attempt to perform line trace as a workaround
+    FHitResult HitResult;
+    if (PerformLineTrace(Unit, DestinationLocation, HitResult))
+    {
+        // If line trace hits a pawn, handle the obstacle
+        return OnLineTraceHit(Unit, DestinationLocation);
+    }
+    else
+    {
+        // No obstacle detected; proceed with movement
+    	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
+    }
+}
+
+bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
+{
+    FVector StartLocation = Unit->GetActorLocation();
+    FVector EndLocation = DestinationLocation;
+
+	EndLocation.Z = StartLocation.Z;
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
+	QueryParams.AddIgnoredActor(Unit->UnitToChase);
+	
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        StartLocation,
+        EndLocation,
+        ECC_Pawn, // Trace against pawns only
+        QueryParams
+    );
+
+	// Draw the line trace for visualization
+	//FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+	//DrawDebugLine(GetWorld(), StartLocation, EndLocation, TraceColor, false, 2.0f, 0, 1.0f);
+
+	
+    return bHit;
+}
+
+bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+	// Log or handle the hit as needed
+	//UE_LOG(LogTemp, Warning, TEXT("LineTrace hit a pawn. Scheduling movement retry."));
+	// Set a timer to retry movement after 0.5 second using a lambda
+	
+	if (Unit->bCanProcessCollision &&
+		Unit->GetUnitState() != UnitData::PatrolRandom &&
+		Unit->GetUnitState() != UnitData::PatrolIdle)
+	{
+		// Calculate the alternate location
+		FVector AlternateLocation = CalculateAlternateLocation(Unit, DestinationLocation);
+		// Set a timer to retry movement after 3 seconds
+		Unit->SetCollisionCooldown();
+		Unit->StoredUnitState = Unit->GetUnitState();
+		//TEnumAsByte<UnitData::EState> CurrentState = Unit->GetUnitState();
+		GetWorld()->GetTimerManager().SetTimer(
+			MoveRetryTimerHandle,
+			[this, Unit, DestinationLocation]() {
+				Unit->SetUEPathfinding = true;
+				Unit->SetUnitState(Unit->StoredUnitState);
+				MoveToLocationUEPathFinding(Unit, DestinationLocation);
+			},
+			1.0f,  // Time in seconds
+			false  // Do not loop
+		);
+
+		return MoveToLocationUEPathFinding(Unit, AlternateLocation);
+	}
+	
+	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
+}
+
+
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
-	// Check server authority
+	//UE_LOG(LogTemp, Warning, TEXT("AUnitControllerBase::MoveToLocationUEPathFinding"));
+	
 	if(!HasAuthority())
 	{
 		return false;
@@ -1295,7 +1413,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 		NavMeshPath->OffsetFromCorners(100.f);
 	}
 
-	return true; // Pathfinding succeeded and the unit can move
+	return true;
 }
 
 void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)

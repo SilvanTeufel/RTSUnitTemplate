@@ -245,6 +245,17 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 		float RelocateWaypointZOffset = 30.f;
-	
+
+private:
+	/*
+	// Workaround helper functions
+	bool PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult);
+	void OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation);
+	FVector CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation);
+	void ContinueMoveToLocation(AUnitBase* Unit, FVector DestinationLocation);
+	void ContinueMoveToLocationWithStoredUnits(FVector DestinationLocation);
+	*/
+	// Timer handle for delayed movement
+	FTimerHandle MoveRetryTimerHandle;
 };
 

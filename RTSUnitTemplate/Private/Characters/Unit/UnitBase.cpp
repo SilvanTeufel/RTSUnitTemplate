@@ -196,7 +196,6 @@ void AUnitBase::BeginPlay()
 	SetCollisionCooldown();
 
 	InitHealthbarOwner();
-
 }
 void AUnitBase::InitHealthbarOwner()
 {

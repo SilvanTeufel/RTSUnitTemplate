@@ -23,6 +23,7 @@
 #include "Engine/EngineTypes.h"    // For FOverlapResult and related collision types
 #include "Engine/OverlapResult.h"
 
+
 AControllerBase::AControllerBase() {
 	bShowMouseCursor = true;
 	DefaultMouseCursor = EMouseCursor::Crosshairs;
@@ -323,6 +324,180 @@ void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVect
 	Unit->SetRunLocation(DestinationLocation);
 }
 
+/*
+void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+    if (!HasAuthority() || !Unit)
+    {
+        return;
+    }
+
+    UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
+    if (!MovementComp)
+    {
+        return;
+    }
+
+    AAIController* AIController = Cast<AAIController>(Unit->GetController());
+    if (!AIController)
+    {
+        return;
+    }
+
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+    if (!NavSystem)
+    {
+        return;
+    }
+
+    // Attempt to perform line trace as a workaround
+    FHitResult HitResult;
+    if (PerformLineTrace(Unit, DestinationLocation, HitResult))
+    {
+        // If line trace hits a pawn, handle the obstacle
+        OnLineTraceHit(Unit, DestinationLocation);
+    }
+    else
+    {
+        // No obstacle detected; proceed with movement
+        ContinueMoveToLocation(Unit, DestinationLocation);
+    }
+}
+
+bool AControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
+{
+    FVector StartLocation = Unit->GetActorLocation();
+    FVector EndLocation = DestinationLocation;
+
+	EndLocation.Z = StartLocation.Z;
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
+
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        StartLocation,
+        EndLocation,
+        ECC_Pawn, // Trace against pawns only
+        QueryParams
+    );
+
+	// Draw the line trace for visualization
+	FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+	DrawDebugLine(GetWorld(), StartLocation, EndLocation, TraceColor, false, 2.0f, 0, 1.0f);
+
+	
+    return bHit;
+}
+
+void AControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+	// Log or handle the hit as needed
+	UE_LOG(LogTemp, Warning, TEXT("LineTrace hit a pawn. Scheduling movement retry."));
+    
+	// Calculate the alternate location
+	FVector AlternateLocation = CalculateAlternateLocation(Unit, DestinationLocation);
+	ContinueMoveToLocation(Unit, AlternateLocation);
+	// Set a timer to retry movement after 3 seconds
+
+	FTimerDelegate TimerDel = FTimerDelegate::CreateUObject(this, &AControllerBase::ContinueMoveToLocation, Unit, DestinationLocation);
+    
+	GetWorld()->GetTimerManager().SetTimer(
+		MoveRetryTimerHandle,
+		TimerDel,
+		1.0f,
+		false
+	);
+}
+
+FVector AControllerBase::CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation)
+{
+	FVector CurrentLocation = Unit->GetActorLocation();
+	FVector Direction = DestinationLocation - CurrentLocation;
+    
+	// Zero out the Z component to ensure movement in the XY plane
+	Direction.Z = 0.0f;
+    
+
+	if (Direction.IsNearlyZero())
+	{
+		return DestinationLocation; // Fallback to original destination
+	}
+    
+	Direction = Direction.GetSafeNormal();
+    
+	// Calculate the right vector perpendicular to the direction in the XY plane
+	FVector RightVector = FVector::CrossProduct(Direction, FVector::UpVector).GetSafeNormal();
+    
+	if (RightVector.IsNearlyZero())
+	{
+		return DestinationLocation; // Fallback to original destination
+	}
+    
+	// Calculate a new location offset by 90 degrees to the right
+	FVector AlternateLocation = CurrentLocation + (RightVector * 500.f);
+
+	DrawDebugSphere(GetWorld(), AlternateLocation, 50.0f, 12, FColor::Blue, false, 5.0f);
+
+	return AlternateLocation;
+}
+
+void AControllerBase::ContinueMoveToLocation(AUnitBase* Unit, FVector DestinationLocation)
+{
+    if (!HasAuthority() || !Unit)
+    {
+        return;
+    }
+
+	UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
+	if (!MovementComp)
+	{
+		return;
+	}
+
+	AAIController* AIController = Cast<AAIController>(Unit->GetController());
+	if (!AIController)
+	{
+		return;
+	}
+
+	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (!NavSystem)
+	{
+		return;
+	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("ContinueMoveToLocation DestinationLocation: %s"), *DestinationLocation.ToString());
+
+	DrawDebugSphere(GetWorld(), DestinationLocation, 50.0f, 12, FColor::Silver, false, 5.0f);
+    // Set the run location and mark that pathfinding has been used
+    SetRunLocation(Unit, DestinationLocation);
+    Unit->UEPathfindingUsed = true;
+	SetUnitState_Replication(Unit, 1);
+    // Prepare the move request
+    FAIMoveRequest MoveRequest;
+    MoveRequest.SetGoalLocation(DestinationLocation);
+    MoveRequest.SetAcceptanceRadius(5.0f);
+    //MoveRequest.SetUsePathfinding(true);
+    //MoveRequest.SetCanStrafe(false);
+   //MoveRequest.SetAllowPartialPath(false);
+
+    FNavPathSharedPtr NavPath;
+
+    // Execute the move
+    EPathFollowingRequestResult::Type MoveResult = AIController->MoveTo(MoveRequest, &NavPath);
+
+    if (MoveResult == EPathFollowingRequestResult::RequestSuccessful && NavPath)
+    {
+    	UE_LOG(LogTemp, Warning, TEXT("!Successful movement!"));
+        FNavMeshPath* NavMeshPath = NavPath->CastPath<FNavMeshPath>();
+        if (NavMeshPath)
+        {
+            NavMeshPath->OffsetFromCorners(UEPathfindingCornerOffset);
+        }
+    }
+}
+*/
+
 void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
 
@@ -331,10 +506,21 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 		return;
 	}
 	
-	if (!Unit || !Unit->GetCharacterMovement())
+	if (!Unit)
 	{
 		return;
 	}
+
+
+	// Enable avoidance on the movement component
+	UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
+
+	if (!MovementComp)
+	{
+		return;
+	}
+
+	
 
 	// Check if we have a valid AI controller for the unit
 	AAIController* AIController = Cast<AAIController>(Unit->GetController());
@@ -349,14 +535,27 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 	{
 		return;
 	}
+
+	// Workaround because avoidance is not working.
+	// Do a LineTrace to the Destination. If the Linetrace hits a Pawn then:
+	// Start a Timer which executes the rest of the code NavPath + MoveRequest in 3 Seconds.
+	// Calc a new Calculation 90° to the Location of the Destionation
+	// and Execute the Rest of the Code with the Calculated Location
+	
 		
 	SetRunLocation(Unit, DestinationLocation);
 	Unit->UEPathfindingUsed = true;
+	Unit->SetUEPathfinding = true;
 	// Move the unit to the destination location using the navigation system
+	/*
 	FAIMoveRequest MoveRequest;
 	MoveRequest.SetGoalLocation(DestinationLocation);
 	MoveRequest.SetAcceptanceRadius(5.0f); // Set an acceptance radius for reaching the destination
-	
+	MoveRequest.SetUsePathfinding(true); // Ensure pathfinding is used
+	MoveRequest.SetCanStrafe(false); // Example setting, adjust as needed
+	MoveRequest.SetAllowPartialPath(false); // Example setting, adjust as needed
+
+
 	FNavPathSharedPtr NavPath;
 	
 	AIController->MoveTo(MoveRequest, &NavPath);
@@ -369,6 +568,7 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 			NavMeshPath->OffsetFromCorners(UEPathfindingCornerOffset);
 		}
 	}
+	*/
 }
 
 void AControllerBase::SetUnitState_Multi_Implementation(AUnitBase* Unit, int State)

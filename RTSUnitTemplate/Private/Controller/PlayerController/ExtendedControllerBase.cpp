@@ -1151,7 +1151,6 @@ void AExtendedControllerBase::RightClickPressed()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	
-	
 	if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		if(!CheckClickOnWorkArea(Hit))
 		{
@@ -1386,7 +1385,6 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 {
 	if (!UnitBase) return;
 	//if (UnitBase->TeamId == SelectableTeamId){
-		UE_LOG(LogTemp, Warning, TEXT("On Server!"));
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		if (UnitBase->ActivatedAbilityInstance)

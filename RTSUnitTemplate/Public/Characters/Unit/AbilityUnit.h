@@ -73,6 +73,9 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Patrol;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TEnumAsByte<UnitData::EState> StoredUnitState = UnitData::Idle;
 	///////////////////////////////////////////////////////////////////
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)

@@ -31,6 +31,14 @@ class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
 	GENERATED_BODY()
 
 private:
+	// Workaround helper functions
+	bool MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation);
+	bool PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult);
+	bool OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation);
+	FVector CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation);
+
+	// Timer handle for delayed movement
+	FTimerHandle MoveRetryTimerHandle;
 
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
