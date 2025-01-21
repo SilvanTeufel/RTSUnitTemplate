@@ -59,7 +59,19 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-	
+
+	// Example: Inside AUnitBase::AUnitBase() constructor
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (MoveComp)
+	{
+		MoveComp->bUseRVOAvoidance = true;
+		MoveComp->AvoidanceWeight = 10.0f;         // Higher weight = higher priority
+		MoveComp->SetAvoidanceEnabled(true);  // Adjust based on unit size
+		MoveComp->AvoidanceConsiderationRadius = 1000.0f; // How far to check for obstacles
+	}
+
+	SetCanAffectNavigationGeneration(true, true); // Enable dynamic NavMesh updates
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 	//bCanProcessCollision = true;
 	//SetLODCount(0);
 	/*

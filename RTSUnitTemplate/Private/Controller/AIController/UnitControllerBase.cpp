@@ -21,6 +21,9 @@
 #include "NavigationSystem.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "NavFilters/NavigationQueryFilter.h"
+
+#include "AI/Navigation/NavigationTypes.h"
 
 #include "Navigation/PathFollowingComponent.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -1211,13 +1214,14 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 		UnitBase->SetUEPathfinding = false;
-		if(UnitToIgnore) return MoveToUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
-		return MoveToUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
+		if(UnitToIgnore) return MoveToLocationUEPathFinding(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
+		return MoveToLocationUEPathFinding(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
 	//}
 
 	
 }
 
+/*
 void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
 {
 	if(!UnitBase->SetUEPathfinding)
@@ -1349,8 +1353,91 @@ bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& Destina
 	
 	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
 }
+*/
+
+bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
+{
+	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
+	{
+		return false;
+	}
+
+	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (!NavSystem)
+	{
+		return false;
+	}
+
+	// Configure the move request
+	FAIMoveRequest MoveRequest(DestinationLocation);
+	MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
+	MoveRequest.SetUsePathfinding(true);
+	MoveRequest.SetAllowPartialPath(false); // Force full paths
+
+	// Add ignored actors (optional)
+	if (UnitToIgnore)
+	{
+		//MoveRequest.AddIgnoredActor(UnitToIgnore);
+	}
+
+	// Get the navigation agent properties (e.g., agent radius/height)
+	//const FNavAgentProperties& NavAgentProps = Unit->GetCharacterMovement()->GetNavAgentPropertiesRef();
+	//FVector StartLocation = Unit->GetActorLocation();
+
+	// Get navigation data and locations
+	ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance();
+
+	if (!NavData)
+	{
+		return false; // Navigation data not available
+	}
+	
+	FVector StartLocation = Unit->GetActorLocation();
+	FVector EndLocation = MoveRequest.GetGoalLocation();
 
 
+	
+	// Create navigation filter CORRECTED
+	FSharedConstNavQueryFilter Filter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
+	//FSharedNavQueryFilter Filter = UNavigationQueryFilter::GetQueryFilter(NavData, Unit);
+
+	// Build pathfinding query
+	FPathFindingQuery Query(
+		*Unit,
+		*NavData,
+		StartLocation,
+		EndLocation,
+		Filter
+	);
+	UE_LOG(LogTemp, Warning, TEXT("CREATED QUERY!"));
+	// Find path
+	FNavPathSharedPtr NavPath;
+	FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
+
+	//const bool BValidPath = PathResult.IsSuccessful(); // && !NavPath->IsPartial(); // NavPath.IsValid() && !NavPath->IsPartial();
+	//if (!BValidPath)
+	//{
+		//return false; // Path is invalid or partial
+	//}
+
+	// Start movement with avoidance
+	FPathFollowingRequestResult RequestID = MoveTo(MoveRequest, &NavPath);
+
+	const bool BValidPath = PathResult.IsSuccessful() && NavPath.IsValid() && !NavPath->IsPartial();
+	if (!BValidPath)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PATH IS INVALID!!!!"));
+		return false; // Path is invalid or partial
+	}
+
+	
+	Unit->SetRunLocation(DestinationLocation);
+	Unit->UEPathfindingUsed = true;
+	UE_LOG(LogTemp, Warning, TEXT("END START MOVE!"));
+	return true;
+}
+
+/*
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("AUnitControllerBase::MoveToLocationUEPathFinding"));
@@ -1415,7 +1502,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 	return true;
 }
-
+*/
 void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)
 {
 	if (!Unit || !Unit->GetCharacterMovement())

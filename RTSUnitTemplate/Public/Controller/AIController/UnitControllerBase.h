@@ -31,6 +31,7 @@ class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
 	GENERATED_BODY()
 
 private:
+	/*
 	// Workaround helper functions
 	bool MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation);
 	bool PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult);
@@ -39,7 +40,7 @@ private:
 
 	// Timer handle for delayed movement
 	FTimerHandle MoveRetryTimerHandle;
-
+*/
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;
@@ -245,8 +246,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool SetUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds, FVector Location, AUnitBase* UnitToIgnore = nullptr);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		//void SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location);
 
 	//UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	//bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
