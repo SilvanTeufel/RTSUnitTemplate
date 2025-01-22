@@ -1,31 +1,26 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
+// UnitControllerBase.h (Corresponding Header)
 #include "Controller/AIController/UnitControllerBase.h"
-#include <string>
+
+// Engine Headers
+#include "GameFramework/Controller.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "NavigationSystem.h"
+#include "Navigation/PathFollowingComponent.h"
+
+// Project-Specific Headers
 #include "Landscape.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/Waypoint.h"
-#include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/GameSession.h"
-#include "Kismet/KismetMathLibrary.h"
-#include "Runtime/Engine/Classes/Kismet/GameplayStatics.h"
-#include "Runtime/Engine/Classes/GameFramework/Controller.h"
-#include "Perception/AiPerceptionComponent.h"
-#include "Perception/AiSenseConfig_Sight.h"
-#include "Components/SkeletalMeshComponent.h"
-#include "Components/CapsuleComponent.h"
 #include "Controller/PlayerController/ControllerBase.h"
-#include "Net/UnrealNetwork.h"
-#include "GAS/GameplayAbilityBase.h"
-#include "NavigationSystem.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Net/UnrealNetwork.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "NavFilters/NavigationQueryFilter.h"
-
-#include "AI/Navigation/NavigationTypes.h"
-
-#include "Navigation/PathFollowingComponent.h"
+#include "CrowdManagerBase.h"
+#include "Navigation/CrowdAgentInterface.h"
+#include "Navigation/CrowdManager.h"
 #include "Widgets/UnitBaseHealthBar.h"
 
 void AUnitControllerBase::DetectAndLoseUnits()
@@ -54,7 +49,6 @@ void AUnitControllerBase::DetectAndLoseUnits()
 
 AUnitControllerBase::AUnitControllerBase()
 {
-	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickInterval = TickInterval;
 }
@@ -1355,8 +1349,11 @@ bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& Destina
 }
 */
 
+
+
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
+	UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
 	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
 	{
 		return false;
@@ -1365,6 +1362,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("BO NAVSystem FOUND"));
 		return false;
 	}
 
@@ -1389,14 +1387,14 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 	if (!NavData)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("BO NAVDATA FOUND"));
 		return false; // Navigation data not available
 	}
 	
 	FVector StartLocation = Unit->GetActorLocation();
-	FVector EndLocation = MoveRequest.GetGoalLocation();
-
-
+	FVector EndLocation = DestinationLocation; //MoveRequest.GetGoalLocation();
 	
+
 	// Create navigation filter CORRECTED
 	FSharedConstNavQueryFilter Filter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
 	//FSharedNavQueryFilter Filter = UNavigationQueryFilter::GetQueryFilter(NavData, Unit);
@@ -1409,33 +1407,43 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 		EndLocation,
 		Filter
 	);
-	UE_LOG(LogTemp, Warning, TEXT("CREATED QUERY!"));
-	// Find path
-	FNavPathSharedPtr NavPath;
-	FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
 
-	//const bool BValidPath = PathResult.IsSuccessful(); // && !NavPath->IsPartial(); // NavPath.IsValid() && !NavPath->IsPartial();
-	//if (!BValidPath)
-	//{
-		//return false; // Path is invalid or partial
-	//}
+	// Find path
+	//FNavPathSharedPtr NavPath;
+	FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
+	FNavPathSharedPtr NavPath = PathResult.Path; // Critical fix
+	//Unit->MoveToLocation(DestinationLocation);	
 
 	// Start movement with avoidance
 	FPathFollowingRequestResult RequestID = MoveTo(MoveRequest, &NavPath);
 
-	const bool BValidPath = PathResult.IsSuccessful() && NavPath.IsValid() && !NavPath->IsPartial();
-	if (!BValidPath)
+
+	// Inside FPathFindingResult PathResult = NavSystem->FindPathSync(...)
+	if (!PathResult.IsSuccessful())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PATH IS INVALID!!!!"));
-		return false; // Path is invalid or partial
+		UE_LOG(LogTemp, Warning, TEXT("Pathfinding failed. Reason: %s"), 
+			*UEnum::GetValueAsString(PathResult.Result));
+		return false;
 	}
 
+	if (NavPath.IsValid() && NavPath->IsPartial())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Path is partial. End location: %s"), 
+			*NavPath->GetPathPoints().Last().Location.ToString());
+		return false;
+	}
+
+	if (!NavPath.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NavPath is invalid."));
+		return false;
+	}
 	
 	Unit->SetRunLocation(DestinationLocation);
 	Unit->UEPathfindingUsed = true;
-	UE_LOG(LogTemp, Warning, TEXT("END START MOVE!"));
 	return true;
 }
+
 
 /*
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
@@ -1501,8 +1509,8 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	}
 
 	return true;
-}
-*/
+}*/
+
 void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)
 {
 	if (!Unit || !Unit->GetCharacterMovement())

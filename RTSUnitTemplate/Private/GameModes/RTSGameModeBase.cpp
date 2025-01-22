@@ -440,7 +440,8 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 
 		
 		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-		
+
+		UnitBase->UpdateUnitNavigation();
 		
 		return UnitBase;
 	}
@@ -562,7 +563,9 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitSpawnDataSet.Id = SpawnParameter.Id;
 				UnitSpawnDataSet.UnitBase = UnitBase;
 				UnitSpawnDataSet.SpawnParameter = SpawnParameter;
-		
+
+				UnitBase->UpdateUnitNavigation();
+				
 				UnitSpawnDataSets.Add(UnitSpawnDataSet);
 				
 			}

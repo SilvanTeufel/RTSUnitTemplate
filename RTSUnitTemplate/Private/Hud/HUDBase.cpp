@@ -1,19 +1,24 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
+// HUDBase.h (Corresponding Header)
 #include "Hud/HUDBase.h"
+
+// Engine Headers
 #include "Blueprint/UserWidget.h"
 #include "DrawDebugHelpers.h"
-#include "Characters/Unit/HealingUnit.h"
 #include "Components/CapsuleComponent.h"
-#include "Elements/Actor/ActorElementData.h"
-#include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Components/WidgetSwitcher.h"
+#include "Kismet/GameplayStatics.h"
+#include "GeometryCollection/GeometryCollectionSimulationTypes.h"
+#include "Net/UnrealNetwork.h"
+
+// Project-Specific Headers
+#include "Characters/Unit/HealingUnit.h"
+#include "Elements/Actor/ActorElementData.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
-#include "Kismet/GameplayStatics.h"
-#include "Net/UnrealNetwork.h"
 
 
 void AHUDBase::DrawHUD()

@@ -16,6 +16,9 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameInstances/CollisionManager.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "NavFilters/NavigationQueryFilter.h"
+#include "Navigation/CrowdAgentInterface.h"
+#include "Navigation/CrowdManager.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 
@@ -65,23 +68,22 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	if (MoveComp)
 	{
 		MoveComp->bUseRVOAvoidance = true;
-		MoveComp->AvoidanceWeight = 10.0f;         // Higher weight = higher priority
+		MoveComp->AvoidanceWeight = 1.0f;         // Higher weight = higher priority
 		MoveComp->SetAvoidanceEnabled(true);  // Adjust based on unit size
-		MoveComp->AvoidanceConsiderationRadius = 1000.0f; // How far to check for obstacles
+		MoveComp->AvoidanceConsiderationRadius = 100.0f; // How far to check for obstacles
 	}
 
 	SetCanAffectNavigationGeneration(true, true); // Enable dynamic NavMesh updates
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-	//bCanProcessCollision = true;
-	//SetLODCount(0);
-	/*
-	if (HasAuthority())
+
+
+	// Force navigation update
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (NavSys)
 	{
-		bReplicates = true;
-		SetReplicateMovement(true);
-		GetMesh()->SetIsReplicated(true);
+		NavSys->UpdateActorInNavOctree(*this); // Update NavMesh representation
 	}
-	*/
+	
 }
 
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -209,6 +211,9 @@ void AUnitBase::BeginPlay()
 
 	InitHealthbarOwner();
 }
+
+
+
 void AUnitBase::InitHealthbarOwner()
 {
 	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
@@ -771,7 +776,9 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			
 			if(Waypoint)
 				UnitBase->NextWaypoint = Waypoint;
-		
+
+			UnitBase->UpdateUnitNavigation();
+			
 			if(SummonedUnitIndexes.Num() < i+1 || SummonContinuously)
 			{
 				int UIndex = GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
@@ -832,4 +839,21 @@ void AUnitBase::SetUnitBase(int UIndex, AUnitBase* NewUnit)
 
 	// If no unit matches the UnitIndex, you can either return false, 
 	// or handle it based on how you want to treat units that are not found
+}
+
+
+void AUnitBase::UpdateUnitNavigation()
+{
+// Force NavMesh update for this unit
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (NavSys)
+	{
+		NavSys->UpdateActorInNavOctree(*this);
+	}
+
+	// Optional: Add delay if needed for physics stabilization
+	GetWorld()->GetTimerManager().SetTimerForNextTick([this](){
+		UpdateNavigationRelevance();
+	});
 }

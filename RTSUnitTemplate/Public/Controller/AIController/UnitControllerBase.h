@@ -3,7 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AIController.h"
+#include "DetourCrowdAIController.h"
+
 #include "Navigation/PathFollowingComponent.h"
 
 #include "Characters/Unit/UnitBase.h"
@@ -26,7 +27,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnMoveCompletedDelegate, FAIReques
  */
 
 UCLASS()
-class RTSUNITTEMPLATE_API AUnitControllerBase : public AAIController
+class RTSUNITTEMPLATE_API AUnitControllerBase : public  ADetourCrowdAIController
 {
 	GENERATED_BODY()
 

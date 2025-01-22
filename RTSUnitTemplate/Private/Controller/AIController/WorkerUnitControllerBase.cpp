@@ -1,25 +1,20 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-
+// WorkerUnitControllerBase.h (Corresponding Header)
 #include "Controller/AIController/WorkerUnitControllerBase.h"
+
+// Engine Headers
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/Controller.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Components/SkeletalMeshComponent.h"
+
+// Project-Specific Headers
 #include "Landscape.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Actors/Waypoint.h"
 #include "Actors/WorkResource.h"
-#include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/GameSession.h"
-#include "Kismet/KismetMathLibrary.h"
-#include "Runtime/Engine/Classes/Kismet/GameplayStatics.h"
-#include "Runtime/Engine/Classes/GameFramework/Controller.h"
-#include "Perception/AiPerceptionComponent.h"
-#include "Perception/AiSenseConfig_Sight.h"
-#include "Components/SkeletalMeshComponent.h"
-#include "Components/CapsuleComponent.h"
-#include "NavigationSystem.h"
-#include "Characters/Unit/BuildingBase.h"
-#include "Controller/PlayerController/ControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
-#include "Net/UnrealNetwork.h"
 
 void AWorkerUnitControllerBase::Tick(float DeltaSeconds)
 {
@@ -713,6 +708,7 @@ void AWorkerUnitControllerBase::DetachWorkResource(AWorkResource* WorkResource)
 }
 
 
+
 AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
     FUnitSpawnParameter SpawnParameter,
     FVector Location,
@@ -742,7 +738,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
     {
         return nullptr;
     }
-
+	
     // 3) (Optional) AI-Controller spawnen und zuweisen
     if (SpawnParameter.UnitControllerBaseClass)
     {
@@ -771,8 +767,8 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
         float HalfHeight = MeshBounds.BoxExtent.Z;
 
         // Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
-        FVector TraceStart = Location + FVector(0.f, 0.f, 5000.f);
-        FVector TraceEnd   = Location - FVector(0.f, 0.f, 5000.f);
+        FVector TraceStart = Location + FVector(0.f, 0.f, 100.f);
+        FVector TraceEnd   = Location - FVector(0.f, 0.f, 100.f);
 
         FHitResult HitResult;
         FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
@@ -804,11 +800,14 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
         // Aktualisiere EnemyTransform mit dem angepassten Z-Wert
         EnemyTransform.SetLocation(Location);
     }
+	
 
+	
     // --------------------------------------------
     // 5) Jetzt wird der Actor final in die Welt gesetzt
     // --------------------------------------------
     UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
 
     // 6) Ab hier folgt dein bisheriger Setup-Code
     if (UnitBase->UnitToChase)
@@ -848,6 +847,24 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
 
     GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 
+	UnitBase->UpdateUnitNavigation();
+
+	/*
+	// Force NavMesh update for this unit
+	if (UnitBase)
+	{
+		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+		if (NavSys)
+		{
+			NavSys->UpdateActorInNavOctree(*UnitBase);
+		}
+
+		// Optional: Add delay if needed for physics stabilization
+		GetWorld()->GetTimerManager().SetTimerForNextTick([UnitBase](){
+			if (UnitBase) UnitBase->UpdateNavigationRelevance();
+		});
+	}
+	*/
     return UnitBase;
 }
 

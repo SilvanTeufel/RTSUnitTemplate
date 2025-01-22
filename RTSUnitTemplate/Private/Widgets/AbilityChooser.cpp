@@ -144,7 +144,7 @@ void UAbilityChooser::ClearAbilityArray()
     Abilities.Empty();
     
     // If you need to do anything else after clearing, do it here...
-    UE_LOG(LogTemp, Log, TEXT("Cleared Ability array #%d"), ControllerBase->AbilityArrayIndex);
+   // UE_LOG(LogTemp, Log, TEXT("Cleared Ability array #%d"), ControllerBase->AbilityArrayIndex);
 }
 
 
@@ -172,7 +172,7 @@ void UAbilityChooser::SetAbilityIcons()
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
+           // UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
         }
     }
 }

@@ -533,7 +533,7 @@ void UUnitWidgetSelector::SetUnitIcons(TArray<AUnitBase*>& Units)
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
+			//UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
 		}
 	}
 }

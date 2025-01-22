@@ -3,11 +3,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Navigation/CrowdAgentInterface.h"
+#include "Navigation/CrowdFollowingComponent.h"
 #include "WorkingUnitBase.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
 #include "PathSeekerBase.h"
+#include "Navigation/CrowdFollowingComponent.h"
+#include "NavigationSystem.h"
+#include "AI/Navigation/NavigationTypes.h"
 #include "UnitBase.generated.h"
 
 
@@ -16,10 +21,31 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
 
+
+//public:
+	// ICrowdAgentInterface implementation
+
+
+	// Movement function
+	//void MoveToLocation(const FVector& Destination);
+
+//protected:
+	//virtual void BeginDestroy() override;
+
+//private:
+	// CrowdFollowingComponent to integrate with UCrowdManager
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crowd", meta = (AllowPrivateAccess = "true"))
+	//UCrowdFollowingComponent* CrowdFollowingComponent;
+
+
+	
 private:
 	FTimerHandle CollisionCooldownTimer;
+
+
 	
 public:
+	
 	bool bCanProcessCollision = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -361,6 +387,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EnergyCost = 20.f;
+
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void UpdateUnitNavigation();
 };
 
 

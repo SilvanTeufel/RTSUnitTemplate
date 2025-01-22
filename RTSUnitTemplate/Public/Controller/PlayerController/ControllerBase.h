@@ -256,6 +256,6 @@ private:
 	void ContinueMoveToLocationWithStoredUnits(FVector DestinationLocation);
 	*/
 	// Timer handle for delayed movement
-	FTimerHandle MoveRetryTimerHandle;
+	//FTimerHandle MoveRetryTimerHandle;
 };
 
