@@ -363,6 +363,51 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 }
 
 
+bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId) // Remove trailing 'const'
+{
+	// Validate team and resources
+	if (TeamResources.Num() == 0 || TeamId < 0 || TeamId >= NumberOfTeams)
+		return false;
+
+	// Check affordability first
+	if (!CanAffordConstruction(ConstructionCost, TeamId))
+		return false;
+
+	// Create cost mapping
+	TMap<EResourceType, int32> CostMap;
+	CostMap.Add(EResourceType::Primary, ConstructionCost.PrimaryCost);
+	CostMap.Add(EResourceType::Secondary, ConstructionCost.SecondaryCost);
+	CostMap.Add(EResourceType::Tertiary, ConstructionCost.TertiaryCost);
+	CostMap.Add(EResourceType::Rare, ConstructionCost.RareCost);
+	CostMap.Add(EResourceType::Epic, ConstructionCost.EpicCost);
+	CostMap.Add(EResourceType::Legendary, ConstructionCost.LegendaryCost);
+
+	// Deduct resources using NON-CONST references
+	for (FResourceArray& ResourceArray : TeamResources) // Remove 'const'
+	{
+		if (CostMap.Contains(ResourceArray.ResourceType))
+		{
+			if (!ResourceArray.Resources.IsValidIndex(TeamId))
+			{
+				UE_LOG(LogTemp, Error, TEXT("Invalid TeamID %d for resource deduction!"), TeamId);
+				return false;
+			}
+
+			// Now allowed to modify
+			ResourceArray.Resources[TeamId] -= CostMap[ResourceArray.ResourceType];
+		}
+	}
+
+	// Update game state
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources);
+	}
+
+	return true;
+}
+
 float AResourceGameMode::GetResource(int TeamId, EResourceType RType)
 {
 	for (const FResourceArray& ResourceArray : TeamResources)

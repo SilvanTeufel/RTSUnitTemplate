@@ -45,8 +45,11 @@ void APerformanceUnit::BeginPlay()
 {
 	Super::BeginPlay();
 
-	SpawnFogOfWarManager();
-	
+	//SpawnFogOfWarManager();
+
+	GetWorld()->GetTimerManager().SetTimerForNextTick([this](){
+		SpawnFogOfWarManager();
+	});
 }
 
 void APerformanceUnit::Destroyed()

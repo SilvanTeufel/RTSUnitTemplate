@@ -847,7 +847,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
 
     GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 
-	UnitBase->UpdateUnitNavigation();
+	UnitBase->ScheduleDelayedNavigationUpdate();
 
 	/*
 	// Force NavMesh update for this unit

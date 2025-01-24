@@ -37,7 +37,8 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crowd", meta = (AllowPrivateAccess = "true"))
 	//UCrowdFollowingComponent* CrowdFollowingComponent;
 
-
+protected:
+	FTimerHandle NavigationUpdateTimer; 
 	
 private:
 	FTimerHandle CollisionCooldownTimer;
@@ -388,7 +389,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EnergyCost = 20.f;
 
-	UFUNCTION(BlueprintCallable, Category = Ability)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ScheduleDelayedNavigationUpdate();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateUnitNavigation();
 };
 

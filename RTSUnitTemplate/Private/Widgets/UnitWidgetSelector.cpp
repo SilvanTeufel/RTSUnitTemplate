@@ -97,8 +97,7 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
 			CurrentAbilityIcon->SetBrushFromTexture(
 				UnitBase->ActivatedAbilityInstance->AbilityIcon, true
 			);
-
-	
+			
 			CurrentAbilityButton->SetVisibility(ESlateVisibility::Visible);
 		}
 		else

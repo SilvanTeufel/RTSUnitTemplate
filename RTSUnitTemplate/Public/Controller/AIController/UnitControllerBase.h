@@ -32,16 +32,17 @@ class RTSUNITTEMPLATE_API AUnitControllerBase : public  ADetourCrowdAIController
 	GENERATED_BODY()
 
 private:
-	/*
+
 	// Workaround helper functions
-	bool MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation);
+	//bool MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult);
-	bool OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation);
-	FVector CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation);
+	//bool OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation);
+	//FVector CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 
 	// Timer handle for delayed movement
-	FTimerHandle MoveRetryTimerHandle;
-*/
+	//FTimerHandle MoveRetryTimerHandle;
+
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;
@@ -145,6 +146,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateToAttackUnit", Keywords = "RTSUnitTemplate RotateToAttackUnit"), Category = RTSUnitTemplate)
 		void RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool Debug = false;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UnitControlStateMachine", Keywords = "RTSUnitTemplate UnitControlStateMachine"), Category = RTSUnitTemplate)
 		void UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds);
@@ -253,6 +257,13 @@ public:
 	//UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	//bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool DirectMoveToLocation(AUnitBase* Unit, const FVector& DestinationLocation);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore = nullptr);
+
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore = nullptr);
 

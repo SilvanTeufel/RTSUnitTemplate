@@ -777,7 +777,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			if(Waypoint)
 				UnitBase->NextWaypoint = Waypoint;
 
-			UnitBase->UpdateUnitNavigation();
+			UnitBase->ScheduleDelayedNavigationUpdate();
 			
 			if(SummonedUnitIndexes.Num() < i+1 || SummonContinuously)
 			{
@@ -842,7 +842,7 @@ void AUnitBase::SetUnitBase(int UIndex, AUnitBase* NewUnit)
 }
 
 
-void AUnitBase::UpdateUnitNavigation()
+void AUnitBase::ScheduleDelayedNavigationUpdate()
 {
 // Force NavMesh update for this unit
 
@@ -851,9 +851,37 @@ void AUnitBase::UpdateUnitNavigation()
 	{
 		NavSys->UpdateActorInNavOctree(*this);
 	}
-
+	
 	// Optional: Add delay if needed for physics stabilization
 	GetWorld()->GetTimerManager().SetTimerForNextTick([this](){
 		UpdateNavigationRelevance();
 	});
+
+
+	/*
+	// Clear any existing timer first
+	GetWorld()->GetTimerManager().ClearTimer(NavigationUpdateTimer);
+
+	// Schedule the update to happen once after 1 second
+	GetWorld()->GetTimerManager().SetTimer(
+		NavigationUpdateTimer,
+		this,
+		&AUnitBase::UpdateUnitNavigation,
+		1.0f,    // 1-second delay
+		false     // Do NOT loop
+	);*/
+
+}
+
+void AUnitBase::UpdateUnitNavigation()
+{
+	// Force NavMesh update immediately
+	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+	{
+		NavSys->UpdateActorInNavOctree(*this);
+	}
+
+	// Update navigation relevance immediately after navmesh update
+	UpdateNavigationRelevance();
+	
 }

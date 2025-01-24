@@ -272,7 +272,7 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 			GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 		}
 
-		UnitBase->UpdateUnitNavigation();
+		UnitBase->ScheduleDelayedNavigationUpdate();
 		
 		SpawnedUnits.Emplace(UnitBase);
 		return UnitBase->UnitIndex;

@@ -76,21 +76,25 @@ void AGASUnit::GiveAbilities()
 	{
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : DefaultAbilities)
 		{
+			StartupAbility.GetDefaultObject()->UpdateTooltipText();
 			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
 
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :SecondAbilities)
 		{
+			StartupAbility.GetDefaultObject()->UpdateTooltipText();
 			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
 		
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :ThirdAbilities)
 		{
+			StartupAbility.GetDefaultObject()->UpdateTooltipText();
 			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
 
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility :FourthAbilities)
 		{
+			StartupAbility.GetDefaultObject()->UpdateTooltipText();
 			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
 	}

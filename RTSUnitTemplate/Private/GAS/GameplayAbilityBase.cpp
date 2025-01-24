@@ -6,7 +6,7 @@
 
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
-	
+	UpdateTooltipText();
 }
 
 void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale) // FVector TargetLocation
@@ -59,4 +59,22 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 			}
 		}
 	}
+}
+
+
+// In cpp file
+FText UGameplayAbilityBase::CreateTooltipText() const
+{
+	const FString costString = ConstructionCost.ToFormattedString();
+	const FString fullText = FString::Printf(TEXT("%s\n\n%s\n\nKeyboard %s"),
+		*AbilityName,
+		*costString, 
+		*KeyboardKey);
+
+	return FText::FromString(fullText);
+}
+
+void UGameplayAbilityBase::UpdateTooltipText()
+{
+	ToolTipText = CreateTooltipText();
 }

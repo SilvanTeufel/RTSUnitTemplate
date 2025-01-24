@@ -1053,7 +1053,8 @@ void AExtendedControllerBase::LeftClickPressed()
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
 		int32 NumUnits = SelectedUnits.Num();
-		int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+		// int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+		const int32 GridSize = ComputeGridSize(NumUnits);
 		AWaypoint* BWaypoint = nullptr;
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
@@ -1063,8 +1064,9 @@ void AExtendedControllerBase::LeftClickPressed()
 				int32 Row = i / GridSize;     // Row index
 				int32 Col = i % GridSize;     // Column index
 
-				FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-		
+				//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+				const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+			
 				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
 				{
 					// Do Nothing

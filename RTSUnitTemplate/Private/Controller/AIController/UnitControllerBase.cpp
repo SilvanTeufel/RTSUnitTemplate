@@ -35,14 +35,14 @@ void AUnitControllerBase::DetectAndLoseUnits()
 		if(SetState || MyUnitBase->GetUnitState() == UnitData::Patrol || MyUnitBase->GetUnitState() == UnitData::PatrolRandom || MyUnitBase->GetUnitState() == UnitData::PatrolIdle)
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
-			DetectUnitsAndSetState(MyUnitBase, 0, true);
 			LoseUnitToChase(MyUnitBase);
+			DetectUnitsAndSetState(MyUnitBase, 0, true);
 		}
 		else
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
-			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 			LoseUnitToChase(MyUnitBase);
+			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 		}
 	}
 }
@@ -237,18 +237,18 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		{
 		case UnitData::None:
 		{
-			//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("None"));
 		}
 		break;
 		case UnitData::Dead:
 		{
-			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Dead"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("Dead"));
 			Dead(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Patrol:
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("Patrol"));
 				
 			if(UnitBase->UsingUEPathfindingPatrol)
 				PatrolUEPathfinding(UnitBase, DeltaSeconds);
@@ -258,8 +258,11 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		break;
 		case UnitData::PatrolRandom:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
-
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("PatrolRandom"));
+				if (!UnitBase->NextWaypoint)
+				{
+					UnitBase->SetUnitState(UnitData::PatrolIdle);
+				}
 	
 				if(UnitBase->SetNextUnitToChase())
 				{
@@ -280,7 +283,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			break;
 		case UnitData::PatrolIdle:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("PatrolIdle"));
 				if(UnitBase->SetNextUnitToChase())
 				{
 					UnitBase->SetUEPathfinding = true;
@@ -307,7 +310,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			break;
 		case UnitData::Run:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Run"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Run"));
 				if(UnitBase->UEPathfindingUsed)
 					RunUEPathfinding(UnitBase, DeltaSeconds);
 				else
@@ -316,31 +319,32 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		break;
 		case UnitData::Chase:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Chase"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Chase"));
 				Chase(UnitBase, DeltaSeconds);
 			}
 		break;
 		case UnitData::Attack:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Attack"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("Attack"));
 			Attack(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Pause:
 		{
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Pause"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("Pause"));
 			Pause(UnitBase, DeltaSeconds);
 		}
 		break;
 
 		case UnitData::IsAttacked:
 		{
-			//if(UnitBase->TeamId == 1)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("IsAttacked"));
 			IsAttacked(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::EvasionChase:
 			{
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("EvasionChase"));
 				if(UnitBase->UnitControlTimer >= 7.f)
 				{
 					UnitBase->CollisionUnit = nullptr;
@@ -359,7 +363,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		{
 
 				
-			//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
+			if(Debug)UE_LOG(LogTemp, Warning, TEXT("Evasion"));
 			
 			if(UnitBase->CollisionUnit)
 			{
@@ -374,25 +378,25 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		break;
 		case UnitData::Rooted:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 				Rooted(UnitBase, DeltaSeconds);
 			}
 			break;
 		case UnitData::Casting:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 				Casting(UnitBase, DeltaSeconds);
 			}
 			break;
 		case UnitData::Idle:
 			{
-				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Idle"));
 				Idle(UnitBase, DeltaSeconds);
 			}
 		break;
 		default:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("default Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("default"));
 				UnitBase->SetUnitState(UnitData::Idle);
 			}
 		break;
@@ -714,7 +718,41 @@ FVector AUnitControllerBase::CalculateChaseLocation(AUnitBase* UnitBase)
 
 void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 {
-	
+
+	if (!UnitBase) return;
+
+	// Store the current chase target locally to avoid invalid access
+	AUnitBase* CurrentChaseTarget = UnitBase->UnitToChase;
+	if (!CurrentChaseTarget) return;
+
+	bool bShouldRemove = false;
+
+	// Check if the unit is dead
+	if (CurrentChaseTarget->GetUnitState() == UnitData::Dead)
+	{
+		bShouldRemove = true;
+	}
+	// Check if out of sight radius
+	else
+	{
+		const float Distance = GetPawn()->GetDistanceTo(CurrentChaseTarget);
+		if (Distance > LoseSightRadius)
+		{
+			bShouldRemove = true;
+		}
+	}
+
+	// Perform removal if needed
+	if (bShouldRemove)
+	{
+		// Safely remove from the array (RemoveSingle removes the first matching element)
+		UnitBase->UnitsToChase.RemoveSingle(CurrentChaseTarget);
+        
+		// Invalidate the chase target
+		UnitBase->UnitToChase = nullptr;
+	}
+
+	/*
 				if (UnitBase->UnitToChase)
 				{
 					float Distance = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
@@ -725,7 +763,7 @@ void AUnitControllerBase::LoseUnitToChase(AUnitBase* UnitBase)
 						UnitBase->UnitToChase = nullptr;
 					}
 				}
-	
+	*/
 	
 
 	/*
@@ -1143,7 +1181,7 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 	FVector ActorLocation = UnitBase->GetActorLocation();
 	FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
 	
-
+	const float Distance = FVector::Dist2D(ActorLocation, UnitBase->RunLocation);
 	
 		if (ActorLocation.Equals(UnitBase->RandomPatrolLocation, 200.f) ||
 			UnitBase->UnitControlTimer > UnitBase->NextWaypoint->RandomTime) 
@@ -1159,6 +1197,10 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 			
 			UnitBase->UnitControlTimer = 0.f;
 			UnitBase->SetUEPathfinding = true;
+		}else if (Distance <= UnitBase->StopRunTolerance)
+		{
+				UnitBase->SetUnitState(UnitData::Idle);
+				return;
 		}
 
 	if(UnitBase->CollisionUnit)
@@ -1208,8 +1250,8 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 		// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
 		UnitBase->SetUEPathfinding = false;
-		if(UnitToIgnore) return MoveToLocationUEPathFinding(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
-		return MoveToLocationUEPathFinding(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
+		if(UnitToIgnore) return MoveToLocationUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
+		return MoveToLocationUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
 	//}
 
 	
@@ -1288,7 +1330,7 @@ bool AUnitControllerBase::MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FV
     	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
     }
 }
-
+*/
 bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
 {
     FVector StartLocation = Unit->GetActorLocation();
@@ -1314,7 +1356,7 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
 	
     return bHit;
 }
-
+/*
 bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation)
 {
 	// Log or handle the hit as needed
@@ -1349,11 +1391,40 @@ bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& Destina
 }
 */
 
-
-
-bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
+bool AUnitControllerBase::DirectMoveToLocation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
-	UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
+	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
+	{
+		return false;
+	}
+
+	FAIMoveRequest MoveRequest(DestinationLocation);
+	MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
+	MoveRequest.SetUsePathfinding(false); // Direct movement
+
+
+	Unit->UEPathfindingUsed = true;
+	Unit->SetUEPathfinding = false;
+	FPathFollowingRequestResult MoveResult = MoveTo(MoveRequest);
+
+	return true;
+}
+
+
+bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
+{
+	
+	// Do a LineTrace here and just do a Regular Move if it succe
+	FHitResult HitResult;
+	if (!PerformLineTrace(Unit, DestinationLocation,  HitResult))
+	{
+		DirectMoveToLocation(Unit, DestinationLocation);
+		// A Walk without Navigation System
+		return true;
+	}
+	
+	
+	//UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
 	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
 	{
 		return false;
@@ -1362,7 +1433,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BO NAVSystem FOUND"));
+		UE_LOG(LogTemp, Warning, TEXT("NO NAVSystem FOUND"));
 		return false;
 	}
 
@@ -1375,19 +1446,17 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	// Add ignored actors (optional)
 	if (UnitToIgnore)
 	{
-		//MoveRequest.AddIgnoredActor(UnitToIgnore);
+	
 	}
 
-	// Get the navigation agent properties (e.g., agent radius/height)
-	//const FNavAgentProperties& NavAgentProps = Unit->GetCharacterMovement()->GetNavAgentPropertiesRef();
-	//FVector StartLocation = Unit->GetActorLocation();
+
 
 	// Get navigation data and locations
 	ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance();
 
 	if (!NavData)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BO NAVDATA FOUND"));
+		UE_LOG(LogTemp, Warning, TEXT("NO NAVDATA FOUND"));
 		return false; // Navigation data not available
 	}
 	
@@ -1423,6 +1492,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Pathfinding failed. Reason: %s"), 
 			*UEnum::GetValueAsString(PathResult.Result));
+		DirectMoveToLocation(Unit, DestinationLocation);
 		return false;
 	}
 
@@ -1430,12 +1500,14 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Path is partial. End location: %s"), 
 			*NavPath->GetPathPoints().Last().Location.ToString());
+		DirectMoveToLocation(Unit, DestinationLocation);
 		return false;
 	}
 
 	if (!NavPath.IsValid())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("NavPath is invalid."));
+		DirectMoveToLocation(Unit, DestinationLocation);
 		return false;
 	}
 	
@@ -1445,7 +1517,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 }
 
 
-/*
+
 bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("AUnitControllerBase::MoveToLocationUEPathFinding"));
@@ -1470,7 +1542,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 	FVector StartLocation = Unit->GetActorLocation();
 	FVector EndLocation = DestinationLocation;
-	FHitResult HitResult;
+
 	FCollisionQueryParams CollisionParams;
 	
 	if(UnitToIgnore) CollisionParams.AddIgnoredActor(UnitToIgnore);
@@ -1509,7 +1581,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	}
 
 	return true;
-}*/
+}
 
 void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)
 {

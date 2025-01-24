@@ -110,6 +110,10 @@ public:
 	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId);
+
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	float GetResource(int TeamId, EResourceType RType);
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Work)

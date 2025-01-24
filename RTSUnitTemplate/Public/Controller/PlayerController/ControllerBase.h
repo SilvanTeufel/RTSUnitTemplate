@@ -16,6 +16,16 @@
 /**
  * 
  */
+
+UENUM(BlueprintType)
+enum class EGridShape : uint8
+{
+	Square,
+	Staggered,
+	VerticalLine
+};
+
+
 UCLASS()
 class RTSUNITTEMPLATE_API AControllerBase : public AEOS_PlayerController
 {
@@ -137,6 +147,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint);
 
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
+	float GridSpacing = 250.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
+	EGridShape GridFormationShape = EGridShape::Staggered;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int32 ComputeGridSize(int32 NumUnits) const;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector CalculateGridOffset(int32 Row, int32 Col) const;
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void RunUnitsAndSetWaypoints(FHitResult Hit);
 

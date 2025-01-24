@@ -739,11 +739,47 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	return true;
 }
 
+
+
+int32 AControllerBase::ComputeGridSize(int32 NumUnits) const
+{
+	switch (GridFormationShape)
+	{
+	case EGridShape::VerticalLine:
+		return 1; // Single column
+	case EGridShape::Square:
+	case EGridShape::Staggered:
+	default:
+		return FMath::CeilToInt(FMath::Sqrt(static_cast<float>(NumUnits)));
+	}
+}
+
+FVector AControllerBase::CalculateGridOffset(int32 Row, int32 Col) const
+{
+	switch (GridFormationShape)
+	{
+	case EGridShape::Staggered:
+		{
+			const float XOffset = (Row % 2 == 0) 
+				? Col * GridSpacing
+				: Col * GridSpacing + GridSpacing * 0.5f;
+			return FVector(XOffset, Row * GridSpacing, 0.f);
+		}
+            
+	case EGridShape::VerticalLine:
+		return FVector(0.f, Row * GridSpacing, 0.f);
+            
+	case EGridShape::Square:
+	default:
+		return FVector(Col * GridSpacing, Row * GridSpacing, 0.f);
+	}
+}
+
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
-	int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
-
+	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+	const int32 GridSize = ComputeGridSize(NumUnits);
 	AWaypoint* BWaypoint = nullptr;
 	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
@@ -754,8 +790,9 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			int32 Row = i / GridSize;     // Row index
 			int32 Col = i % GridSize;     // Column index
 
-			FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-
+			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+			const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+			
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
 			{
 				// DO NOTHING
