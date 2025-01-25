@@ -21,6 +21,7 @@ void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AAbilityUnit, UnitState);
 	DOREPLIFETIME(AAbilityUnit, UnitStatePlaceholder);
+	DOREPLIFETIME(AAbilityUnit, StoredUnitState);
 }
 
 void AAbilityUnit::PossessedBy(AController* NewController)

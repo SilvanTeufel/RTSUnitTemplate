@@ -21,22 +21,6 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
 
-
-//public:
-	// ICrowdAgentInterface implementation
-
-
-	// Movement function
-	//void MoveToLocation(const FVector& Destination);
-
-//protected:
-	//virtual void BeginDestroy() override;
-
-//private:
-	// CrowdFollowingComponent to integrate with UCrowdManager
-	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crowd", meta = (AllowPrivateAccess = "true"))
-	//UCrowdFollowingComponent* CrowdFollowingComponent;
-
 protected:
 	FTimerHandle NavigationUpdateTimer; 
 	

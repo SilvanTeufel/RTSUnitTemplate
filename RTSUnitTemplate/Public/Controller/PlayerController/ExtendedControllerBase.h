@@ -35,66 +35,66 @@ public:
 	USoundBase* DropWorkAreaSound;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagF1 = FGameplayTag::RequestGameplayTag(FName("Key.F1"));
+	FGameplayTag KeyTagF1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagF2 = FGameplayTag::RequestGameplayTag(FName("Key.F2"));
+	FGameplayTag KeyTagF2;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagF3 = FGameplayTag::RequestGameplayTag(FName("Key.F3"));
+	FGameplayTag KeyTagF3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagF4 = FGameplayTag::RequestGameplayTag(FName("Key.F4"));
+	FGameplayTag KeyTagF4;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl1 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl1"));
+	FGameplayTag KeyTagCtrl1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl2 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl2"));
+	FGameplayTag KeyTagCtrl2;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl3 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl3"));
+	FGameplayTag KeyTagCtrl3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl4 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl4"));
+	FGameplayTag KeyTagCtrl4;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl5 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl5"));
+	FGameplayTag KeyTagCtrl5;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrl6 = FGameplayTag::RequestGameplayTag(FName("Key.Ctrl6"));
+	FGameplayTag KeyTagCtrl6;
 	
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrlQ = FGameplayTag::RequestGameplayTag(FName("Key.CtrlQ"));
+	FGameplayTag KeyTagCtrlQ;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrlW = FGameplayTag::RequestGameplayTag(FName("Key.CtrlW"));
+	FGameplayTag KeyTagCtrlW;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrlE = FGameplayTag::RequestGameplayTag(FName("Key.CtrlE"));
+	FGameplayTag KeyTagCtrlE;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagCtrlR = FGameplayTag::RequestGameplayTag(FName("Key.CtrlR"));
+	FGameplayTag KeyTagCtrlR;
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt1 = FGameplayTag::RequestGameplayTag(FName("Key.Alt1"));
+	FGameplayTag KeyTagAlt1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt2 = FGameplayTag::RequestGameplayTag(FName("Key.Alt2"));
+	FGameplayTag KeyTagAlt2;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt3 = FGameplayTag::RequestGameplayTag(FName("Key.Alt3"));
+	FGameplayTag KeyTagAlt3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt4 = FGameplayTag::RequestGameplayTag(FName("Key.Alt4"));
+	FGameplayTag KeyTagAlt4;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt5 = FGameplayTag::RequestGameplayTag(FName("Key.Alt5"));
+	FGameplayTag KeyTagAlt5;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag KeyTagAlt6 = FGameplayTag::RequestGameplayTag(FName("Key.Alt6"));
+	FGameplayTag KeyTagAlt6;
 
 
 	
