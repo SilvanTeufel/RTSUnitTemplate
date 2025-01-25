@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Actors/EffectArea.h"
 #include "Actors/UnitSpawnPlatform.h"
+#include "Kismet/GameplayStatics.h"
 #include "EOS/EOS_PlayerController.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "ControllerBase.generated.h"
@@ -37,6 +38,13 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* WaypointSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* RunSound;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CameraUnitWithTag;
@@ -145,7 +153,7 @@ public:
 		AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint);
+		bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound);
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")

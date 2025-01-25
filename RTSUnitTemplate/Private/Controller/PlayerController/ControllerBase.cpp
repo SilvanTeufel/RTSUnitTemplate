@@ -708,13 +708,16 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 }
 
 
-bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint)
+bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound)
 {
 
 			ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
-
+	PlayWaypointSound = false;
+	
 	if (!BuildingBase) return false;
-	if (!BuildingBase->HasWaypoint) return false;
+	if (!BuildingBase->HasWaypoint) return true;
+
+	PlayWaypointSound = true;
 	
 	NewWPLocation.Z += RelocateWaypointZOffset;
 	if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
@@ -781,6 +784,9 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 	const int32 GridSize = ComputeGridSize(NumUnits);
 	AWaypoint* BWaypoint = nullptr;
+
+	bool PlayWaypointSound = false;
+	bool PlayRunSound = false;
 	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] != CameraUnitWithTag)
@@ -793,19 +799,32 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 			const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
 			
-			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
-				// DO NOTHING
+				//PlayWaypointSound = true;
 			}else if (IsShiftPressed) {
 				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
+				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{
 				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation);
+				PlayRunSound = true;
 			}
 			else {
 				RightClickRunDijkstraPF_Implementation(SelectedUnits[i], RunLocation, i);
+				PlayRunSound = true;
 			}
 		}
+	}
+
+	if (WaypointSound && PlayWaypointSound)
+	{
+		UGameplayStatics::PlaySound2D(this, WaypointSound);
+	}
+
+	if (RunSound && PlayRunSound)
+	{
+		UGameplayStatics::PlaySound2D(this, RunSound);
 	}
 }
 

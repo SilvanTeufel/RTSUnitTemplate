@@ -22,7 +22,12 @@ public:
 	
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* AbilitySound;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* AttackSound;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagF1 = FGameplayTag::RequestGameplayTag(FName("Key.F1"));
 

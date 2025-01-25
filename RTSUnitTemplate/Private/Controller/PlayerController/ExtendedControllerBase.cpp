@@ -10,6 +10,7 @@
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
 #include "Landscape.h" 
+#include "AssetTypeActions/AssetDefinition_SoundBase.h"
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
@@ -284,6 +285,12 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+
+	if (AbilitySound)
+	{
+		UGameplayStatics::PlaySound2D(this, AbilitySound);
+	}
 	
 	if (SelectedUnits.Num() > 0)
 	{
@@ -1056,6 +1063,9 @@ void AExtendedControllerBase::LeftClickPressed()
 		// int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 		const int32 GridSize = ComputeGridSize(NumUnits);
 		AWaypoint* BWaypoint = nullptr;
+
+		bool PlayWaypointSound = false;
+		bool PlayAttackSound = false;
 		
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
@@ -1067,15 +1077,26 @@ void AExtendedControllerBase::LeftClickPressed()
 				//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 				const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
 			
-				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint))
+				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 				{
 					// Do Nothing
 				}else
 				{
 					DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Red, false, 1.5, 0, 1);
 					LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
+					PlayAttackSound = true;
 				}
 			}
+		}
+
+		if (WaypointSound && PlayWaypointSound)
+		{
+			UGameplayStatics::PlaySound2D(this, WaypointSound);
+		}
+
+		if (AttackSound && PlayAttackSound)
+		{
+			UGameplayStatics::PlaySound2D(this, AttackSound);
 		}
 		
 	}
