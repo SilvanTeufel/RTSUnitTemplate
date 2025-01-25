@@ -935,12 +935,22 @@ bool AExtendedControllerBase::DropWorkArea()
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
 		if (bIsOverlappingWithValidArea && !WorkAreaIsSnapped) // bIsOverlappingWithValidArea &&
 		{
+			if (DropWorkAreaFailedSound)
+			{
+				UGameplayStatics::PlaySound2D(this, AbilitySound);
+			}
+	
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			return true;
 		}
 
 		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
 		{
+			if (DropWorkAreaSound)
+			{
+				UGameplayStatics::PlaySound2D(this, AbilitySound);
+			}
+	
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
 		}
