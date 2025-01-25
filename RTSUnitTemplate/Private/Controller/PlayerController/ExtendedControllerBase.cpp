@@ -9,8 +9,6 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
-#include "Landscape.h" 
-#include "AssetTypeActions/AssetDefinition_SoundBase.h"
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
