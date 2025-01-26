@@ -38,6 +38,7 @@ void AControllerBase::BeginPlay() {
 	
 	InitCameraHUDGameMode();
 	ToggleUnitCountDisplay(ShowUnitCount);
+	LastRunSoundTime = 0.f;
 }
 void AControllerBase::InitCameraHUDGameMode()
 {
@@ -824,7 +825,12 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 
 	if (RunSound && PlayRunSound)
 	{
-		UGameplayStatics::PlaySound2D(this, RunSound);
+		const float CurrentTime = GetWorld()->GetTimeSeconds();
+		if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime) // Check if 3 seconds have passed
+		{
+			UGameplayStatics::PlaySound2D(this, RunSound);
+			LastRunSoundTime = CurrentTime; // Update the timestamp
+		}
 	}
 }
 

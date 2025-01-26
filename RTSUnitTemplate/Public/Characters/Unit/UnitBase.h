@@ -78,10 +78,10 @@ public:
 	FGameplayTagContainer UnitTags;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag AbilitySelectionTag = FGameplayTag::RequestGameplayTag(FName("Selection.UnitA"));
+	FGameplayTag AbilitySelectionTag;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FGameplayTag TalentTag = FGameplayTag::RequestGameplayTag(FName("Talent.UnitA"));
+	FGameplayTag TalentTag;
 
 protected:
 // Called when the game starts or when spawned

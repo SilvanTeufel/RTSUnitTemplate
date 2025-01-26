@@ -146,14 +146,14 @@ public:
 	virtual void OnRep_Range(const FGameplayAttributeData& OldRange);
 	// Range //
 
-	// MaxRunSpeed //
+	// RunSpeed //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeed)
 	FGameplayAttributeData RunSpeed;
 	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeed);
 
 	UFUNCTION()
 	virtual void OnRep_RunSpeed(const FGameplayAttributeData& OldRunSpeed);
-	// MaxRunSpeed //
+	// RunSpeed //
 
 	// IsAttackedSpeed //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_IsAttackedSpeed)

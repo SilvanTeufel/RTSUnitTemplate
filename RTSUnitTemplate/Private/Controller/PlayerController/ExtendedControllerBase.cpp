@@ -937,7 +937,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		{
 			if (DropWorkAreaFailedSound)
 			{
-				UGameplayStatics::PlaySound2D(this, AbilitySound);
+				UGameplayStatics::PlaySound2D(this, DropWorkAreaFailedSound);
 			}
 	
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
@@ -948,7 +948,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		{
 			if (DropWorkAreaSound)
 			{
-				UGameplayStatics::PlaySound2D(this, AbilitySound);
+				UGameplayStatics::PlaySound2D(this, DropWorkAreaSound);
 			}
 	
 				SendWorkerToWork(SelectedUnits[0]);

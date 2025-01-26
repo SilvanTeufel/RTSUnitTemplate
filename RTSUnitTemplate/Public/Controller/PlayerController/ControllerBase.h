@@ -46,9 +46,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* RunSound;
 	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CameraUnitWithTag;
 
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
+	float RunSoundDelayTime = 3.0f;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float LastRunSoundTime = 0.f;;
 	// Timer handle for managing FPS display updates
 	FTimerHandle FPSTimerHandle;
 
