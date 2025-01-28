@@ -221,7 +221,7 @@ void ABuildingControllerBase::AttackBuilding(AUnitBase* UnitBase, float DeltaSec
 	if(UnitBase->SetNextUnitToChase())
 	{
 		
-		if (UnitBase->UnitControlTimer > AttackDuration + UnitBase->PauseDuration) {
+		if (UnitBase->UnitControlTimer > UnitBase->AttackDuration + UnitBase->PauseDuration) {
 		
 			if(!UnitBase->UseProjectile )
 			{

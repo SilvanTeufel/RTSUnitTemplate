@@ -185,8 +185,24 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, b
 	}
 }
 
+void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack, float DeltaSeconds)
+{
+	if (!AttackingUnit || !UnitToAttack) return;
 
+	// Calculate direction to target (ignoring Z-axis for horizontal rotation)
+	FVector ToTarget = UnitToAttack->GetActorLocation() - AttackingUnit->GetActorLocation();
+	ToTarget.Z = 0.0f;
+	ToTarget.Normalize();
 
+	// Calculate current and target rotations
+	FRotator TargetRotation = ToTarget.Rotation();
+	FRotator CurrentRotation = AttackingUnit->GetActorRotation();
+
+	// Smoothly interpolate towards the target rotation
+	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaSeconds, RotationSpeed);
+	AttackingUnit->SetActorRotation(NewRotation);
+}
+/*
 void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack)
 {
 	if(AttackingUnit && UnitToAttack)
@@ -204,7 +220,7 @@ void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase
 				AttackingUnit->AddActorLocalRotation(QuadRotation, false, 0, ETeleportType::None);
 			}
 	}
-}
+}*/
 
 void AUnitControllerBase::CheckUnitDetectionTimer(float DeltaSeconds)
 {
@@ -420,7 +436,7 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
 	UnitBase->SetWalkSpeed(0);
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 	UnitBase->UnitControlTimer += DeltaSeconds;
 
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
@@ -652,7 +668,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     } else
     {
        UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-       RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+       RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 
         if (IsUnitToChaseInRange(UnitBase))
         {
@@ -799,13 +815,13 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);	
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
 	if(UnitBase->SetNextUnitToChase())
 	{
 		
-		if (UnitBase->UnitControlTimer > AttackDuration + UnitBase->PauseDuration) {
+		if (UnitBase->UnitControlTimer > UnitBase->AttackDuration + UnitBase->PauseDuration) {
 		
 			if(!UnitBase->UseProjectile )
 			{
@@ -877,7 +893,7 @@ void AUnitControllerBase::Pause(AUnitBase* UnitBase, float DeltaSeconds)
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 				
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	

@@ -117,9 +117,6 @@ public:
 	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "PauseDuration", Keywords = "RTSUnitTemplate PauseDuration"), Category = RTSUnitTemplate)
 		//float PauseDuration = 0.6f; // Duratin of the State Pause
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "AttackDuration", Keywords = "RTSUnitTemplate AttackDuration"), Category = RTSUnitTemplate)
-		float AttackDuration = 0.6f;
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "IsAttackedDuration", Keywords = "RTSUnitTemplate IsAttackedDuration"), Category = RTSUnitTemplate)
 		float IsAttackedDuration = 0.3f;
 
@@ -143,9 +140,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "OnUnitDetected", Keywords = "RTSUnitTemplate OnUnitDetected"), Category = RTSUnitTemplate)
 		void OnUnitDetected(const TArray<AActor*>& DetectedUnits, bool SetState);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation")
+		float RotationSpeed = 5.0f;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateToAttackUnit", Keywords = "RTSUnitTemplate RotateToAttackUnit"), Category = RTSUnitTemplate)
-		void RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack);
+		void RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttackk, float DeltaSeconds);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool Debug = false;

@@ -149,7 +149,7 @@ public:
 		void RightClickRunShift(AUnitBase* Unit, FVector Location);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void RightClickRunUEPF(AUnitBase* Unit, FVector Location);
+		void RightClickRunUEPF(AUnitBase* Unit, FVector Location, bool CancelAbility);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);

@@ -32,6 +32,19 @@ private:
 
 	void StartUpdateTimer();
 public:
+
+	// Replaces rarity keywords in text with specified values
+	UFUNCTION(BlueprintCallable, Category = "Text Processing")
+	FText ReplaceRarityKeywords(
+		FText OriginalText,
+		FText NewPrimary,  // Default values act as fallback
+		FText NewSecondary,
+		FText NewTertiary,
+		FText NewRare,
+		FText NewEpic,
+		FText NewLegendary
+	);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateSelectedUnits();
 

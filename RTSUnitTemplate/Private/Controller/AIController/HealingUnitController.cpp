@@ -200,7 +200,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
 					}else if (UnitBase->UnitToChase) {
     				UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
     				
-    				RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+    				RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
     				DistanceToUnitToChase = GetPawn()->GetDistanceTo(UnitBase->UnitToChase);
     
     					AUnitBase* UnitToChase = UnitBase->UnitToChase;
@@ -284,10 +284,10 @@ void AHealingUnitController::Healing(AHealingUnit* UnitBase, float DeltaSeconds)
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 	UnitBase->SetWalkSpeed(0);	
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 
-	if (UnitBase->UnitControlTimer > AttackDuration +  UnitBase->PauseDuration) {
+	if (UnitBase->UnitControlTimer > UnitBase->AttackDuration +  UnitBase->PauseDuration) {
 		UnitBase->SetUnitState( UnitData::Pause );
 		bHealActorSpawned = false;
 		UnitBase->UnitControlTimer = 0.f;
@@ -302,7 +302,7 @@ void AHealingUnitController::HealPause(AHealingUnit* UnitBase, float DeltaSecond
 		//DetectUnits(UnitBase, DeltaSeconds, false);
 	
 		UnitBase->SetWalkSpeed(0);
-		RotateToAttackUnit(UnitBase, UnitBase->UnitToChase);
+		RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
 		UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	
 		if(UnitBase->UnitToChase && (UnitBase->UnitToChase->GetUnitState() == UnitData::Dead || UnitBase->UnitToChase->Attributes->GetHealth() == UnitBase->UnitToChase->Attributes->GetMaxHealth())) {

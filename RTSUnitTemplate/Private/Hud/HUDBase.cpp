@@ -113,14 +113,13 @@ void AHUDBase::DrawHUD()
 			TArray <AUnitBase*> NewUnitBases;
 
 			GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
+
+			ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
 			
 			for (int32 i = 0; i < NewUnitBases.Num(); i++) {
 
 
 				const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(NewUnitBases[i]);
-
-		
-				ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
 			
 				if(Controller && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
 				{
@@ -130,10 +129,10 @@ void AHUDBase::DrawHUD()
 					SelectUnitsFromSameSquad(NewUnitBases[i]);
 				}
 			}
-
+			
 			NewUnitBases.Empty();
 			
-
+			if(Controller) Controller->AbilityArrayIndex = 0;
 		}
 
 	}

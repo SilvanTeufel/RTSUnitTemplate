@@ -651,8 +651,13 @@ void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector
 	Unit->SetToggleUnitDetection(false);
 }
 
-void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location)
+void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location, bool CancelAbility)
 {
+	
+	if (!Unit) return;
+
+	if (CancelAbility) Unit->CancelCurrentAbility();
+	
 	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	MoveToLocationUEPathFinding(Unit, Location);
 	SetUnitState_Replication(Unit,1);
@@ -808,7 +813,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{
-				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation);
+				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation, true);
 				PlayRunSound = true;
 			}
 			else {

@@ -1181,6 +1181,7 @@ void AExtendedControllerBase::RightClickPressed()
 	AttackToggled = false;
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
 	
 	if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		if(!CheckClickOnWorkArea(Hit))
@@ -1227,6 +1228,8 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
 	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+
+	AbilityArrayIndex = 0;
 	
 	TArray<AUnitBase*> NewSelection;
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)

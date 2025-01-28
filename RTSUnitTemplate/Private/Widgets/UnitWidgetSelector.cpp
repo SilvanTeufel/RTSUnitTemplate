@@ -33,6 +33,29 @@ void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
 	}
 }*/
+
+FText UUnitWidgetSelector::ReplaceRarityKeywords(
+	FText OriginalText,
+	FText NewPrimary,
+	FText NewSecondary,
+	FText NewTertiary,
+	FText NewRare,
+	FText NewEpic,
+	FText NewLegendary)
+{
+	FString TextString = OriginalText.ToString();
+
+	// Perform replacements using Unreal's string operations
+	TextString.ReplaceInline(TEXT("Primary"), *NewPrimary.ToString());
+	TextString.ReplaceInline(TEXT("Secondary"), *NewSecondary.ToString());
+	TextString.ReplaceInline(TEXT("Tertiary"), *NewTertiary.ToString());
+	TextString.ReplaceInline(TEXT("Rare"), *NewRare.ToString());
+	TextString.ReplaceInline(TEXT("Epic"), *NewEpic.ToString());
+	TextString.ReplaceInline(TEXT("Legendary"), *NewLegendary.ToString());
+
+	return FText::FromString(TextString);
+}
+
 void UUnitWidgetSelector::UpdateSelectedUnits()
 {
 	if(ControllerBase)
