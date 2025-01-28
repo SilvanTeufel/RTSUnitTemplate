@@ -44,7 +44,7 @@ public:
 	float LifeTime = 0.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float MaxLifeTime = 3.f;
+	float MaxLifeTime = 2.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	float MinDrift = -10.f;
@@ -53,7 +53,7 @@ public:
 	float MaxDrift = 10.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float ZDrift = 10.f;
+	float ZDrift = 5.f;
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_UpdateWidget(float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);

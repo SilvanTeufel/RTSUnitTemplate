@@ -464,12 +464,18 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 						int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
 						int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType); // Implement this based on your AttributeSet
 
+					//UE_LOG(LogTemp, Log, TEXT("CurrentWorkers: %d"), CurrentWorkers);
+					//UE_LOG(LogTemp, Log, TEXT("MaxWorkers: %d"), MaxWorkers);
 						if (CurrentWorkers < MaxWorkers)
 						{
+							//UE_LOG(LogTemp, Log, TEXT("Added Area!"));
 							SuitableWorkAreas.Add(WorkArea);
 						}
+					
 				}
 			}
+
+	//UE_LOG(LogTemp, Log, TEXT("Array Size %d"), SuitableWorkAreas.Num());
 	
 			return GetRandomClosestWorkArea(SuitableWorkAreas);
 

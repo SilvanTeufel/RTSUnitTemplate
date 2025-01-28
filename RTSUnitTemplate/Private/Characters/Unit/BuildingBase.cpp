@@ -89,16 +89,24 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 
 void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
+	// Log initial state
+	/*
+	UE_LOG(LogTemp, Log, TEXT("1111 ABuildingBase::SwitchResourceArea - Unit %s (Team %d) current resource place: %s"), 
+		*UnitBase->GetName(), 
+		UnitBase->TeamId,
+		UnitBase->ResourcePlace ? *UnitBase->ResourcePlace->GetName() : TEXT("None"));
+	*/
+
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
-	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
 
+	//UE_LOG(LogTemp, Log, TEXT("NewResourcePlace: %s"), NewResourcePlace ? *NewResourcePlace->GetName() : TEXT("None"));
 	if(UnitBase->ResourcePlace && NewResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
 		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		UnitBase->ResourcePlace = NewResourcePlace;
-	}else if(!UnitBase->ResourcePlace && NewResourcePlace)
+	}else if(NewResourcePlace) //!UnitBase->ResourcePlace && 
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		UnitBase->ResourcePlace = NewResourcePlace;
@@ -106,6 +114,13 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 
 	UnitBase->SetUEPathfinding = true;
 	UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+
+	/*
+	UE_LOG(LogTemp, Log, TEXT("2222 ABuildingBase::SwitchResourceArea - Unit %s (Team %d) current resource place: %s"), 
+	*UnitBase->GetName(), 
+	UnitBase->TeamId,
+	UnitBase->ResourcePlace ? *UnitBase->ResourcePlace->GetName() : TEXT("None"));
+	*/
 }
 
 bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
@@ -139,12 +154,11 @@ bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* Reso
 		UnitBase->BuildArea->ControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBuild);
-	} else
-	{
-		return false;
+		return true;
 	}
 	
-	return true;
+	return false;
+
 }
 
 void ABuildingBase::DespawnWorkResource(AWorkResource* ResourceToDespawn)
