@@ -1056,7 +1056,8 @@ void AExtendedControllerBase::DestoryWorkArea()
 void AExtendedControllerBase::LeftClickPressed()
 {
 	LeftClickIsPressed = true;
-
+	AbilityArrayIndex = 0;
+	
 	if (!CameraBase || CameraBase->TabToggled) return;
 	
 	if(AltIsPressed)
@@ -1111,7 +1112,7 @@ void AExtendedControllerBase::LeftClickPressed()
 	else {
 		DropWorkArea();
 		LeftClickSelect();
-
+		
 		FHitResult Hit_Pawn;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
 		

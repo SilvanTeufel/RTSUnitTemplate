@@ -604,7 +604,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
 			{
 				UnitBase->BuildArea->RemoveAreaFromGroup();
-				UnitBase->BuildArea->Destroy(true);
+				UnitBase->BuildArea->Destroy(false, true);
 				UnitBase->BuildArea = nullptr;
 			}
 			

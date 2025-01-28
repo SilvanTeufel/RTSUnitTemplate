@@ -60,11 +60,12 @@ void UUnitBaseHealthBar::UpdateWidget()
 	}else
 	{
 		ShieldBar->SetVisibility(ESlateVisibility::Visible);
-		ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
-		CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
-		MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
-		CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->LevelData.CharacterLevel, &Opts));
 	}
-
+	
+	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
+	CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
+	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
+	CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->LevelData.CharacterLevel, &Opts));
+	
 	UpdateExperience();
 }
