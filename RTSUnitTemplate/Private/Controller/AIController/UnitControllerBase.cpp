@@ -436,18 +436,13 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 	if (!UnitBase || !UnitBase->Attributes) return;
 	
 	UnitBase->SetWalkSpeed(0);
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
+	
+	if (RotateWhileCasting) RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
+	
 	UnitBase->UnitControlTimer += DeltaSeconds;
 
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
-		/*
-		if (UnitBase->ActivatedAbilityInstance)
-		{
-			FHitResult Hit;
-			ControllerBase->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
-		}*/
 		ControllerBase->CastEndsEvent(UnitBase);
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());

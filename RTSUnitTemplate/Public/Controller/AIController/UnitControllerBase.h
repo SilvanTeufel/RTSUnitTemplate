@@ -70,6 +70,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	UUnitBaseHealthBar* HealthBarWidget;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool RotateWhileCasting = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.15f; 
