@@ -218,6 +218,9 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
+
+	if (NewUnitState != UnitData::Casting && NewUnitState != UnitData::Dead && ActivatedAbilityInstance && !ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||

@@ -187,7 +187,7 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, b
 
 void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack, float DeltaSeconds)
 {
-	if (!AttackingUnit || !UnitToAttack) return;
+	if (!AttackingUnit || !UnitToAttack || !RotateToUnitToChase) return;
 
 	// Calculate direction to target (ignoring Z-axis for horizontal rotation)
 	FVector ToTarget = UnitToAttack->GetActorLocation() - AttackingUnit->GetActorLocation();
@@ -202,25 +202,6 @@ void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase
 	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaSeconds, RotationSpeed);
 	AttackingUnit->SetActorRotation(NewRotation);
 }
-/*
-void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack)
-{
-	if(AttackingUnit && UnitToAttack)
-	{
-		float AngleDiff = CalcAngle(AttackingUnit->GetActorForwardVector(), UnitToAttack->GetActorLocation() - AttackingUnit->GetActorLocation());
-
-		FQuat QuadRotation;
-		
-			if ((AngleDiff > 2.f+AttackAngleTolerance && AngleDiff < 179.f-AttackAngleTolerance) || (AngleDiff <= -179.f+AttackAngleTolerance && AngleDiff > -359.f+AttackAngleTolerance)) {
-				AngleDiff > 50.f || AngleDiff < -50.f ? QuadRotation = FQuat(FRotator(0.f, -20.0f, 0.f)) : QuadRotation = FQuat(FRotator(0.f, -4.0f, 0.f));
-				AttackingUnit->AddActorLocalRotation(QuadRotation, false, 0, ETeleportType::None);
-			}
-			else if ((AngleDiff < -2.f-AttackAngleTolerance && AngleDiff > -179.f+AttackAngleTolerance) || (AngleDiff >= 180.f-AttackAngleTolerance && AngleDiff < 359.f-AttackAngleTolerance)) {
-				AngleDiff > 50.f || AngleDiff < -50.f ? QuadRotation = FQuat(FRotator(0.f, 20.0f, 0.f)) : QuadRotation = FQuat(FRotator(0.f, 4.0f, 0.f));
-				AttackingUnit->AddActorLocalRotation(QuadRotation, false, 0, ETeleportType::None);
-			}
-	}
-}*/
 
 void AUnitControllerBase::CheckUnitDetectionTimer(float DeltaSeconds)
 {
@@ -400,7 +381,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			break;
 		case UnitData::Casting:
 			{
-				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Casting"));
 				Casting(UnitBase, DeltaSeconds);
 			}
 			break;

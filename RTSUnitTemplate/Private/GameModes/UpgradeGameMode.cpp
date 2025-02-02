@@ -20,15 +20,18 @@ void AUpgradeGameMode::InitializeUpgradesForTeams()
     AUpgradeGameState* UpgradeGameState = GetGameState<AUpgradeGameState>();
     if (UpgradeGameState)
     {
+        // Ensure the array has enough teams
+        UpgradeGameState->TeamUpgradesArray.SetNum(8); 
+
         // Loop over the 8 teams and initialize upgrades for each team
         for (int32 TeamId = 1; TeamId <= 8; ++TeamId)
         {
-            // Initialize all the upgrades for this team
             InitializeSingleUpgrade(TeamId, TEXT("Robotic Cleave"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Robotic Shield"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Rifle Multishot"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Sniper Aimed Shot"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Buggy Damage"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("Buggy Mine"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Tank Health"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Tank Shield"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Plasma Fire"), false, nullptr);
@@ -44,21 +47,19 @@ void AUpgradeGameMode::AddUpgrade(int32 TeamId, const FString& UpgradeName, TSub
     AUpgradeGameState* UpgradeGameState = GetGameState<AUpgradeGameState>();
     if (UpgradeGameState)
     {
-        // Subtract 1 from TeamId to get the correct team index (TeamId - 1)
         int32 TeamIndex = TeamId - 1;
         
-        // Check if the team index is valid
-        if (TeamIndex < 0 || TeamIndex >= UpgradeGameState->TeamUpgradesArray.Num()) return;
+        // Ensure array size is correct before accessing
+        if (TeamIndex < 0) return;
+        UpgradeGameState->TeamUpgradesArray.SetNum(FMath::Max(UpgradeGameState->TeamUpgradesArray.Num(), TeamIndex + 1));
 
         FTeamUpgrades& TeamUpgrades = UpgradeGameState->TeamUpgradesArray[TeamIndex];
 
-        // Create new upgrade
         FUpgradeStatus NewUpgrade;
         NewUpgrade.Name = UpgradeName;
         NewUpgrade.Researched = false;
         NewUpgrade.InvestmentEffect = InvestmentEffect;
 
-        // Add the upgrade to the correct team
         TeamUpgrades.Upgrades.Add(NewUpgrade);
         TeamUpgrades.MarkArrayDirty();
     }
@@ -69,15 +70,13 @@ void AUpgradeGameMode::ResearchUpgrade(int32 TeamId, const FString& UpgradeName)
     AUpgradeGameState* UpgradeGameState = GetGameState<AUpgradeGameState>();
     if (UpgradeGameState)
     {
-        // Subtract 1 from TeamId to get the correct team index (TeamId - 1)
         int32 TeamIndex = TeamId - 1;
-
-        // Check if the team index is valid
-        if (TeamIndex < 0 || TeamIndex >= UpgradeGameState->TeamUpgradesArray.Num()) return;
+        
+        if (TeamIndex < 0) return;
+        UpgradeGameState->TeamUpgradesArray.SetNum(FMath::Max(UpgradeGameState->TeamUpgradesArray.Num(), TeamIndex + 1));
 
         FTeamUpgrades& TeamUpgrades = UpgradeGameState->TeamUpgradesArray[TeamIndex];
 
-        // Search for the upgrade and mark it as researched
         for (FUpgradeStatus& Upgrade : TeamUpgrades.Upgrades)
         {
             if (Upgrade.Name.Equals(UpgradeName))
@@ -90,27 +89,23 @@ void AUpgradeGameMode::ResearchUpgrade(int32 TeamId, const FString& UpgradeName)
     }
 }
 
-// New function to initialize a single upgrade for a team
 void AUpgradeGameMode::InitializeSingleUpgrade(int32 TeamId, const FString& UpgradeName, bool bResearched, TSubclassOf<UGameplayEffect> InvestmentEffect)
 {
     AUpgradeGameState* UpgradeGameState = GetGameState<AUpgradeGameState>();
     if (UpgradeGameState)
     {
-        // Subtract 1 from TeamId to get the correct team index (TeamId - 1)
         int32 TeamIndex = TeamId - 1;
-
-        // Check if the team index is valid
-        if (TeamIndex < 0 || TeamIndex >= UpgradeGameState->TeamUpgradesArray.Num()) return;
+        
+        if (TeamIndex < 0) return;
+        UpgradeGameState->TeamUpgradesArray.SetNum(FMath::Max(UpgradeGameState->TeamUpgradesArray.Num(), TeamIndex + 1));
 
         FTeamUpgrades& TeamUpgrades = UpgradeGameState->TeamUpgradesArray[TeamIndex];
 
-        // Create a new upgrade status
         FUpgradeStatus NewUpgrade;
         NewUpgrade.Name = UpgradeName;
         NewUpgrade.Researched = bResearched;
         NewUpgrade.InvestmentEffect = InvestmentEffect;
 
-        // Add the upgrade to the correct team
         TeamUpgrades.Upgrades.Add(NewUpgrade);
         TeamUpgrades.MarkArrayDirty();
     }

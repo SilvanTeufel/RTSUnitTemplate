@@ -18,6 +18,9 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 
 public:
 	UGameplayAbilityBase();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool AbilityCanBeCanceled = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* AbilityIcon;

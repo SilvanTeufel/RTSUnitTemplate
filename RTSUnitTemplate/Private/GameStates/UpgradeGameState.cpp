@@ -17,89 +17,109 @@ void AUpgradeGameState::OnRep_TeamUpgrades()
     // Handle UI updates or gameplay reactions when TeamUpgradesArray changes
 }
 
-void AUpgradeGameState::SetTeamUpgrades(const TArray<FTeamUpgrades>& NewUpgrades)
+void AUpgradeGameState::SetTeamUpgrades(int32 TeamId, const TArray<FUpgradeStatus>& Upgrades)
 {
-    if (HasAuthority()) // Ensure this is only called on the server
+    if (HasAuthority() && TeamId >= 1)
     {
-        TeamUpgradesArray = NewUpgrades;
+        int32 TeamIndex = TeamId - 1;
 
-        // Mark all upgrades in the array as dirty for replication
-        for (FTeamUpgrades& TeamUpgrade : TeamUpgradesArray)
+        // Ensure the array is large enough
+        if (TeamIndex >= TeamUpgradesArray.Num())
         {
-            TeamUpgrade.MarkArrayDirty();
+            TeamUpgradesArray.SetNum(TeamIndex + 1);
+        }
+
+        TeamUpgradesArray[TeamIndex].Upgrades = Upgrades;
+        TeamUpgradesArray[TeamIndex].MarkArrayDirty();
+    }
+}
+
+void AUpgradeGameState::SetUpgradeResearched(int32 TeamId, int32 UpgradeIndex, bool bResearched)
+{
+    if (HasAuthority() && TeamId >= 1)
+    {
+        int32 TeamIndex = TeamId - 1;
+
+        if (TeamIndex < TeamUpgradesArray.Num() && UpgradeIndex < TeamUpgradesArray[TeamIndex].Upgrades.Num())
+        {
+            TeamUpgradesArray[TeamIndex].Upgrades[UpgradeIndex].Researched = bResearched;
+            TeamUpgradesArray[TeamIndex].MarkItemDirty(TeamUpgradesArray[TeamIndex].Upgrades[UpgradeIndex]);
         }
     }
 }
 
-void AUpgradeGameState::SetUpgradeResearched(int32 TeamIndex, int32 UpgradeIndex, bool bResearched)
+TSubclassOf<UGameplayEffect> AUpgradeGameState::GetUpgradeInvestmentEffect(int32 TeamId, const FString& UpgradeName) const
 {
-    if (HasAuthority() && TeamIndex < TeamUpgradesArray.Num())
+    if (TeamId >= 1)
     {
-        FTeamUpgrades& TeamUpgrades = TeamUpgradesArray[TeamIndex];
-        
-        if (UpgradeIndex < TeamUpgrades.Upgrades.Num())
-        {
-            FUpgradeStatus& Upgrade = TeamUpgrades.Upgrades[UpgradeIndex];
-            Upgrade.Researched = bResearched;
+        int32 TeamIndex = TeamId - 1;
 
-            // Mark the specific upgrade as dirty for replication
-            TeamUpgrades.MarkItemDirty(Upgrade);
-        }
-    }
-}
-
-TSubclassOf<UGameplayEffect> AUpgradeGameState::GetUpgradeInvestmentEffect(int32 TeamIndex, int32 UpgradeIndex) const
-{
-    if (TeamIndex < TeamUpgradesArray.Num())
-    {
-        const FTeamUpgrades& TeamUpgrades = TeamUpgradesArray[TeamIndex];
-        
-        if (UpgradeIndex < TeamUpgrades.Upgrades.Num())
+        if (TeamIndex < TeamUpgradesArray.Num())
         {
-            return TeamUpgrades.Upgrades[UpgradeIndex].InvestmentEffect;
+            const FTeamUpgrades& TeamUpgrades = TeamUpgradesArray[TeamIndex];
+
+            for (const FUpgradeStatus& Upgrade : TeamUpgrades.Upgrades)
+            {
+                if (Upgrade.Name.Equals(UpgradeName, ESearchCase::IgnoreCase))
+                {
+                    return Upgrade.InvestmentEffect;
+                }
+            }
         }
     }
     return nullptr;
 }
 
-void AUpgradeGameState::AddUpgradeToTeam(int32 TeamIndex, const FUpgradeStatus& Upgrade)
+void AUpgradeGameState::AddUpgradeToTeam(int32 TeamId, const FUpgradeStatus& Upgrade)
 {
-    if (HasAuthority() && TeamIndex < TeamUpgradesArray.Num())
+    if (HasAuthority() && TeamId >= 1)
     {
-        FTeamUpgrades& TeamUpgrades = TeamUpgradesArray[TeamIndex];
-        
-        TeamUpgrades.Upgrades.Add(Upgrade);
-        TeamUpgrades.MarkArrayDirty();
+        int32 TeamIndex = TeamId - 1;
+
+        if (TeamIndex >= TeamUpgradesArray.Num())
+        {
+            TeamUpgradesArray.SetNum(TeamIndex + 1);
+        }
+
+        TeamUpgradesArray[TeamIndex].Upgrades.Add(Upgrade);
+        TeamUpgradesArray[TeamIndex].MarkArrayDirty();
     }
 }
 
-bool AUpgradeGameState::GetUpgradeResearchedStatus(FString UpgradeName) const
+bool AUpgradeGameState::GetUpgradeResearchedStatus(int32 TeamId, FString UpgradeName) const
 {
-    for (const FTeamUpgrades& TeamUpgrades : TeamUpgradesArray)
+    if (TeamId >= 1)
     {
-        for (const FUpgradeStatus& Upgrade : TeamUpgrades.Upgrades)
+        int32 TeamIndex = TeamId - 1;
+
+        if (TeamIndex < TeamUpgradesArray.Num())
         {
-            if (Upgrade.Name.Equals(UpgradeName))
+            for (const FUpgradeStatus& Upgrade : TeamUpgradesArray[TeamIndex].Upgrades)
             {
-                return Upgrade.Researched;
+                if (Upgrade.Name.Equals(UpgradeName))
+                {
+                    return Upgrade.Researched;
+                }
             }
         }
     }
     return false;
 }
 
-void AUpgradeGameState::ResearchUpgradeByName(FString UpgradeName)
+void AUpgradeGameState::ResearchUpgradeByName(int32 TeamId, FString UpgradeName)
 {
-    if (HasAuthority())
+    if (HasAuthority() && TeamId >= 1)
     {
-        for (FTeamUpgrades& TeamUpgrades : TeamUpgradesArray)
+        int32 TeamIndex = TeamId - 1;
+
+        if (TeamIndex < TeamUpgradesArray.Num())
         {
-            for (FUpgradeStatus& Upgrade : TeamUpgrades.Upgrades)
+            for (FUpgradeStatus& Upgrade : TeamUpgradesArray[TeamIndex].Upgrades)
             {
                 if (Upgrade.Name.Equals(UpgradeName))
                 {
                     Upgrade.Researched = true;
-                    TeamUpgrades.MarkItemDirty(Upgrade);
+                    TeamUpgradesArray[TeamIndex].MarkItemDirty(Upgrade);
                     return;
                 }
             }

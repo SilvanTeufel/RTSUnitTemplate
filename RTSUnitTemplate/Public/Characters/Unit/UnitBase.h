@@ -53,6 +53,9 @@ public:
 	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool ControlUnitIntoMouseDirection = true;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.25f;
 	

@@ -5,7 +5,7 @@
 #include "UpgradeGameMode.generated.h"
 
 /**
- * 
+ * Game Mode for handling team upgrades.
  */
 UCLASS()
 class RTSUNITTEMPLATE_API AUpgradeGameMode : public AResourceGameMode
@@ -19,19 +19,19 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// Initialize upgrades for all teams
+	/** Initialize upgrades for all teams */
 	UFUNCTION(BlueprintCallable, Category = "Upgrades")
 	void InitializeUpgradesForTeams();
 
-	// Add upgrade to a specific team
+	/** Add an upgrade to a specific team */
 	UFUNCTION(BlueprintCallable, Category = "Upgrades")
 	void AddUpgrade(int32 TeamId, const FString& UpgradeName, TSubclassOf<UGameplayEffect> InvestmentEffect);
 
-	// Research an upgrade for a specific team
+	/** Research an upgrade for a specific team */
 	UFUNCTION(BlueprintCallable, Category = "Upgrades")
 	void ResearchUpgrade(int32 TeamId, const FString& UpgradeName);
 
-	// Initialize a single upgrade for a specific team
+	/** Initialize a single upgrade for a specific team */
 	UFUNCTION(BlueprintCallable, Category = "Upgrades")
 	void InitializeSingleUpgrade(int32 TeamId, const FString& UpgradeName, bool bResearched, TSubclassOf<UGameplayEffect> InvestmentEffect);
 };

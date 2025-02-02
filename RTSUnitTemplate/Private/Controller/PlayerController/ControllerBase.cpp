@@ -130,8 +130,13 @@ void AControllerBase::Tick(float DeltaSeconds)
 	if(AttackToggled)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
-		if(SelectedUnits[i] && !SelectedUnits[i]->IsA(ABuildingBase::StaticClass()) && SelectedUnits[i]->GetUnitState() == UnitData::Idle && SelectedUnits[i]->ToggleUnitDetection)
+		if(SelectedUnits[i] &&
+			!SelectedUnits[i]->IsA(ABuildingBase::StaticClass()) &&
+			SelectedUnits[i]->GetUnitState() == UnitData::Idle &&
+			SelectedUnits[i]->ToggleUnitDetection &&
+			SelectedUnits[i]->ControlUnitIntoMouseDirection)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
+		
 	}
 
 
@@ -190,12 +195,16 @@ void AControllerBase::SelectUnit(int Index)
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
 	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Red, false, 1.5, 0, 1);
+	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	SetUnitState_Replication(Unit,1);
 	MoveToLocationUEPathFinding(Unit, Location);
 }
 
 void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Location)
 {
+	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
 	Unit->RunLocationArray.Empty();
@@ -636,6 +645,8 @@ void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, boo
 }
 void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
 {
+	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	if(!Unit->RunLocationArray.Num())
 	{
@@ -656,6 +667,8 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 	
 	if (!Unit) return;
 
+	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	if (CancelAbility) Unit->CancelCurrentAbility();
 	
 	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
@@ -666,6 +679,8 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 
 void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
 {
+	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	
 	TArray<FPathPoint> PathPoints;
 
 	FVector UnitLocation = Unit->GetActorLocation();

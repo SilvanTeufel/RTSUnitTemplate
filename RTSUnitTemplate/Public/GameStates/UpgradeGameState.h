@@ -54,21 +54,21 @@ public:
 
     // Main setter
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    void SetTeamUpgrades(const TArray<FTeamUpgrades>& NewUpgrades);
+    void SetTeamUpgrades(int32 TeamId, const TArray<FUpgradeStatus>& Upgrades);
 
     // Individual upgrade management
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    void SetUpgradeResearched(int32 TeamIndex, int32 UpgradeIndex, bool bResearched);
+    void SetUpgradeResearched(int32 TeamId, int32 UpgradeIndex, bool bResearched);
 
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    TSubclassOf<UGameplayEffect> GetUpgradeInvestmentEffect(int32 TeamIndex, int32 UpgradeIndex) const;
+    TSubclassOf<UGameplayEffect> GetUpgradeInvestmentEffect(int32 TeamId, const FString& UpgradeName) const;
+    
+    UFUNCTION(BlueprintCallable, Category = "Upgrades")
+    void AddUpgradeToTeam(int32 TeamId, const FUpgradeStatus& Upgrade);
 
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    void AddUpgradeToTeam(int32 TeamIndex, const FUpgradeStatus& Upgrade);
+    bool GetUpgradeResearchedStatus(int32 TeamId, FString UpgradeName) const;
 
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    bool GetUpgradeResearchedStatus(FString UpgradeName) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Upgrades")
-    void ResearchUpgradeByName(FString UpgradeName);
+    void ResearchUpgradeByName(int32 TeamId, FString UpgradeName);
 };

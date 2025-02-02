@@ -377,6 +377,8 @@ void AGASUnit::CancelCurrentAbility()
 	
 	if (ActivatedAbilityInstance)
 	{
+		if (!ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+		
 		ActivatedAbilityInstance->K2_CancelAbility();
 		ActivatedAbilityInstance = nullptr;
 	}
