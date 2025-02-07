@@ -282,6 +282,11 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 		float RelocateWaypointZOffset = 30.f;
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void CancelCurrentAbility(AUnitBase* UnitBase);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void DeQueAbility(AUnitBase* UnitBase, int ButtonIndex);
 private:
 	/*
 	// Workaround helper functions

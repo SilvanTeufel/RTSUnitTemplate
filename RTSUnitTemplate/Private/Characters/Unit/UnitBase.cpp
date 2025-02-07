@@ -244,6 +244,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, UnitTags);
 	DOREPLIFETIME(AUnitBase, AbilitySelectionTag);
 	DOREPLIFETIME(AUnitBase, TalentTag);
+	DOREPLIFETIME(AUnitBase, UnitToChase);
 }
 
 

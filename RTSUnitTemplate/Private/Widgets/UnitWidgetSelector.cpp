@@ -14,25 +14,9 @@ void UUnitWidgetSelector::NativeConstruct()
 	SetVisibleButtonCount(ShowButtonCount);
 	SetButtonLabelCount(ShowButtonCount);
 	ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
-	/*
-	if (ControllerBase)
-	{
-		ControllerBase->SetInputMode(FInputModeGameAndUI());
-		ControllerBase->bShowMouseCursor = true;
-	}*/
 	StartUpdateTimer();
 }
-/*
-void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
-	
-	if(ControllerBase)
-	{
-		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
-		SetButtonLabelCount(ControllerBase->SelectedUnitCount);
-	}
-}*/
+
 
 FText UUnitWidgetSelector::ReplaceRarityKeywords(
 	FText OriginalText,
@@ -111,25 +95,35 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
 		CurrentAbilityTimerBar->SetFillColorAndOpacity(CurrentAbilityTimerBarColor);
 	}
 
-	// Now update the current ability icon
+	FQueuedAbility CurrentSnapshot = UnitBase->GetCurrentSnapshot();
+	if (CurrentSnapshot.AbilityClass)
+	{
+		// Get the default object to read its icon
+		UGameplayAbilityBase* AbilityCDO = CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 
-		if (UnitBase->ActivatedAbilityInstance && 
-			UnitBase->ActivatedAbilityInstance->AbilityIcon)
+		if (AbilityCDO && AbilityCDO->AbilityIcon)
 		{
-			// Set the brush from the texture
 			CurrentAbilityIcon->SetBrushFromTexture(
-				UnitBase->ActivatedAbilityInstance->AbilityIcon, true
-			);
+							AbilityCDO->AbilityIcon, true
+						);
 			
 			CurrentAbilityButton->SetVisibility(ESlateVisibility::Visible);
+
 		}
 		else
 		{
 			// Hide the icon or set to a default if no ability or icon is set
 			CurrentAbilityButton->SetVisibility(ESlateVisibility::Collapsed);
 		}
+	}else
+	{
+		// Hide the icon or set to a default if no ability or icon is set
+		CurrentAbilityButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	
 }
+
+
 void UUnitWidgetSelector::UpdateAbilityCooldowns()
 {
 
@@ -290,13 +284,12 @@ void UUnitWidgetSelector::OnAbilityQueueButtonClicked(int32 ButtonIndex)
 	if (!ControllerBase) return;
 	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
 
-	AGASUnit* GASUnit = Cast<AGASUnit>(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]);
-	if (!GASUnit) return;
+	AUnitBase* Unit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
+
 	
-	if (GASUnit->DequeueAbility(ButtonIndex))
-	{
-		// success—front item removed
-	}
+	if (!Unit) return;
+
+	ControllerBase->DeQueAbility(Unit, ButtonIndex);
 
 	// Refresh UI
 	UpdateQueuedAbilityIcons();
@@ -308,11 +301,9 @@ void UUnitWidgetSelector::OnCurrentAbilityButtonClicked()
 	if (!ControllerBase) return;
 	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
 
-	AUnitBase* UnitBase = Cast<AUnitBase>(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]);
-	if (!UnitBase) return;
+	AUnitBase* UnitBase = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
 	
-	UnitBase->CancelCurrentAbility();
-	UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+	ControllerBase->CancelCurrentAbility(UnitBase);
 }
 
 
@@ -339,22 +330,6 @@ void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 
 void UUnitWidgetSelector::GetButtonsFromBP()
 {
-/*
-	FString CurrentAbilityIconName = FString::Printf(TEXT("CurrentAbilityIcon"));
-	if (UImage* ImageWidget = Cast<UImage>(GetWidgetFromName(FName(*CurrentAbilityIconName))))
-		CurrentAbilityIcon = ImageWidget;
-	//class UImage* CurrentAbilityIcon;
-
-	FString CurrentAbilityButtonName = FString::Printf(TEXT("CurrentAbilityButton"));
-	if (UButton* AbilityButton = Cast<UButton>(GetWidgetFromName(FName(*CurrentAbilityButtonName))))
-		CurrentAbilityButton = AbilityButton;
-
-		
-	FString CurrentAbilityTimerBarName = FString::Printf(TEXT("CurrentAbilityTimerBar"));
-	if (UProgressBar* AbilityProgressbar= Cast<UProgressBar>(GetWidgetFromName(FName(*CurrentAbilityTimerBarName))))
-		CurrentAbilityTimerBar = AbilityProgressbar;
-*/
-	
 	
 	for (int32 i = 0; i <= MaxQueButtonCount; i++)
 	{

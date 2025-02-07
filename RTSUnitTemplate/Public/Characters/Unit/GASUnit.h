@@ -12,6 +12,7 @@
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "Net/UnrealNetwork.h"
 #include "Containers/Queue.h"
 #include "GASUnit.generated.h"
 
@@ -53,7 +54,11 @@ public:
 	// A queue to store "next" abilities if the current one can't be activated or is still running
 	TQueue<FQueuedAbility> AbilityQueue;
 
+	UPROPERTY(Replicated, BlueprintReadOnly)
 	TArray<FQueuedAbility> QueSnapshot;
+
+	//UFUNCTION()
+	//void OnRep_QueSnapshot();
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const TArray<FQueuedAbility>& GetQueuedAbilities();
@@ -144,5 +149,10 @@ public:
 	// Reference to the activated ability instance
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	UGameplayAbilityBase* ActivatedAbilityInstance;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category=Ability)
+	FQueuedAbility CurrentSnapshot;
 	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	const FQueuedAbility GetCurrentSnapshot();
 };

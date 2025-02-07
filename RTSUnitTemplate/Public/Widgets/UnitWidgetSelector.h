@@ -66,16 +66,16 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void Update(int AbillityArrayIndex);
 	
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (BindWidget))
 	class UTextBlock* Name;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (BindWidget))
 	class UImage* CurrentAbilityIcon;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (BindWidget))
 	class UButton* CurrentAbilityButton;
 		
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (BindWidget))
 	class UProgressBar* CurrentAbilityTimerBar;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

@@ -1416,9 +1416,13 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 	return false;
 }
 
-void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
+void AExtendedControllerBase::CastEndsEvent_Implementation(AUnitBase* UnitBase)
 {
 	if (!UnitBase) return;
+
+	// Ensure this logic runs only on the server
+	if (!UnitBase->HasAuthority()) return;
+
 	//if (UnitBase->TeamId == SelectableTeamId){
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);

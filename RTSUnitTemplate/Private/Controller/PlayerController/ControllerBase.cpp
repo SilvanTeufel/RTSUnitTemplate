@@ -669,7 +669,7 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 
 	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
 	
-	if (CancelAbility) Unit->CancelCurrentAbility();
+	if (CancelAbility) CancelCurrentAbility(Unit);
 	
 	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	MoveToLocationUEPathFinding(Unit, Location);
@@ -1042,6 +1042,18 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
 	
+}
+
+void AControllerBase::DeQueAbility_Implementation(AUnitBase* UnitBase, int ButtonIndex)
+{
+	UnitBase->DequeueAbility(ButtonIndex);
+}
+
+void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
+{
+	UnitBase->SetUnitState(UnitData::Idle);
+	UnitBase->UnitControlTimer = 0;
+	UnitBase->CancelCurrentAbility();
 }
 
 void AControllerBase::SetControlerTeamId_Implementation(int Id)

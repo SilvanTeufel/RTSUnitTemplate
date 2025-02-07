@@ -11,6 +11,7 @@
 #include "Characters/Unit/LevelUnit.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/ActorChannel.h"
 
 
 // Called when the game starts or when spawned
@@ -20,7 +21,7 @@ void AGASUnit::BeginPlay()
 	CreateOwnerShip();
 	AbilitySystemComponent->SetIsReplicated(true);
 	AddReplicatedSubObject(ActivatedAbilityInstance);
-	//bReplicates = true;
+	bReplicates = true;
 }
 
 void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -34,6 +35,8 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AGASUnit, SecondAbilities);
 	DOREPLIFETIME(AGASUnit, ThirdAbilities);
 	DOREPLIFETIME(AGASUnit, FourthAbilities);
+	DOREPLIFETIME(AGASUnit, QueSnapshot);
+	DOREPLIFETIME(AGASUnit, CurrentSnapshot);
 }
 
 
@@ -157,16 +160,14 @@ void AGASUnit::SetupAbilitySystemDelegates()
 	}
 }
 
+
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated: %s"), *ActivatedAbility->GetName());
-	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated! Here we set ActivatedAbiltiyInstance!"));
-	// Assuming ActivatedAbilityInstance is a class member
-	// Cast to UGameplayAbilityBase if necessary, depending on your class hierarchy
+
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
 
-	// Do something with the ActivatedAbilityInstance...
 }
 
 void AGASUnit::SetToggleUnitDetection_Implementation(bool ToggleTo)
@@ -229,6 +230,11 @@ void AGASUnit::ActivateAbilityByInputID(
 		if (bIsActivated && HitResult.IsValidBlockingHit())
 		{
 			// If you have a pointer to the active ability instance:
+			FQueuedAbility Queued;
+			Queued.AbilityClass = AbilityToActivate;
+			Queued.HitResult    = HitResult;
+			CurrentSnapshot = Queued;
+			
 			if (ActivatedAbilityInstance) 
 			{
 				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
@@ -278,6 +284,11 @@ void AGASUnit::ActivateNextQueuedAbility()
 		if (bDequeued && AbilitySystemComponent)
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Dequeued next ability: %s"), *Next.AbilityClass->GetName());
+			
+			CurrentSnapshot = Next;
+
+
+			
 			QueSnapshot.Remove(Next);
 			ActivatedAbilityInstance = nullptr;
 			// 2) Activate the next queued ability
@@ -294,6 +305,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 			else
 			{
 				ActivatedAbilityInstance = nullptr;
+				CurrentSnapshot = FQueuedAbility();
 				// Optionally: If we fail again (cooldown, cost, or still "busy"), 
 				// do you want to re-queue it or just discard?
 				// AbilityQueue.Enqueue(Next); // if you want to retry
@@ -302,25 +314,10 @@ void AGASUnit::ActivateNextQueuedAbility()
 	}else
 	{
 		ActivatedAbilityInstance = nullptr;
+		CurrentSnapshot = FQueuedAbility();
 	}
 }
-/*
-void AGASUnit::ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult)
-{
-		if(AbilitySystemComponent)
-		{
-			TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 
-			//UE_LOG(LogTemp, Warning, TEXT("AbilityToActivate! %s"), *AbilityToActivate->GetName());
-			if(AbilityToActivate != nullptr)
-			{
-				// 1) Activate the ability:
-				bool IsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-				if (IsActivated && HitResult.IsValidBlockingHit())ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
-			}
-		}
-}
-*/
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
@@ -372,14 +369,27 @@ const TArray<FQueuedAbility>& AGASUnit::GetQueuedAbilities()
 }
 
 
+const FQueuedAbility AGASUnit::GetCurrentSnapshot()
+{
+	return CurrentSnapshot;
+}
+
 void AGASUnit::CancelCurrentAbility()
 {
+    // Check if this code is executing on a client.
 	
+    if (!HasAuthority())
+    {
+        return;
+    }
+
 	if (ActivatedAbilityInstance)
 	{
-		if (!ActivatedAbilityInstance->AbilityCanBeCanceled) return;
-		
-		ActivatedAbilityInstance->K2_CancelAbility();
-		ActivatedAbilityInstance = nullptr;
+		// Check if the active ability can be canceled.
+		if (ActivatedAbilityInstance->AbilityCanBeCanceled)
+		{
+			ActivatedAbilityInstance->K2_CancelAbility();
+			ActivatedAbilityInstance = nullptr;
+		}
 	}
 }
