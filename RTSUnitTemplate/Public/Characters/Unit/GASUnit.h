@@ -54,7 +54,7 @@ public:
 	// A queue to store "next" abilities if the current one can't be activated or is still running
 	TQueue<FQueuedAbility> AbilityQueue;
 
-	UPROPERTY(Replicated, BlueprintReadOnly)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category=RTSUnitTemplate)
 	TArray<FQueuedAbility> QueSnapshot;
 
 	//UFUNCTION()

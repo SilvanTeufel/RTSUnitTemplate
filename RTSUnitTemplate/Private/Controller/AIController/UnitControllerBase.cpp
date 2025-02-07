@@ -93,7 +93,8 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 				RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 				
 				if(MyUnitBase->HealthWidgetComp)HealthBarWidget = Cast<UUnitBaseHealthBar>(MyUnitBase->HealthWidgetComp->GetUserWidgetObject());
-			
+
+				
 			}
 		}
 	}

@@ -39,6 +39,8 @@ void AControllerBase::BeginPlay() {
 	InitCameraHUDGameMode();
 	ToggleUnitCountDisplay(ShowUnitCount);
 	LastRunSoundTime = 0.f;
+
+
 }
 void AControllerBase::InitCameraHUDGameMode()
 {
@@ -48,6 +50,12 @@ void AControllerBase::InitCameraHUDGameMode()
 	
 	RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
+	/*
+	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(GetPawn());
+	if (ExtendedCameraBase)
+		ExtendedCameraBase->SetupResourceWidget();
+	*/
+	
 	if (!RTSGameMode)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("!!!!!DONT Found GameMode Inside ControllerBase!!!!"));

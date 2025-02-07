@@ -91,9 +91,13 @@ void AExtendedCameraBase::BeginPlay()
 {
 	// Call the base class BeginPlay
 	Super::BeginPlay();
-	SetupResourceWidget();
 
 	HideWidgetsWhenNoControl();
+
+	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
+	FTimerHandle SetupResourceWidgetTimerHandle;
+	GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
+	// Delay the execution of HideWidgetsWhenNoControl
 }
 
 void AExtendedCameraBase::HideWidgetsWhenNoControl()
@@ -120,8 +124,6 @@ void AExtendedCameraBase::SetupResourceWidget()
 {
 	if(!ResourceWidget) return;
 	
-	if (IsOwnedByLocalPlayer()) // This is a pseudo-function, replace with actual ownership check
-	{
 		ResourceWidget->SetVisibility(true);
 		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
 
@@ -135,11 +137,6 @@ void AExtendedCameraBase::SetupResourceWidget()
 				ResourceBar->StartUpdateTimer();
 			}
 		}
-	}
-	else
-	{
-		ResourceWidget->SetVisibility(false);
-	}
 }
 
 // Tick implementation
