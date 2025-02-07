@@ -27,6 +27,9 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CheckForCollisions();
+
 	
 	// Declare the replicated property
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

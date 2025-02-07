@@ -28,8 +28,36 @@ void AFogOfWarManager::BeginPlay()
 {
     Super::BeginPlay();
 
-
+    CheckForCollisions();
+   // FTimerHandle CollisionCheckTimerHandle;
+   // GetWorldTimerManager().SetTimer(CollisionCheckTimerHandle, this, &AFogOfWarManager::CheckForCollisions, 3.0f, false);
+    
 }
+
+void AFogOfWarManager::CheckForCollisions()
+{
+    // Ensure the overlap state is up to date
+    Mesh->UpdateOverlaps();
+
+    // Get all overlapping actors (you can filter by class if needed)
+    TArray<AActor*> OverlappingActors;
+    Mesh->GetOverlappingActors(OverlappingActors, APerformanceUnit::StaticClass());
+
+    // Process each overlapping actor
+    for (AActor* Actor : OverlappingActors)
+    {
+        if (APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor))
+        {
+            // Only process enemy units
+            if (PlayerTeamId != Unit->TeamId)
+            {
+                Unit->IsVisibileEnemy = true;
+                Unit->FogManagerOverlaps++;
+            }
+        }
+    }
+}
+
 
 void AFogOfWarManager::Tick(float DeltaTime)
 {
