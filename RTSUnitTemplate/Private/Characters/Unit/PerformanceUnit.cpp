@@ -44,26 +44,27 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void APerformanceUnit::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	SetOwningPlayerController();
+}
 
-	// Check how long the game has been running.
-	// If it’s below a threshold (e.g., 1.0 second), assume the game just started.
-	if (!GetWorld() ||  GetWorld() && GetWorld()->GetTimeSeconds() < 3.0f)
-	{
-		// Delay the execution of SpawnFogOfWarManager by 3 seconds.
-		FTimerHandle SpawnFogTimerHandle;
-		GetWorldTimerManager().SetTimer(SpawnFogTimerHandle, this, &APerformanceUnit::SpawnFogOfWarManager, 3.0f, false);
-	}
-	else
-	{
-		// Game did not just start, so spawn immediately.
-		SpawnFogOfWarManager();
-	}
+void APerformanceUnit::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	//CheckForFogOfWarCollisions();
+	
 }
 
 void APerformanceUnit::Destroyed()
 {
 	Super::Destroyed();
 
+	DestroyFogManager();
+}
+
+void APerformanceUnit::DestroyFogManager()
+{
 	if (SpawnedFogManager)
 	{
 		// Detach the FogManager from this unit
@@ -72,6 +73,55 @@ void APerformanceUnit::Destroyed()
 		// Destroy the FogManager
 		SpawnedFogManager->Destroy();
 		SpawnedFogManager = nullptr;
+	}
+}
+
+
+void APerformanceUnit::SetOwningPlayerController()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;  // Safety check
+	
+	APlayerController* PlayerController = World->GetFirstPlayerController();
+	if (PlayerController)
+	{
+		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
+		{
+			OwningPlayerController = ControllerBase;
+			// Stop retrying if controller is assigned
+			World->GetTimerManager().ClearTimer(PlayerControllerRetryHandle);
+
+			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
+			{
+				IsMyTeam = true;
+			}
+			else
+			{
+				IsMyTeam = false;
+			}
+			// Safe to call multiple times since SpawnFogOfWarManager checks internally
+			SpawnFogOfWarManager();
+			return;
+		}
+	}
+
+	// Retry if conditions aren't met and within max wait time
+	if ((!OwningPlayerController || !SpawnedFogManager) && PlayerControllerTimeWaited < PlayerControllerMaxWaitTime)
+	{
+		PlayerControllerTimeWaited += PlayerControllerRetryInterval;
+		World->GetTimerManager().SetTimer(
+			PlayerControllerRetryHandle,
+			this,
+			&APerformanceUnit::SetOwningPlayerController,
+			PlayerControllerRetryInterval,
+			false  // No looping, manual re-trigger
+		);
+	}
+	else
+	{
+		// Timeout reached; handle failure if needed
+		UE_LOG(LogTemp, Warning, TEXT("Failed to find OwningPlayerController within %.1f seconds."), PlayerControllerMaxWaitTime);
 	}
 }
 
@@ -84,77 +134,51 @@ void APerformanceUnit::SpawnFogOfWarManager()
 		UE_LOG(LogTemp, Warning, TEXT("World is not valid."));
 		return;
 	}
-
-	if (!EnableFog || !FogOfWarManagerClass)
-	{
-		if (APlayerController* PlayerController = World->GetFirstPlayerController())
-		{
-			AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-			// Ensure that the controller’s team ID matches or is neutral (0)
-			if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
-			{
-				OwningPlayerController = PlayerController;
-			}
-		}
-		return;
-	}
+	
+	if (!EnableFog || !FogOfWarManagerClass) return;
+	
+	AControllerBase* ControllerBase = Cast<AControllerBase>(OwningPlayerController);
 	
 	if(SpawnedFogManager) return;
 	
-	if (FogOfWarManagerClass)
+	if (FogOfWarManagerClass && ControllerBase  && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
 	{
-		if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-		{
-			AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-			// Get the world reference
-			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
-			{
-				OwningPlayerController = PlayerController;
-			
-				if (World)
-				{
-					// Calculate the spawn location by applying the offset to the current actor location
+		
 					FVector SpawnLocation = GetActorLocation();
 					FRotator SpawnRotation = FRotator::ZeroRotator;
 					FTransform SpawnTransform(SpawnRotation, SpawnLocation);
 					// Spawn the FogOfWarManager at the new location
 					SpawnedFogManager = World->SpawnActorDeferred<AFogOfWarManager>(FogOfWarManagerClass, SpawnTransform);
-					//SpawnedFogManager = World->SpawnActor<AFogOfWarManager>(FogOfWarManagerClass, SpawnLocation, FRotator::ZeroRotator);
-					// Check if the actor was spawned successfully
-					//if (SpawnedFogManager)
-					//{
-						//SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
-					//}
-		
+
+					if (SpawnedFogManager)
+					{
+						SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
+					}
+
 					if (SpawnedFogManager && SpawnedFogManager->Mesh)
 					{
 						// Scale the Mesh component of the spawned FogOfWarManager
-			
-							SpawnedFogManager->TeamId = TeamId;
-							SpawnedFogManager->PlayerTeamId = ControllerBase->SelectableTeamId;
-							SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
-							SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
-							// Bind overlap events using the appropriate class and instance
-							SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
-							SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
-						IsVisibileEnemy = false;
+						SpawnedFogManager->TeamId = TeamId;
+						SpawnedFogManager->PlayerTeamId =  ControllerBase->SelectableTeamId;//ControllerBase->SelectableTeamId;
+						SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
+						SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
+						// Bind overlap events using the appropriate class and instance
+						SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
+						SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
+	
+				
 						// Finish spawning the actor. This will trigger its BeginPlay().
 						UGameplayStatics::FinishSpawningActor(SpawnedFogManager, SpawnTransform);
-
+						UE_LOG(LogTemp, Warning, TEXT("SpawnedFogManager! %d"), SpawnedFogManager->PlayerTeamId);
 						if (SpawnedFogManager)
 						{
 							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
 						}
 						
 					}
-				}
-			}
-		}
 	}
-
-	// IsVisibileEnemy = false;
+	
 }
-
 
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {

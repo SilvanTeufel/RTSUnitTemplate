@@ -19,8 +19,7 @@ AFogOfWarManager::AFogOfWarManager()
     Mesh->SetRenderInMainPass(false);
     Mesh->SetRenderInDepthPass(false);
     Mesh->SetCastShadow(false);
-
-    bReplicates = false;
+    
 }
 
 
@@ -28,10 +27,7 @@ void AFogOfWarManager::BeginPlay()
 {
     Super::BeginPlay();
 
-    CheckForCollisions();
-   // FTimerHandle CollisionCheckTimerHandle;
-   // GetWorldTimerManager().SetTimer(CollisionCheckTimerHandle, this, &AFogOfWarManager::CheckForCollisions, 3.0f, false);
-    
+   // CheckForCollisions();
 }
 
 void AFogOfWarManager::CheckForCollisions()
@@ -49,7 +45,7 @@ void AFogOfWarManager::CheckForCollisions()
         if (APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor))
         {
             // Only process enemy units
-            if (PlayerTeamId != Unit->TeamId)
+            if (PlayerTeamId != Unit->TeamId) // PlayerTeamId
             {
                 Unit->IsVisibileEnemy = true;
                 Unit->FogManagerOverlaps++;
@@ -69,7 +65,7 @@ void AFogOfWarManager::Tick(float DeltaTime)
 void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     APerformanceUnit* Unit = Cast<APerformanceUnit>(OtherActor);
-    
+
     if (Unit && PlayerTeamId != Unit->TeamId)
     {
             Unit->IsVisibileEnemy = true;

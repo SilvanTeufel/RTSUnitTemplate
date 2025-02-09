@@ -265,7 +265,7 @@ public:
 		TArray <AUnitBase*> SelectedUnits;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		int SelectableTeamId = 0;
+		int SelectableTeamId = -1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		AWaypoint* DefaultWaypoint;
@@ -287,16 +287,6 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void DeQueAbility(AUnitBase* UnitBase, int ButtonIndex);
-private:
-	/*
-	// Workaround helper functions
-	bool PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult);
-	void OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation);
-	FVector CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation);
-	void ContinueMoveToLocation(AUnitBase* Unit, FVector DestinationLocation);
-	void ContinueMoveToLocationWithStoredUnits(FVector DestinationLocation);
-	*/
-	// Timer handle for delayed movement
-	//FTimerHandle MoveRetryTimerHandle;
+
 };
 

@@ -28,6 +28,8 @@ public:
 	
 	virtual void BeginPlay() override;
 
+	virtual void PossessedBy(AController* NewController) override;
+	
 	virtual void Destroyed() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
@@ -35,9 +37,26 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SpawnFogOfWarManager();
+	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void DestroyFogManager();
+	
+	FTimerHandle PlayerControllerRetryHandle;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	float PlayerControllerMaxWaitTime = 10.0f;          // Maximum time to wait for the controller
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	float PlayerControllerRetryInterval = 5.f;        // Retry every 0.1 seconds
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	float PlayerControllerTimeWaited = 0.0f;           // Tracks total wait time
+	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetOwningPlayerController();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector FogManagerMultiplier = FVector(0.01, 0.01, 50);
+	FVector FogManagerMultiplier = FVector(0.01, 0.01, 200);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerPositionOffset = FVector(0, 0, 50.f);
@@ -50,7 +69,7 @@ public:
 	bool IsOnViewport = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsMyTeam = true;
+	bool IsMyTeam = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool EnemyStartVisibility = true;
@@ -126,7 +145,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	class AProjectile* Projectile;
 	
-	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	AFogOfWarManager* SpawnedFogManager;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)

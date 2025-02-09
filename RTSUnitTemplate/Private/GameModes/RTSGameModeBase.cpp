@@ -545,6 +545,13 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 					UnitBase->SetActorLocation(NewLocation);
 				}
 
+				/*
+				if (UnitBase->EnableFog)
+				{
+					UnitBase->SetCharacterVisibility(false);
+					UnitBase->IsVisibileEnemy = false;
+				}
+				*/
 				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 				
 				if(SpawnParameter.Attributes)
