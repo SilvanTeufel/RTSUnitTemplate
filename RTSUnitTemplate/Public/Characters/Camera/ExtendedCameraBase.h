@@ -25,7 +25,7 @@ public:
 	void HideWidgetsWhenNoControl();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetupResourceWidget();
+	void SetupResourceWidget(AExtendedControllerBase* CameraControllerBase);
 	// Override the Tick function
 	virtual void Tick(float DeltaTime) override;
 	

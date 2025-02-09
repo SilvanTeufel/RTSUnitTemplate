@@ -28,32 +28,31 @@ public:
 	
 	virtual void BeginPlay() override;
 
-	virtual void PossessedBy(AController* NewController) override;
-	
 	virtual void Destroyed() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SpawnFogOfWarManager();
+	void SpawnFogOfWarManager(APlayerController* PC);
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void DestroyFogManager();
-	
+	/*
 	FTimerHandle PlayerControllerRetryHandle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	float PlayerControllerMaxWaitTime = 10.0f;          // Maximum time to wait for the controller
+	float PlayerControllerMaxWaitTime = 60.0f;          // Maximum time to wait for the controller
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	float PlayerControllerRetryInterval = 5.f;        // Retry every 0.1 seconds
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	float PlayerControllerTimeWaited = 0.0f;           // Tracks total wait time
+*/
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SetOwningPlayerController();
+	void SetOwningPlayerControllerAndSpawnFogManager();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.01, 0.01, 200);

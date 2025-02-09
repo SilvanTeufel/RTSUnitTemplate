@@ -10,6 +10,26 @@
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
 
+
+void AExtendedControllerBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	/*
+	if (HasAuthority()) // Ensure this runs only on the server
+	{
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(
+			TimerHandle, 
+			this, 
+			&AExtendedControllerBase::Server_SetFogManager, 
+			5.0f,    // Delay in seconds
+			false     // Don't loop
+		);
+	}
+	*/
+}
+
 void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1433,4 +1453,89 @@ void AExtendedControllerBase::CastEndsEvent_Implementation(AUnitBase* UnitBase)
 	//}
 }
 
+void AExtendedControllerBase::Server_SetFogManager_Implementation()
+{
+	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+	
+	// TSGameMode->AllUnits is onyl available on Server why we start running on server
+	// We Cast to CLient and send him AllUnits as parameter
+	Client_SetFogManager(RTSGameMode->AllUnits);
 
+	// We Mutlicast to CLient and send him AllUnits as parameter
+	TArray<AUnitBase*> NewSelection;
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		// Every Controller can Check his own TeamId
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
+		{
+			NewSelection.Add(Unit);
+		}
+	}
+
+	// And we can create the FogManager
+	for (int32 i = 0; i < NewSelection.Num(); i++)
+	{
+		if (NewSelection[i])
+		{
+			NewSelection[i]->IsMyTeam = true;
+			NewSelection[i]->SpawnFogOfWarManager(this);
+		}
+	}
+	
+}
+
+
+void AExtendedControllerBase::Client_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
+{
+	// TSGameMode->AllUnits is onyl available on Server why we start running on server
+	// We Mutlicast to CLient and send him AllUnits as parameter
+	TArray<AUnitBase*> NewSelection;
+	for (int32 i = 0; i < AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		// Every Controller can Check his own TeamId
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
+		{
+			NewSelection.Add(Unit);
+		}
+	}
+
+	// And we can create the FogManager
+	for (int32 i = 0; i < NewSelection.Num(); i++)
+	{
+		if (NewSelection[i])
+		{
+			NewSelection[i]->IsMyTeam = true;
+			NewSelection[i]->SpawnFogOfWarManager(this);
+		}
+	}
+
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+	if (Camera)
+		Camera->SetupResourceWidget(this);
+}
+
+
+void AExtendedControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
+{
+	if (Unit->TeamId == SelectableTeamId)
+	{
+		Unit->IsMyTeam = true;
+		Unit->SpawnFogOfWarManager(this);
+	}
+}
+/*
+// Retry if conditions aren't met and within max wait time
+if ((!OwningPlayerController || !SpawnedFogManager) && PlayerControllerTimeWaited < PlayerControllerMaxWaitTime)
+{
+	PlayerControllerTimeWaited += PlayerControllerRetryInterval;
+	World->GetTimerManager().SetTimer(
+		PlayerControllerRetryHandle,
+		this,
+		&APerformanceUnit::SetOwningPlayerController,
+		PlayerControllerRetryInterval,
+		false  // No looping, manual re-trigger
+	);
+}
+*/

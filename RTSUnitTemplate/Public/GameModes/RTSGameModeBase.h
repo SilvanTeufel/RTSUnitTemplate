@@ -47,6 +47,10 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DisableSpawn = true;
 //public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int GatherControllerTimer = 5.f;
+	
 	virtual void BeginPlay() override;
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
@@ -123,7 +127,7 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 HighestSquadId = 0;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <AActor*> AllUnits;
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)

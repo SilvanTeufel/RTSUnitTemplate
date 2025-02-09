@@ -95,8 +95,8 @@ void AExtendedCameraBase::BeginPlay()
 	HideWidgetsWhenNoControl();
 
 	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
-	FTimerHandle SetupResourceWidgetTimerHandle;
-	GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
+	//FTimerHandle SetupResourceWidgetTimerHandle;
+	//GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
 	// Delay the execution of HideWidgetsWhenNoControl
 }
 
@@ -120,19 +120,21 @@ void AExtendedCameraBase::HideWidgetsWhenNoControl()
 	}
 }
 
-void AExtendedCameraBase::SetupResourceWidget()
+void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
+	UE_LOG(LogTemp, Error, TEXT("Try SetupResourceWidget"));
 	if(!ResourceWidget) return;
 	
 		ResourceWidget->SetVisibility(true);
 		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-
+		UE_LOG(LogTemp, Error, TEXT("Found ResourceWidget"));
 		if(ResourceBar)
 		{
-			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-			
+			//ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			UE_LOG(LogTemp, Error, TEXT("Found ResourceBar"));
 			if(CameraControllerBase)
 			{
+				UE_LOG(LogTemp, Error, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
 				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
 				ResourceBar->StartUpdateTimer();
 			}

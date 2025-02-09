@@ -16,6 +16,8 @@ class RTSUNITTEMPLATE_API AExtendedControllerBase : public AWidgetController
 
 public:
 
+	virtual void BeginPlay() override;
+	
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
@@ -249,5 +251,14 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void CastEndsEvent(AUnitBase* UnitBase);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetFogManager();
+
+	UFUNCTION(Client, Reliable)
+	void Client_SetFogManager(const TArray<AActor*>& AllUnits);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetFogManagerUnit(APerformanceUnit* Unit);
 	
 };

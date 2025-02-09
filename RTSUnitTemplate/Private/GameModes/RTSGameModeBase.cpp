@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "AIController.h"
 #include "Actors/Waypoint.h"
+#include "Characters/Camera/ExtendedCameraBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
@@ -18,9 +19,7 @@
 void ARTSGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	FTimerHandle TimerHandle;
-	SetTeamIdsAndWaypoints();
+	
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 	
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
@@ -41,7 +40,10 @@ void ARTSGameModeBase::BeginPlay()
 		if(WorkingUnit)
 			WorkingUnits.Add(WorkingUnit);
 	}
-	
+
+	FTimerHandle TimerHandle;
+	GetWorldTimerManager().SetTimer(TimerHandle, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+	//SetTeamIdsAndWaypoints();
 }
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
@@ -55,7 +57,7 @@ void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	//DOREPLIFETIME(ARTSGameModeBase, SpawnTimerHandleMap);
 	DOREPLIFETIME(ARTSGameModeBase, TimerIndex);
-	
+	DOREPLIFETIME(ARTSGameModeBase, AllUnits);
 }
 
 int32 FindMatchingIndex(const TArray<int32>& IdArray, int32 SearchId)
@@ -87,7 +89,7 @@ void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypo
 
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
-	
+	UE_LOG(LogTemp, Error, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
 	{
@@ -101,10 +103,17 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		AController* PlayerController = It->Get();
 		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(PlayerController);
 
+	
+		
 		if (CameraControllerBase && PlayerStarts.IsValidIndex(PlayerStartIndex))
 		{
 			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
+
+			UE_LOG(LogTemp, Error, TEXT("Assigning TeamId: %d to Controller: %s"), 
+				CustomPlayerStart->SelectableTeamId, *CameraControllerBase->GetName());
+			
 			SetTeamIdAndDefaultWaypoint_Implementation(CustomPlayerStart->SelectableTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
+			CameraControllerBase->Client_SetFogManager(AllUnits);;
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
 		}
 	}

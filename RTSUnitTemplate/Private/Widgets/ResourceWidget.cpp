@@ -94,7 +94,7 @@ void UResourceWidget::UpdateTeamResourcesDisplay()
     AResourceGameState* ResourceGameState = GetWorld()->GetGameState<AResourceGameState>();
     if (!ResourceGameState)
     {
-       // UE_LOG(LogTemp, Warning, TEXT("ResourceGameState not found on client."));
+        UE_LOG(LogTemp, Warning, TEXT("ResourceGameState not found on client."));
         return;
     }
         

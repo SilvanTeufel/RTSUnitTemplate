@@ -610,7 +610,9 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			
 
 			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
-			
+
+			if (ControllerBase)
+				ControllerBase->Multi_SetFogManagerUnit(NewUnit);
 			
 			if(NewUnit)
 			{

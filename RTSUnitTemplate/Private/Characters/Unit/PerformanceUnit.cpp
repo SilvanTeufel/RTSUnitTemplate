@@ -14,7 +14,7 @@
 
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
-
+	bReplicates = true;
 }
 
 void APerformanceUnit::Tick(float DeltaTime)
@@ -44,16 +44,9 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void APerformanceUnit::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	SetOwningPlayerController();
-}
 
-void APerformanceUnit::PossessedBy(AController* NewController)
-{
-	Super::PossessedBy(NewController);
 
-	//CheckForFogOfWarCollisions();
-	
+	SetOwningPlayerControllerAndSpawnFogManager();
 }
 
 void APerformanceUnit::Destroyed()
@@ -76,36 +69,37 @@ void APerformanceUnit::DestroyFogManager()
 	}
 }
 
-
-void APerformanceUnit::SetOwningPlayerController()
+void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 {
+
+	if (IsLocallyControlled())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetOwningPlayerController Creating Fog on Server"));
+	}else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetOwningPlayerController Creating Fog on Client"));
+	}
+	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
 	
 	APlayerController* PlayerController = World->GetFirstPlayerController();
 	if (PlayerController)
 	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
+		AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(PlayerController);
+		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
 			OwningPlayerController = ControllerBase;
 			// Stop retrying if controller is assigned
-			World->GetTimerManager().ClearTimer(PlayerControllerRetryHandle);
-
-			if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
-			{
-				IsMyTeam = true;
-			}
-			else
-			{
-				IsMyTeam = false;
-			}
+			//World->GetTimerManager().ClearTimer(PlayerControllerRetryHandle);
 			// Safe to call multiple times since SpawnFogOfWarManager checks internally
-			SpawnFogOfWarManager();
+			ControllerBase->Multi_SetFogManagerUnit(this);
+			//SpawnFogOfWarManager(ControllerBase);
 			return;
 		}
 	}
 
+	/*
 	// Retry if conditions aren't met and within max wait time
 	if ((!OwningPlayerController || !SpawnedFogManager) && PlayerControllerTimeWaited < PlayerControllerMaxWaitTime)
 	{
@@ -123,9 +117,10 @@ void APerformanceUnit::SetOwningPlayerController()
 		// Timeout reached; handle failure if needed
 		UE_LOG(LogTemp, Warning, TEXT("Failed to find OwningPlayerController within %.1f seconds."), PlayerControllerMaxWaitTime);
 	}
+	*/
 }
 
-void APerformanceUnit::SpawnFogOfWarManager()
+void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
 
 	UWorld* World = GetWorld();
@@ -137,12 +132,22 @@ void APerformanceUnit::SpawnFogOfWarManager()
 	
 	if (!EnableFog || !FogOfWarManagerClass) return;
 	
-	AControllerBase* ControllerBase = Cast<AControllerBase>(OwningPlayerController);
+	AControllerBase* ControllerBase = Cast<AControllerBase>(PC);
 	
 	if(SpawnedFogManager) return;
 	
-	if (FogOfWarManagerClass && ControllerBase  && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
+	if (FogOfWarManagerClass &&
+		ControllerBase  &&
+		(ControllerBase->SelectableTeamId == TeamId ||
+			ControllerBase->SelectableTeamId == 0))
 	{
+		if (IsLocallyControlled())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Creating Fog on Server"));
+		}else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Creating Fog on Client"));
+		}
 		
 					FVector SpawnLocation = GetActorLocation();
 					FRotator SpawnRotation = FRotator::ZeroRotator;
