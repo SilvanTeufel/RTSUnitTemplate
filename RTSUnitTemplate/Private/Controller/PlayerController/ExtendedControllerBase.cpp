@@ -1112,7 +1112,7 @@ void AExtendedControllerBase::LeftClickPressed()
 				}else
 				{
 					DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Red, false, 1.5, 0, 1);
-					LeftClickAttack_Implementation(SelectedUnits[i], RunLocation);
+					LeftClickAttack(SelectedUnits[i], RunLocation);
 					PlayAttackSound = true;
 				}
 			}
@@ -1436,7 +1436,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 	return false;
 }
 
-void AExtendedControllerBase::CastEndsEvent_Implementation(AUnitBase* UnitBase)
+void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 {
 	if (!UnitBase) return;
 
@@ -1459,7 +1459,7 @@ void AExtendedControllerBase::Server_SetFogManager_Implementation()
 	
 	// TSGameMode->AllUnits is onyl available on Server why we start running on server
 	// We Cast to CLient and send him AllUnits as parameter
-	Client_SetFogManager(RTSGameMode->AllUnits);
+	Multi_SetFogManager(RTSGameMode->AllUnits);
 
 	// We Mutlicast to CLient and send him AllUnits as parameter
 	TArray<AUnitBase*> NewSelection;
@@ -1486,8 +1486,9 @@ void AExtendedControllerBase::Server_SetFogManager_Implementation()
 }
 
 
-void AExtendedControllerBase::Client_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
+void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
 {
+	UE_LOG(LogTemp, Error, TEXT("Multi_SetFogManager_Implementation - TeamId is now: %d"), SelectableTeamId);
 	// TSGameMode->AllUnits is onyl available on Server why we start running on server
 	// We Mutlicast to CLient and send him AllUnits as parameter
 	TArray<AUnitBase*> NewSelection;
@@ -1525,17 +1526,12 @@ void AExtendedControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanc
 		Unit->SpawnFogOfWarManager(this);
 	}
 }
-/*
-// Retry if conditions aren't met and within max wait time
-if ((!OwningPlayerController || !SpawnedFogManager) && PlayerControllerTimeWaited < PlayerControllerMaxWaitTime)
+
+void AExtendedControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()
 {
-	PlayerControllerTimeWaited += PlayerControllerRetryInterval;
-	World->GetTimerManager().SetTimer(
-		PlayerControllerRetryHandle,
-		this,
-		&APerformanceUnit::SetOwningPlayerController,
-		PlayerControllerRetryInterval,
-		false  // No looping, manual re-trigger
-	);
+	UE_LOG(LogTemp, Error, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
+	
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+	if (Camera)
+		Camera->ShowWidgetsWhenLocallyControlled();
 }
-*/

@@ -22,7 +22,7 @@ public:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void HideWidgetsWhenNoControl();
+	void ShowWidgetsWhenLocallyControlled();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupResourceWidget(AExtendedControllerBase* CameraControllerBase);

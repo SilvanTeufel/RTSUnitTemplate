@@ -149,7 +149,7 @@ public:
 		void RightClickRunShift(AUnitBase* Unit, FVector Location);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void RightClickRunUEPF(AUnitBase* Unit, FVector Location, bool CancelAbility);
+		void RightClickRunUEPF(int UnitIndex, FVector Location, bool CancelAbility);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
@@ -270,11 +270,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		AWaypoint* DefaultWaypoint;
 		
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void SetControlerTeamId(int Id);
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void Multi_SetControllerTeamId(int Id);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void SetControlerDefaultWaypoint(AWaypoint* Waypoint);
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+		void Multi_SetControllerDefaultWaypoint(AWaypoint* Waypoint);
 	
 	UPROPERTY(BlueprintReadWrite, Category = TopDownRTSTemplate)
 		int SelectedUnitCount = 0;

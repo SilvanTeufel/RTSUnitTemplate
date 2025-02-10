@@ -92,22 +92,37 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
-	HideWidgetsWhenNoControl();
-
-	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
-	//FTimerHandle SetupResourceWidgetTimerHandle;
-	//GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
-	// Delay the execution of HideWidgetsWhenNoControl
-}
-
-void AExtendedCameraBase::HideWidgetsWhenNoControl()
-{
 	if (ControlWidgetComp)ControlWidgetComp->SetHiddenInGame(true);
 	if (TalentChooser) TalentChooser->SetHiddenInGame(true);
 	if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
 	if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
 	if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
 	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
+	
+	//HideWidgetsWhenNoControl();
+	
+	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
+	//FTimerHandle SetupResourceWidgetTimerHandle;
+	//GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
+	// Delay the execution of HideWidgetsWhenNoControl
+}
+
+void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
+{
+	UE_LOG(LogTemp, Error, TEXT("HideWidgetsWhenNoControl!"));
+	
+	/*
+	if (!IsLocallyControlled())
+	{
+		UE_LOG(LogTemp, Error, TEXT("HIDING!!"));
+		if (ControlWidgetComp)ControlWidgetComp->SetHiddenInGame(true);
+		if (TalentChooser) TalentChooser->SetHiddenInGame(true);
+		if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
+		if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
+		if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
+		if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
+	}*/
+	
 	if (IsLocallyControlled())
 	{
 		// Hide all widgets if we are not locally controlled

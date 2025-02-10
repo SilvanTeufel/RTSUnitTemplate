@@ -249,16 +249,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastEndsEvent(AUnitBase* UnitBase);
 
 	UFUNCTION(Server, Reliable)
 	void Server_SetFogManager();
 
-	UFUNCTION(Client, Reliable)
-	void Client_SetFogManager(const TArray<AActor*>& AllUnits);
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetFogManager(const TArray<AActor*>& AllUnits);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetFogManagerUnit(APerformanceUnit* Unit);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_ShowWidgetsWhenLocallyControlled();
 	
 };

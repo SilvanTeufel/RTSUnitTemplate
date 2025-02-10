@@ -425,8 +425,11 @@ void AUnitControllerBase::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 
 	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
 	{
-		ControllerBase->CastEndsEvent(UnitBase);
-		
+		//ControllerBase->CastEndsEvent(UnitBase);
+		if (UnitBase->ActivatedAbilityInstance)
+		{
+			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+		}
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;
 		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);

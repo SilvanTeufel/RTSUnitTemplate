@@ -4,6 +4,8 @@
 
 #include "Characters/Unit/UnitBase.h"
 
+
+
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
 	UpdateTooltipText();

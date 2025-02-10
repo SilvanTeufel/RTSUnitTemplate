@@ -81,8 +81,8 @@ void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypo
 
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->SetControlerTeamId(Id);
-		CameraControllerBase->SetControlerDefaultWaypoint(Waypoint);
+		CameraControllerBase->Multi_SetControllerTeamId(Id);
+		CameraControllerBase->Multi_SetControllerDefaultWaypoint(Waypoint);
 	}
 	
 }
@@ -113,7 +113,12 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 				CustomPlayerStart->SelectableTeamId, *CameraControllerBase->GetName());
 			
 			SetTeamIdAndDefaultWaypoint_Implementation(CustomPlayerStart->SelectableTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
-			CameraControllerBase->Client_SetFogManager(AllUnits);;
+
+			UE_LOG(LogTemp, Error, TEXT("TeamId is now: %d from Controller: %s"), 
+			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
+			
+			CameraControllerBase->Multi_SetFogManager(AllUnits);;
+			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
 		}
 	}

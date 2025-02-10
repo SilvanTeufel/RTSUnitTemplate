@@ -16,6 +16,8 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 {
 	GENERATED_BODY()
 
+
+	
 public:
 	UGameplayAbilityBase();
 

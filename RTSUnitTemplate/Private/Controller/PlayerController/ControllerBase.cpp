@@ -241,7 +241,7 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 			}else if(UseUnrealEnginePathFinding)
 			{
 					
-				if (Unit &&Unit->UnitState != UnitData::Dead)
+				if (Unit && Unit->UnitState != UnitData::Dead)
 				{
 					LeftClickAMoveUEPF(Unit, Location);
 				}
@@ -670,8 +670,22 @@ void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector
 	Unit->SetToggleUnitDetection(false);
 }
 
-void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location, bool CancelAbility)
+void AControllerBase::RightClickRunUEPF_Implementation(int UnitIndex, FVector Location, bool CancelAbility)
 {
+
+	if (!RTSGameMode) return;
+
+	AUnitBase* Unit = nullptr;
+	
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
+		{
+			Unit = NewUnit;
+			break;
+		}
+	}
 	
 	if (!Unit) return;
 
@@ -832,15 +846,15 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			{
 				//PlayWaypointSound = true;
 			}else if (IsShiftPressed) {
-				RightClickRunShift_Implementation(SelectedUnits[i], RunLocation);
+				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{
-				RightClickRunUEPF_Implementation(SelectedUnits[i], RunLocation, true);
+				RightClickRunUEPF(SelectedUnits[i]->UnitIndex, RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
-				RightClickRunDijkstraPF_Implementation(SelectedUnits[i], RunLocation, i);
+				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
 				PlayRunSound = true;
 			}
 		}
@@ -1064,12 +1078,12 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 	UnitBase->CancelCurrentAbility();
 }
 
-void AControllerBase::SetControlerTeamId_Implementation(int Id)
+void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
 }
 
-void AControllerBase::SetControlerDefaultWaypoint_Implementation(AWaypoint* Waypoint)
+void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoint* Waypoint)
 {
 	if(Waypoint)
 		DefaultWaypoint = Waypoint;
