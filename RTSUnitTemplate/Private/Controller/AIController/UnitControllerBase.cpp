@@ -27,20 +27,22 @@ void AUnitControllerBase::DetectAndLoseUnits()
 {
 	// Assuming UnitBase is an accessible variable or parameter
 	 // Replace this with actual reference to UnitBase
-	//UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
+	if (Debug) UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
 	if (MyUnitBase)
 	{
 		bool SetState = MyUnitBase->GetToggleUnitDetection();
 
+		if (Debug) UE_LOG(LogTemp, Warning, TEXT("MyUnitBase->GetToggleUnitDetection() %d "), SetState);
+		
 		if(SetState || MyUnitBase->GetUnitState() == UnitData::Patrol || MyUnitBase->GetUnitState() == UnitData::PatrolRandom || MyUnitBase->GetUnitState() == UnitData::PatrolIdle)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
+			if (Debug) UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
 			LoseUnitToChase(MyUnitBase);
 			DetectUnitsAndSetState(MyUnitBase, 0, true);
 		}
 		else
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
+			if (Debug) UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
 			LoseUnitToChase(MyUnitBase);
 			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 		}
@@ -1015,6 +1017,8 @@ void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSe
 
 void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	DetectAndLoseUnits();
+	
 	if(UnitBase->GetToggleUnitDetection())
 	{
 		if(UnitBase->SetNextUnitToChase())
@@ -1031,9 +1035,6 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->UnitStatePlaceholder = UnitData::Run;
 		return;
 	}
-
-
-	DetectAndLoseUnits();
 
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 

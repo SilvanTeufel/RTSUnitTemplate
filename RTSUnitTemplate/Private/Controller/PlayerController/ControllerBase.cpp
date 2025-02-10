@@ -213,7 +213,7 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 {
 	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
 	
-	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
+	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
 	Unit->RunLocationArray.Empty();
 	Unit->RunLocationArrayIterator = 0;
@@ -341,180 +341,6 @@ void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVect
 {
 	Unit->SetRunLocation(DestinationLocation);
 }
-
-/*
-void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-    if (!HasAuthority() || !Unit)
-    {
-        return;
-    }
-
-    UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
-    if (!MovementComp)
-    {
-        return;
-    }
-
-    AAIController* AIController = Cast<AAIController>(Unit->GetController());
-    if (!AIController)
-    {
-        return;
-    }
-
-    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
-    if (!NavSystem)
-    {
-        return;
-    }
-
-    // Attempt to perform line trace as a workaround
-    FHitResult HitResult;
-    if (PerformLineTrace(Unit, DestinationLocation, HitResult))
-    {
-        // If line trace hits a pawn, handle the obstacle
-        OnLineTraceHit(Unit, DestinationLocation);
-    }
-    else
-    {
-        // No obstacle detected; proceed with movement
-        ContinueMoveToLocation(Unit, DestinationLocation);
-    }
-}
-
-bool AControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
-{
-    FVector StartLocation = Unit->GetActorLocation();
-    FVector EndLocation = DestinationLocation;
-
-	EndLocation.Z = StartLocation.Z;
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
-
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        StartLocation,
-        EndLocation,
-        ECC_Pawn, // Trace against pawns only
-        QueryParams
-    );
-
-	// Draw the line trace for visualization
-	FColor TraceColor = bHit ? FColor::Red : FColor::Green;
-	DrawDebugLine(GetWorld(), StartLocation, EndLocation, TraceColor, false, 2.0f, 0, 1.0f);
-
-	
-    return bHit;
-}
-
-void AControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-	// Log or handle the hit as needed
-	UE_LOG(LogTemp, Warning, TEXT("LineTrace hit a pawn. Scheduling movement retry."));
-    
-	// Calculate the alternate location
-	FVector AlternateLocation = CalculateAlternateLocation(Unit, DestinationLocation);
-	ContinueMoveToLocation(Unit, AlternateLocation);
-	// Set a timer to retry movement after 3 seconds
-
-	FTimerDelegate TimerDel = FTimerDelegate::CreateUObject(this, &AControllerBase::ContinueMoveToLocation, Unit, DestinationLocation);
-    
-	GetWorld()->GetTimerManager().SetTimer(
-		MoveRetryTimerHandle,
-		TimerDel,
-		1.0f,
-		false
-	);
-}
-
-FVector AControllerBase::CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-	FVector CurrentLocation = Unit->GetActorLocation();
-	FVector Direction = DestinationLocation - CurrentLocation;
-    
-	// Zero out the Z component to ensure movement in the XY plane
-	Direction.Z = 0.0f;
-    
-
-	if (Direction.IsNearlyZero())
-	{
-		return DestinationLocation; // Fallback to original destination
-	}
-    
-	Direction = Direction.GetSafeNormal();
-    
-	// Calculate the right vector perpendicular to the direction in the XY plane
-	FVector RightVector = FVector::CrossProduct(Direction, FVector::UpVector).GetSafeNormal();
-    
-	if (RightVector.IsNearlyZero())
-	{
-		return DestinationLocation; // Fallback to original destination
-	}
-    
-	// Calculate a new location offset by 90 degrees to the right
-	FVector AlternateLocation = CurrentLocation + (RightVector * 500.f);
-
-	DrawDebugSphere(GetWorld(), AlternateLocation, 50.0f, 12, FColor::Blue, false, 5.0f);
-
-	return AlternateLocation;
-}
-
-void AControllerBase::ContinueMoveToLocation(AUnitBase* Unit, FVector DestinationLocation)
-{
-    if (!HasAuthority() || !Unit)
-    {
-        return;
-    }
-
-	UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
-	if (!MovementComp)
-	{
-		return;
-	}
-
-	AAIController* AIController = Cast<AAIController>(Unit->GetController());
-	if (!AIController)
-	{
-		return;
-	}
-
-	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
-	if (!NavSystem)
-	{
-		return;
-	}
-	
-	UE_LOG(LogTemp, Warning, TEXT("ContinueMoveToLocation DestinationLocation: %s"), *DestinationLocation.ToString());
-
-	DrawDebugSphere(GetWorld(), DestinationLocation, 50.0f, 12, FColor::Silver, false, 5.0f);
-    // Set the run location and mark that pathfinding has been used
-    SetRunLocation(Unit, DestinationLocation);
-    Unit->UEPathfindingUsed = true;
-	SetUnitState_Replication(Unit, 1);
-    // Prepare the move request
-    FAIMoveRequest MoveRequest;
-    MoveRequest.SetGoalLocation(DestinationLocation);
-    MoveRequest.SetAcceptanceRadius(5.0f);
-    //MoveRequest.SetUsePathfinding(true);
-    //MoveRequest.SetCanStrafe(false);
-   //MoveRequest.SetAllowPartialPath(false);
-
-    FNavPathSharedPtr NavPath;
-
-    // Execute the move
-    EPathFollowingRequestResult::Type MoveResult = AIController->MoveTo(MoveRequest, &NavPath);
-
-    if (MoveResult == EPathFollowingRequestResult::RequestSuccessful && NavPath)
-    {
-    	UE_LOG(LogTemp, Warning, TEXT("!Successful movement!"));
-        FNavMeshPath* NavMeshPath = NavPath->CastPath<FNavMeshPath>();
-        if (NavMeshPath)
-        {
-            NavMeshPath->OffsetFromCorners(UEPathfindingCornerOffset);
-        }
-    }
-}
-*/
 
 void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
@@ -651,11 +477,26 @@ void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, boo
 	//Unit->UnitsToChase.Empty();
 	//Unit->UnitToChase = nullptr;
 }
-void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
+void AControllerBase::RightClickRunShift_Implementation(int UnitIndex, FVector Location)
 {
+	if (!RTSGameMode) return;
+
+	AUnitBase* Unit = nullptr;
+	
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
+		{
+			Unit = NewUnit;
+			break;
+		}
+	}
+	
+	if (!Unit) return;
+	
 	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
 	
-	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	if(!Unit->RunLocationArray.Num())
 	{
 		SetRunLocation(Unit, Location);
@@ -693,21 +534,35 @@ void AControllerBase::RightClickRunUEPF_Implementation(int UnitIndex, FVector Lo
 	
 	if (CancelAbility) CancelCurrentAbility(Unit);
 	
-	DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	MoveToLocationUEPathFinding(Unit, Location);
 	SetUnitState_Replication(Unit,1);
 	SetToggleUnitDetection(Unit, false);
 }
 
-void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
+void AControllerBase::RightClickRunDijkstraPF_Implementation(int UnitIndex, FVector Location, int Counter)
 {
+	if (!RTSGameMode) return;
+
+	AUnitBase* Unit = nullptr;
+	
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
+		{
+			Unit = NewUnit;
+			break;
+		}
+	}
+	
+	if (!Unit) return;
+	
 	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
 	
 	TArray<FPathPoint> PathPoints;
 
 	FVector UnitLocation = Unit->GetActorLocation();
-
-	DrawDebugCircle(GetWorld(), FVector(Location.X, Location.Y, Location.Z+2.f), 15, 5, FColor::Green, false, 1.5, 0, 1, FVector(0, 1, 0), FVector(1, 0, 0));
+	
 	if(Unit->GetUnitState() != UnitData::Run)
 		Unit->SetWalkSpeed(0.f);
 
@@ -821,6 +676,32 @@ FVector AControllerBase::CalculateGridOffset(int32 Row, int32 Col) const
 	}
 }
 
+void AControllerBase::DrawDebugCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor)
+{
+	if (!World) return;
+
+	float Radius = 15.f;
+	int32 NumSegments = 32;       // Glätte des Kreises
+	float LifeTime = 1.5f;        // Dauer des Kreises in Sekunden
+	float Thickness = 2.f;        // Linienstärke
+
+	// Kreis in der XY-Ebene zeichnen
+	DrawDebugCircle(
+		World, 
+		Location+FVector(0.f,0.f,15.f), 
+		Radius, 
+		NumSegments, 
+		CircleColor, 
+		false,          // Nicht permanent
+		LifeTime, 
+		0,              // Depth Priority
+		Thickness, 
+		FVector(1, 0, 0), // X-Achse
+		FVector(0, 1, 0), // Y-Achse
+		false            // Keine Achsen zeichnen
+	);
+}
+
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
@@ -846,15 +727,19 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			{
 				//PlayWaypointSound = true;
 			}else if (IsShiftPressed) {
-				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
+				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				RightClickRunShift(SelectedUnits[i]->UnitIndex, RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunUEPF(SelectedUnits[i]->UnitIndex, RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
-				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				RightClickRunDijkstraPF(SelectedUnits[i]->UnitIndex, RunLocation, i); // _Implementation
 				PlayRunSound = true;
 			}
 		}
@@ -951,12 +836,23 @@ void AControllerBase::SpaceReleased()
 	IsSpacePressed = false;
 }
 
-void AControllerBase::ToggleUnitDetection_Implementation(AUnitBase* Unit)
+void AControllerBase::ToggleUnitDetection_Implementation(int UnitIndex)
 {
-	if (Unit && Unit->UnitState != UnitData::Dead)
+	AUnitBase* NewSelection = nullptr;
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
-		if(Unit)
-			Unit->SetToggleUnitDetection(true);
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		// Every Controller can Check his own TeamId
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->UnitIndex == UnitIndex)
+		{
+			NewSelection = Unit;
+		}
+	}
+	
+	if (NewSelection && NewSelection->UnitState != UnitData::Dead)
+	{
+		if(NewSelection)
+			NewSelection->SetToggleUnitDetection(true);
 	}
 }
 
@@ -968,7 +864,7 @@ void AControllerBase::TPressed()
 		AttackToggled = true;
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			ToggleUnitDetection(SelectedUnits[i]);
+			ToggleUnitDetection(SelectedUnits[i]->UnitIndex);
 		}
 	}
 }

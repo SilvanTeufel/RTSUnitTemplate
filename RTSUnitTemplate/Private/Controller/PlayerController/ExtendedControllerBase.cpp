@@ -1111,7 +1111,7 @@ void AExtendedControllerBase::LeftClickPressed()
 					// Do Nothing
 				}else
 				{
-					DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Red, false, 1.5, 0, 1);
+					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
 					LeftClickAttack(SelectedUnits[i], RunLocation);
 					PlayAttackSound = true;
 				}

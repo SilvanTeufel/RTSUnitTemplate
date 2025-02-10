@@ -24,22 +24,7 @@ void ARTSGameModeBase::BeginPlay()
 	
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
 
-	for(int i = 0; i < AllUnits.Num(); i++)
-	{
-		HighestUnitIndex++;
-	
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		Unit->SetUnitIndex(HighestUnitIndex);
-		
-
-		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(Unit);
-		if(SpeakingUnit)
-			SpeakingUnits.Add(SpeakingUnit);
-
-		AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(Unit);
-		if(WorkingUnit)
-			WorkingUnits.Add(WorkingUnit);
-	}
+	FillUnitArrays();
 
 	FTimerHandle TimerHandle;
 	GetWorldTimerManager().SetTimer(TimerHandle, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
@@ -87,9 +72,29 @@ void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypo
 	
 }
 
+void ARTSGameModeBase::FillUnitArrays()
+{
+	for(int i = 0; i < AllUnits.Num(); i++)
+	{
+		HighestUnitIndex++;
+	
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		Unit->SetUnitIndex(HighestUnitIndex);
+
+		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(Unit);
+		if(SpeakingUnit)
+			SpeakingUnits.Add(SpeakingUnit);
+
+		AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(Unit);
+		if(WorkingUnit)
+			WorkingUnits.Add(WorkingUnit);
+	}
+}
+
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
 	UE_LOG(LogTemp, Error, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
+	
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
 	{
@@ -116,7 +121,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 			UE_LOG(LogTemp, Error, TEXT("TeamId is now: %d from Controller: %s"), 
 			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
-			
+			UE_LOG(LogTemp, Error, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
 			CameraControllerBase->Multi_SetFogManager(AllUnits);;
 			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration

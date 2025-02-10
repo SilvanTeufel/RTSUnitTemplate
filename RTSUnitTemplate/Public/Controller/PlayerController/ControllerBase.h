@@ -146,13 +146,13 @@ public:
 		void SetToggleUnitDetection(AUnitBase* Unit, bool State);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void RightClickRunShift(AUnitBase* Unit, FVector Location);
+		void RightClickRunShift(int UnitIndex, FVector Location);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void RightClickRunUEPF(int UnitIndex, FVector Location, bool CancelAbility);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
+		void RightClickRunDijkstraPF(int UnitIndex, FVector Location, int Counter);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
@@ -172,6 +172,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector CalculateGridOffset(int32 Row, int32 Col) const;
+
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DrawDebugCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void RunUnitsAndSetWaypoints(FHitResult Hit);
@@ -190,7 +194,7 @@ public:
 		void SpaceReleased();
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-		void ToggleUnitDetection(AUnitBase* Unit);
+		void ToggleUnitDetection(int UnitIndex);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "APressed", Keywords = "RTSUnitTemplate APressed"), Category = RTSUnitTemplate)
 		void TPressed();

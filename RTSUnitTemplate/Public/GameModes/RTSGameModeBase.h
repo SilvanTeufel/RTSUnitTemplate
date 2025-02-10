@@ -57,6 +57,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTeamIdAndDefaultWaypoint(int Id, AWaypoint* Waypoint, ACameraControllerBase* CameraControllerBase);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void FillUnitArrays();
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTeamIdsAndWaypoints();
