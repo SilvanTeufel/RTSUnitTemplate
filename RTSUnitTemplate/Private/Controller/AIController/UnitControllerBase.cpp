@@ -27,22 +27,23 @@ void AUnitControllerBase::DetectAndLoseUnits()
 {
 	// Assuming UnitBase is an accessible variable or parameter
 	 // Replace this with actual reference to UnitBase
-	if (Debug) UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
+	if (DebugDetection) UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
+	if(DebugDetection)UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
 	if (MyUnitBase)
 	{
 		bool SetState = MyUnitBase->GetToggleUnitDetection();
 
-		if (Debug) UE_LOG(LogTemp, Warning, TEXT("MyUnitBase->GetToggleUnitDetection() %d "), SetState);
+		if (DebugDetection) UE_LOG(LogTemp, Warning, TEXT("MyUnitBase->GetToggleUnitDetection() %d "), SetState);
 		
 		if(SetState || MyUnitBase->GetUnitState() == UnitData::Patrol || MyUnitBase->GetUnitState() == UnitData::PatrolRandom || MyUnitBase->GetUnitState() == UnitData::PatrolIdle)
 		{
-			if (Debug) UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
+			if (DebugDetection) UE_LOG(LogTemp, Warning, TEXT("SetState TRUE! "));
 			LoseUnitToChase(MyUnitBase);
 			DetectUnitsAndSetState(MyUnitBase, 0, true);
 		}
 		else
 		{
-			if (Debug) UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
+			if (DebugDetection) UE_LOG(LogTemp, Warning, TEXT("SetState FALSE! "));
 			LoseUnitToChase(MyUnitBase);
 			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 		}
@@ -310,7 +311,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			break;
 		case UnitData::Run:
 			{
-				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Run"));
+				if(Debug) UE_LOG(LogTemp, Warning, TEXT("Run"));
+				
 				if(UnitBase->UEPathfindingUsed)
 					RunUEPathfinding(UnitBase, DeltaSeconds);
 				else
@@ -495,6 +497,8 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 	if(!RTSGameMode) return;
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
+	if(DebugDetection)UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
+	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
@@ -680,7 +684,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
             if(UnitBase->UnitToChase->IsFlying && !UnitBase->IsFlying 
                && DistanceToUnitToChase > UnitBase->StopRunToleranceForFlying)
             {
-                UnitBase->SetUnitState(UnitData::Idle);
+                UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
             }
             // If we are flying, adjust the chase location.
             FVector UnitToChaseLocation = CalculateChaseLocation(UnitBase);
@@ -1024,6 +1028,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		if(UnitBase->SetNextUnitToChase())
 		{
 			UnitBase->SetUEPathfinding = true;
+			UnitBase->UnitStatePlaceholder = UnitData::Run;
 			UnitBase->SetUnitState(UnitData::Chase);
 			return;
 		}
@@ -1254,80 +1259,6 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	
 }
 
-/*
-void AUnitControllerBase::SetUEPathfindingTo(AUnitBase* UnitBase, float DeltaSeconds, FVector Location)
-{
-	if(!UnitBase->SetUEPathfinding)
-		return;
-	
-	if (ControllerBase != nullptr)
-	{
-			UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-			// You can use the controller here
-			// For example, you can use the MoveToLocationUEPathFinding function if it's defined in your controller class.
-			UnitBase->SetUEPathfinding = false;
-			ControllerBase->MoveToLocationUEPathFinding(UnitBase, Location);
-	
-	}
-}
-
-FVector AUnitControllerBase::CalculateAlternateLocation(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-	FVector CurrentLocation = Unit->GetActorLocation();
-	FVector Direction = DestinationLocation - CurrentLocation;
-    
-	// Zero out the Z component to ensure movement in the XY plane
-	Direction.Z = 0.0f;
-    
-
-	if (Direction.IsNearlyZero())
-	{
-		return DestinationLocation; // Fallback to original destination
-	}
-    
-	Direction = Direction.GetSafeNormal();
-    
-	// Calculate the right vector perpendicular to the direction in the XY plane
-	FVector RightVector = FVector::CrossProduct(Direction, FVector::UpVector).GetSafeNormal();
-    
-	if (RightVector.IsNearlyZero())
-	{
-		return DestinationLocation; // Fallback to original destination
-	}
-    
-	// Calculate a new location offset by 90 degrees to the right
-
-	// Randomly choose direction (50% chance for left or right)
-	float DirectionSign = FMath::RandBool() ? 1.f : -1.f;
-	
-	FVector AlternateLocation = CurrentLocation + (RightVector * DirectionSign * 500.f);
-
-	//DrawDebugSphere(GetWorld(), AlternateLocation, 50.0f, 12, FColor::Blue, false, 5.0f);
-
-	return AlternateLocation;
-}
-
-bool AUnitControllerBase::MoveToUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-    if (!HasAuthority() || !Unit)
-    {
-        return false;
-    }
-
-    // Attempt to perform line trace as a workaround
-    FHitResult HitResult;
-    if (PerformLineTrace(Unit, DestinationLocation, HitResult))
-    {
-        // If line trace hits a pawn, handle the obstacle
-        return OnLineTraceHit(Unit, DestinationLocation);
-    }
-    else
-    {
-        // No obstacle detected; proceed with movement
-    	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
-    }
-}
-*/
 bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
 {
     FVector StartLocation = Unit->GetActorLocation();
@@ -1353,40 +1284,7 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
 	
     return bHit;
 }
-/*
-bool AUnitControllerBase::OnLineTraceHit(AUnitBase* Unit, const FVector& DestinationLocation)
-{
-	// Log or handle the hit as needed
-	//UE_LOG(LogTemp, Warning, TEXT("LineTrace hit a pawn. Scheduling movement retry."));
-	// Set a timer to retry movement after 0.5 second using a lambda
-	
-	if (Unit->bCanProcessCollision &&
-		Unit->GetUnitState() != UnitData::PatrolRandom &&
-		Unit->GetUnitState() != UnitData::PatrolIdle)
-	{
-		// Calculate the alternate location
-		FVector AlternateLocation = CalculateAlternateLocation(Unit, DestinationLocation);
-		// Set a timer to retry movement after 3 seconds
-		Unit->SetCollisionCooldown();
-		Unit->StoredUnitState = Unit->GetUnitState();
-		//TEnumAsByte<UnitData::EState> CurrentState = Unit->GetUnitState();
-		GetWorld()->GetTimerManager().SetTimer(
-			MoveRetryTimerHandle,
-			[this, Unit, DestinationLocation]() {
-				Unit->SetUEPathfinding = true;
-				Unit->SetUnitState(Unit->StoredUnitState);
-				MoveToLocationUEPathFinding(Unit, DestinationLocation);
-			},
-			1.0f,  // Time in seconds
-			false  // Do not loop
-		);
 
-		return MoveToLocationUEPathFinding(Unit, AlternateLocation);
-	}
-	
-	return MoveToLocationUEPathFinding(Unit, DestinationLocation);
-}
-*/
 
 bool AUnitControllerBase::DirectMoveToLocation(AUnitBase* Unit, const FVector& DestinationLocation)
 {

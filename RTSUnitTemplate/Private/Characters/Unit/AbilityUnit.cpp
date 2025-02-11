@@ -218,8 +218,13 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
-
-	if (NewUnitState != UnitData::Casting && NewUnitState != UnitData::Dead && ActivatedAbilityInstance && !ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	/*
+	if (CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled && NewUnitState != UnitData::Casting && NewUnitState != UnitData::Dead) return;
+	}
+	*/
 	
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||

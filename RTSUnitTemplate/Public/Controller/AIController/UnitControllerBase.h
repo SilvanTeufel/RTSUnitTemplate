@@ -119,18 +119,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DespawnTime", Keywords = "RTSUnitTemplate DespawnTime"), Category = RTSUnitTemplate)
 		float DespawnTime = 4.0f;
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "PauseDuration", Keywords = "RTSUnitTemplate PauseDuration"), Category = RTSUnitTemplate)
-		//float PauseDuration = 0.6f; // Duratin of the State Pause
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "IsAttackedDuration", Keywords = "RTSUnitTemplate IsAttackedDuration"), Category = RTSUnitTemplate)
 		float IsAttackedDuration = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float IsRootedDuration = 5.f;
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		//float IsCastingDuration = 5.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "AttackAngleTolerance", Keywords = "RTSUnitTemplate AttackAngleTolerance"), Category = RTSUnitTemplate)
 		float AttackAngleTolerance = 0.f;
@@ -155,6 +149,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool Debug = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool DebugDetection = false;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UnitControlStateMachine", Keywords = "RTSUnitTemplate UnitControlStateMachine"), Category = RTSUnitTemplate)
 		void UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds);

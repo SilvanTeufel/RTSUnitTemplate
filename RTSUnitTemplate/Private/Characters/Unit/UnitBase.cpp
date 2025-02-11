@@ -526,6 +526,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 		{
 			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
+			
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
 			if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
@@ -639,7 +640,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 
 				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-
 			}
 		
 	}

@@ -49,7 +49,10 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 //public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int GatherControllerTimer = 5.f;
+	int GatherUnitsTimer = 5.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int GatherControllerTimer = 10.f;
 	
 	virtual void BeginPlay() override;
 

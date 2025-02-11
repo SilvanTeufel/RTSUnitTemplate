@@ -41,11 +41,9 @@ void ACameraUnitController::Casting(AUnitBase* UnitBase, float DeltaSeconds)
 		
 		if (UnitBase->ActivatedAbilityInstance)
 		{
-			FHitResult Hit;
-			ControllerBase->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
+			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
 		}
-		//ControllerBase->CastEndsEvent(UnitBase);
+
 		
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		UnitBase->UnitControlTimer = 0.f;

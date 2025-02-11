@@ -82,6 +82,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 public:
+
+
+	//UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//bool CurrentAbilityCanBeCanceled = true;
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	
@@ -89,9 +93,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void InitializeAttributes();
-
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void CreateOwnerShip();
+	
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void GiveAbilities();
@@ -100,9 +102,12 @@ public:
 	
 	virtual void OnRep_PlayerState() override;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(ReplicatedUsing = OnRep_ToggleUnitDetection, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;
 
+	UFUNCTION()
+	void OnRep_ToggleUnitDetection();
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetToggleUnitDetection(bool ToggleTo);
 

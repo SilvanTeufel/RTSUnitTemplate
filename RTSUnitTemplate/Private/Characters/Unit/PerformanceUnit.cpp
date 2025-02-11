@@ -71,14 +71,6 @@ void APerformanceUnit::DestroyFogManager()
 
 void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 {
-
-	if (IsLocallyControlled())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SetOwningPlayerController Creating Fog on Server"));
-	}else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SetOwningPlayerController Creating Fog on Client"));
-	}
 	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
@@ -90,34 +82,9 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
 			OwningPlayerController = ControllerBase;
-			// Stop retrying if controller is assigned
-			//World->GetTimerManager().ClearTimer(PlayerControllerRetryHandle);
-			// Safe to call multiple times since SpawnFogOfWarManager checks internally
 			ControllerBase->Multi_SetFogManagerUnit(this);
-			//SpawnFogOfWarManager(ControllerBase);
-			return;
 		}
 	}
-
-	/*
-	// Retry if conditions aren't met and within max wait time
-	if ((!OwningPlayerController || !SpawnedFogManager) && PlayerControllerTimeWaited < PlayerControllerMaxWaitTime)
-	{
-		PlayerControllerTimeWaited += PlayerControllerRetryInterval;
-		World->GetTimerManager().SetTimer(
-			PlayerControllerRetryHandle,
-			this,
-			&APerformanceUnit::SetOwningPlayerController,
-			PlayerControllerRetryInterval,
-			false  // No looping, manual re-trigger
-		);
-	}
-	else
-	{
-		// Timeout reached; handle failure if needed
-		UE_LOG(LogTemp, Warning, TEXT("Failed to find OwningPlayerController within %.1f seconds."), PlayerControllerMaxWaitTime);
-	}
-	*/
 }
 
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
@@ -141,13 +108,6 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 		(ControllerBase->SelectableTeamId == TeamId ||
 			ControllerBase->SelectableTeamId == 0))
 	{
-		if (IsLocallyControlled())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Creating Fog on Server"));
-		}else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Creating Fog on Client"));
-		}
 		
 					FVector SpawnLocation = GetActorLocation();
 					FRotator SpawnRotation = FRotator::ZeroRotator;

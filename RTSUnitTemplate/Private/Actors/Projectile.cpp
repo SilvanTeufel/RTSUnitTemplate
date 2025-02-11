@@ -32,7 +32,8 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 {
 	Target = TargetActor;
 	Shooter = ShootingActor;
-
+	SetOwner(Shooter);
+	
 	if(TargetLocation.IsZero())
 		TargetLocation = TargetActor->GetActorLocation();
 
@@ -68,7 +69,8 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 {
 	Target = TargetActor;
 	Shooter = ShootingActor;
-
+	SetOwner(Shooter);
+	
 	if(TargetLocation.IsZero())
 		TargetLocation = TargetActor->GetActorLocation();
 
@@ -106,7 +108,7 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 
 	Shooter = ShootingActor;
 	TargetLocation = Aim;
-
+	SetOwner(Shooter);
 	
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
@@ -269,8 +271,11 @@ void AProjectile::FlyToLocationTarget()
 	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
 	AddActorWorldOffset(Direction * MovementSpeed);
 }
-void AProjectile::Impact_Implementation(AActor* ImpactTarget)
+
+void AProjectile::Impact(AActor* ImpactTarget)
 {
+	if (!HasAuthority()) return;
+	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
@@ -314,8 +319,10 @@ void AProjectile::Impact_Implementation(AActor* ImpactTarget)
 	}			
 }
 
-void AProjectile::ImpactHeal_Implementation(AActor* ImpactTarget)
+void AProjectile::ImpactHeal(AActor* ImpactTarget)
 {
+	if (!HasAuthority()) return;
+	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());

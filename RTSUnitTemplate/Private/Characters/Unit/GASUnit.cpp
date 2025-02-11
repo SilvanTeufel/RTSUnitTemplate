@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/GASUnit.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/GameplayAbilityBase.h"
@@ -18,10 +19,12 @@
 void AGASUnit::BeginPlay()
 {
 	Super::BeginPlay();
-	CreateOwnerShip();
+
+	/*
 	AbilitySystemComponent->SetIsReplicated(true);
 	AddReplicatedSubObject(ActivatedAbilityInstance);
 	bReplicates = true;
+	*/
 }
 
 void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -37,13 +40,10 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AGASUnit, FourthAbilities);
 	DOREPLIFETIME(AGASUnit, QueSnapshot);
 	DOREPLIFETIME(AGASUnit, CurrentSnapshot);
+	//DOREPLIFETIME(AGASUnit, CurrentAbilityCanBeCanceled);
 }
 
 
-void AGASUnit::CreateOwnerShip()
-{
-
-}
 // Called every frame
 void AGASUnit::Tick(float DeltaTime)
 {
@@ -142,6 +142,11 @@ void AGASUnit::OnRep_PlayerState()
 	}
 }
 
+void AGASUnit::OnRep_ToggleUnitDetection()
+{
+	UE_LOG(LogTemp, Warning, TEXT("OnRep_ToggleUnitDetection: %d"), ToggleUnitDetection);
+}
+
 
 void AGASUnit::SetupAbilitySystemDelegates()
 {
@@ -238,6 +243,7 @@ void AGASUnit::ActivateAbilityByInputID(
 			if (ActivatedAbilityInstance) 
 			{
 				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
+				//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
 			}
 		}
 		else if (!bIsActivated)
@@ -300,6 +306,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 				if (ActivatedAbilityInstance)
 				{
 					ActivatedAbilityInstance->OnAbilityMouseHit(Next.HitResult);
+					//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
 				}
 			}
 			else

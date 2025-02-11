@@ -123,10 +123,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void FlyToLocationTarget();
 	
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) //UFUNCTION(Server, Reliable)
 	void Impact(AActor* ImpactTarget);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ImpactHeal(AActor* ImpactTarget);
 	
 	UFUNCTION(Server, Reliable)

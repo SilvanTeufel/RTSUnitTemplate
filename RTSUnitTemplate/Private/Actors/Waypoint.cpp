@@ -35,12 +35,14 @@ void AWaypoint::Tick(float DeltaTime)
 
 }
 
-void AWaypoint::OnPlayerEnter_Implementation(UPrimitiveComponent* OverlapComponent,
+void AWaypoint::OnPlayerEnter(UPrimitiveComponent* OverlapComponent,
 	AActor* OtherActor, UPrimitiveComponent* OtherComponent,
 	int32 OtherBodyIndex,
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
+	if (!HasAuthority()) return;
+	
 	if (OtherActor != nullptr) {
 		ActualCharacter = Cast<AUnitBase>(OtherActor);
 		if (ActualCharacter != nullptr &&

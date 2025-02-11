@@ -202,8 +202,15 @@ void AControllerBase::SelectUnit(int Index)
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
-	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Red, false, 1.5, 0, 1);
-	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	if (!Unit) return;
+
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
 	
 	SetUnitState_Replication(Unit,1);
 	MoveToLocationUEPathFinding(Unit, Location);
@@ -211,7 +218,15 @@ void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector
 
 void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Location)
 {
-	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+	if (!Unit) return;
+
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
 	
 	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
@@ -344,7 +359,7 @@ void AControllerBase::SetRunLocation_Implementation(AUnitBase* Unit, const FVect
 
 void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
-
+	
 	if(!HasAuthority())
 	{
 		return;
@@ -445,6 +460,7 @@ void AControllerBase::SetUnitState_Multi_Implementation(AUnitBase* Unit, int Sta
 
 void AControllerBase::SetUnitState_Replication_Implementation(AUnitBase* Unit, int State)
 {
+
 	if(Unit)
 	switch (State)
 	{
@@ -477,25 +493,18 @@ void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, boo
 	//Unit->UnitsToChase.Empty();
 	//Unit->UnitToChase = nullptr;
 }
-void AControllerBase::RightClickRunShift_Implementation(int UnitIndex, FVector Location)
+void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
 {
-	if (!RTSGameMode) return;
-
-	AUnitBase* Unit = nullptr;
-	
-	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
-		{
-			Unit = NewUnit;
-			break;
-		}
-	}
 	
 	if (!Unit) return;
-	
-	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
 	
 	if(!Unit->RunLocationArray.Num())
 	{
@@ -511,53 +520,37 @@ void AControllerBase::RightClickRunShift_Implementation(int UnitIndex, FVector L
 	Unit->SetToggleUnitDetection(false);
 }
 
-void AControllerBase::RightClickRunUEPF_Implementation(int UnitIndex, FVector Location, bool CancelAbility)
+void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location, bool CancelAbility)
 {
-
-	if (!RTSGameMode) return;
-
-	AUnitBase* Unit = nullptr;
-	
-	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
-		{
-			Unit = NewUnit;
-			break;
-		}
-	}
-	
 	if (!Unit) return;
-
-	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
 	
-	if (CancelAbility) CancelCurrentAbility(Unit);
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		if (CancelAbility) CancelCurrentAbility(Unit);
+	}
 	
 	MoveToLocationUEPathFinding(Unit, Location);
 	SetUnitState_Replication(Unit,1);
 	SetToggleUnitDetection(Unit, false);
 }
 
-void AControllerBase::RightClickRunDijkstraPF_Implementation(int UnitIndex, FVector Location, int Counter)
+void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
 {
-	if (!RTSGameMode) return;
 
-	AUnitBase* Unit = nullptr;
-	
-	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* NewUnit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (NewUnit && NewUnit->UnitIndex == UnitIndex)
-		{
-			Unit = NewUnit;
-			break;
-		}
-	}
-	
 	if (!Unit) return;
-	
-	if (Unit->ActivatedAbilityInstance && !Unit->ActivatedAbilityInstance->AbilityCanBeCanceled) return;
+
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
 	
 	TArray<FPathPoint> PathPoints;
 
@@ -729,17 +722,17 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			}else if (IsShiftPressed) {
 				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				RightClickRunShift(SelectedUnits[i]->UnitIndex, RunLocation); // _Implementation
+				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
 			{
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				RightClickRunUEPF(SelectedUnits[i]->UnitIndex, RunLocation, true); // _Implementation
+				RightClickRunUEPF(SelectedUnits[i], RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				RightClickRunDijkstraPF(SelectedUnits[i]->UnitIndex, RunLocation, i); // _Implementation
+				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
 				PlayRunSound = true;
 			}
 		}
@@ -836,8 +829,9 @@ void AControllerBase::SpaceReleased()
 	IsSpacePressed = false;
 }
 
-void AControllerBase::ToggleUnitDetection_Implementation(int UnitIndex)
+void AControllerBase::ToggleUnitDetection_Implementation(AUnitBase* Unit)
 {
+	/*
 	AUnitBase* NewSelection = nullptr;
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
@@ -846,6 +840,7 @@ void AControllerBase::ToggleUnitDetection_Implementation(int UnitIndex)
 		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->UnitIndex == UnitIndex)
 		{
 			NewSelection = Unit;
+			break;
 		}
 	}
 	
@@ -853,6 +848,13 @@ void AControllerBase::ToggleUnitDetection_Implementation(int UnitIndex)
 	{
 		if(NewSelection)
 			NewSelection->SetToggleUnitDetection(true);
+	}*/
+
+
+	if (Unit && Unit->UnitState != UnitData::Dead)
+	{
+		if(Unit)
+			Unit->SetToggleUnitDetection(true);
 	}
 }
 
@@ -864,7 +866,13 @@ void AControllerBase::TPressed()
 		AttackToggled = true;
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			ToggleUnitDetection(SelectedUnits[i]->UnitIndex);
+			/*
+			if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
+			{
+				if(SelectedUnits[i])
+					SelectedUnits[i]->SetToggleUnitDetection(true);
+			}*/
+			ToggleUnitDetection(SelectedUnits[i]);
 		}
 	}
 }

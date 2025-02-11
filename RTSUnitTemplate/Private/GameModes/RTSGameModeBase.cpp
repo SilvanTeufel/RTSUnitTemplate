@@ -22,12 +22,12 @@ void ARTSGameModeBase::BeginPlay()
 	
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 	
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), AllUnits);
 
-	FillUnitArrays();
-
-	FTimerHandle TimerHandle;
-	GetWorldTimerManager().SetTimer(TimerHandle, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+	FTimerHandle TimerHandleGetUnits;
+	GetWorldTimerManager().SetTimer(TimerHandleGetUnits, this, &ARTSGameModeBase::FillUnitArrays, GatherUnitsTimer, false);
+	
+	FTimerHandle TimerHandleGatherController;
+	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
 	//SetTeamIdsAndWaypoints();
 }
 
@@ -74,12 +74,20 @@ void ARTSGameModeBase::SetTeamIdAndDefaultWaypoint_Implementation(int Id, AWaypo
 
 void ARTSGameModeBase::FillUnitArrays()
 {
-	for(int i = 0; i < AllUnits.Num(); i++)
+	TArray <AActor*> GatheredUnits;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnitBase::StaticClass(), GatheredUnits);
+	
+	for(int i = 0; i < GatheredUnits.Num(); i++)
 	{
 		HighestUnitIndex++;
 	
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		Unit->SetUnitIndex(HighestUnitIndex);
+		AUnitBase* Unit = Cast<AUnitBase>(GatheredUnits[i]);
+	
+		if (Unit)
+		{
+			Unit->SetUnitIndex(HighestUnitIndex);
+			AllUnits.Add(Unit);
+		}
 
 		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(Unit);
 		if(SpeakingUnit)
@@ -611,10 +619,10 @@ int ARTSGameModeBase::AssignNewHighestIndex(AUnitBase* Unit)
 
 int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	//APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 
-	if(PlayerController)
-	{
+	//if(PlayerController)
+	//{
 		//AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
 		//if(HUD)
 		//{
@@ -623,8 +631,8 @@ int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 				//HUD->AllUnits.Add(UnitBase);
 				return Index;
 		//}
-	}
-	return 0;
+	//}
+	//return 0;
 }
 
 void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter)
