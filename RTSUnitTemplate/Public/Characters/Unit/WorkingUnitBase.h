@@ -58,7 +58,14 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;
-	
+
+
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void StartBuild();
+
+
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void FinishedBuild();
 };
 
 

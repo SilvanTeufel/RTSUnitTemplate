@@ -27,8 +27,17 @@ void AUnitControllerBase::DetectAndLoseUnits()
 {
 	// Assuming UnitBase is an accessible variable or parameter
 	 // Replace this with actual reference to UnitBase
-	if (DebugDetection) UE_LOG(LogTemp, Warning, TEXT("DetectAndLoseUnits!!!!!!!!!!! "));
+
+	if(!RTSGameMode)
+	{
+		RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	}
+
+	if(!RTSGameMode) return;
+
+	if(DebugDetection) UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!DetectAndLoseUnits!!!!!!!!!!! "));
 	if(DebugDetection)UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
+
 	if (MyUnitBase)
 	{
 		bool SetState = MyUnitBase->GetToggleUnitDetection();
@@ -119,13 +128,6 @@ void AUnitControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
-	
-	
-	if(ControllerBase && MyUnitBase)
-	{
-		//MyUnitBase->CheckVisibility(ControllerBase->SelectableTeamId);
-		//MyUnitBase->UpdateFogOfWarLight(ControllerBase->SelectableTeamId, SightRadius);
-	}
 }
 
 FRotator AUnitControllerBase::GetControlRotation() const
@@ -497,7 +499,7 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 }
 
 
-void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId)
+void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
 {
 	if(!RTSGameMode)
 	{
@@ -544,15 +546,10 @@ void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float Delt
 
 	if(IsUnitDetected) return;
 	
-	if (ControllerBase)
-	{
-	
 		TArray<AActor*> DetectedUnits;
-		DetectUnitsFromGameMode(UnitBase, DetectedUnits, SightRadius, LoseSightRadius, DetectFriendlyUnits,ControllerBase->SelectableTeamId);
+		DetectUnitsFromGameMode(UnitBase, DetectedUnits, SightRadius);
 		OnUnitDetected(DetectedUnits, SetState);
 		IsUnitDetected = true;
-
-	}
 
 }
 

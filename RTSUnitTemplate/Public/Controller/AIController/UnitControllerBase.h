@@ -182,7 +182,7 @@ public:
 	void CheckUnitDetectionTimer(float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
-		void DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId);
+		void DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight);
 	
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
 		void DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState);

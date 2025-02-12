@@ -144,7 +144,6 @@ public:
 	
 // RTSHud related //////////////////////////////////////////
 public:
-
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerStartAttackEvent();
 

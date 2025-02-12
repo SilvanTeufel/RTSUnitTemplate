@@ -572,6 +572,10 @@ FVector AWorkerUnitControllerBase::GetGroundLocation(FVector ALocation, AUnitBas
 
 void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	
+
+
+	
 	if(!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->BuildingClass)
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -583,6 +587,9 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 	
 	UnitBase->SetWalkSpeed(0);
 	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
+
+	if (UnitBase->UnitControlTimer <= 0.1f) UnitBase->StartBuild();
+	
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->BuildArea && UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
 	{
@@ -615,6 +622,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			{
 				NewUnit->IsMyTeam = true;
 				NewUnit->SpawnFogOfWarManager(ControllerBase);
+				UnitBase->FinishedBuild();
 			}
 		
 			
