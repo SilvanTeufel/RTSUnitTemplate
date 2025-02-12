@@ -465,11 +465,16 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	UnitBase->HideHealthWidget();
 	
+
+	if(!RTSGameMode)
+	{
+		RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	}
+
 	if(RTSGameMode)
 	{
 		RTSGameMode->AllUnits.Remove(UnitBase);
 	}
-
 	
 	UnitBase->SpawnPickupsArray();
 
@@ -494,6 +499,11 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendly, int PlayerTeamId)
 {
+	if(!RTSGameMode)
+	{
+		RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	}
+	
 	if(!RTSGameMode) return;
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;

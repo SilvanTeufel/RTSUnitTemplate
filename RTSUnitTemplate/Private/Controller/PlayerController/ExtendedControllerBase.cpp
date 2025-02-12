@@ -1488,7 +1488,7 @@ void AExtendedControllerBase::Server_SetFogManager_Implementation()
 
 void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
 {
-	UE_LOG(LogTemp, Error, TEXT("Multi_SetFogManager_Implementation - TeamId is now: %d"), SelectableTeamId);
+	UE_LOG(LogTemp, Log, TEXT("Multi_SetFogManager_Implementation - TeamId is now: %d"), SelectableTeamId);
 	// TSGameMode->AllUnits is onyl available on Server why we start running on server
 	// We Mutlicast to CLient and send him AllUnits as parameter
 	TArray<AUnitBase*> NewSelection;
@@ -1529,7 +1529,7 @@ void AExtendedControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanc
 
 void AExtendedControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()
 {
-	UE_LOG(LogTemp, Error, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
+	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
 	
 	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
 	if (Camera)

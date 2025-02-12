@@ -215,11 +215,8 @@ void AGASUnit::ActivateAbilityByInputID(
 	
 	if (ActivatedAbilityInstance)
 	{
-
-		//UE_LOG(LogTemp, Warning, TEXT("Ability->UseAbilityQue! %d"), Ability->UseAbilityQue);
 		if (Ability->UseAbilityQue)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("Enqueue!!1"));
 			// ASC is busy, so let's queue the ability
 			FQueuedAbility Queued;
 			Queued.AbilityClass = AbilityToActivate;
@@ -232,14 +229,16 @@ void AGASUnit::ActivateAbilityByInputID(
 	{
 		// 2) Try to activate
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-		if (bIsActivated && HitResult.IsValidBlockingHit())
+		if (bIsActivated)
 		{
 			// If you have a pointer to the active ability instance:
 			FQueuedAbility Queued;
 			Queued.AbilityClass = AbilityToActivate;
 			Queued.HitResult    = HitResult;
 			CurrentSnapshot = Queued;
-			
+		}
+		if (bIsActivated && HitResult.IsValidBlockingHit())
+		{
 			if (ActivatedAbilityInstance) 
 			{
 				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
@@ -250,7 +249,6 @@ void AGASUnit::ActivateAbilityByInputID(
 		{
 			if (Ability->UseAbilityQue)
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("Enqueue!!2"));
 				// Optionally queue the ability if activation fails 
 				// (e.g. on cooldown). Depends on your desired flow.
 				FQueuedAbility Queued;
@@ -384,7 +382,6 @@ const FQueuedAbility AGASUnit::GetCurrentSnapshot()
 void AGASUnit::CancelCurrentAbility()
 {
     // Check if this code is executing on a client.
-	
     if (!HasAuthority())
     {
         return;
@@ -397,6 +394,7 @@ void AGASUnit::CancelCurrentAbility()
 		{
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;
+			CurrentSnapshot = FQueuedAbility();
 		}
 	}
 }

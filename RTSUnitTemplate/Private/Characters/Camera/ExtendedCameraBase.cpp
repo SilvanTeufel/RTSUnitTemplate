@@ -109,7 +109,7 @@ void AExtendedCameraBase::BeginPlay()
 
 void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 {
-	UE_LOG(LogTemp, Error, TEXT("HideWidgetsWhenNoControl!"));
+	UE_LOG(LogTemp, Log, TEXT("HideWidgetsWhenNoControl!"));
 	
 	/*
 	if (!IsLocallyControlled())
@@ -137,19 +137,19 @@ void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 
 void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
-	UE_LOG(LogTemp, Error, TEXT("Try SetupResourceWidget"));
+	UE_LOG(LogTemp, Log, TEXT("Try SetupResourceWidget"));
 	if(!ResourceWidget) return;
 	
 		ResourceWidget->SetVisibility(true);
 		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-		UE_LOG(LogTemp, Error, TEXT("Found ResourceWidget"));
+		UE_LOG(LogTemp, Log, TEXT("Found ResourceWidget"));
 		if(ResourceBar)
 		{
 			//ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-			UE_LOG(LogTemp, Error, TEXT("Found ResourceBar"));
+			UE_LOG(LogTemp, Log, TEXT("Found ResourceBar"));
 			if(CameraControllerBase)
 			{
-				UE_LOG(LogTemp, Error, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
+				UE_LOG(LogTemp, Log, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
 				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
 				ResourceBar->StartUpdateTimer();
 			}

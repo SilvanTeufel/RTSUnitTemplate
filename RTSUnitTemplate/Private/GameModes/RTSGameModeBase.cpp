@@ -23,8 +23,9 @@ void ARTSGameModeBase::BeginPlay()
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 	
 
-	FTimerHandle TimerHandleGetUnits;
-	GetWorldTimerManager().SetTimer(TimerHandleGetUnits, this, &ARTSGameModeBase::FillUnitArrays, GatherUnitsTimer, false);
+	FillUnitArrays();
+	//FTimerHandle TimerHandleGetUnits;
+	//GetWorldTimerManager().SetTimer(TimerHandleGetUnits, this, &ARTSGameModeBase::FillUnitArrays, GatherUnitsTimer, false);
 	
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
@@ -101,7 +102,7 @@ void ARTSGameModeBase::FillUnitArrays()
 
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
-	UE_LOG(LogTemp, Error, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
+	UE_LOG(LogTemp, Log, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
 	
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
@@ -122,14 +123,14 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		{
 			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
 
-			UE_LOG(LogTemp, Error, TEXT("Assigning TeamId: %d to Controller: %s"), 
+			UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), 
 				CustomPlayerStart->SelectableTeamId, *CameraControllerBase->GetName());
 			
 			SetTeamIdAndDefaultWaypoint_Implementation(CustomPlayerStart->SelectableTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
 
-			UE_LOG(LogTemp, Error, TEXT("TeamId is now: %d from Controller: %s"), 
+			UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"), 
 			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
-			UE_LOG(LogTemp, Error, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
+			UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
 			CameraControllerBase->Multi_SetFogManager(AllUnits);;
 			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
