@@ -106,7 +106,8 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	case UnitData::Run:
 		{
 			//if(UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("Run"));
-		
+
+			UE_LOG(LogTemp, Warning, TEXT("Run"));
 			if(UnitBase->UEPathfindingUsed)
 				HealRunUEPathfinding(UnitBase, DeltaSeconds);
 			else
@@ -385,7 +386,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 
 void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
-
+/*
 	if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -412,7 +413,44 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 		if (Distance <= UnitBase->StopRunTolerance) {
 			UnitBase->SetUnitState(UnitData::Idle);
 		}
+	}*/
+
+
+	DetectAndLoseUnits();
+	
+	if(UnitBase->GetToggleUnitDetection())
+	{
+		if(UnitBase->SetNextUnitToChase())
+		{
+			UnitBase->SetUEPathfinding = true;
+			UnitBase->UnitStatePlaceholder = UnitData::Run;
+			UnitBase->SetUnitState(UnitData::Chase);
+			return;
+		}
 	}
+	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Evasion);
+		UnitBase->UnitStatePlaceholder = UnitData::Run;
+		return;
+	}
+
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+
+	const FVector UnitLocation = UnitBase->GetActorLocation();
+	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
+
+	if (Distance <= UnitBase->StopRunTolerance) {
+		UnitBase->SetUnitState(UnitData::Idle);
+		return;
+	}
+
+	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
+	
+	if(!UnitBase->SetUEPathfinding) return;
+
+	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RunLocation);
 }
 
 void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSeconds)

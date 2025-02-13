@@ -172,4 +172,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class AWaypoint* NextWaypoint;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	FRotator ServerMeshRotationBuilding = FRotator (0.f, -90.f, 0.f);
 };

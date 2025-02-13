@@ -601,7 +601,7 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
 			SpawnParameter.UnitMinRange = FVector(0.f);
 			SpawnParameter.UnitMaxRange = FVector(0.f);
-			SpawnParameter.ServerMeshRotation = FRotator (0.f, -90.f, 0.f);
+			SpawnParameter.ServerMeshRotation = UnitBase->BuildArea->ServerMeshRotationBuilding;
 			SpawnParameter.State = UnitData::Idle;
 			SpawnParameter.StatePlaceholder = UnitData::Idle;
 			SpawnParameter.Material = nullptr;
