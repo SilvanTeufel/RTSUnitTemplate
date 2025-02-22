@@ -83,11 +83,16 @@ void ARTSGameModeBase::FillUnitArrays()
 		HighestUnitIndex++;
 	
 		AUnitBase* Unit = Cast<AUnitBase>(GatheredUnits[i]);
-	
+		FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 		if (Unit)
 		{
 			Unit->SetUnitIndex(HighestUnitIndex);
 			AllUnits.Add(Unit);
+
+			if (Unit && Unit->UnitTags.HasTagExact(CameraUnitTag))
+			{
+				CameraUnits.Add(Unit);
+			}
 		}
 
 		ASpeakingUnit* SpeakingUnit = Cast<ASpeakingUnit>(Unit);

@@ -136,6 +136,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <AActor*> AllUnits;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray <AActor*> CameraUnits;
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <AWorkingUnitBase*> WorkingUnits;
 	

@@ -24,78 +24,34 @@ void ACameraUnitController::OnPossess(APawn* PawN)
 
 void ACameraUnitController::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaSeconds);
-	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
+	//Super::Tick(DeltaSeconds);
+	CameraUnitControlStateMachine(MyUnitBase, DeltaSeconds);
 }
 
-void ACameraUnitController::Casting(AUnitBase* UnitBase, float DeltaSeconds)
+void ACameraUnitController::CameraUnitRunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if (!UnitBase || !UnitBase->Attributes) return;
+	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
+
+	const FVector UnitLocation = UnitBase->GetActorLocation();
+	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
+
+	if (Distance <= UnitBase->StopRunTolerance) {
+		UnitBase->SetUnitState(UnitData::Idle);
+		return;
+	}
+
+	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
 	
-	UnitBase->SetWalkSpeed(0);
-	RotateToAttackUnit(UnitBase, UnitBase->UnitToChase, DeltaSeconds);
-	UnitBase->UnitControlTimer += DeltaSeconds;
+	if(!UnitBase->SetUEPathfinding) return;
 
-	if (UnitBase->UnitControlTimer > UnitBase->CastTime)
-	{
-		
-		if (UnitBase->ActivatedAbilityInstance)
-		{
-			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
-		}
-
-		
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-		UnitBase->UnitControlTimer = 0.f;
-		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
-	}
-}
-
-void ACameraUnitController::RotateToAttackUnit(AUnitBase* UnitBase, AUnitBase* UnitToChase, float DeltaSeconds)
-{
-	if (!UnitBase || !UnitToChase)
-	{
-		// Invalid pointers, cannot rotate
-		return;
-	}
-
-	// Get the current location of UnitBase and UnitToChase
-	FVector BaseLocation = UnitBase->GetActorLocation();
-	FVector TargetLocation = UnitToChase->GetActorLocation();
-
-	// Calculate the direction vector from UnitBase to UnitToChase
-	FVector Direction = TargetLocation - BaseLocation;
-
-	// If the direction vector is too small, no need to rotate
-	if (Direction.SizeSquared() < KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	// Normalize the direction vector
-	Direction.Normalize();
-
-	// Calculate the desired rotation to face the target
-	FRotator DesiredRotation = Direction.Rotation();
-
-	// Get the current rotation of UnitBase
-	FRotator CurrentRotation = UnitBase->GetActorRotation();
-
-	// Define the rotation speed (degrees per second)
-	float RotationSpeed = 720.0f; // Adjust as needed for desired rotation speed
-
-	// Interpolate between current rotation and desired rotation
-	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, DesiredRotation, DeltaSeconds, RotationSpeed);
-
-	// Apply the new rotation to UnitBase
-	UnitBase->SetActorRotation(NewRotation);
+	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RunLocation);
 }
 
 
-
-void ACameraUnitController::UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds)
+void ACameraUnitController::CameraUnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds)
 {
 
+		
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
 	
@@ -111,7 +67,8 @@ void ACameraUnitController::UnitControlStateMachine(AUnitBase* UnitBase, float D
 		break;
 		case UnitData::Dead:
 		{
-
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Dead"));
+				Dead(UnitBase, DeltaSeconds);
 		}
 		break;
 		case UnitData::Patrol:
@@ -131,7 +88,7 @@ void ACameraUnitController::UnitControlStateMachine(AUnitBase* UnitBase, float D
 			break;
 		case UnitData::Run:
 			{
-
+				CameraUnitRunUEPathfinding(UnitBase, DeltaSeconds);
 			}
 		break;
 		case UnitData::Chase:
@@ -179,6 +136,7 @@ void ACameraUnitController::UnitControlStateMachine(AUnitBase* UnitBase, float D
 		case UnitData::Idle:
 		{
 				//if(UnitBase->TeamId == 3)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				UnitBase->SetWalkSpeed(0);
 		}
 		break;
 		default:

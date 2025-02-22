@@ -124,9 +124,22 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LocalMoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockCamToCharacterWithTag(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveCameraUnit();
+
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float CameraUnitTimer = 0.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MoveCameraUnitReExecutionTime = 1.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockZDistanceToCharacter();
