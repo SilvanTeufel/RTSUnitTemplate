@@ -35,6 +35,12 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 //protected:
 	public:
 
+	// Override pawn spawning to support custom Pawn classes from the PlayerStart.
+	//virtual void RestartPlayer(AController* NewPlayer) override;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetPlayerPawnAndController(AController* NewPlayer, const APlayerStartBase* CustomStart);
+	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 	// Timer handle for spawning units

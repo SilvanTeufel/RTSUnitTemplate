@@ -16,10 +16,18 @@ class RTSUNITTEMPLATE_API APlayerStartBase : public APlayerStart
 	GENERATED_BODY()
 	
 public:
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= RTSUnitTemplate)
 	int SelectableTeamId = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* DefaultWaypoint;
+
+	// Blueprint‐selectable custom PlayerController class (should be a child of ACameraControllerBase).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate")
+	TSubclassOf<class ACameraControllerBase> CustomPlayerControllerClass;
+
+	// Blueprint‐selectable custom Pawn class (should be a child of ACameraBase).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate")
+	TSubclassOf<class ACameraBase> CustomPawnClass;
 };
