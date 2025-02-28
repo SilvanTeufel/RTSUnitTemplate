@@ -35,6 +35,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* DropWorkAreaSound;
+
+	UFUNCTION(Client, Reliable)
+	void Client_ApplyCustomizations(
+		USoundBase* InWaypointSound,
+		USoundBase* InRunSound,
+		USoundBase* InAbilitySound,
+		USoundBase* InAttackSound,
+		USoundBase* InDropWorkAreaFailedSound,
+		USoundBase* InDropWorkAreaSound);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagF1;
@@ -251,9 +260,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastEndsEvent(AUnitBase* UnitBase);
-
-	UFUNCTION(Server, Reliable)
-	void Server_SetFogManager();
+	
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetFogManager(const TArray<AActor*>& AllUnits);
@@ -263,5 +270,8 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_ShowWidgetsWhenLocallyControlled();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetCamLocation(FVector NewLocation);
 	
 };

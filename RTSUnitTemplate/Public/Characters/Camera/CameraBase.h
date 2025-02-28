@@ -315,16 +315,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetComp", Keywords = "RTSUnitTemplate ControlWidgetComp"), Category = RTSUnitTemplate)
 		class UWidgetComponent* ControlWidgetComp;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetRotator", Keywords = "RTSUnitTemplate ControlWidgetRotator"), Category = RTSUnitTemplate)
-		FRotator ControlWidgetRotation = FRotator(50, 180, 0);
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetLocation", Keywords = "TopDownRTSTemplate ControlWidgetLocation"), Category = TopDownRTSTemplate)
-		FVector2D ControlWidgetLocation = FVector2D(0.5f, 0.5f);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetHideLocation", Keywords = "RTSUnitTemplate ControlWidgetHideLocation"), Category = RTSUnitTemplate)
-		FVector ControlWidgetHideLocation = FVector(400.f, -2500.0f, -250.0f);
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 		bool ShowControlWidgetAtStart = true;
 	

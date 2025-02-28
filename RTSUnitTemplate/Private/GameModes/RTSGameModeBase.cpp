@@ -8,6 +8,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Hud/PathProviderHUD.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
@@ -35,203 +36,106 @@ void ARTSGameModeBase::BeginPlay()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
-	SetTeamIdsAndWaypoints();
 }
 
-void ARTSGameModeBase::SetPlayerPawnAndController(AController* NewPlayer, const APlayerStartBase* CustomStart)
+void ARTSGameModeBase::ApplyCustomizationsFromPlayerStart(APlayerController* PC, const APlayerStartBase* CustomStart)
 {
-	UE_LOG(LogTemp, Warning, TEXT("RestartPlayer!!"));
-	if (!NewPlayer)
+	if (!PC || !CustomStart)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ApplyCustomizationsFromPlayerStart: Invalid PC or CustomStart"));
 		return;
 	}
 
-	// Choose an appropriate PlayerStart for this player.
-
-	if (!CustomStart)
+	// --- Update the PlayerController with sound settings ---
+	ACameraControllerBase* CameraController = Cast<ACameraControllerBase>(PC);
+	if (CameraController)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RestartPlayer: No PlayerStart found for player %s"), *NewPlayer->GetName());
-		return;
+		// Check each sound property in the CustomStart. If available, use it; otherwise, use the current controller setting.
+		USoundBase* NewWaypointSound = CustomStart->WaypointSound ? CustomStart->WaypointSound : CameraController->WaypointSound;
+		USoundBase* NewRunSound = CustomStart->RunSound ? CustomStart->RunSound : CameraController->RunSound;
+		USoundBase* NewAbilitySound = CustomStart->AbilitySound ? CustomStart->AbilitySound : CameraController->AbilitySound;
+		USoundBase* NewAttackSound = CustomStart->AttackSound ? CustomStart->AttackSound : CameraController->AttackSound;
+		USoundBase* NewDropWorkAreaFailedSound = CustomStart->DropWorkAreaFailedSound ? CustomStart->DropWorkAreaFailedSound : CameraController->DropWorkAreaFailedSound;
+		USoundBase* NewDropWorkAreaSound = CustomStart->DropWorkAreaSound ? CustomStart->DropWorkAreaSound : CameraController->DropWorkAreaSound;
+
+		// Update the controller's properties on the server.
+		CameraController->WaypointSound = NewWaypointSound;
+		CameraController->RunSound = NewRunSound;
+		CameraController->AbilitySound = NewAbilitySound;
+		CameraController->AttackSound = NewAttackSound;
+		CameraController->DropWorkAreaFailedSound = NewDropWorkAreaFailedSound;
+		CameraController->DropWorkAreaSound = NewDropWorkAreaSound;
+
+		// Now push the updated settings to the client via a client RPC.
+		CameraController->Client_ApplyCustomizations(
+			NewWaypointSound,
+			NewRunSound,
+			NewAbilitySound,
+			NewAttackSound,
+			NewDropWorkAreaFailedSound,
+			NewDropWorkAreaSound);
+        
+		
+		UE_LOG(LogTemp, Log, TEXT("Updated sounds on PlayerController: %s"), *CameraController->GetName());
 	}
-
-
-	
-	APawn* NewPawn = nullptr;
-
-
-	if (CustomStart && CustomStart->CustomPawnClass)
+	else
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		// Spawn the custom pawn at the PlayerStart's transform.
-		NewPawn = GetWorld()->SpawnActor<APawn>(CustomStart->CustomPawnClass, CustomStart->GetActorTransform(), SpawnParams);
+		UE_LOG(LogTemp, Warning, TEXT("PlayerController is not of type ACameraControllerBase"));
 	}
-
-	// Possess the newly spawned pawn.
-	if (NewPawn)
+	// --- Update widget settings on the pawn ---
+	APawn* Pawn = PC->GetPawn();
+	if (Pawn)
 	{
-		if (APawn* OldPawn = NewPlayer->GetPawn())
+		AExtendedCameraBase* CameraPawn = Cast<AExtendedCameraBase>(Pawn);
+		if (CameraPawn)
 		{
-			OldPawn->Destroy();
-		}
-		NewPawn->SetOwner(NewPlayer);
-		NewPlayer->Possess(NewPawn);
-	}
+			TSubclassOf<UUserWidget> NewWidgetSelector = CustomStart->WidgetSelector ? CustomStart->WidgetSelector : nullptr;
+			TSubclassOf<UUserWidget> NewTaggedSelector = CustomStart->TaggedUnitSelector ? CustomStart->TaggedUnitSelector : nullptr;
+			TSubclassOf<UUserWidget> NewResourceWidget = CustomStart->ResourceWidget ? CustomStart->ResourceWidget : nullptr;
 
-	// --- Custom PlayerController replacement ---
-	// If the custom PlayerStart specifies a custom PlayerController class,
-	// and the current NewPlayer is not of that type, spawn a new one.
-	if (CustomStart && CustomStart->CustomPlayerControllerClass)
-	{
-		if (!NewPlayer->IsA(CustomStart->CustomPlayerControllerClass))
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Owner = this;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			APlayerController* NewPC = GetWorld()->SpawnActor<APlayerController>(
-				CustomStart->CustomPlayerControllerClass,
-				NewPawn->GetActorLocation(),
-				NewPawn->GetActorRotation(),
-				SpawnParams);
 			
-			if (NewPC)
+			// Update the WidgetSelector widget component if a new widget class is provided.
+			if (CameraPawn->WidgetSelector && CustomStart->WidgetSelector)
 			{
-				// Transfer PlayerState (if needed) from the old controller.
-				NewPC->PlayerState = NewPlayer->PlayerState;
-				// Possess the pawn with the new controller.
-				NewPC->Possess(NewPawn);
-				// Destroy the old controller.
-				NewPlayer->Destroy();
-				// Replace NewPlayer pointer with our newly spawned controller.
-				NewPlayer = NewPC;
+				CameraPawn->WidgetSelector->SetWidget(nullptr);
+				CameraPawn->WidgetSelector->SetWidgetClass(NewWidgetSelector);
+				CameraPawn->WidgetSelector->InitWidget();
+				UE_LOG(LogTemp, Log, TEXT("Updated WidgetSelector on Pawn: %s"), *CameraPawn->GetName());
 			}
+    
+			// Update the TaggedSelector widget component.
+			if (CameraPawn->TaggedSelector && CustomStart->TaggedUnitSelector)
+			{
+				CameraPawn->TaggedSelector->SetWidget(nullptr);
+				CameraPawn->TaggedSelector->SetWidgetClass(NewTaggedSelector);
+				CameraPawn->TaggedSelector->InitWidget();
+				UE_LOG(LogTemp, Log, TEXT("Updated TaggedSelector on Pawn: %s"), *CameraPawn->GetName());
+			}
+    
+			// Update the ResourceWidget widget component.
+			if (CameraPawn->ResourceWidget && CustomStart->ResourceWidget)
+			{
+				CameraPawn->ResourceWidget->SetWidget(nullptr); // Remove current widget
+				CameraPawn->ResourceWidget->SetWidgetClass(NewResourceWidget);
+				CameraPawn->ResourceWidget->InitWidget();
+				UE_LOG(LogTemp, Log, TEXT("Updated ResourceWidget on Pawn: %s"), *CameraPawn->GetName());
+			}
+
+			// Call Client RPC to update widgets on the client
+			CameraPawn->Client_UpdateWidgets(NewWidgetSelector, NewTaggedSelector, NewResourceWidget);
 		}
 		else
 		{
-			// If NewPlayer is already of the correct type, simply possess the pawn.
-			NewPlayer->Possess(NewPawn);
+			UE_LOG(LogTemp, Warning, TEXT("Pawn is not of type ACameraBase"));
 		}
 	}
 	else
 	{
-		// No custom controller defined—simply possess the pawn.
-		NewPlayer->Possess(NewPawn);
+		UE_LOG(LogTemp, Warning, TEXT("No Pawn possessed by PlayerController: %s"), *PC->GetName());
 	}
 }
-/*
-void ARTSGameModeBase::RestartPlayer(AController* NewPlayer)
-{
-	UE_LOG(LogTemp, Warning, TEXT("RestartPlayer!!"));
-	if (!NewPlayer)
-	{
-		return;
-	}
-
-	// Choose an appropriate PlayerStart for this player.
-	AActor* ChosenPlayerStart = ChoosePlayerStart(NewPlayer);
-	if (!ChosenPlayerStart)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("RestartPlayer: No PlayerStart found for player %s"), *NewPlayer->GetName());
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("RestartPlayer!!!"));
-	
-	APawn* NewPawn = nullptr;
-	APlayerStartBase* CustomStart = Cast<APlayerStartBase>(ChosenPlayerStart);
-
-	if (CustomStart && CustomStart->CustomPawnClass)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		// Spawn the custom pawn at the PlayerStart's transform.
-		NewPawn = GetWorld()->SpawnActor<APawn>(CustomStart->CustomPawnClass, CustomStart->GetActorTransform(), SpawnParams);
-	}
-	else
-	{
-		// Fallback: use the default pawn class.
-		TSubclassOf<APawn> PawnClass = GetDefaultPawnClassForController(NewPlayer);
-		if (PawnClass)
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-			NewPawn = GetWorld()->SpawnActor<APawn>(PawnClass, ChosenPlayerStart->GetActorTransform(), SpawnParams);
-		}
-	}
-
-	// Possess the newly spawned pawn.
-	if (NewPawn)
-	{
-		NewPawn->SetOwner(NewPlayer);
-		NewPlayer->Possess(NewPawn);
-	}
-
-	// --- Custom PlayerController replacement ---
-	// If the custom PlayerStart specifies a custom PlayerController class,
-	// and the current NewPlayer is not of that type, spawn a new one.
-	if (CustomStart && CustomStart->CustomPlayerControllerClass)
-	{
-		if (!NewPlayer->IsA(CustomStart->CustomPlayerControllerClass))
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Owner = this;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			APlayerController* NewPC = GetWorld()->SpawnActor<APlayerController>(
-				CustomStart->CustomPlayerControllerClass,
-				NewPawn->GetActorLocation(),
-				NewPawn->GetActorRotation(),
-				SpawnParams);
-			if (NewPC)
-			{
-				// Transfer PlayerState (if needed) from the old controller.
-				NewPC->PlayerState = NewPlayer->PlayerState;
-				// Possess the pawn with the new controller.
-				NewPC->Possess(NewPawn);
-				// Destroy the old controller.
-				NewPlayer->Destroy();
-				// Replace NewPlayer pointer with our newly spawned controller.
-				NewPlayer = NewPC;
-			}
-		}
-		else
-		{
-			// If NewPlayer is already of the correct type, simply possess the pawn.
-			NewPlayer->Possess(NewPawn);
-		}
-	}
-	else
-	{
-		// No custom controller defined—simply possess the pawn.
-		NewPlayer->Possess(NewPawn);
-	}
-	// --- End custom PlayerController logic ---
 
 
-
-	// Now, assign team ID and default waypoint to the player's controller.
-	// This assumes that the PlayerController is a ACameraControllerBase.
-	ACameraControllerBase* CameraController = Cast<ACameraControllerBase>(NewPlayer);
-	if (CameraController && CustomStart)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Found Controller"));
-		UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), 
-			CustomStart->SelectableTeamId, *CameraController->GetName());
-
-		// Call your existing team/waypoint assignment logic.
-		SetTeamIdAndDefaultWaypoint_Implementation(CustomStart->SelectableTeamId, CustomStart->DefaultWaypoint, CameraController);
-
-		UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"), 
-			CameraController->SelectableTeamId, *CameraController->GetName());
-
-		// Additional initialization (for example, fog settings, widgets, etc.)
-		CameraController->Multi_SetFogManager(AllUnits);
-		CameraController->Multi_ShowWidgetsWhenLocallyControlled();
-
-		FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
-		CameraController->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraController->SelectableTeamId);
-	}
-}
-*/
 void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -322,7 +226,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		{
 			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
 
-			SetPlayerPawnAndController(CameraControllerBase, CustomPlayerStart);
+			ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
 			
 			UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), 
 				CustomPlayerStart->SelectableTeamId, *CameraControllerBase->GetName());
@@ -332,8 +236,12 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"), 
 			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
 			UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
+
+			
 			CameraControllerBase->Multi_SetFogManager(AllUnits);;
+			
 			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
+			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration

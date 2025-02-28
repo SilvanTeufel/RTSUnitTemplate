@@ -88,7 +88,7 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
         FTimerHandle TimerHandle;
         GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {
             Unit->IsVisibileEnemy = false;
-        }, 2.0f, false);
+        }, Unit->FogDeadVisibilityTime, false);
     }
   
 }

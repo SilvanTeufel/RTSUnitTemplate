@@ -44,6 +44,18 @@ void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	//DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
 }
 
+void AExtendedControllerBase::Client_ApplyCustomizations_Implementation(USoundBase* InWaypointSound,
+	USoundBase* InRunSound, USoundBase* InAbilitySound, USoundBase* InAttackSound,
+	USoundBase* InDropWorkAreaFailedSound, USoundBase* InDropWorkAreaSound)
+{
+	WaypointSound = InWaypointSound;
+	RunSound = InRunSound;
+	AbilitySound = InAbilitySound;
+	AttackSound = InAttackSound;
+	DropWorkAreaFailedSound = InDropWorkAreaFailedSound;
+	DropWorkAreaSound = InDropWorkAreaSound;
+}
+
 void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
 	if (!UnitBase)
@@ -1453,41 +1465,9 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 	//}
 }
 
-void AExtendedControllerBase::Server_SetFogManager_Implementation()
-{
-	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
-	
-	// TSGameMode->AllUnits is onyl available on Server why we start running on server
-	// We Cast to CLient and send him AllUnits as parameter
-	Multi_SetFogManager(RTSGameMode->AllUnits);
-
-	// We Mutlicast to CLient and send him AllUnits as parameter
-	TArray<AUnitBase*> NewSelection;
-	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		// Every Controller can Check his own TeamId
-		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
-		{
-			NewSelection.Add(Unit);
-		}
-	}
-
-	// And we can create the FogManager
-	for (int32 i = 0; i < NewSelection.Num(); i++)
-	{
-		if (NewSelection[i])
-		{
-			NewSelection[i]->IsMyTeam = true;
-			NewSelection[i]->SpawnFogOfWarManager(this);
-		}
-	}
-	
-}
-
-
 void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
 {
+	if (!IsLocalController()) return;
 	UE_LOG(LogTemp, Log, TEXT("Multi_SetFogManager_Implementation - TeamId is now: %d"), SelectableTeamId);
 	// TSGameMode->AllUnits is onyl available on Server why we start running on server
 	// We Mutlicast to CLient and send him AllUnits as parameter
@@ -1499,13 +1479,16 @@ void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AA
 		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
 		{
 			NewSelection.Add(Unit);
+		}else if (Unit && Unit->SpawnedFogManager)
+		{
+			Unit->DestroyFogManager();
 		}
 	}
 
 	// And we can create the FogManager
 	for (int32 i = 0; i < NewSelection.Num(); i++)
 	{
-		if (NewSelection[i])
+		if (NewSelection[i] && NewSelection[i]->TeamId == SelectableTeamId)
 		{
 			NewSelection[i]->IsMyTeam = true;
 			NewSelection[i]->SpawnFogOfWarManager(this);
@@ -1531,7 +1514,17 @@ void AExtendedControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementat
 {
 	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
 	
-	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
 	if (Camera)
 		Camera->ShowWidgetsWhenLocallyControlled();
+}
+
+void AExtendedControllerBase::Multi_SetCamLocation_Implementation(FVector NewLocation)
+{
+	//if (!IsLocalController()) return;
+	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
+	
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
+	if (Camera)
+		Camera->SetActorLocation(NewLocation);
 }

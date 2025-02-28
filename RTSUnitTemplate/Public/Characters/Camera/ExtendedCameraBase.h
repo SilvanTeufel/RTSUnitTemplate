@@ -21,6 +21,11 @@ public:
 	// Override the BeginPlay function
 	virtual void BeginPlay() override;
 
+	UFUNCTION(Client, Reliable)
+	void Client_UpdateWidgets(TSubclassOf<UUserWidget> NewWidgetSelector, TSubclassOf<UUserWidget> NewTaggedSelector, TSubclassOf<UUserWidget> NewResourceWidget);
+
+	
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShowWidgetsWhenLocallyControlled();
 	

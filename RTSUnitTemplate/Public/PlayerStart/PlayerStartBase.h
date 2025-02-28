@@ -5,6 +5,9 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerStart.h"
 #include "Actors/Waypoint.h"
+#include "Widgets/ResourceWidget.h"
+#include "Widgets/TaggedUnitSelector.h"
+#include "Widgets/UnitWidgetSelector.h"
 #include "PlayerStartBase.generated.h"
 
 /**
@@ -22,7 +25,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* DefaultWaypoint;
-
+	/*
 	// Blueprint‐selectable custom PlayerController class (should be a child of ACameraControllerBase).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate")
 	TSubclassOf<class ACameraControllerBase> CustomPlayerControllerClass;
@@ -30,4 +33,31 @@ public:
 	// Blueprint‐selectable custom Pawn class (should be a child of ACameraBase).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate")
 	TSubclassOf<class ACameraBase> CustomPawnClass;
+	*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* WaypointSound; // Replace in PlayerController
+
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* RunSound; // Replace in PlayerController
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* AbilitySound; // Replace in PlayerController
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* AttackSound; // Replace in PlayerController
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* DropWorkAreaFailedSound; // Replace in PlayerController
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* DropWorkAreaSound; // Replace in PlayerController
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	 TSubclassOf<UUnitWidgetSelector> WidgetSelector; // Replace in Pawn
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	 TSubclassOf<UTaggedUnitSelector> TaggedUnitSelector;  // Replace in Pawn
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	 TSubclassOf<UResourceWidget> ResourceWidget;  // Replace in Pawn
 };

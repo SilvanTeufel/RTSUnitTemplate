@@ -90,13 +90,14 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
 
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("World is not valid."));
 		return;
 	}
-	
+
 	if (!EnableFog || !FogOfWarManagerClass) return;
 	
 	AControllerBase* ControllerBase = Cast<AControllerBase>(PC);

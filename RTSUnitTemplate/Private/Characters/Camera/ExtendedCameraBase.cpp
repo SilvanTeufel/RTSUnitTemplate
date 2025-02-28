@@ -107,6 +107,33 @@ void AExtendedCameraBase::BeginPlay()
 	// Delay the execution of HideWidgetsWhenNoControl
 }
 
+void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserWidget> NewWidgetSelector, TSubclassOf<UUserWidget> NewTaggedSelector, TSubclassOf<UUserWidget> NewResourceWidget)
+{
+	if (WidgetSelector && NewWidgetSelector)
+	{
+		WidgetSelector->SetWidget(nullptr);
+		WidgetSelector->SetWidgetClass(NewWidgetSelector);
+		WidgetSelector->InitWidget();
+		UE_LOG(LogTemp, Log, TEXT("Client: Updated WidgetSelector"));
+	}
+
+	if (TaggedSelector && NewTaggedSelector)
+	{
+		TaggedSelector->SetWidget(nullptr);
+		TaggedSelector->SetWidgetClass(NewTaggedSelector);
+		TaggedSelector->InitWidget();
+		UE_LOG(LogTemp, Log, TEXT("Client: Updated TaggedSelector"));
+	}
+
+	if (ResourceWidget && NewResourceWidget)
+	{
+		ResourceWidget->SetWidget(nullptr);
+		ResourceWidget->SetWidgetClass(NewResourceWidget);
+		ResourceWidget->InitWidget();
+		UE_LOG(LogTemp, Log, TEXT("Client: Updated ResourceWidget"));
+	}
+}
+
 void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 {
 	UE_LOG(LogTemp, Log, TEXT("HideWidgetsWhenNoControl!"));
