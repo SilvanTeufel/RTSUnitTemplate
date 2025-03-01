@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayEffect.h"
+#include "NiagaraComponent.h"
 #include "Projectile.generated.h"
 
 UCLASS()
@@ -69,6 +70,15 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UStaticMeshComponent* Mesh_B;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraComponent* Niagara;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraComponent* Niagara_B;
+	
 	UStaticMeshComponent* GetMesh(){ return Mesh; };
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

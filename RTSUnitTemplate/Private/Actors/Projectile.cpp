@@ -21,6 +21,21 @@ AProjectile::AProjectile()
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
 
+	// Create a secondary mesh and attach it to the root (or the main Mesh)
+	Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
+	Mesh_B->SetupAttachment(RootComponent);
+	// Optionally, configure Mesh_B properties if needed
+
+	// Create the Niagara component and attach it to the root (or the desired parent)
+	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara->SetupAttachment(RootComponent);
+	// Optionally, initialize Niagara properties here
+
+	// Create the Niagara component and attach it to the root (or the desired parent)
+	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
+	Niagara_B->SetupAttachment(RootComponent);
+	// Optionally, initialize Niagara properties here
+	
 	if (HasAuthority())
 	{
 		bReplicates = true;
@@ -139,24 +154,13 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 
 
 void AProjectile::SetProjectileVisibility(bool bVisible)
-{
-	SetVisibility(bVisible);
-	GetMesh()->SetVisibility(bVisible, true);
-	// Set visibility for the root component (if applicable)
-	//SetActorHiddenInGame(!bVisible);
+{	
 
-	/*
-	// Iterate over all components and update their visibility
-	TArray<UActorComponent*> Components;
-	GetComponents(UActorComponent::StaticClass(), Components);
-	for (UActorComponent* Component : Components)
-	{
-		UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Component);
-		if (PrimitiveComponent)
-		{
-			PrimitiveComponent->SetVisibility(bVisible, true); // Propagate to children
-		}
-	}*/
+	SetVisibility(bVisible);
+	Mesh->SetVisibility(bVisible, true);
+	Mesh_B->SetVisibility(bVisible, true);
+	Niagara->SetVisibility(bVisible, true);
+
 }
 
 // Called when the game starts or when spawned
@@ -172,6 +176,9 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, Target);
 	DOREPLIFETIME(AProjectile, Shooter);
 	DOREPLIFETIME(AProjectile, Mesh);
+	DOREPLIFETIME(AProjectile, Mesh_B);
+	DOREPLIFETIME(AProjectile, Niagara);
+	DOREPLIFETIME(AProjectile, Niagara_B);
 	DOREPLIFETIME(AProjectile, Material);
 	DOREPLIFETIME(AProjectile, Damage);
 	DOREPLIFETIME(AProjectile, LifeTime);
