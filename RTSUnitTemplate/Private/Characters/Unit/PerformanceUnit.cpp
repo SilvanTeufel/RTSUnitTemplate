@@ -154,6 +154,11 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 			SkelMesh->SetVisibility(desiredVisibility, true);
 			SkelMesh->bPauseAnims = !desiredVisibility;
 		}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+
+	if (Capsule)
+		Capsule->SetVisibility(desiredVisibility, true);
 }
 
 
@@ -225,7 +230,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
-			if(Projectile) Projectile->SetVisibility(true);
+			if(Projectile) Projectile->SetProjectileVisibility(true);
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{

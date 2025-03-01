@@ -28,6 +28,9 @@ public:
 	void InitForAbility(AActor* TargetActor, AActor* ShootingActor);
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SetProjectileVisibility(bool bVisible);
+	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitForLocationPosition(FVector Aim, AActor* ShootingActor);
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)

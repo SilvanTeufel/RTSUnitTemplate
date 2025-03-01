@@ -52,15 +52,15 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
 		{
 
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 		else if (ShootingUnit->EnableFog)
 		{
 
-			SetVisibility(false);
+			SetProjectileVisibility(false);
 		}else
 		{
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 	}
 }
@@ -89,15 +89,15 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
 		{
 
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 		else if (ShootingUnit->EnableFog)
 		{
 
-			SetVisibility(false);
+			SetProjectileVisibility(false);
 		}else
 		{
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 		
 	}
@@ -123,18 +123,40 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
 		{
 
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 		else if (ShootingUnit->EnableFog)
 		{
 
-			SetVisibility(false);
+			SetProjectileVisibility(false);
 		}else
 		{
-			SetVisibility(true);
+			SetProjectileVisibility(true);
 		}
 		
 	}
+}
+
+
+void AProjectile::SetProjectileVisibility(bool bVisible)
+{
+	SetVisibility(bVisible);
+	GetMesh()->SetVisibility(bVisible, true);
+	// Set visibility for the root component (if applicable)
+	//SetActorHiddenInGame(!bVisible);
+
+	/*
+	// Iterate over all components and update their visibility
+	TArray<UActorComponent*> Components;
+	GetComponents(UActorComponent::StaticClass(), Components);
+	for (UActorComponent* Component : Components)
+	{
+		UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Component);
+		if (PrimitiveComponent)
+		{
+			PrimitiveComponent->SetVisibility(bVisible, true); // Propagate to children
+		}
+	}*/
 }
 
 // Called when the game starts or when spawned

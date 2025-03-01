@@ -529,7 +529,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
-			if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
+			if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 			
 		
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
@@ -586,7 +586,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
+				if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 				
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			}
@@ -638,7 +638,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!MyProjectile->IsOnViewport) MyProjectile->SetVisibility(false);
+				if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			}
 		
