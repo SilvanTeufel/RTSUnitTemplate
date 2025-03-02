@@ -841,7 +841,7 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 					UnitBase->ServerMeeleImpactEvent();
 			
 					UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID, UnitBase->UnitToChase->DefensiveAbilities);
-					UnitBase->UnitToChase->FireEffects(UnitBase->MeleeImpactVFX, UnitBase->MeleeImpactSound, UnitBase->ScaleImpactVFX, UnitBase->ScaleImpactSound);
+					UnitBase->UnitToChase->FireEffects(UnitBase->MeleeImpactVFX, UnitBase->MeleeImpactSound, UnitBase->ScaleImpactVFX, UnitBase->ScaleImpactSound, UnitBase->MeeleImpactVFXDelay, UnitBase->MeleeImpactSoundDelay);
 					
 					if (!UnitBase->UnitToChase->UnitsToChase.Contains(UnitBase))
 					{

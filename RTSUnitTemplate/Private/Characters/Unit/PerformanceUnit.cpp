@@ -50,6 +50,9 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, DeadVFX);
 	DOREPLIFETIME(APerformanceUnit, ScaleDeadSound);
 	DOREPLIFETIME(APerformanceUnit, ScaleDeadVFX);
+
+	DOREPLIFETIME(APerformanceUnit, MeeleImpactVFXDelay);
+	DOREPLIFETIME(APerformanceUnit, MeleeImpactSoundDelay);
 	
 }
 
@@ -258,7 +261,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 	}
 }
 
-void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound)
+void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay)
 {
 
 	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
@@ -276,13 +279,52 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 			// Spawn the Niagara visual effect at the projectile's location and rotation
 			if (ImpactVFX)
 			{
-				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+
+				if (EffectDelay > 0.f)
+				{
+					// Set a timer to spawn the visual effect again after EffectDelay seconds
+					FTimerHandle VisualEffectTimerHandle;
+					World->GetTimerManager().SetTimer(
+							VisualEffectTimerHandle,
+							[this, ImpactVFX, ScaleVFX]()
+							{
+								if (GetWorld())
+								{
+									UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+								}
+							},
+							EffectDelay,
+							false
+					);
+				}else
+				{
+					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+				}
+
 			}
 
 			// Play the impact sound at the projectile's location
 			if (ImpactSound)
 			{
-				UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, GetActorLocation(), ScaleSound);
+				if (SoundDelay > 0.f)
+				{
+					FTimerHandle SoundTimerHandle;
+					World->GetTimerManager().SetTimer(
+						SoundTimerHandle,
+						[this, ImpactSound, ScaleSound]()
+						{
+							if (GetWorld())
+							{
+								UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetActorLocation(), ScaleSound);
+							}
+						},
+						SoundDelay,
+						false
+					);
+				}else
+				{
+					UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetActorLocation(), ScaleSound);
+				}
 			}
 		}
 	}
