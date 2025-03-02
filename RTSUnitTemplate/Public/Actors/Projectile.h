@@ -19,6 +19,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.025f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USceneComponent* SceneRoot;
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
@@ -28,8 +31,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitForAbility(AActor* TargetActor, AActor* ShootingActor);
 
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SetProjectileVisibility(bool bVisible);
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=RTSUnitTemplate)
+	void SetProjectileVisibility();
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitForLocationPosition(FVector Aim, AActor* ShootingActor);
@@ -67,17 +70,30 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RotationSpeed = FVector(0.5f);
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh_B;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_B;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraSystem* ImpactVFX;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* ImpactSound;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ScaleImpactVFX = FVector(1.f,1.f,1.f);
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ScaleImpactSound = 1.f;
+
 	
 	UStaticMeshComponent* GetMesh(){ return Mesh; };
 	

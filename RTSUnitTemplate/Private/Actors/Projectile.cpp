@@ -4,6 +4,8 @@
 #include "Actors/Projectile.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Net/UnrealNetwork.h"
@@ -14,28 +16,32 @@ AProjectile::AProjectile()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickInterval = TickInterval; 
+
+	// Create a new scene component as the root
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot); // Set it as the root component
+
+	// Create all components and attach them to the SceneRoot
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+	Mesh->SetupAttachment(SceneRoot); // Attach to the new root
 	
+	Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
+	Mesh_B->SetupAttachment(SceneRoot);
+	
+	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara->SetupAttachment(SceneRoot);
+	
+	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
+	Niagara_B->SetupAttachment(SceneRoot);
+	
+	// Collision settings for Mesh
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
+	Mesh->SetCollisionProfileName(TEXT("Trigger"));
 	Mesh->SetGenerateOverlapEvents(true);
 
-	// Create a secondary mesh and attach it to the root (or the main Mesh)
-	Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
-	Mesh_B->SetupAttachment(RootComponent);
-	// Optionally, configure Mesh_B properties if needed
-
-	// Create the Niagara component and attach it to the root (or the desired parent)
-	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
-	Niagara->SetupAttachment(RootComponent);
 	// Optionally, initialize Niagara properties here
+	SceneRoot->SetVisibility(false, true);
 
-	// Create the Niagara component and attach it to the root (or the desired parent)
-	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
-	Niagara_B->SetupAttachment(RootComponent);
-	// Optionally, initialize Niagara properties here
-	
 	if (HasAuthority())
 	{
 		bReplicates = true;
@@ -63,20 +69,6 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
-
-		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
-		{
-
-			SetProjectileVisibility(true);
-		}
-		else if (ShootingUnit->EnableFog)
-		{
-
-			SetProjectileVisibility(false);
-		}else
-		{
-			SetProjectileVisibility(true);
-		}
 	}
 }
 
@@ -100,21 +92,6 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		//Damage = ShootingUnit->Attributes->GetAttackDamage();
 		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
-
-		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
-		{
-
-			SetProjectileVisibility(true);
-		}
-		else if (ShootingUnit->EnableFog)
-		{
-
-			SetProjectileVisibility(false);
-		}else
-		{
-			SetProjectileVisibility(true);
-		}
-		
 	}
 }
 
@@ -134,40 +111,37 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 		//Damage = ShootingUnit->Attributes->GetAttackDamage();
 		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
-
-		if (ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam)
-		{
-
-			SetProjectileVisibility(true);
-		}
-		else if (ShootingUnit->EnableFog)
-		{
-
-			SetProjectileVisibility(false);
-		}else
-		{
-			SetProjectileVisibility(true);
-		}
-		
 	}
 }
 
 
-void AProjectile::SetProjectileVisibility(bool bVisible)
-{	
+void AProjectile::SetProjectileVisibility_Implementation()
+{
 
-	SetVisibility(bVisible);
-	Mesh->SetVisibility(bVisible, true);
-	Mesh_B->SetVisibility(bVisible, true);
-	Niagara->SetVisibility(bVisible, true);
+	if (!HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Client: SetProjectileVisibility"));
+	}
+	else if (HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server: SetProjectileVisibility"));
+	}
 
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
+
+	bool bShootingVisible = ShootingUnit ? ((ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam) ? true : (!ShootingUnit->EnableFog)) : false;
+	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibileEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
+	bool bFinalVisibility = bShootingVisible || bTargetVisible;
+
+	UE_LOG(LogTemp, Warning, TEXT("Final visibility: %d"), bFinalVisibility);
+	SceneRoot->SetVisibility(bFinalVisibility, true);
 }
 
 // Called when the game starts or when spawned
 void AProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -175,10 +149,10 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AProjectile, Target);
 	DOREPLIFETIME(AProjectile, Shooter);
-	DOREPLIFETIME(AProjectile, Mesh);
-	DOREPLIFETIME(AProjectile, Mesh_B);
-	DOREPLIFETIME(AProjectile, Niagara);
-	DOREPLIFETIME(AProjectile, Niagara_B);
+
+	DOREPLIFETIME(AProjectile, ImpactSound);
+	DOREPLIFETIME(AProjectile, ImpactVFX);
+	
 	DOREPLIFETIME(AProjectile, Material);
 	DOREPLIFETIME(AProjectile, Damage);
 	DOREPLIFETIME(AProjectile, LifeTime);
@@ -198,7 +172,10 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, IsBouncingNext);
 	DOREPLIFETIME(AProjectile, BouncedBack);
 	DOREPLIFETIME(AProjectile, ProjectileEffect); // Added for Build
-	DOREPLIFETIME(AProjectile, UseAttributeDamage)
+	DOREPLIFETIME(AProjectile, UseAttributeDamage);
+
+	DOREPLIFETIME(AProjectile, ScaleImpactVFX);
+	DOREPLIFETIME(AProjectile, ScaleImpactSound);
 }
 
 // Called every frame
@@ -348,6 +325,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	}			
 }
 
+
 void AProjectile::ImpactHeal(AActor* ImpactTarget)
 {
 	if (!HasAuthority()) return;
@@ -391,29 +369,35 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 	if(OtherActor)
 	{
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
+		AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
 			ImpactEvent();
+			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			DestroyProjectileWithDelay();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && IsHealing)
 		{
 			ImpactEvent();
 			ImpactHeal(UnitToHit);
+			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			DestroyProjectileWithDelay();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && !IsHealing)
 		{
 			ImpactEvent();
+			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			DestroyProjectileWithDelay();
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
 			ImpactEvent();
 			Impact(UnitToHit);
+			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			SetIsAttacked(UnitToHit);
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
 			ImpactEvent();
 			ImpactHeal(UnitToHit);
+			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			DestroyWhenMaxPierced();
 		}
 			

@@ -55,9 +55,11 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-				
+				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
+				//MyProjectile->SetProjectileVisibility();
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+
+				//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 			}
 		}
 	}

@@ -19,12 +19,6 @@
 void AGASUnit::BeginPlay()
 {
 	Super::BeginPlay();
-
-	/*
-	AbilitySystemComponent->SetIsReplicated(true);
-	AddReplicatedSubObject(ActivatedAbilityInstance);
-	bReplicates = true;
-	*/
 }
 
 void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -40,7 +34,6 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AGASUnit, FourthAbilities);
 	DOREPLIFETIME(AGASUnit, QueSnapshot);
 	DOREPLIFETIME(AGASUnit, CurrentSnapshot);
-	//DOREPLIFETIME(AGASUnit, CurrentAbilityCanBeCanceled);
 }
 
 

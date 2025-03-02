@@ -841,7 +841,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
 
     UnitBase->SetReplicateMovement(true);
     SetReplicates(true);
-    UnitBase->GetMesh()->SetIsReplicated(true);
+    //UnitBase->GetMesh()->SetIsReplicated(true);
 
     // Meshrotation-Server
     UnitBase->SetMeshRotationServer();

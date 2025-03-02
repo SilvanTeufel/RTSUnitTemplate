@@ -25,7 +25,31 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraSystem* MeleeImpactVFX;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraSystem* DeadVFX;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ScaleDeadVFX = FVector(1.f, 1.f,1.f);
 	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ScaleImpactVFX = FVector(1.f, 1.f,1.f);
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* MeleeImpactSound;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USoundBase* DeadSound;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ScaleImpactSound = 1.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ScaleDeadSound = 1.f;
+
 	virtual void BeginPlay() override;
 
 	virtual void Destroyed() override;
@@ -129,6 +153,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTickFog();
+	
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void FireEffects(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound);
+	
 private:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -142,10 +170,10 @@ private:
 	
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<class AProjectile> ProjectileBaseClass;
+	TSubclassOf<AProjectile> ProjectileBaseClass;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	class AProjectile* Projectile;
+	AProjectile* Projectile;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	AFogOfWarManager* SpawnedFogManager;

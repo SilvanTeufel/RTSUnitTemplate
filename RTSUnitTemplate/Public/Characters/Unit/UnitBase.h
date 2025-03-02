@@ -109,8 +109,6 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, ReplicatedUsing=OnRep_MeshMaterialPath, Category = RTSUnitTemplate)
 	FString MeshMaterialPath;
-
-	
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnRep_MeshAssetPath();

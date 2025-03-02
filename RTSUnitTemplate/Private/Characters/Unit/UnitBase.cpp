@@ -46,7 +46,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	HealthWidgetComp->SetVisibility(true);
 	
 	SetReplicates(true);
-	GetMesh()->SetIsReplicated(true);
+	//GetMesh()->SetIsReplicated(true);
 	bReplicates = true;
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
@@ -83,7 +83,8 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	{
 		NavSys->UpdateActorInNavOctree(*this); // Update NavMesh representation
 	}
-	
+	GetCapsuleComponent()->SetIsReplicated(false);
+	GetMesh()->SetIsReplicated(false);
 }
 
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -111,24 +112,11 @@ void AUnitBase::SetCollisionCooldown()
 {
 	// Re-enable collision processing
 	bCanProcessCollision = false;
-	/*
-	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(GetRootComponent());
-	if (PrimitiveComponent)
-	{
-		PrimitiveComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	}*/
 	GetWorld()->GetTimerManager().SetTimer(CollisionCooldownTimer, this, &AUnitBase::ResetCollisionCooldown, CollisionCooldown, false);
 }
 
 void AUnitBase::ResetCollisionCooldown()
 {
-	// Re-enable collision processing
-	/*
-	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(GetRootComponent());
-	if (PrimitiveComponent)
-	{
-		PrimitiveComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-	}*/
 	bCanProcessCollision = true;
 }
 
@@ -529,10 +517,12 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			
 			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
-			if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-			
-		
+			//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
+
+			MyProjectile->SetProjectileVisibility();
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+			
+			//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 		}
 	}
 }
@@ -586,9 +576,11 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-				
+				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
+				MyProjectile->SetProjectileVisibility();
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+
+				//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 			}
 		}
 	}
@@ -638,8 +630,11 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
 
-				if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
+				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
+				MyProjectile->SetProjectileVisibility();
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+				// Set a timer to delay the visibility update until the next tick
+				//ProjectileAndEffectsVisibility(MyProjectile);
 			}
 		
 	}
@@ -752,7 +747,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 
 			UnitBase->SetReplicateMovement(true);
 			SetReplicates(true);
-			UnitBase->GetMesh()->SetIsReplicated(true);
+			//UnitBase->GetMesh()->SetIsReplicated(true);
 
 			// Does this have to be replicated?
 			UnitBase->SetMeshRotationServer();

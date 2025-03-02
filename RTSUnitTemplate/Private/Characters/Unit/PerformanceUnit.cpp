@@ -6,6 +6,8 @@
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
@@ -39,6 +41,16 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetCompLocation);
+
+	DOREPLIFETIME(APerformanceUnit, MeleeImpactVFX);
+	DOREPLIFETIME(APerformanceUnit, MeleeImpactSound);
+	DOREPLIFETIME(APerformanceUnit, ScaleImpactSound);
+	DOREPLIFETIME(APerformanceUnit, ScaleImpactVFX);
+	DOREPLIFETIME(APerformanceUnit, DeadSound);
+	DOREPLIFETIME(APerformanceUnit, DeadVFX);
+	DOREPLIFETIME(APerformanceUnit, ScaleDeadSound);
+	DOREPLIFETIME(APerformanceUnit, ScaleDeadVFX);
+	
 }
 
 void APerformanceUnit::BeginPlay()
@@ -148,17 +160,18 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
-		USkeletalMeshComponent* SkelMesh = GetMesh();
-		if (SkelMesh)
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+
+	if (Capsule)
+		Capsule->SetVisibility(desiredVisibility, true);
+	
+	USkeletalMeshComponent* SkelMesh = GetMesh();
+	if (SkelMesh)
 		{
 			SkelMesh->SetVisibility(desiredVisibility, true);
 			SkelMesh->bPauseAnims = !desiredVisibility;
 		}
 
-	UCapsuleComponent* Capsule = GetCapsuleComponent();
-
-	if (Capsule)
-		Capsule->SetVisibility(desiredVisibility, true);
 }
 
 
@@ -230,7 +243,8 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
-			if(Projectile) Projectile->SetProjectileVisibility(true);
+			//if(Projectile) ProjectileAndEffectsVisibility(Projectile->Mesh, Projectile->Mesh_B, Projectile->Niagara, Projectile->Niagara_B);
+			//if(Projectile) Projectile->SetProjectileVisibility(true);
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
@@ -241,6 +255,36 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		
 		if(HealthBarUpdateTriggered)	
 			HealthBarWidget->UpdateWidget();
+	}
+}
+
+void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound)
+{
+
+	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
+	if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+	{
+		UWorld* World = GetWorld();
+
+		if (!World)
+		{
+			return;
+		}
+		
+		if (World)
+		{
+			// Spawn the Niagara visual effect at the projectile's location and rotation
+			if (ImpactVFX)
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+			}
+
+			// Play the impact sound at the projectile's location
+			if (ImpactSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, GetActorLocation(), ScaleSound);
+			}
+		}
 	}
 }
 

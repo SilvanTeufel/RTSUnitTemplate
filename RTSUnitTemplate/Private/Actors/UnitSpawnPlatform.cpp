@@ -247,7 +247,7 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 
 		UnitBase->SetReplicateMovement(true);
 		SetReplicates(true);
-		UnitBase->GetMesh()->SetIsReplicated(true);
+		//UnitBase->GetMesh()->SetIsReplicated(true);
 
 		// Does this have to be replicated?
 		UnitBase->SetMeshRotationServer();
