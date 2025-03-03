@@ -71,6 +71,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	UUnitBaseHealthBar* HealthBarWidget;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DeadEffectsExecuted = false;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool RotateWhileCasting = true;
 

@@ -466,7 +466,12 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	UnitBase->HideHealthWidget();
-	UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound);
+
+	if (!DeadEffectsExecuted)
+	{
+		UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
+		DeadEffectsExecuted = true;
+	}
 
 	if(!RTSGameMode)
 	{

@@ -22,22 +22,22 @@ AProjectile::AProjectile()
 	SetRootComponent(SceneRoot); // Set it as the root component
 
 	// Create all components and attach them to the SceneRoot
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	Mesh->SetupAttachment(SceneRoot); // Attach to the new root
+	Mesh_A = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh_A->SetupAttachment(SceneRoot); // Attach to the new root
 	
 	Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
 	Mesh_B->SetupAttachment(SceneRoot);
 	
-	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
-	Niagara->SetupAttachment(SceneRoot);
+	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara_A->SetupAttachment(SceneRoot);
 	
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(SceneRoot);
 	
 	// Collision settings for Mesh
-	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Mesh->SetCollisionProfileName(TEXT("Trigger"));
-	Mesh->SetGenerateOverlapEvents(true);
+	Mesh_A->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Mesh_A->SetCollisionProfileName(TEXT("Trigger"));
+	Mesh_A->SetGenerateOverlapEvents(true);
 
 	// Optionally, initialize Niagara properties here
 	SceneRoot->SetVisibility(false, true);
@@ -192,9 +192,9 @@ void AProjectile::Tick(float DeltaTime)
 		FRotator NewRotation = FRotator(RotationSpeed.X * DeltaTime, RotationSpeed.Y * DeltaTime, RotationSpeed.Z * DeltaTime);
 
 		// Apply rotation to the mesh
-		if (Mesh) // Assuming your mesh component is named MeshComponent
+		if (Mesh_A) // Assuming your mesh component is named MeshComponent
 		{
-			Mesh->AddLocalRotation(NewRotation);
+			Mesh_A->AddLocalRotation(NewRotation);
 		}
 	}
 	if(LifeTime > MaxLifeTime)

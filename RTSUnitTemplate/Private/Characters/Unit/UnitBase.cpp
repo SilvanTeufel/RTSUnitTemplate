@@ -233,6 +233,9 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, AbilitySelectionTag);
 	DOREPLIFETIME(AUnitBase, TalentTag);
 	DOREPLIFETIME(AUnitBase, UnitToChase);
+
+	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
+	DOREPLIFETIME(AUnitBase, DelayDeadSound);
 }
 
 
@@ -515,7 +518,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
 			
-			MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+			MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
 			//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 
@@ -570,7 +573,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 
 				MyProjectile->TargetLocation = LocationToShoot;
 				MyProjectile->InitForAbility(Aim, Attacker);
-				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+				MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
 				MyProjectile->FollowTarget = FollowTarget;
 				MyProjectile->IsBouncingNext = IsBouncingNext;
@@ -625,7 +628,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 				MyProjectile->TargetLocation = LocationToShoot;
 				MyProjectile->InitForLocationPosition(LocationToShoot, this);
 			
-				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+				MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;

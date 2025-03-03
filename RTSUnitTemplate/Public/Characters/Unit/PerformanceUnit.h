@@ -56,6 +56,12 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ScaleDeadSound = 1.f;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float DelayDeadVFX = 0.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float DelayDeadSound = 0.f;
+	
 	virtual void BeginPlay() override;
 
 	virtual void Destroyed() override;

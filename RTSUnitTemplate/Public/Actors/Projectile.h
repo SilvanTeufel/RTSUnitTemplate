@@ -71,13 +71,13 @@ public:
 	FVector RotationSpeed = FVector(0.5f);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UStaticMeshComponent* Mesh;
+	UStaticMeshComponent* Mesh_A;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh_B;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UNiagaraComponent* Niagara;
+	UNiagaraComponent* Niagara_A;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_B;
@@ -95,7 +95,7 @@ public:
 	float ScaleImpactSound = 1.f;
 
 	
-	UStaticMeshComponent* GetMesh(){ return Mesh; };
+	UStaticMeshComponent* GetMesh(){ return Mesh_A; };
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* Material;

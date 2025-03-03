@@ -50,7 +50,7 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 				//MyProjectile->TargetLocation = LocationToShoot;
 				MyProjectile->InitForLocationPosition(LocationToShoot, Attacker);
 			
-				MyProjectile->Mesh->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+				MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
 				MyProjectile->IsBouncingNext = IsBouncingNext;
 				MyProjectile->IsBouncingBack = IsBouncingBack;
