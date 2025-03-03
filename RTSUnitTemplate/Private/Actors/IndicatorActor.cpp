@@ -3,6 +3,7 @@
 
 #include "Actors/IndicatorActor.h"
 
+#include "Characters/Unit/UnitBase.h"
 #include "Net/UnrealNetwork.h"
 
 // Sets default values

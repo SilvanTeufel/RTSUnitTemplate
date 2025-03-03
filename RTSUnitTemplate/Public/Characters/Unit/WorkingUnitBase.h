@@ -17,6 +17,9 @@ UCLASS()
 class RTSUNITTEMPLATE_API AWorkingUnitBase : public AAbilityUnit
 {
 	GENERATED_BODY()
+private:
+	
+	FTimerHandle ShowWorkAreaTimerHandle;
 	
 public:
 	virtual void BeginPlay() override;

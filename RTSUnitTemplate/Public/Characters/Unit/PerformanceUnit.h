@@ -167,6 +167,10 @@ public:
 	void VisibilityTickFog();
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ShowWorkAreaIfNoFog(AWorkArea* WorkArea);
+
+	
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void FireEffects(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay = 0.f, float SoundDelay = 0.f);
 	
 private:

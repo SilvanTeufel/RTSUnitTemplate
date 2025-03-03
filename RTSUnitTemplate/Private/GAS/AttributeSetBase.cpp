@@ -134,18 +134,20 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset) // FVector TargetLocation
 {
 
-	AActor* UnitBase = GetOwningActor();
+	AActor* UnitActor = GetOwningActor();
 	
 	if(Damage > 0 && IndicatorBaseClass)
 	{
 		
 		FTransform Transform;
-		Transform.SetLocation(UnitBase->GetActorLocation());
+		Transform.SetLocation(UnitActor->GetActorLocation());
 		Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
 
 		const auto MyIndicator = Cast<AIndicatorActor>
 							(UGameplayStatics::BeginDeferredActorSpawnFromClass
 							(this, IndicatorBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+		
+		
 		if (MyIndicator != nullptr)
 		{
 			UGameplayStatics::FinishSpawningActor(MyIndicator, Transform);

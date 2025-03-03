@@ -118,23 +118,13 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 void AProjectile::SetProjectileVisibility_Implementation()
 {
 
-	if (!HasAuthority())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Client: SetProjectileVisibility"));
-	}
-	else if (HasAuthority())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Server: SetProjectileVisibility"));
-	}
-
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
 
 	bool bShootingVisible = ShootingUnit ? ((ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam) ? true : (!ShootingUnit->EnableFog)) : false;
 	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibileEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
 	bool bFinalVisibility = bShootingVisible || bTargetVisible;
-
-	UE_LOG(LogTemp, Warning, TEXT("Final visibility: %d"), bFinalVisibility);
+	
 	SceneRoot->SetVisibility(bFinalVisibility, true);
 }
 

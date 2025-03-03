@@ -261,6 +261,22 @@ void APerformanceUnit::CheckHealthBarVisibility()
 	}
 }
 
+void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
+{
+	if (WorkArea)
+	{
+		// Example condition checks: adapt these to your game logic
+		if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+		{
+			if (WorkArea->Mesh)
+			{
+				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
+				WorkArea->Mesh->SetHiddenInGame(false);
+			}
+		}
+	}
+}
+
 void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay)
 {
 

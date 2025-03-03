@@ -51,6 +51,8 @@ AWorkArea::AWorkArea()
 		bReplicates = true;
 		SetReplicateMovement(true);
 	}
+
+	Mesh->SetIsReplicated(false);
 }
 
 // Called when the game starts or when spawned
