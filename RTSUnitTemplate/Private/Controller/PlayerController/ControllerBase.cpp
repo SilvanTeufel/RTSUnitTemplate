@@ -602,7 +602,8 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound)
 {
 
-			ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+	ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+	
 	PlayWaypointSound = false;
 	
 	if (!BuildingBase) return false;

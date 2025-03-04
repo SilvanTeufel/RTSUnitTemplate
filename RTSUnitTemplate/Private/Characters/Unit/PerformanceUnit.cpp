@@ -141,6 +141,7 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 						// Scale the Mesh component of the spawned FogOfWarManager
 						SpawnedFogManager->TeamId = TeamId;
 						SpawnedFogManager->PlayerTeamId =  ControllerBase->SelectableTeamId;//ControllerBase->SelectableTeamId;
+						SpawnedFogManager->OwningUnit = this;
 						SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
 						SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
 						// Bind overlap events using the appropriate class and instance
@@ -261,6 +262,32 @@ void APerformanceUnit::CheckHealthBarVisibility()
 	}
 }
 
+
+void APerformanceUnit::SpawnDamageIndicator_Implementation(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset)
+{
+	if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+	{
+		if(Damage > 0 && Attributes->IndicatorBaseClass)
+		{
+			
+			FTransform Transform;
+			Transform.SetLocation(GetActorLocation());
+			Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
+
+			const auto MyIndicator = Cast<AIndicatorActor>
+								(UGameplayStatics::BeginDeferredActorSpawnFromClass
+								(this, Attributes->IndicatorBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+			
+			
+			if (MyIndicator != nullptr)
+			{
+				UGameplayStatics::FinishSpawningActor(MyIndicator, Transform);
+				MyIndicator->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
+			}
+		}
+	}
+}
+
 void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
 {
 	if (WorkArea)
@@ -271,6 +298,7 @@ void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
 			if (WorkArea->Mesh)
 			{
 				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
+				WorkArea->SceneRoot->SetVisibility(true, true);
 				WorkArea->Mesh->SetHiddenInGame(false);
 			}
 		}

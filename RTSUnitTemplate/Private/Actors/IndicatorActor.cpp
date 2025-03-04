@@ -14,10 +14,17 @@ AIndicatorActor::AIndicatorActor(const FObjectInitializer& ObjectInitializer):Su
 	DamageIndicatorComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("DamageIndicator"));
 	RootComponent = DamageIndicatorComp;
 
+	/*
 	if (HasAuthority())
 	{
 		bReplicates = true;
 		SetReplicateMovement(true);
+	}*/
+
+	if (HasAuthority())
+	{
+		bReplicates = false;
+		SetReplicateMovement(false);
 	}
 }
 

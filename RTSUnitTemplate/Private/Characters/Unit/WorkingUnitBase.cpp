@@ -157,7 +157,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			SpawnedWorkArea->TeamId          = TeamId;
 			SpawnedWorkArea->IsPaid          = IsPaid;
 			SpawnedWorkArea->ConstructionCost = ConstructionCost;
-
+			SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
 			// Keep track of this WorkArea if needed
 			CurrentDraggedWorkArea = SpawnedWorkArea;
 

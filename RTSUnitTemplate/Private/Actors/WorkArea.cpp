@@ -15,12 +15,15 @@ AWorkArea::AWorkArea()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-
+	/*
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
+	*/
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot); // Set it as the root component
 	
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	Mesh->SetupAttachment(RootComponent);
+	Mesh->SetupAttachment(SceneRoot);
 	//SetRootComponent(Mesh);
 	
 	// Set collision enabled 
@@ -40,12 +43,15 @@ AWorkArea::AWorkArea()
 
 
 
+	
 	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
 	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerCapsule->SetupAttachment(RootComponent);
 	//TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
 
+	SceneRoot->SetVisibility(false, true);
+	
 	if (HasAuthority())
 	{
 		bReplicates = true;

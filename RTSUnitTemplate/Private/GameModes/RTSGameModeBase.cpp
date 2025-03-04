@@ -25,12 +25,9 @@ void ARTSGameModeBase::BeginPlay()
 	
 
 	FillUnitArrays();
-	//FTimerHandle TimerHandleGetUnits;
-	//GetWorldTimerManager().SetTimer(TimerHandleGetUnits, this, &ARTSGameModeBase::FillUnitArrays, GatherUnitsTimer, false);
-	
+
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
-	//SetTeamIdsAndWaypoints();
 }
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
@@ -224,6 +221,9 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		
 		if (CameraControllerBase && PlayerStarts.IsValidIndex(PlayerStartIndex))
 		{
+			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = true;
+
+			
 			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
 
 			ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
@@ -244,7 +244,10 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
+			CameraControllerBase->Multi_HideEnemyWaypoints();
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
+
+			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
 		}
 	}
 }
@@ -726,25 +729,13 @@ int ARTSGameModeBase::AssignNewHighestIndex(AUnitBase* Unit)
 	HighestUnitIndex++;
 	Unit->SetUnitIndex(HighestUnitIndex);
 	return HighestUnitIndex;
-	//UE_LOG(LogTemp, Warning, TEXT("Assigned UnitINDEX! %d"), Unit->UnitIndex);
 }
 
 int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 {
-	//APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-
-	//if(PlayerController)
-	//{
-		//AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-		//if(HUD)
-		//{
-				int Index = AssignNewHighestIndex(UnitBase);
-				AllUnits.Add(UnitBase);
-				//HUD->AllUnits.Add(UnitBase);
-				return Index;
-		//}
-	//}
-	//return 0;
+	int Index = AssignNewHighestIndex(UnitBase);
+	AllUnits.Add(UnitBase);
+	return Index;
 }
 
 void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter)
@@ -753,9 +744,7 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 
 	if(PlayerController)
 	{
-		//AHUDBase* HUD = Cast<AHUDBase>(PlayerController->GetHUD());
-		//if(HUD)
-		//{
+
 			if(Index == INDEX_NONE || !AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[Index])
 			{
 				AssignNewHighestIndex(UnitBase);
@@ -767,14 +756,11 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 
 				if(SpawnParameter.LoadLevelAfterSpawn)
 				{
-					//UnitBase->LoadLevelDataAndAttributes(FString::FromInt(AvailableUnitIndexArray[Index]));
 					UnitBase->LoadAbilityAndLevelData(FString::FromInt(AvailableUnitIndexArray[Index]));
 				}
 				AvailableUnitIndexArray.RemoveAt(Index);
 				SpawnParameterIdArray.RemoveAt(Index);
 				AllUnits.Add(UnitBase);
-			
-			//}
 			
 		}
 	}

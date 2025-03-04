@@ -14,20 +14,6 @@
 void AExtendedControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	/*
-	if (HasAuthority()) // Ensure this runs only on the server
-	{
-		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(
-			TimerHandle, 
-			this, 
-			&AExtendedControllerBase::Server_SetFogManager, 
-			5.0f,    // Delay in seconds
-			false     // Don't loop
-		);
-	}
-	*/
 }
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
@@ -324,7 +310,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	if (SelectedUnits.Num() > 0)
 	{
-		if (SelectedUnits[0]->IsWorker)
+		if (SelectedUnits[0]->IsWorker && SelectedUnits[0]->CanActivateAbilities)
 		{
 			ActivateAbilitiesByIndex_Implementation(SelectedUnits[0], InputID, Hit);
 			HUDBase->SetUnitSelected(SelectedUnits[0]);
@@ -337,7 +323,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			
 			for (AUnitBase* SelectedUnit : SelectedUnits)
 			{
-				if (SelectedUnit && !SelectedUnit->IsWorker &&  SelectedUnit->AbilitySelectionTag == SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag)
+				if (SelectedUnit && SelectedUnit->CanActivateAbilities && !SelectedUnit->IsWorker &&  SelectedUnit->AbilitySelectionTag == SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag)
 				{
 					bAnyHasTag = true;
 					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
@@ -348,7 +334,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			{
 				for (AUnitBase* SelectedUnit : SelectedUnits)
 				{
-					if (SelectedUnit && !SelectedUnit->IsWorker)
+					if (SelectedUnit && SelectedUnit->CanActivateAbilities && !SelectedUnit->IsWorker)
 					{
 						ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
 					}
@@ -356,7 +342,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			}
 			
 		}
-	}else if (CameraUnitWithTag)
+	}else if (CameraUnitWithTag && CameraUnitWithTag->CanActivateAbilities)
 	{
 		CameraUnitWithTag->SetSelected();
 		SelectedUnits.Emplace(CameraUnitWithTag);
@@ -1527,4 +1513,36 @@ void AExtendedControllerBase::Multi_SetCamLocation_Implementation(FVector NewLoc
 	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
 	if (Camera)
 		Camera->SetActorLocation(NewLocation);
+}
+
+void AExtendedControllerBase::Multi_HideEnemyWaypoints_Implementation()
+{
+	// Only execute for the local controller
+	if (!IsLocalController())
+	{
+		return;
+	}
+	//if (!IsLocalController()) return;
+	UE_LOG(LogTemp, Log, TEXT("Multi_HideEnemyWaypoints_Implementation - TeamId is now: %d"), SelectableTeamId);
+	// Try to get all AWaypoints* Waypoint with TArray from Map
+	// Compare Waypoint->TeamId with SelectableTeamId (from this Class)
+	// If Unequal please hide
+	// If TeamId == 0 dont hide
+
+	// Retrieve all waypoints from the world
+	TArray<AActor*> FoundWaypoints;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWaypoint::StaticClass(), FoundWaypoints);
+
+	// Iterate over each waypoint
+	for (AActor* Actor : FoundWaypoints)
+	{
+		if (AWaypoint* Waypoint = Cast<AWaypoint>(Actor))
+		{
+			// Hide the waypoint if its TeamId is different from our team AND it isn't neutral (TeamId == 0)
+			if (Waypoint->TeamId != SelectableTeamId && Waypoint->TeamId != 0)
+			{
+				Waypoint->SetActorHiddenInGame(true);
+			}
+		}
+	}
 }

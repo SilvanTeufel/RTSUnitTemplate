@@ -223,6 +223,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
 	DOREPLIFETIME(AUnitBase, UnitControlTimer);
 	DOREPLIFETIME(AUnitBase, LineTraceZDistance);
+	DOREPLIFETIME(AUnitBase, CanActivateAbilities);
 
 	DOREPLIFETIME(AUnitBase, EvadeDistance); // Added for Build
 	DOREPLIFETIME(AUnitBase, EvadeDistanceChase); // Added for Build

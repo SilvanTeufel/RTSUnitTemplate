@@ -503,7 +503,91 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 }
 
+void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
+{
+    if (!RTSGameMode)
+    {
+        RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+    }
+    
+    if (!RTSGameMode)
+    {
+        return;
+    }
 
+    // Mark the detecting unit as being in fog.
+    DetectingUnit->IsInFog = true;
+    
+    if (DebugDetection)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
+    }
+
+    // Loop through all units stored in the game mode.
+    for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+    {
+        AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+        if (!Unit)
+        {
+            continue;
+        }
+
+        // Calculate distance between detecting unit and target unit.
+        float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+        if (Distance > Sight)
+        {
+            continue;
+        }
+
+        // Skip if either unit is dead.
+        if (Unit->GetUnitState() == UnitData::Dead || DetectingUnit->GetUnitState() == UnitData::Dead)
+        {
+            continue;
+        }
+
+        // --- Extra Detection Conditions ---
+
+        // 1. Invisible detection:
+        // If the target unit is invisible and the detecting unit is not capable of detecting invisible units, skip.
+        if (Unit->IsInvisible && !DetectingUnit->CanDetectInvisible)
+        {
+            continue;
+        }
+
+        // 2. Ground/Flying detection restrictions:
+        // If the detecting unit can only attack ground units but the target unit is flying, skip.
+        if (DetectingUnit->CanOnlyAttackGround && Unit->IsFlying)
+        {
+            continue;
+        }
+        // If the detecting unit can only attack flying units but the target unit is not flying, skip.
+        if (DetectingUnit->CanOnlyAttackFlying && !Unit->IsFlying)
+        {
+            continue;
+        }
+
+        // --- End Extra Conditions ---
+
+        // Now check team relationships.
+        if (!DetectFriendlyUnits)
+        {
+            // When detecting enemy units, add the unit if its team is different.
+            if (Unit->TeamId != DetectingUnit->TeamId)
+            {
+                DetectedUnits.Emplace(Unit);
+            }
+        }
+        else
+        {
+            // When detecting friendly units, add if the unit is on the same team.
+            if (Unit->TeamId == DetectingUnit->TeamId)
+            {
+                DetectedUnits.Emplace(Unit);
+            }
+        }
+    }
+}
+/*
 void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
 {
 	if(!RTSGameMode)
@@ -515,6 +599,15 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 	//TArray<int> DetectedCount;
 	DetectingUnit->IsInFog = true;
 	if(DebugDetection)UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
+
+
+	//New Variables have to be included in Detection
+	//bool CanOnlyAttackGround = false; // Detection is not working for a Unit where IsFlying = true
+	//bool CanOnlyAttackFlying = false; // Detection is only working for a Unit where IsFlying = true;
+	//bool CanDetectInvisible = false; // Can Detect Units where IsInvisible = true;
+	//bool IsInvisible = false; // Can only be detected from a Unit where CanDetectInvisible = true;
+	//bool IsFlying = false; // Is true for Units which are Flying
+
 	
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
@@ -543,7 +636,7 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 		}
 	}
 	
-}
+}*/
 
 
 void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)

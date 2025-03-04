@@ -64,10 +64,17 @@ void AFogOfWarManager::Tick(float DeltaTime)
 
 void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-    APerformanceUnit* Unit = Cast<APerformanceUnit>(OtherActor);
-
+    AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
+    AUnitBase* DetectingUnit = Cast<AUnitBase>(OwningUnit);
+    
     if (Unit && PlayerTeamId != Unit->TeamId)
     {
+            if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->IsInvisible)
+            {
+                Unit->IsInvisible = false;
+                Unit->DetectorOverlaps++;
+            }
+        
             Unit->IsVisibileEnemy = true;
             Unit->FogManagerOverlaps++;
     }
@@ -77,12 +84,27 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
 {
 
     AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
-
+    AUnitBase* DetectingUnit = Cast<AUnitBase>(OwningUnit);
     
     if (Unit && PlayerTeamId != Unit->TeamId)
     {
         Unit->FogManagerOverlaps--;
         if(Unit->FogManagerOverlaps < 0) Unit->FogManagerOverlaps = 0;
+
+        if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->DetectorOverlaps > 0)
+        {
+            Unit->DetectorOverlaps--;
+
+            if (Unit->DetectorOverlaps <= 0)
+            {
+                FTimerHandle TimerHandleDetector;
+                GetWorld()->GetTimerManager().SetTimer(TimerHandleDetector, [Unit]()
+                {
+                    Unit->IsInvisible = true;
+                }, 1.f, false);
+            }
+        }
+        
         if(Unit->FogManagerOverlaps > 0) return;
 
         FTimerHandle TimerHandle;

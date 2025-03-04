@@ -133,7 +133,10 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset) // FVector TargetLocation
 {
+	AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor());
 
+	UnitBase->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
+/*
 	AActor* UnitActor = GetOwningActor();
 	
 	if(Damage > 0 && IndicatorBaseClass)
@@ -154,6 +157,7 @@ void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColo
 			MyIndicator->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
 		}
 	}
+	*/
 }
 
 void UAttributeSetBase::OnRep_EffectDamage(const FGameplayAttributeData& OldEffectDamage)

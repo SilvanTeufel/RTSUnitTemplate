@@ -273,5 +273,8 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetCamLocation(FVector NewLocation);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_HideEnemyWaypoints();
 	
 };
