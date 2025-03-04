@@ -50,7 +50,7 @@ AWorkArea::AWorkArea()
 	TriggerCapsule->SetupAttachment(RootComponent);
 	//TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
 
-	SceneRoot->SetVisibility(false, true);
+	//SceneRoot->SetVisibility(false, true);
 	
 	if (HasAuthority())
 	{

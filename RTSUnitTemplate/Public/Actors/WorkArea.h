@@ -4,7 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-//#include "Characters/Unit/UnitBase.h"
+//#include "Characters/Unit/UnitBase.h"3
+#include "Components/SceneComponent.h"
 #include "GameplayEffect.h"
 #include "TimerManager.h"
 #include "Core/WorkerData.h"
