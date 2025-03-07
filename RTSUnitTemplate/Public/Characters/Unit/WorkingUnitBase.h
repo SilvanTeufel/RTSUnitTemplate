@@ -62,6 +62,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraComponent* Niagara_Build;
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void StartBuild();

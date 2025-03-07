@@ -121,8 +121,8 @@ void AProjectile::SetProjectileVisibility_Implementation()
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
 
-	bool bShootingVisible = ShootingUnit ? ((ShootingUnit->IsVisibileEnemy || ShootingUnit->IsMyTeam) ? true : (!ShootingUnit->EnableFog)) : false;
-	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibileEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
+	bool bShootingVisible = ShootingUnit ? ((ShootingUnit->IsVisibleEnemy || ShootingUnit->IsMyTeam) ? true : (!ShootingUnit->EnableFog)) : false;
+	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibleEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
 	bool bFinalVisibility = bShootingVisible || bTargetVisible;
 	
 	SceneRoot->SetVisibility(bFinalVisibility, true);

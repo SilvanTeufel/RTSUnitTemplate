@@ -486,6 +486,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
 	SnapToActorVisited(DraggedActor, OtherActor, Visited);
 }
 */
+/*
 void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor,
 	TSet<AActor*>& AlreadyVisited)
 {
@@ -584,15 +585,15 @@ void AExtendedControllerBase::SnapToActorVisited(AWorkArea* DraggedActor, AActor
         	WorkAreaIsSnapped = false;
         }
     }
-}
+}*/
 
-
+/*
 void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor)
 {
     if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
         return;
 
-    // 1) Get the dragged mesh
+    // 1) Get the dragged mesh (assumed to be a StaticMeshComponent)
     UStaticMeshComponent* DraggedMesh = DraggedActor->FindComponentByClass<UStaticMeshComponent>();
     if (!DraggedMesh)
     {
@@ -600,8 +601,123 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         return;
     }
 
+    // 2) Try to get a mesh from OtherActor, supporting both StaticMesh and SkeletalMesh.
+    UPrimitiveComponent* OtherMesh = Cast<UPrimitiveComponent>(
+        OtherActor->FindComponentByClass<UStaticMeshComponent>());
+    if (!OtherMesh)
+    {
+        OtherMesh = Cast<UPrimitiveComponent>(
+            OtherActor->FindComponentByClass<USkeletalMeshComponent>());
+    }
+    if (!OtherMesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("OtherActor has no valid mesh component!"));
+        return;
+    }
+
+    // 3) Compute each mesh’s bounds in world space.
+    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    FBoxSphereBounds OtherBounds   = OtherMesh->CalcBounds(OtherMesh->GetComponentTransform());
+
+    // 4) Extract the centers and half-extents.
+    FVector DraggedCenter = DraggedBounds.Origin;
+    FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+    FVector OtherCenter   = OtherBounds.Origin;
+    FVector OtherExtent   = OtherBounds.BoxExtent;
+
+    // 5) Decide on a small gap so they don’t overlap visually.
+    float Gap = SnapGap;
+
+    // 6) Compute how much to offset on X and Y so they "just touch".
+    float XOffset = DraggedExtent.X + OtherExtent.X + Gap;
+    float YOffset = DraggedExtent.Y + OtherExtent.Y + Gap;
+
+    // 7) Determine which axis (X or Y) is already closer.
+    float dx = FMath::Abs(DraggedCenter.X - OtherCenter.X);
+    float dy = FMath::Abs(DraggedCenter.Y - OtherCenter.Y);
+
+    // Start with the current ActorLocation’s Z so we only adjust X/Y.
+    FVector SnappedPos = DraggedActor->GetActorLocation();
+
+    if (dx < dy)
+    {
+        // They’re closer on X, so snap them to the same X.
+        SnappedPos.X = OtherCenter.X;
+
+        // Offset Y so they’re side-by-side.
+        float SignY = (DraggedCenter.Y >= OtherCenter.Y) ? 1.f : -1.f;
+        SnappedPos.Y = OtherCenter.Y + SignY * YOffset;
+    }
+    else
+    {
+        // They’re closer on Y, so snap them to the same Y.
+        SnappedPos.Y = OtherCenter.Y;
+
+        // Offset X so they’re side-by-side.
+        float SignX = (DraggedCenter.X >= OtherCenter.X) ? 1.f : -1.f;
+        SnappedPos.X = OtherCenter.X + SignX * XOffset;
+    }
+
+    // 8) (Optional) Adjust Z if needed, or keep the original Z.
+    SetWorkAreaPosition(DraggedActor, SnappedPos);
+
+    //
+    // ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
+    //
+
+    TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+    TArray<AActor*> ActorsToIgnore;
+    ActorsToIgnore.Add(DraggedActor);
+    ActorsToIgnore.Add(OtherActor);
+
+    TArray<AActor*> OverlappingActors;
+
+    bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
+        GetWorld(),
+        SnappedPos,
+        DraggedExtent,
+        TArray<TEnumAsByte<EObjectTypeQuery>>(),
+        nullptr,
+        ActorsToIgnore,
+        OverlappingActors
+    );
+
+    bool bAnyOverlap = false;
+
+    if (bSuccess)
+    {
+        for (AActor* Overlapped : OverlappingActors)
+        {
+            if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
+                continue;
+
+            if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
+            {
+                bAnyOverlap = true;
+            }
+        }
+    }
+
+    WorkAreaIsSnapped = !bAnyOverlap;
+}
+*/
+
+
+void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor, UStaticMeshComponent* OtherMesh)
+{
+    if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
+        return;
+
+    // 1) Get the dragged mesh
+   	UStaticMeshComponent* DraggedMesh = DraggedActor->Mesh;
+    if (!DraggedMesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DraggedActor has no StaticMeshComponent!"));
+        return;
+    }
+
     // 2) Get the other mesh
-    UStaticMeshComponent* OtherMesh = OtherActor->FindComponentByClass<UStaticMeshComponent>();
+   // UStaticMeshComponent* OtherMesh = OtherActor->FindComponentByClass<UStaticMeshComponent>();
     if (!OtherMesh)
     {
         UE_LOG(LogTemp, Warning, TEXT("OtherActor has no StaticMeshComponent!"));
@@ -722,6 +838,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
 	}
 }
 
+/*
 void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
 {
     // Sanity check that we have at least one "SelectedUnit"
@@ -736,6 +853,8 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
         return;
     }
 
+	SelectedUnits[0]->ShowWorkAreaIfNoFog(DraggedWorkArea);
+	
     FVector MousePosition, MouseDirection;
     DeprojectMousePositionToWorld(MousePosition, MouseDirection);
 
@@ -765,7 +884,169 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     //---------------------------------------
     // Get DraggedWorkArea bounding box info
     //---------------------------------------
-	UStaticMeshComponent* DraggedMesh = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>();
+    // Try to get a static mesh first; if not, try a skeletal mesh.
+    UPrimitiveComponent* DraggedMesh = Cast<UPrimitiveComponent>(
+        DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>());
+    if (!DraggedMesh)
+    {
+        DraggedMesh = Cast<UPrimitiveComponent>(
+            DraggedWorkArea->FindComponentByClass<USkeletalMeshComponent>());
+    }
+    if (!DraggedMesh)
+    {
+        return;
+    }
+    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    FVector Extent = DraggedBounds.BoxExtent; // half-size
+
+    // Decide how you want to incorporate the bounding box size into your check.
+    float DraggedBoxExtentSize = Extent.Size() * 2.f; 
+
+    // If the distance < SnapDistance + SnapGap + DraggedBoxExtentSize
+    if (Distance < (SnapDistance + SnapGap + DraggedBoxExtentSize))
+    {
+        // Instead of checking only for a static mesh, try for both static and skeletal mesh.
+        UPrimitiveComponent* Mesh = Cast<UPrimitiveComponent>(
+            DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>());
+        if (!Mesh)
+        {
+            Mesh = Cast<UPrimitiveComponent>(
+                DraggedWorkArea->FindComponentByClass<USkeletalMeshComponent>());
+        }
+        if (Mesh)
+        {
+            FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
+            float OverlapRadius = MeshBounds.SphereRadius;
+
+            TArray<AActor*> OverlappedActors;
+            bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
+                this,
+                HitResult.Location,
+                OverlapRadius,
+                TArray<TEnumAsByte<EObjectTypeQuery>>(),
+                AActor::StaticClass(),
+                TArray<AActor*>(),  // Actors to ignore
+                OverlappedActors
+            );
+
+            if (bAnyOverlap && OverlappedActors.Num() > 0)
+            {
+                for (AActor* OverlappedActor : OverlappedActors)
+                {
+                    // Ignore if the overlapped actor is invalid or the same as the dragged one.
+                    if (!OverlappedActor || OverlappedActor == DraggedWorkArea)
+                    {
+                        continue;
+                    }
+
+                    AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor);
+                    ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
+                    if (OverlappedWorkArea || OverlappedBuilding)
+                    {
+                        // Try to get a valid mesh component (static or skeletal) from the overlapped actor.
+                        UPrimitiveComponent* OverlappedMesh = Cast<UPrimitiveComponent>(
+                            OverlappedActor->FindComponentByClass<UStaticMeshComponent>());
+                        if (!OverlappedMesh)
+                        {
+                            OverlappedMesh = Cast<UPrimitiveComponent>(
+                                OverlappedActor->FindComponentByClass<USkeletalMeshComponent>());
+                        }
+                        if (!OverlappedMesh)
+                        {
+                            continue;
+                        }
+                        
+                        FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+                        FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
+                        
+                        // Example: we only care about XY distance for snapping.
+                        float XYDistance = FVector::Dist2D(
+                            DraggedWorkArea->GetActorLocation(),
+                            OverlappedActor->GetActorLocation()
+                        );
+
+                        // Combine XY extents: (X1 + X2) + (Y1 + Y2), averaged.
+                        float CombinedXYExtent = (Extent.X + OverlappedExtent.X +
+                                                  Extent.Y + OverlappedExtent.Y) * 0.5f;
+
+                        float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
+
+                        if (XYDistance < SnapThreshold)
+                        {
+                            // Snap logic.
+                            SnapToActor(DraggedWorkArea, OverlappedActor);
+                            return; // Exit after a successful snap.
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //---------------------------------
+    // If no snap, move the WorkArea
+    //---------------------------------
+    if (bHit && HitResult.GetActor() != nullptr)
+    {
+        CurrentDraggedGround = HitResult.GetActor();
+
+        FVector NewActorPosition = HitResult.Location;
+        // Adjust Z if needed.
+        NewActorPosition.Z += DraggedAreaZOffset; 
+        SetWorkAreaPosition(DraggedWorkArea, NewActorPosition);
+
+        WorkAreaIsSnapped = false;
+    }
+}
+*/
+
+
+void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
+{
+    // Sanity check that we have at least one "SelectedUnit"
+    if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
+    {
+        return;
+    }
+
+    AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
+    if (!DraggedWorkArea)
+    {
+        return;
+    }
+	
+	SelectedUnits[0]->ShowWorkAreaIfNoFog(DraggedWorkArea);
+	
+    FVector MousePosition, MouseDirection;
+    DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+    // Raycast from the mouse into the scene
+    FVector Start = MousePosition;
+    FVector End   = Start + MouseDirection * 5000.f;
+
+    FHitResult HitResult;
+    FCollisionQueryParams CollisionParams;
+    CollisionParams.bTraceComplex = true;
+    CollisionParams.AddIgnoredActor(DraggedWorkArea);
+
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        Start,
+        End,
+        ECC_Visibility,
+        CollisionParams
+    );
+
+    // Compute distance from the drag’s current location to the raycast hit
+    float Distance = FVector::Dist(
+        HitResult.Location,
+        DraggedWorkArea->GetActorLocation()
+    );
+
+    //---------------------------------------
+    // Get DraggedWorkArea bounding box info
+    //---------------------------------------
+	UStaticMeshComponent* DraggedMesh = DraggedWorkArea->Mesh;
 
 	if (!DraggedMesh)
 	{
@@ -787,7 +1068,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     if (Distance < (SnapDistance + SnapGap + DraggedBoxExtentSize))
     {
         // Try to overlap to see if we’re near something we can snap to
-        if (UStaticMeshComponent* Mesh = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
+        if (UStaticMeshComponent* Mesh = DraggedWorkArea->Mesh)
         {
             // Use the sphere radius as an overlap check
             FBoxSphereBounds MeshBounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
@@ -820,8 +1101,20 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     if (OverlappedWorkArea || OverlappedBuilding)
                     {
 
-                    	UStaticMeshComponent* OverlappedMesh = OverlappedActor->FindComponentByClass<UStaticMeshComponent>();
-
+                    	UStaticMeshComponent* OverlappedMesh = nullptr;
+                    	if (OverlappedBuilding)
+                    	{
+                    		OverlappedMesh = OverlappedBuilding->SnapMesh;
+                    	}
+                    	else if (OverlappedWorkArea)
+                    	{
+                    		OverlappedMesh = OverlappedWorkArea->Mesh;
+                    	}
+                    	if (!OverlappedMesh)
+                    	{
+                    		continue;
+                    	}
+                    	
                     	if (!OverlappedMesh)
                     	{
                     		// If there's no mesh on this overlapped actor, skip to the next actor
@@ -849,7 +1142,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                         if (XYDistance < SnapThreshold)
                         {
                             // Snap logic
-                            SnapToActor(DraggedWorkArea, OverlappedActor);
+                            SnapToActor(DraggedWorkArea, OverlappedActor, OverlappedMesh);
                             return; // Break out if you only want one snap
                         }
                     }
@@ -957,8 +1250,10 @@ bool AExtendedControllerBase::DropWorkArea()
 			{
 				UGameplayStatics::PlaySound2D(this, DropWorkAreaFailedSound);
 			}
-	
+			
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
+			CancelCurrentAbility(SelectedUnits[0]);
+
 			return true;
 		}
 
@@ -1193,6 +1488,10 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 	Worker->CurrentDraggedWorkArea->RemoveAreaFromGroup();
 	Worker->CurrentDraggedWorkArea->Destroy();
 	Worker->CurrentDraggedWorkArea = nullptr;
+	if (AUnitBase* Unit = Cast<AUnitBase>(Worker))
+	{
+		CancelCurrentAbility(Unit);
+	}
 }
 
 void AExtendedControllerBase::RightClickPressed()

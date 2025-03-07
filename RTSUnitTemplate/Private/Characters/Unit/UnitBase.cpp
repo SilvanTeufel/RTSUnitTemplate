@@ -455,18 +455,21 @@ void AUnitBase::SetDeselected()
 
 void AUnitBase::SpawnSelectedIcon()
 {
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.bNoFail = true;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (SelectedIconBaseClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.bNoFail = true;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	FTransform SpellTransform;
-	SpellTransform.SetLocation(FVector(500, 0, 0));
-	SpellTransform.SetRotation(FQuat(FRotator::ZeroRotator));
+		FTransform SpellTransform;
+		SpellTransform.SetLocation(FVector(500, 0, 0));
+		SpellTransform.SetRotation(FQuat(FRotator::ZeroRotator));
 	
-	SelectedIcon = GetWorld()->SpawnActor<ASelectedIcon>(SelectedIconBaseClass, SpellTransform, SpawnParams);
-	if (SelectedIcon) {
-		SelectedIcon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("rootSocket"));
-		SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
+		SelectedIcon = GetWorld()->SpawnActor<ASelectedIcon>(SelectedIconBaseClass, SpellTransform, SpawnParams);
+		if (SelectedIcon) {
+			SelectedIcon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("rootSocket"));
+			SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
+		}
 	}
 }
 
@@ -500,6 +503,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
 
+	if (!ProjectileBaseClass) return;
+	
 	if(ShootingUnit)
 	{
 		FTransform Transform;
@@ -698,6 +703,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 	SpawnParameter.CharacterMesh = CharacterMesh;
 	// Waypointspawn
 
+	if (!SpawnParameter.UnitBaseClass) return;
+	
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
 	if(!GameMode) return;

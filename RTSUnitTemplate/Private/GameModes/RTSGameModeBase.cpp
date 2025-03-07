@@ -489,6 +489,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter, FVector Location,
 	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
+	if (!SpawnParameter.UnitBaseClass) return nullptr;
 	// Waypointspawn
 	const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
 
@@ -594,6 +595,8 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 
 void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase) // , int TeamId, AWaypoint* Waypoint, int32 UnitIndex, AUnitBase* SummoningUnit, int SummonIndex
 {
+
+	if (!SpawnParameter.UnitBaseClass) return;
 	
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
 

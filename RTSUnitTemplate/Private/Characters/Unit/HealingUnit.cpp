@@ -8,7 +8,8 @@ void AHealingUnit::SpawnHealActor(AActor* Target) // FVector TargetLocation
 {
 
 
-
+	if (HealingActorBaseClass)
+	{
 		FTransform Transform;
 		Transform.SetLocation(Target->GetActorLocation() + HealActorSpawnOffset);
 		Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
@@ -23,6 +24,7 @@ void AHealingUnit::SpawnHealActor(AActor* Target) // FVector TargetLocation
 			MyHealActor->Init(UnitToChase, this);
 			UGameplayStatics::FinishSpawningActor(MyHealActor, Transform);
 		}
+	}
 
 }
 

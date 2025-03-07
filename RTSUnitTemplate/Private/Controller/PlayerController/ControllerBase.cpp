@@ -922,6 +922,7 @@ void AControllerBase::ZoomOut()
 
 void AControllerBase::SpawnMissileRain(int TeamId, FVector Location) // FVector TargetLocation
 {
+	if (!MissileRainClass) return;
 
 		FTransform Transform;
 		Transform.SetLocation(Location);
@@ -943,7 +944,8 @@ void AControllerBase::SpawnMissileRain(int TeamId, FVector Location) // FVector 
 
 void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
 {
-
+	if (!EAClass) return;
+	
 	FTransform Transform;
 	Transform.SetLocation(Location);
 	Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator

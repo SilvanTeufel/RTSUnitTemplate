@@ -187,7 +187,7 @@ void APerformanceUnit::VisibilityTickFog()
 		SetCharacterVisibility(IsOnViewport);
 	}else
 	{
-		if(IsOnViewport)SetCharacterVisibility(IsVisibileEnemy);
+		if(IsOnViewport)SetCharacterVisibility(IsVisibleEnemy);
 		else SetCharacterVisibility(false);
 	}
 
@@ -243,7 +243,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 	if(HealthWidgetComp)
 	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
 	{
-		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
@@ -265,7 +265,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 
 void APerformanceUnit::SpawnDamageIndicator_Implementation(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset)
 {
-	if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
 		if(Damage > 0 && Attributes->IndicatorBaseClass)
 		{
@@ -293,12 +293,12 @@ void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
 	if (WorkArea)
 	{
 		// Example condition checks: adapt these to your game logic
-		if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+		if (!EnableFog || IsVisibleEnemy || IsMyTeam)
 		{
 			if (WorkArea->Mesh)
 			{
 				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
-				WorkArea->SceneRoot->SetVisibility(true, true);
+				//WorkArea->SceneRoot->SetVisibility(true, true);
 				WorkArea->Mesh->SetHiddenInGame(false);
 			}
 		}
@@ -309,7 +309,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 {
 
 	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
-	if (IsOnViewport && (!EnableFog || IsVisibileEnemy || IsMyTeam))
+	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
 		UWorld* World = GetWorld();
 
@@ -370,6 +370,54 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 					UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetActorLocation(), ScaleSound);
 				}
 			}
+		}
+	}
+}
+
+
+void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay)
+{
+	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+	{
+		UWorld* World = GetWorld();
+		if (!World)
+		{
+			return;
+		}
+        
+		// Spawn the Niagara visual effect
+		UNiagaraComponent* NiagaraComp = nullptr;
+		if (ImpactVFX)
+		{
+			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, GetActorRotation(), ScaleVFX);
+		}
+        
+		// Spawn the sound effect and get its audio component
+		UAudioComponent* AudioComp = nullptr;
+		if (ImpactSound)
+		{
+			AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, GetActorRotation(), ScaleSound);
+		}
+        
+		// If either component is valid and a kill delay is provided, set up a timer to kill them.
+		if ((NiagaraComp || AudioComp) && KillDelay > 0.0f)
+		{
+			FTimerHandle TimerHandle;
+			World->GetTimerManager().SetTimer(TimerHandle, [NiagaraComp, AudioComp]()
+			{
+				// Stop and clean up the Niagara effect
+				if (NiagaraComp)
+				{
+					NiagaraComp->Deactivate();
+					NiagaraComp->DestroyComponent();
+				}
+				// Stop and clean up the audio effect
+				if (AudioComp)
+				{
+					AudioComp->Stop();
+					AudioComp->DestroyComponent();
+				}
+			}, KillDelay, false);
 		}
 	}
 }

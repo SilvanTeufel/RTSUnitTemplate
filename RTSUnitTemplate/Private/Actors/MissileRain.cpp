@@ -44,6 +44,8 @@ void AMissileRain::Tick(float DeltaTime)
 
 void AMissileRain::SpawnMissile(int TId, FVector SpawnLocation, float DeltaTime)
 {
+	if (!MissileBaseClass) return;
+	
 			FVector RandomOffset = FVector(FMath::FRandRange(-MissileRange, MissileRange), FMath::FRandRange(-MissileRange, MissileRange), 0.f);
 			FVector SpawnLocationWithOffset = SpawnLocation + RandomOffset;
 

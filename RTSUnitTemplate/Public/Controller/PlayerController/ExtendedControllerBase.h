@@ -181,10 +181,10 @@ public:
 	AActor* CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor);
+	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor, UStaticMeshComponent* OtherMesh);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor, TSet<AActor*>& AlreadyVisited);
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	//void SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor, TSet<AActor*>& AlreadyVisited);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);

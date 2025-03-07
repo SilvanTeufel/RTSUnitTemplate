@@ -130,9 +130,20 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 											   const FBuildingCost ConstructionCost,
 											   bool IsPaid)
 {
-
-	if (WorkAreaClass && !CurrentDraggedWorkArea)
+	
+ // && !CurrentDraggedWorkArea
+	if (CurrentDraggedWorkArea){
+		CurrentDraggedWorkArea->PlannedBuilding = true;
+		CurrentDraggedWorkArea->ControlTimer = 0.f;
+		CurrentDraggedWorkArea->RemoveAreaFromGroup();
+		CurrentDraggedWorkArea->Destroy();
+		CurrentDraggedWorkArea = nullptr;
+	}
+	
+	if (WorkAreaClass)
 	{
+
+
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -157,7 +168,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			SpawnedWorkArea->TeamId          = TeamId;
 			SpawnedWorkArea->IsPaid          = IsPaid;
 			SpawnedWorkArea->ConstructionCost = ConstructionCost;
-			SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
+			//SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
 			// Keep track of this WorkArea if needed
 			CurrentDraggedWorkArea = SpawnedWorkArea;
 
@@ -165,6 +176,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			// (this call only makes sense if we are on the server, which we are).
 
 			// Create a delegate to call ShowWorkArea with our SpawnedWorkArea as a parameter
+			/*
 			FTimerDelegate TimerDelegate;
 			TimerDelegate.BindUFunction(this, FName("ShowWorkAreaIfNoFog"), CurrentDraggedWorkArea);
 			
@@ -176,7 +188,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 				0.01,
 				false                     // Don't loop, just once
 			);
-			
+			*/
 		}
 	}
 }

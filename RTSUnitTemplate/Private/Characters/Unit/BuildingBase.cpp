@@ -6,6 +6,29 @@
 #include "GameModes/ResourceGameMode.h"
 #include "Components/CapsuleComponent.h"
 
+
+ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	SnapMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SnapMesh"));
+	SnapMesh->SetupAttachment(RootComponent);  // Ensure SceneRoot is valid
+
+	// Set collision enabled 
+	SnapMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // Query Only (No Physics Collision)
+	SnapMesh->SetCollisionObjectType(ECC_WorldStatic);           // Object Type: WorldStatic
+	SnapMesh->SetGenerateOverlapEvents(true);
+
+	// Set collision responses
+	SnapMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);   // Visibility: Block
+	SnapMesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Overlap);       // Camera: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Overlap);  // WorldStatic: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap); // WorldDynamic: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);         // Pawn: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap);  // PhysicsBody: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Overlap);      // Vehicle: Overlap
+	SnapMesh->SetCollisionResponseToChannel(ECC_Destructible, ECR_Overlap);   // Destructible: Overlap
+}
+
 void ABuildingBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);

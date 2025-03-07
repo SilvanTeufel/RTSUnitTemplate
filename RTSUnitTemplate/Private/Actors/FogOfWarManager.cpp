@@ -47,7 +47,7 @@ void AFogOfWarManager::CheckForCollisions()
             // Only process enemy units
             if (PlayerTeamId != Unit->TeamId) // PlayerTeamId
             {
-                Unit->IsVisibileEnemy = true;
+                Unit->IsVisibleEnemy = true;
                 Unit->FogManagerOverlaps++;
             }
         }
@@ -75,7 +75,7 @@ void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedCompone
                 Unit->DetectorOverlaps++;
             }
         
-            Unit->IsVisibileEnemy = true;
+            Unit->IsVisibleEnemy = true;
             Unit->FogManagerOverlaps++;
     }
 }
@@ -109,7 +109,7 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
 
         FTimerHandle TimerHandle;
         GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {
-            Unit->IsVisibileEnemy = false;
+            Unit->IsVisibleEnemy = false;
         }, Unit->FogDeadVisibilityTime, false);
     }
   

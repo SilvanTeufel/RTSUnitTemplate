@@ -588,7 +588,10 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);
 	//UE_LOG(LogTemp, Warning, TEXT("BuildTime: %f"), UnitBase->UnitControlTimer);
 
-	if (UnitBase->UnitControlTimer <= 0.1f) UnitBase->StartBuild();
+	if (UnitBase->UnitControlTimer <= 0.1f)
+	{
+		UnitBase->StartBuild();
+	}
 	
 	UnitBase->UnitControlTimer += DeltaSeconds;
 	if(UnitBase->BuildArea && UnitBase->BuildArea->BuildTime < UnitBase->UnitControlTimer)
@@ -655,6 +658,9 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
 {
 
+
+	if (!WRClass) return;
+	
 	FTransform Transform;
 
 	Transform.SetLocation(Location);

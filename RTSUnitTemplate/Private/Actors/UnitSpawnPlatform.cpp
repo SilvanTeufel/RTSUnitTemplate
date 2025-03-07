@@ -195,11 +195,15 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 	SpawnParameter.StatePlaceholder = UStatePlaceholder;
 	SpawnParameter.Material = Material;
 	SpawnParameter.CharacterMesh = CharacterMesh;
+	
 	// Waypointspawn
-
+	if (!SpawnParameter.UnitBaseClass) return 0;
+	
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
 	if(!GameMode) return 0;
+
+	
 	
 	FTransform UnitTransform;
 	

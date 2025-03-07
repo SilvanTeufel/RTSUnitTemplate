@@ -20,12 +20,19 @@ class RTSUNITTEMPLATE_API ABuildingBase : public AUnitBase
 	GENERATED_BODY()
 	
 public:
+
+	// Constructor declaration
+	ABuildingBase(const FObjectInitializer& ObjectInitializer);;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HasWaypoint = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsBase = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UStaticMeshComponent* SnapMesh;
+	
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void BeginPlay() override;
