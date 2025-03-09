@@ -55,6 +55,9 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(APerformanceUnit, MeeleImpactVFXDelay);
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactSoundDelay);
+
+	DOREPLIFETIME(APerformanceUnit, Niagara_A);
+	DOREPLIFETIME(APerformanceUnit, Niagara_B);
 	
 }
 
@@ -377,7 +380,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 }
 
 
-void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay)
+void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation)
 {
 	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
@@ -391,14 +394,14 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
 		UNiagaraComponent* NiagaraComp = nullptr;
 		if (ImpactVFX)
 		{
-			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, GetActorRotation(), ScaleVFX);
+			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
 		}
         
 		// Spawn the sound effect and get its audio component
 		UAudioComponent* AudioComp = nullptr;
 		if (ImpactSound)
 		{
-			AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, GetActorRotation(), ScaleSound);
+			AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, ScaleSound);
 		}
         
 		// If either component is valid and a kill delay is provided, set up a timer to kill them.

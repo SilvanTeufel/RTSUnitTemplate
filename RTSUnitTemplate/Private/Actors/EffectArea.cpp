@@ -10,17 +10,23 @@ AEffectArea::AEffectArea()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+	Mesh->SetupAttachment(SceneRoot);
 	
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
+
+	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara_A->SetupAttachment(SceneRoot);
 	
 	if (HasAuthority())
 	{
 		bReplicates = true;
-		SetReplicateMovement(true);
 	}
 }
 
@@ -28,7 +34,7 @@ AEffectArea::AEffectArea()
 void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
-
+	SetReplicateMovement(true);
 	SetScaleTimer();
 }
 
@@ -52,6 +58,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, AreaEffectTwo);
 	DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Mesh);
+	DOREPLIFETIME(AEffectArea, Niagara_A);
 }
 
 void AEffectArea::ScaleMesh()

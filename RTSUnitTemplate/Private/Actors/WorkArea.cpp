@@ -55,7 +55,7 @@ AWorkArea::AWorkArea()
 	if (HasAuthority())
 	{
 		bReplicates = true;
-		SetReplicateMovement(true);
+		//SetReplicateMovement(true);
 	}
 
 	Mesh->SetIsReplicated(false);
@@ -65,7 +65,7 @@ AWorkArea::AWorkArea()
 void AWorkArea::BeginPlay()
 {
 	Super::BeginPlay();
-
+	SetReplicateMovement(true);
 }
 
 

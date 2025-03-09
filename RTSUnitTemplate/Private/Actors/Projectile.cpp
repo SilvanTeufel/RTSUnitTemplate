@@ -42,11 +42,14 @@ AProjectile::AProjectile()
 	// Optionally, initialize Niagara properties here
 	SceneRoot->SetVisibility(false, true);
 
+	bReplicates = true;
+	/*
 	if (HasAuthority())
 	{
 		bReplicates = true;
+		SetReplicates(true);
 		SetReplicateMovement(true);
-	}
+	}*/
 }
 
 void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
@@ -132,6 +135,7 @@ void AProjectile::SetProjectileVisibility_Implementation()
 void AProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+	SetReplicateMovement(true);
 }
 
 void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -166,6 +170,9 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 
 	DOREPLIFETIME(AProjectile, ScaleImpactVFX);
 	DOREPLIFETIME(AProjectile, ScaleImpactSound);
+
+	DOREPLIFETIME(AProjectile, Niagara_A);
+	DOREPLIFETIME(AProjectile, Niagara_B);
 }
 
 // Called every frame

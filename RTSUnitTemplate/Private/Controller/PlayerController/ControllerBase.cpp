@@ -607,6 +607,7 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	PlayWaypointSound = false;
 	
 	if (!BuildingBase) return false;
+	if (BuildingBase->CanMove) return false;
 	if (!BuildingBase->HasWaypoint) return true;
 
 	PlayWaypointSound = true;

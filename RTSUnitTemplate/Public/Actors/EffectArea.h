@@ -35,9 +35,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetScaleTimer();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	USceneComponent* SceneRoot;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UNiagaraComponent* Niagara_A;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float LifeTime = 0.f;

@@ -12,14 +12,28 @@ AWaypoint::AWaypoint()
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root Component"));
-	SetRootComponent(Root);
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
+	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh->SetupAttachment(SceneRoot);
+	
 	BoxComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("Trigger Box"));
-	BoxComponent->SetupAttachment(GetRootComponent());
+	BoxComponent->SetupAttachment(SceneRoot);
 	BoxComponent->OnComponentBeginOverlap.AddDynamic(this, &AWaypoint::OnPlayerEnter);
 
 
+	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara_A->SetupAttachment(SceneRoot);
+	
+}
+
+void AWaypoint::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWaypoint, Mesh);
+	DOREPLIFETIME(AWaypoint, Niagara_A);
 }
 
 // Called when the game starts or when spawned

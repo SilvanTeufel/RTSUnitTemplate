@@ -26,6 +26,8 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 	if(!UnitBase)
 		return;
 
+	if (!UnitBase->IsInitialized) return;
+	
 	CheckUnitDetectionTimer(DeltaSeconds);
 	
 	switch (UnitBase->GetUnitState())

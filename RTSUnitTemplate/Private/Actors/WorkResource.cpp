@@ -27,7 +27,7 @@ AWorkResource::AWorkResource()
 	if (HasAuthority())
 	{
 		bReplicates = true;
-		SetReplicateMovement(true);
+		//SetReplicateMovement(true);
 	}
 }
 

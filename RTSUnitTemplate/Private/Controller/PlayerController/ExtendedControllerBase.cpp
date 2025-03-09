@@ -359,7 +359,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
 {
    if (!DraggedArea) return;
-
+	
     UStaticMeshComponent* MeshComponent = DraggedArea->FindComponentByClass<UStaticMeshComponent>();
     if (!MeshComponent)
     {
@@ -370,7 +370,7 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
     // 1) Zunächst nur XY setzen, Z bleibt unverändert (oder so, wie es reinkommt)
     FVector TempLocation = FVector(NewActorPosition.X, NewActorPosition.Y, NewActorPosition.Z);
     DraggedArea->SetActorLocation(TempLocation);
-
+	
     // 2) Bounds neu holen (jetzt mit richtiger Weltposition)
     FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
     // „halbe Höhe“ des Meshes (inkl. Scale & Rotation, da in Weltkoordinaten)
@@ -433,9 +433,10 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
     {
         UE_LOG(LogTemp, Warning, TEXT("SetWorkAreaPosition_Implementation: Kein Boden getroffen!"));
     }
-
+	
     // 4) Schlussendlich Actor anpassen
     DraggedArea->SetActorLocation(NewActorPosition);
+	DraggedArea->ForceNetUpdate();
 }
 
 
@@ -1150,7 +1151,6 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
             }
         }
     }
-
     //---------------------------------
     // If no snap, move the WorkArea
     //---------------------------------

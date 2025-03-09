@@ -15,7 +15,8 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		//AUnitBase* UnitBase = Cast<AUnitBase>(GetPawn());
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
-
+		if (!UnitBase->IsInitialized) return;
+	
 		CheckUnitDetectionTimer(DeltaSeconds);
 
 		

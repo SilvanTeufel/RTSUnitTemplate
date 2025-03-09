@@ -54,7 +54,7 @@ void ACameraUnitController::CameraUnitControlStateMachine(AUnitBase* UnitBase, f
 		
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
-	
+		if (!UnitBase->IsInitialized) return;
 
 		//DetectAndLoseUnits();
 	

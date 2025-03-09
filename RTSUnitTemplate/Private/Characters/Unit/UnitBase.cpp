@@ -44,6 +44,13 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	HealthWidgetComp->SetVisibility(true);
+
+
+	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
+	Niagara_A->SetupAttachment(RootComponent);
+	
+	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
+	Niagara_B->SetupAttachment(RootComponent);
 	
 	SetReplicates(true);
 	//GetMesh()->SetIsReplicated(true);
@@ -237,6 +244,9 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
+
+	DOREPLIFETIME(AUnitBase, IsInitialized);
+
 }
 
 
@@ -530,7 +540,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 
 			MyProjectile->SetProjectileVisibility();
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-			
+			MyProjectile->SetReplicates(true);
 			//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 		}
 	}
@@ -588,7 +598,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Att
 				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 				MyProjectile->SetProjectileVisibility();
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-
+				MyProjectile->SetReplicates(true);
 				//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 			}
 		}
@@ -642,6 +652,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 				MyProjectile->SetProjectileVisibility();
 				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+				MyProjectile->SetReplicates(true);
 				// Set a timer to delay the visibility update until the next tick
 				//ProjectileAndEffectsVisibility(MyProjectile);
 			}

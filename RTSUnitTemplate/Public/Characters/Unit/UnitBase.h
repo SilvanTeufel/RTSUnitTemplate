@@ -51,8 +51,11 @@ public:
 	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
 	bool IsInFog = false;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool CanActivateAbilities = true;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool IsInitialized = true;
 	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 

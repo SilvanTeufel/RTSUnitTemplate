@@ -171,7 +171,7 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			//SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
 			// Keep track of this WorkArea if needed
 			CurrentDraggedWorkArea = SpawnedWorkArea;
-
+			CurrentDraggedWorkArea->SetReplicateMovement(true);
 			// Call a Multicast to hide the mesh on all clients
 			// (this call only makes sense if we are on the server, which we are).
 
