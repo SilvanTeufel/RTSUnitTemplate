@@ -58,7 +58,7 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 		class UTextBlock* CharacterLevel;
-
+	
 	UPROPERTY(meta = (BindWidget))
 	UProgressBar* ExperienceProgressBar;
 	

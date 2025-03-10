@@ -67,7 +67,16 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	default:
 		{
-			IsVisible = false;
+			if (UnitBase && UnitBase->CurrentUnitsLoaded > 0)
+			{
+				IsVisible = true;
+				TimerBar->SetPercent(static_cast<float>(UnitBase->CurrentUnitsLoaded) / static_cast<float>(UnitBase->MaxTransportUnits));
+				//TimerBar->SetPercent(UnitBase->MaxTransportUnits / UnitBase->CurrentUnitsLoaded);
+				TimerBar->SetFillColorAndOpacity(TransportColor);
+			}else
+			{
+				IsVisible = false;
+			}
 		}
 		break;
 	}

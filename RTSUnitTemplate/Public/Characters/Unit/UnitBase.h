@@ -53,9 +53,6 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool CanActivateAbilities = true;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool IsInitialized = true;
 	
 	AUnitBase(const FObjectInitializer& ObjectInitializer);
 

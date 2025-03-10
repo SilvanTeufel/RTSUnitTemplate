@@ -1498,14 +1498,19 @@ void AExtendedControllerBase::RightClickPressed()
 {
 	AttackToggled = false;
 	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
 	
-	if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
-		if(!CheckClickOnWorkArea(Hit))
+	if (!CheckClickOnTransportUnit(Hit))
+	{
+		if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		{
-			RunUnitsAndSetWaypoints(Hit);
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+			if(!CheckClickOnWorkArea(Hit))
+			{
+				RunUnitsAndSetWaypoints(Hit);
+			}
 		}
+	}
 
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
@@ -1610,7 +1615,24 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 		NewUnit->SetSelected();
 		HUDBase->SelectedUnits.Emplace(NewUnit);
 	}
-	
+	CurrentUnitWidgetIndex = 0;
+	SelectedUnits = HUDBase->SelectedUnits;
+}
+
+void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase* UnitToDeselect)
+{
+	if (!HUDBase || !UnitToDeselect)
+	{
+		return;
+	}
+
+	// Deselect the unit visually
+	UnitToDeselect->SetDeselected();
+
+	// Remove the unit from the HUD's selected units array
+	HUDBase->SelectedUnits.Remove(UnitToDeselect);
+
+	// Update the controller's selected units
 	SelectedUnits = HUDBase->SelectedUnits;
 }
 
@@ -1682,6 +1704,81 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 		Worker->SetUnitState(UnitData::GoToBuild);
 	}
 }
+
+void AExtendedControllerBase::LoadUnits_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
+{
+		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
+		{
+			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
+			{
+				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
+				{
+					// Calculate the distance between the selected unit and the transport unit.
+					float Distance = FVector::Dist(UnitsToLoad[i]->GetActorLocation(), Transporter->GetActorLocation());
+
+					// If the unit is within 250 units, load it instantly.
+					if (Distance <= Transporter->InstantLoadRange)
+					{
+						Transporter->LoadUnit(UnitsToLoad[i]);
+					}
+					else
+					{
+						// Otherwise, set it as ready for transport so it can move towards the transporter.
+						UnitsToLoad[i]->SetRdyForTransport(true);
+					}
+					RightClickRunUEPF(UnitsToLoad[i], Transporter->GetActorLocation(), true);
+				}
+			}
+
+			Transporter->RunLocation = Transporter->GetActorLocation();
+			SetUnitState_Replication(Transporter,0);
+
+		}else
+		{
+			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
+			{
+				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
+				{
+					UnitsToLoad[i]->SetRdyForTransport(false);
+				}
+			}
+		}
+	
+}
+
+bool AExtendedControllerBase::CheckClickOnTransportUnit(FHitResult Hit_Pawn)
+{
+	if (!Hit_Pawn.bBlockingHit) return false;
+
+
+		AActor* HitActor = Hit_Pawn.GetActor();
+		
+		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
+	
+		LoadUnits(SelectedUnits, UnitBase);
+	
+		if (UnitBase && UnitBase->IsATransporter){
+		
+			TArray<AUnitBase*> NewSelection;
+
+			NewSelection.Emplace(UnitBase);
+			
+			FTimerHandle TimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+				TimerHandle,
+				[this, NewSelection]()
+				{
+					Client_UpdateHUDSelection(NewSelection, SelectableTeamId);
+				},
+				1.0f,  // Delay time in seconds (change as needed)
+				false  // Do not loop
+			);
+			return true;
+		}
+	return false;
+}
+
+
 bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 {
 	StopWorkOnSelectedUnit();
@@ -1753,7 +1850,7 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
 {
 	if (!IsLocalController()) return;
-	UE_LOG(LogTemp, Log, TEXT("Multi_SetFogManager_Implementation - TeamId is now: %d"), SelectableTeamId);
+	
 	// TSGameMode->AllUnits is onyl available on Server why we start running on server
 	// We Mutlicast to CLient and send him AllUnits as parameter
 	TArray<AUnitBase*> NewSelection;

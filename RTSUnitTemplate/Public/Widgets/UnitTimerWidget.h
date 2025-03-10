@@ -42,6 +42,9 @@ public:
 	FLinearColor PauseColor = FLinearColor::Yellow;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	FLinearColor TransportColor = FLinearColor::Blue;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor BuildColor = FLinearColor::Black;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

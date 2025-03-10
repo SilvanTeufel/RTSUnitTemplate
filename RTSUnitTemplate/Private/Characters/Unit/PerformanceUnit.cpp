@@ -25,6 +25,8 @@ void APerformanceUnit::Tick(float DeltaTime)
 	CheckViewport();
 	CheckTeamVisibility();
 	
+	if (StopVisibilityTick) return;
+		
 	if(EnableFog)VisibilityTickFog();
 	else SetCharacterVisibility(IsOnViewport);
 	
@@ -58,7 +60,8 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(APerformanceUnit, Niagara_A);
 	DOREPLIFETIME(APerformanceUnit, Niagara_B);
-	
+
+	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 }
 
 void APerformanceUnit::BeginPlay()

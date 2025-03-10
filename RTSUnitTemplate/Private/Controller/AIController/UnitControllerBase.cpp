@@ -467,6 +467,7 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(0);			
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	UnitBase->HideHealthWidget();
+	UnitBase->KillLoadedUnits();
 
 	if (!DeadEffectsExecuted)
 	{

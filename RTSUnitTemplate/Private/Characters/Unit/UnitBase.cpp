@@ -245,8 +245,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
 
-	DOREPLIFETIME(AUnitBase, IsInitialized);
-
 }
 
 
@@ -874,20 +872,6 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 	GetWorld()->GetTimerManager().SetTimerForNextTick([this](){
 		UpdateNavigationRelevance();
 	});
-
-
-	/*
-	// Clear any existing timer first
-	GetWorld()->GetTimerManager().ClearTimer(NavigationUpdateTimer);
-
-	// Schedule the update to happen once after 1 second
-	GetWorld()->GetTimerManager().SetTimer(
-		NavigationUpdateTimer,
-		this,
-		&AUnitBase::UpdateUnitNavigation,
-		1.0f,    // 1-second delay
-		false     // Do NOT loop
-	);*/
 
 }
 

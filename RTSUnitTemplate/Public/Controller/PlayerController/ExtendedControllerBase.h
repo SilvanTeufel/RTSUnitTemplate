@@ -237,8 +237,13 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToWorkArea(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
+
+	UFUNCTION(Server, Reliable)
+	void LoadUnits(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
 	
-		
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool CheckClickOnTransportUnit(FHitResult Hit_Pawn);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CheckClickOnWorkArea(FHitResult Hit_Pawn);
 
@@ -254,6 +259,9 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void Client_UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
+	
+	UFUNCTION(Client, Reliable)
+	void Client_DeselectSingleUnit(AUnitBase* UnitToDeselect);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);

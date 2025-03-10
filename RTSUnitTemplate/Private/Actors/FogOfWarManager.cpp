@@ -107,10 +107,16 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
         
         if(Unit->FogManagerOverlaps > 0) return;
 
-        FTimerHandle TimerHandle;
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {
+        if (Unit->GetUnitState() == UnitData::Dead)
+        {
+            FTimerHandle TimerHandle;
+            GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {
+                Unit->IsVisibleEnemy = false;
+            }, Unit->FogDeadVisibilityTime, false);
+        }else
+        {
             Unit->IsVisibleEnemy = false;
-        }, Unit->FogDeadVisibilityTime, false);
+        }
     }
   
 }
