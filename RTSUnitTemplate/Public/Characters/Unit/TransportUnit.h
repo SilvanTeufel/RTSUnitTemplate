@@ -31,6 +31,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetRdyForTransport(bool Rdy);
+	
 	// Loads a unit into this transport.
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LoadUnit(AUnitBase* UnitToLoad);
@@ -39,6 +40,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UnloadAllUnits();
 
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void LoadedUnit();
+
+	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
+	void UnloadedUnit(); 
+	
 	// Replication of properties.
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -79,7 +86,12 @@ public:
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	float UnloadVariatioMax = 200.f;
 
+	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
+	int UnitSpaceNeeded = 1;
 
+	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
+	int MaxSpacePerUnitAllowed = 4;
+	
 	// Maximum number of units this transport can hold.
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	int MaxTransportUnits = 4;

@@ -55,8 +55,10 @@ void ATransportUnit::SetCollisionAndVisibility_Implementation(bool IsVisible)
 void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 {
 	if (!IsATransporter || UnitToLoad == this) return;
+
+	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
 	
-	if (UnitToLoad && LoadedUnits.Num() < MaxTransportUnits)
+	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
 		// Instead of disabling avoidance entirely, adjust the avoidance group.
 		if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(UnitToLoad->GetMovementComponent()))
@@ -67,10 +69,11 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 		UnitToLoad->SetActorLocation(VoidLocation);
 		// Disable collisions for the entire actor.
 		// Add the unit to the loaded units array.
-		CurrentUnitsLoaded++;
+		CurrentUnitsLoaded = CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded;
 		LoadedUnits.Add(UnitToLoad);
 
 		GetWorld()->GetTimerManager().ClearTimer(UnloadTimerHandle);
+		LoadedUnit();
 	}
 }
 
@@ -88,9 +91,11 @@ void ATransportUnit::UnloadNextUnit()
 	// Check if there are still units to unload.
 	if (LoadedUnits.Num() > 0)
 	{
-		CurrentUnitsLoaded--;
 		// Get the first unit from the array.
 		ATransportUnit* LoadedUnit = LoadedUnits[0];
+
+		CurrentUnitsLoaded = CurrentUnitsLoaded - LoadedUnit->UnitSpaceNeeded;
+		
 		if (LoadedUnit)
 		{
 			// Use the transporter's location as the base.
@@ -119,7 +124,8 @@ void ATransportUnit::UnloadNextUnit()
 
 		// Remove the unloaded unit from the array.
 		LoadedUnits.RemoveAt(0);
-	
+
+		UnloadedUnit();
 		// Schedule the next unload after a 1-second delay.
 		GetWorld()->GetTimerManager().SetTimer(UnloadTimerHandle, this, &ATransportUnit::UnloadNextUnit, 1.0f, false);
 	}
@@ -146,6 +152,9 @@ void ATransportUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATransportUnit, UnloadVariationMin);
 	DOREPLIFETIME(ATransportUnit, UnloadVariatioMax);
 	DOREPLIFETIME(ATransportUnit, CurrentUnitsLoaded);
+
+	DOREPLIFETIME(ATransportUnit, UnitSpaceNeeded);
+	DOREPLIFETIME(ATransportUnit, MaxSpacePerUnitAllowed);
 }
 
 void ATransportUnit::OnCapsuleOverlapBegin(

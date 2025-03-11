@@ -189,7 +189,6 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 
 void APerformanceUnit::VisibilityTickFog()
 {
-	
 	if (IsMyTeam)
 	{
 		SetCharacterVisibility(IsOnViewport);
@@ -198,7 +197,6 @@ void APerformanceUnit::VisibilityTickFog()
 		if(IsOnViewport)SetCharacterVisibility(IsVisibleEnemy);
 		else SetCharacterVisibility(false);
 	}
-
 }
 
 void APerformanceUnit::CheckViewport()
