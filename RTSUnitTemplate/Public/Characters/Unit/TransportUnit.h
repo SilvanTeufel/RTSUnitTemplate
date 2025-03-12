@@ -86,6 +86,13 @@ public:
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	float UnloadVariatioMax = 200.f;
 
+
+	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
+	float UnloadInterval = 0.5f;
+
+	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
+	int TransportId = 0;
+	
 	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
 	int UnitSpaceNeeded = 1;
 

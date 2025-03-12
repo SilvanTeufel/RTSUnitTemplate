@@ -57,7 +57,12 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	if (!IsATransporter || UnitToLoad == this) return;
 
 	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
-	
+
+	if (TransportId != 0 && TransportId != UnitToLoad->TransportId)
+	{
+		UnitToLoad->SetRdyForTransport(false);
+		return;
+	}
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
 		// Instead of disabling avoidance entirely, adjust the avoidance group.
@@ -127,7 +132,7 @@ void ATransportUnit::UnloadNextUnit()
 
 		UnloadedUnit();
 		// Schedule the next unload after a 1-second delay.
-		GetWorld()->GetTimerManager().SetTimer(UnloadTimerHandle, this, &ATransportUnit::UnloadNextUnit, 1.0f, false);
+		GetWorld()->GetTimerManager().SetTimer(UnloadTimerHandle, this, &ATransportUnit::UnloadNextUnit, UnloadInterval, false);
 	}
 	else
 	{
@@ -155,6 +160,9 @@ void ATransportUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 	DOREPLIFETIME(ATransportUnit, UnitSpaceNeeded);
 	DOREPLIFETIME(ATransportUnit, MaxSpacePerUnitAllowed);
+
+	DOREPLIFETIME(ATransportUnit, UnloadInterval);
+	DOREPLIFETIME(ATransportUnit, TransportId);
 }
 
 void ATransportUnit::OnCapsuleOverlapBegin(
