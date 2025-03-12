@@ -589,57 +589,6 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
         }
     }
 }
-/*
-void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight)
-{
-	if(!RTSGameMode)
-	{
-		RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-	}
-	
-	if(!RTSGameMode) return;
-	//TArray<int> DetectedCount;
-	DetectingUnit->IsInFog = true;
-	if(DebugDetection)UE_LOG(LogTemp, Warning, TEXT("RTSGameMode->AllUnits.Num(): %d"), RTSGameMode->AllUnits.Num());
-
-
-	//New Variables have to be included in Detection
-	//bool CanOnlyAttackGround = false; // Detection is not working for a Unit where IsFlying = true
-	//bool CanOnlyAttackFlying = false; // Detection is only working for a Unit where IsFlying = true;
-	//bool CanDetectInvisible = false; // Can Detect Units where IsInvisible = true;
-	//bool IsInvisible = false; // Can only be detected from a Unit where CanDetectInvisible = true;
-	//bool IsFlying = false; // Is true for Units which are Flying
-
-	
-	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		
-
-		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
-		{
-			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-			
-			if (Distance <= Sight &&
-				Unit->GetUnitState() != UnitData::Dead &&
-				DetectingUnit->GetUnitState() != UnitData::Dead)
-			{
-
-				DetectedUnits.Emplace(Unit);
-			}
-		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
-		{
-
-			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-
-			if (Distance <= Sight)
-				DetectedUnits.Emplace(Unit);
-
-		}
-	}
-	
-}*/
-
 
 void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
 {
@@ -700,6 +649,8 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 
 void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if(Debug) UE_LOG(LogTemp, Warning, TEXT("No UE PF Run!!!"));
+
 	if(UnitBase->GetToggleUnitDetection())
 	{
 		if(UnitBase->SetNextUnitToChase())
@@ -721,7 +672,8 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 				
 	const FVector UnitLocation = UnitBase->GetActorLocation();
-				
+
+
 	if(UnitBase->IsFlying)
 	{
 		UnitBase->RunLocation = FVector(UnitBase->RunLocation.X, UnitBase->RunLocation.Y, UnitBase->FlyHeight);
@@ -1130,6 +1082,8 @@ void AUnitControllerBase::SetUnitBackToPatrol(AUnitBase* UnitBase, float DeltaSe
 
 void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	if(Debug) UE_LOG(LogTemp, Warning, TEXT("RunUEPathfinding!"));
+
 	DetectAndLoseUnits();
 	
 	if(UnitBase->GetToggleUnitDetection())
@@ -1142,6 +1096,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 			return;
 		}
 	}
+	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
 	{
 		UnitBase->SetUEPathfinding = true;
@@ -1159,7 +1114,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->SetUnitState(UnitData::Idle);
 		return;
 	}
-
+	
 	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
 	
 	if(!UnitBase->SetUEPathfinding) return;

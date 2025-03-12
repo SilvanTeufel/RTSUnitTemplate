@@ -726,7 +726,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
-			}else if(UseUnrealEnginePathFinding && !SelectedUnits[i]->IsFlying)
+			}else if(UseUnrealEnginePathFinding)
 			{
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunUEPF(SelectedUnits[i], RunLocation, true); // _Implementation
