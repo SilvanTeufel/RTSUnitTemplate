@@ -107,7 +107,8 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
         
         if(Unit->FogManagerOverlaps > 0) return;
 
-        if (Unit->GetUnitState() == UnitData::Dead)
+  
+        if (Unit->Attributes->GetHealth() <= 0.f) // Unit->GetUnitState() == UnitData::Dead
         {
             FTimerHandle TimerHandle;
             GetWorld()->GetTimerManager().SetTimer(TimerHandle, [Unit]() {

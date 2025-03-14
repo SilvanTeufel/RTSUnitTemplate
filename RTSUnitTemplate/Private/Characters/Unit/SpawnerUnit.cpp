@@ -2,6 +2,7 @@
 
 #include "Characters/Unit/SpawnerUnit.h"
 
+#include "Actors/AbilityIndicator.h"
 #include "Net/UnrealNetwork.h"
 
 void ASpawnerUnit::BeginPlay()
@@ -16,6 +17,7 @@ void ASpawnerUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutL
 	
 	DOREPLIFETIME(ASpawnerUnit, TeamId);
 	DOREPLIFETIME(ASpawnerUnit, SquadId);
+	DOREPLIFETIME(ASpawnerUnit, CurrentDraggedAbilityIndicator);
 
 }
 
@@ -84,4 +86,47 @@ void ASpawnerUnit::SpawnPickupsArray()
 		i++;
 	}
 	IsSpawned = true;
+}
+
+
+void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass,
+											   FVector SpawnLocation)
+{
+	
+	if (AbilityIndicatorClass)
+	{
+
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		FRotator SpawnRotation = FRotator::ZeroRotator;
+
+		// Spawn the replicated WorkArea on the server
+		AAbilityIndicator* SpawnedAbilityIndicator = GetWorld()->SpawnActor<AAbilityIndicator>(
+			AbilityIndicatorClass,
+			SpawnLocation,
+			SpawnRotation,
+			SpawnParams
+		);
+
+		if (SpawnedAbilityIndicator)
+		{
+			// Initialize any properties on the spawned WorkArea
+
+			SpawnedAbilityIndicator->TeamId = TeamId;
+			//SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
+			// Keep track of this WorkArea if needed
+			CurrentDraggedAbilityIndicator = SpawnedAbilityIndicator;
+			CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
+
+		}
+	}
+}
+
+void ASpawnerUnit::DespawnCurrentAbilityIndicator()
+{
+	if (CurrentDraggedAbilityIndicator)
+		CurrentDraggedAbilityIndicator->Destroy(true, true);
 }

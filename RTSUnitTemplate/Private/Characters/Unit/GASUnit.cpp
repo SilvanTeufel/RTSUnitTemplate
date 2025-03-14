@@ -216,6 +216,9 @@ void AGASUnit::ActivateAbilityByInputID(
 			Queued.HitResult    = HitResult;
 			QueSnapshot.Add(Queued);
 			AbilityQueue.Enqueue(Queued);
+		}else
+		{
+			ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
 		}
 	}
 	else
