@@ -60,6 +60,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ability")
 	void UpdateTooltipText();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	int ClickCount = 0;
+	
 private:
 	FText CreateTooltipText() const;
 };

@@ -18,6 +18,14 @@ AAbilityIndicator::AAbilityIndicator()
 	// Create and attach the static mesh component
 	IndicatorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("IndicatorMesh"));
 	IndicatorMesh->SetupAttachment(SceneRoot);
+	IndicatorMesh->SetHiddenInGame(true);
+
+	// Disable collisions on the mesh component
+	IndicatorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Optionally, disable collision for the entire actor
+	SetActorEnableCollision(false);
+	
 	bReplicates = true;
 }
 

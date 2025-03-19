@@ -660,6 +660,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 
 bool AUnitBase::SetNextUnitToChase()
 {
+	
 	if (UnitsToChase.IsEmpty()) return false;
     
 	float ShortestDistance = TNumericLimits<float>::Max();

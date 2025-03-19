@@ -30,14 +30,13 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UStaticMeshComponent* IndicatorMesh;
 	
 private:
 	// Root Scene Component
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	USceneComponent* SceneRoot;
-
-	// Static Mesh Component for visualization
-	UPROPERTY(VisibleAnywhere, Category = "Components")
-	UStaticMeshComponent* IndicatorMesh;
 };
 

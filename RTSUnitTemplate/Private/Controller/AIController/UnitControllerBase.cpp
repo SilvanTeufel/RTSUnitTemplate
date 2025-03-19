@@ -193,7 +193,7 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, b
 
 void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack, float DeltaSeconds)
 {
-	if (!AttackingUnit || !UnitToAttack || !RotateToUnitToChase) return;
+	if (!AttackingUnit || !UnitToAttack || !RotateToUnitToChase || AttackingUnit->CurrentSnapshot.AbilityClass) return;
 
 	// Calculate direction to target (ignoring Z-axis for horizontal rotation)
 	FVector ToTarget = UnitToAttack->GetActorLocation() - AttackingUnit->GetActorLocation();
@@ -593,7 +593,7 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
 {
 
-	if(IsUnitDetected) return;
+	if(IsUnitDetected || UnitBase->CurrentSnapshot.AbilityClass) return;
 	
 		TArray<AActor*> DetectedUnits;
 		DetectUnitsFromGameMode(UnitBase, DetectedUnits, SightRadius);
@@ -919,13 +919,13 @@ void AUnitControllerBase::Attack(AUnitBase* UnitBase, float DeltaSeconds)
 					}
 				}else
 				{
-					UnitBase->SetUnitState( UnitData::Chase );
+					UnitBase->SetUnitState(UnitData::Chase);
 				}
 			}
 
 			ProjectileSpawned = false;
 			UnitBase->UnitControlTimer = 0.f;
-			UnitBase->SetUnitState( UnitData::Pause);
+			UnitBase->SetUnitState(UnitData::Pause);
 		}
 	}else
 	{

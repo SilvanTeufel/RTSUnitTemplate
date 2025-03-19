@@ -422,7 +422,7 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 	
 	if(UnitBase->GetToggleUnitDetection())
 	{
-		if(UnitBase->SetNextUnitToChase())
+		if(UnitBase->SetNextUnitToChaseHeal())
 		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->UnitStatePlaceholder = UnitData::Run;

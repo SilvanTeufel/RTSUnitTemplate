@@ -311,6 +311,24 @@ void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
 	}
 }
 
+
+void APerformanceUnit::ShowAbilityIndicator_Implementation(AAbilityIndicator* AbilityIndicator)
+{
+	if (AbilityIndicator)
+	{
+		// Example condition checks: adapt these to your game logic
+		if (IsMyTeam)
+		{
+			if (AbilityIndicator->IndicatorMesh)
+			{
+				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
+				//WorkArea->SceneRoot->SetVisibility(true, true);
+				AbilityIndicator->IndicatorMesh->SetHiddenInGame(false);
+			}
+		}
+	}
+}
+
 void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay)
 {
 

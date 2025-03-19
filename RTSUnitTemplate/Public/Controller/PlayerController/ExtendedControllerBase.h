@@ -189,12 +189,16 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
 
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveAbilityIndicator(float DeltaSeconds);
+	
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToWork(AUnitBase* Worker);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();
-
+	
 	UFUNCTION(Server, Reliable)
 	void DestroyDraggedArea(AWorkingUnitBase* Worker);
 	
@@ -217,10 +221,13 @@ public:
 	void DropUnitBase();
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void DestoryWorkAreaOnServer(AWorkArea* WorkArea);
+	void DestroyWorkAreaOnServer(AWorkArea* WorkArea);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void DestoryWorkArea();
+	void DestroyWorkArea();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CancelAbilitiesIfNoBuilding(AUnitBase* Unit);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickPressed();

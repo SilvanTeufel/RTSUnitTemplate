@@ -218,6 +218,7 @@ void AGASUnit::ActivateAbilityByInputID(
 			AbilityQueue.Enqueue(Queued);
 		}else
 		{
+			ActivatedAbilityInstance->ClickCount++;
 			ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
 		}
 	}
@@ -237,6 +238,7 @@ void AGASUnit::ActivateAbilityByInputID(
 		{
 			if (ActivatedAbilityInstance) 
 			{
+				ActivatedAbilityInstance->ClickCount++;
 				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
 				//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
 			}
@@ -271,6 +273,8 @@ void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 			/*bLoop=*/false
 		);
 
+	UGameplayAbilityBase* AbilityToActivate = Cast<UGameplayAbilityBase>(EndedAbility);
+	AbilityToActivate->ClickCount = 0;
 
 }
 
@@ -299,6 +303,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 				
 				if (ActivatedAbilityInstance)
 				{
+					ActivatedAbilityInstance->ClickCount++;
 					ActivatedAbilityInstance->OnAbilityMouseHit(Next.HitResult);
 					//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
 				}
@@ -388,6 +393,7 @@ void AGASUnit::CancelCurrentAbility()
 		// Check if the active ability can be canceled.
 		if (ActivatedAbilityInstance->AbilityCanBeCanceled)
 		{
+			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;
 			CurrentSnapshot = FQueuedAbility();

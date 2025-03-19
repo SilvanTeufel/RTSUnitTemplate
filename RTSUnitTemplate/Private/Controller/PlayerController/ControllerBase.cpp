@@ -278,6 +278,7 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 	}
 }
 
+
 void AControllerBase::LeftClickSelect_Implementation()
 {
 	FHitResult Hit_IPoint;
@@ -286,7 +287,23 @@ void AControllerBase::LeftClickSelect_Implementation()
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
 		if(SelectedUnits[i])
+		{
+		
+			
+			if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+			{
+				UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+
+				if (AbilityCDO && AbilityCDO->AbilityCanBeCanceled)
+				{
+					ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[i]);
+					
+					if (!BuildingBase || BuildingBase->CanMove)
+						CancelCurrentAbility(SelectedUnits[i]);
+				}
+			}
 			SelectedUnits[i]->SetDeselected();
+		}
 	}
 		
 	SelectedUnits.Empty();
@@ -981,9 +998,11 @@ void AControllerBase::DeQueAbility_Implementation(AUnitBase* UnitBase, int Butto
 
 void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 {
+	UE_LOG(LogTemp, Warning, TEXT("CancelCurrentAbility_Implementation!"));
 	UnitBase->SetUnitState(UnitData::Idle);
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->CancelCurrentAbility();
+	UnitBase->DespawnCurrentAbilityIndicator();
 }
 
 void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)

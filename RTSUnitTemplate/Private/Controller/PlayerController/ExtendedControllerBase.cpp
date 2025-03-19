@@ -22,12 +22,12 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Implementation(DeltaSeconds);
+	MoveAbilityIndicator_Implementation(DeltaSeconds);
 }
 
 void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	//DOREPLIFETIME(AExtendedControllerBase, CurrentDraggedWorkArea);
 }
 
 void AExtendedControllerBase::Client_ApplyCustomizations_Implementation(USoundBase* InWaypointSound,
@@ -783,7 +783,150 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     }
 }
 
+void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSeconds)
+{
+    // Sanity check that we have at least one "SelectedUnit"
+    if (SelectedUnits.Num() == 0)
+    {
+        return;
+    }
+    
+    // Build the collision query params and ignore all ability indicators from the selected units
+    FCollisionQueryParams CollisionParams;
+    CollisionParams.bTraceComplex = true;
+    for (auto Unit : SelectedUnits)
+    {
+        if (Unit && Unit->CurrentDraggedAbilityIndicator)
+        {
+            CollisionParams.AddIgnoredActor(Unit->CurrentDraggedAbilityIndicator);
+        }
+    }
+    
+    FVector MousePosition, MouseDirection;
+    DeprojectMousePositionToWorld(MousePosition, MouseDirection);
 
+    // Raycast from the mouse into the scene
+    FVector Start = MousePosition;
+    FVector End   = Start + MouseDirection * 5000.f;
+
+    FHitResult HitResult;
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        Start,
+        End,
+        ECC_Visibility,
+        CollisionParams
+    );
+
+    if (bHit)
+    {
+        // For each selected unit, update its ability indicator
+        for (auto Unit : SelectedUnits)
+        {
+            if (!Unit)
+            {
+                continue;
+            }
+            
+            AAbilityIndicator* CurrentIndicator = Unit->CurrentDraggedAbilityIndicator;
+            if (!CurrentIndicator)
+            {
+                continue;
+            }
+
+            Unit->ShowAbilityIndicator(CurrentIndicator);
+
+            // Calculate the direction from the unit to the hit location
+            FVector Direction = HitResult.Location - Unit->GetActorLocation();
+            // Zero out the Z component to restrict rotation to the XY plane
+            Direction.Z = 0;
+
+            if (!Direction.IsNearlyZero())
+            {
+                FRotator NewRotation = Direction.Rotation();
+
+                // Rotate the unit if it's not a building or if the building can move
+                ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+                if (!BuildingBase || BuildingBase->CanMove)
+                {
+                    Unit->SetActorRotation(NewRotation);
+                }
+
+                // Also rotate the AbilityIndicator so that it faces in the direction from the unit
+                CurrentIndicator->SetActorRotation(NewRotation);
+            }
+            
+            // Move the AbilityIndicator to the hit location
+            CurrentIndicator->SetActorLocation(HitResult.Location);
+        }
+    }
+}
+/*
+void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSeconds)
+{
+	// Sanity check that we have at least one "SelectedUnit"
+	if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
+	{
+		return;
+	}
+
+	AAbilityIndicator* CurrentIndicator = SelectedUnits[0]->CurrentDraggedAbilityIndicator;
+	if (!CurrentIndicator)
+	{
+		return;
+	}
+
+	SelectedUnits[0]->ShowAbilityIndicator(CurrentIndicator);
+
+	
+	FVector MousePosition, MouseDirection;
+	DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+	// Raycast from the mouse into the scene
+	FVector Start = MousePosition;
+	FVector End   = Start + MouseDirection * 5000.f;
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.bTraceComplex = true;
+	CollisionParams.AddIgnoredActor(CurrentIndicator);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		CollisionParams
+	);
+
+	if (bHit)
+	{
+		// Calculate the direction from the selected unit to the hit location
+		FVector Direction = HitResult.Location - SelectedUnits[0]->GetActorLocation();
+		// Optionally, zero out the Z component to restrict rotation to the XY plane
+		Direction.Z = 0;
+
+		if (!Direction.IsNearlyZero())
+		{
+			FRotator NewRotation = Direction.Rotation();
+
+			// Rotate the SelectedUnit if it's not a building or if the building can move
+			ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[0]);
+			if (!BuildingBase || BuildingBase->CanMove)
+			{
+				// Rotate SelectedUnits
+				SelectedUnits[0]->SetActorRotation(NewRotation);
+			}
+
+			// Also rotate the AbilityIndicator so that it faces in the direction from the SelectedUnit
+			CurrentIndicator->SetActorRotation(NewRotation);
+		}
+		// Move the AbilityIndicator to the hit location
+		CurrentIndicator->SetActorLocation(HitResult.Location);
+		// Also Rotate the CurrentIndicator that it is in the Direction of the Vector from SelectedUnits[0]
+	}
+}
+*/
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
 
@@ -953,12 +1096,12 @@ void AExtendedControllerBase::DropUnitBase()
 	}
 }
 
-void AExtendedControllerBase::DestoryWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
+void AExtendedControllerBase::DestroyWorkAreaOnServer_Implementation(AWorkArea* WorkArea)
 {
 	if (WorkArea) WorkArea->Destroy();;
 }
 
-void AExtendedControllerBase::DestoryWorkArea()
+void AExtendedControllerBase::DestroyWorkArea()
 {
 	// Use Hit (FHitResult) and GetHitResultUnderCursor
 	// If you hit AWorkArea with WorkArea->Type == BuildArea
@@ -976,10 +1119,29 @@ void AExtendedControllerBase::DestoryWorkArea()
 		{
 			// Destroy the WorkArea
 			//WorkArea->Destroy();
-			DestoryWorkAreaOnServer(WorkArea);
+			DestroyWorkAreaOnServer(WorkArea);
 		}
 	}
 	
+}
+
+void AExtendedControllerBase::CancelAbilitiesIfNoBuilding(AUnitBase* Unit)
+{
+
+		if (Unit)
+		{
+			if (Unit->CurrentSnapshot.AbilityClass)
+			{
+				UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+				if (AbilityCDO && AbilityCDO->AbilityCanBeCanceled)
+				{
+					ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+					
+					if (!BuildingBase || BuildingBase->CanMove)
+						CancelCurrentAbility(Unit);
+				}
+			}
+		}
 }
 
 void AExtendedControllerBase::LeftClickPressed()
@@ -991,7 +1153,12 @@ void AExtendedControllerBase::LeftClickPressed()
 	
 	if(AltIsPressed)
 	{
-		DestoryWorkArea();
+		DestroyWorkArea();
+		for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		{
+			CancelAbilitiesIfNoBuilding(SelectedUnits[i]);
+		}
+		
 	}else if (AttackToggled) {
 		AttackToggled = false;
 		FHitResult Hit;
@@ -1020,6 +1187,7 @@ void AExtendedControllerBase::LeftClickPressed()
 					// Do Nothing
 				}else
 				{
+					CancelAbilitiesIfNoBuilding(SelectedUnits[i]);
 					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
 					LeftClickAttack(SelectedUnits[i], RunLocation);
 					PlayAttackSound = true;
@@ -1073,7 +1241,7 @@ void AExtendedControllerBase::LeftClickPressed()
 			}
 		}
 	}
-
+	
 }
 
 void AExtendedControllerBase::LeftClickReleased()

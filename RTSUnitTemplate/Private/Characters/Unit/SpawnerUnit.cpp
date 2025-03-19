@@ -128,5 +128,13 @@ void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityI
 void ASpawnerUnit::DespawnCurrentAbilityIndicator()
 {
 	if (CurrentDraggedAbilityIndicator)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Despawning current dragged ability indicator for actor: %s."), *GetName());
 		CurrentDraggedAbilityIndicator->Destroy(true, true);
+		CurrentDraggedAbilityIndicator = nullptr;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No current dragged ability indicator to despawn for actor: %s."), *GetName());
+	}
 }
