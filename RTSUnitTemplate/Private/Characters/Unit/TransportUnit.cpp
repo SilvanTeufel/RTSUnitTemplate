@@ -104,15 +104,41 @@ void ATransportUnit::UnloadNextUnit()
 		if (LoadedUnit)
 		{
 			// Use the transporter's location as the base.
-			FVector ALocation = GetActorLocation();
+			FVector BaseLocation  = GetActorLocation();
 			
 			// Generate random offsets in the range [-200, -100] or [100, 200].
 			float XOffset = FMath::RandRange(UnloadVariationMin, UnloadVariatioMax) * (FMath::RandBool() ? 1 : -1);
 			float YOffset = FMath::RandRange(UnloadVariationMin, UnloadVariatioMax) * (FMath::RandBool() ? 1 : -1);
             
-			// Apply the offset.
-			ALocation = FVector(ALocation.X + XOffset, ALocation.Y + YOffset, ALocation.Z+100.f);
-			LoadedUnit->SetActorLocation(ALocation+UnloadOffset);
+			FVector UnloadLocation = BaseLocation  + FVector(XOffset, YOffset, 0.f);
+
+			// Perform a line trace to find the ground.
+			FVector TraceStart = UnloadLocation + FVector(0.f, 0.f, 1000.f);
+			FVector TraceEnd = UnloadLocation - FVector(0.f, 0.f, 2000.f);
+			FHitResult HitResult;
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActor(this);
+			QueryParams.AddIgnoredActor(LoadedUnit);
+
+			if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+			{
+				// If we hit the ground, adjust the unload location.
+				float CapsuleHalfHeight = 0.f;
+				if (UCapsuleComponent* CapsuleComp = LoadedUnit->FindComponentByClass<UCapsuleComponent>())
+				{
+					CapsuleHalfHeight = CapsuleComp->GetScaledCapsuleHalfHeight();
+				}
+				// Set the Z to the ground hit location plus capsule height and a Z offset.
+				UnloadLocation.Z = HitResult.Location.Z + CapsuleHalfHeight + 10.f;
+			}
+			else
+			{
+				// Fallback in case no ground is hit.
+				UnloadLocation.Z += 100.f;
+			}
+			
+			// Apply any additional unload offset.
+			LoadedUnit->SetActorLocation(UnloadLocation + UnloadOffset);
 
 			// Re-enable collision.
 			//LoadedUnit->SetActorEnableCollision(true);

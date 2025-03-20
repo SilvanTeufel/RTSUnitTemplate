@@ -62,6 +62,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, Niagara_B);
 
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
+	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
 }
 
 void APerformanceUnit::BeginPlay()
@@ -321,9 +322,24 @@ void APerformanceUnit::ShowAbilityIndicator_Implementation(AAbilityIndicator* Ab
 		{
 			if (AbilityIndicator->IndicatorMesh)
 			{
-				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
-				//WorkArea->SceneRoot->SetVisibility(true, true);
 				AbilityIndicator->IndicatorMesh->SetHiddenInGame(false);
+				AbilityIndicatorVisibility = true;
+			}
+		}
+	}
+}
+
+void APerformanceUnit::HideAbilityIndicator_Implementation(AAbilityIndicator* AbilityIndicator)
+{
+	if (AbilityIndicator)
+	{
+		// Example condition checks: adapt these to your game logic
+		if (IsMyTeam)
+		{
+			if (AbilityIndicator->IndicatorMesh)
+			{
+				AbilityIndicator->IndicatorMesh->SetHiddenInGame(true);
+				AbilityIndicatorVisibility = false;
 			}
 		}
 	}

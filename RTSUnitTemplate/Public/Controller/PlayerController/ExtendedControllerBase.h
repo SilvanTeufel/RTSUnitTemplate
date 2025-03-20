@@ -182,17 +182,16 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor, UStaticMeshComponent* OtherMesh);
-
-	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	//void SnapToActorVisited(AWorkArea* DraggedActor, AActor* OtherActor, TSet<AActor*>& AlreadyVisited);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
-
-
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveAbilityIndicator(float DeltaSeconds);
-	
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AbilityIndicatorBlinkTimer = 0.f;
+
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToWork(AUnitBase* Worker);
 	
@@ -228,6 +227,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CancelAbilitiesIfNoBuilding(AUnitBase* Unit);
+
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	//void FireAbilityMouseHit(AUnitBase* Unit, const FHitResult& InHitResult);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickPressed();

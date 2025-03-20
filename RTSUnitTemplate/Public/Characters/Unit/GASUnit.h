@@ -124,6 +124,9 @@ public:
 		
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void FireMouseHitAbility(const FHitResult& InHitResult);
 	
 	UPROPERTY(Replicated,BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;

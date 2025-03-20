@@ -247,8 +247,6 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
     						UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
-    						//const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitToChaseLocation);
-    						//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
     					}
     
     					if (DistanceToUnitToChase > LoseSightRadius) {
@@ -388,36 +386,6 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 
 void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float DeltaSeconds)
 {
-/*
-	if(UnitBase->GetToggleUnitDetection() && UnitBase->SetNextUnitToChaseHeal())
-	{
-		UnitBase->SetUEPathfinding = true;
-		UnitBase->SetUnitState(UnitData::Chase);
-		return;
-	}
-	
-	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
-	{
-		UnitBase->SetUnitState(UnitData::Evasion);
-		UnitBase->UnitStatePlaceholder = UnitData::Run;
-		return;
-	}
-
-	DetectAndLoseUnits();
-	
-	if(UnitBase->GetUnitState() != UnitData::Chase)
-	{
-		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-
-		const FVector UnitLocation = UnitBase->GetActorLocation();
-		const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
-
-		if (Distance <= UnitBase->StopRunTolerance) {
-			UnitBase->SetUnitState(UnitData::Idle);
-		}
-	}*/
-
-
 	DetectAndLoseUnits();
 	
 	if(UnitBase->GetToggleUnitDetection())

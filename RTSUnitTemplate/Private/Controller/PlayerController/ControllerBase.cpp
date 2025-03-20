@@ -279,34 +279,39 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 }
 
 
+void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const FHitResult& InHitResult)
+{
+
+	UE_LOG(LogTemp, Warning, TEXT("FireAbilityMouseHit_Implementation!!!!!!!"));
+	if (Unit)
+	{
+		Unit->FireMouseHitAbility(InHitResult);
+	}
+}
+
 void AControllerBase::LeftClickSelect_Implementation()
 {
 	FHitResult Hit_IPoint;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit_IPoint);
-	
+
+	bool Deselect = true;
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
 		if(SelectedUnits[i])
 		{
-		
-			
 			if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
 			{
-				UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-
-				if (AbilityCDO && AbilityCDO->AbilityCanBeCanceled)
-				{
-					ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[i]);
-					
-					if (!BuildingBase || BuildingBase->CanMove)
-						CancelCurrentAbility(SelectedUnits[i]);
-				}
+				FireAbilityMouseHit(SelectedUnits[i], Hit_IPoint);
+				Deselect = false;
+			}else
+			{
+				SelectedUnits[i]->SetDeselected();
 			}
-			SelectedUnits[i]->SetDeselected();
 		}
 	}
-		
-	SelectedUnits.Empty();
+
+	if (Deselect)
+		SelectedUnits.Empty();
 
 }
 

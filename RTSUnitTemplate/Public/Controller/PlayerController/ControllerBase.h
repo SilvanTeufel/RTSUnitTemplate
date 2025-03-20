@@ -106,6 +106,9 @@ public:
 	void LeftClickAttack(AUnitBase* Unit, FVector Location);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void FireAbilityMouseHit(AUnitBase* Unit, const FHitResult& InHitResult);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickSelect();
 	/*
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickPressed", Keywords = "RTSUnitTemplate LeftClickPressed"), Category = RTSUnitTemplate)

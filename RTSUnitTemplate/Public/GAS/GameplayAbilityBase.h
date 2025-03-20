@@ -62,6 +62,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
 	int ClickCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	bool RotateToMouseWithMouseEvent = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	float Range = 0.f;
 	
 private:
 	FText CreateTooltipText() const;

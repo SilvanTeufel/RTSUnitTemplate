@@ -8,6 +8,8 @@
 #include "GAS/Gas.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include <GameplayEffectTypes.h>
+
+#include "Characters/Unit/BuildingBase.h"
 #include "Engine/Engine.h"
 #include "Characters/Unit/LevelUnit.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -137,7 +139,7 @@ void AGASUnit::OnRep_PlayerState()
 
 void AGASUnit::OnRep_ToggleUnitDetection()
 {
-	UE_LOG(LogTemp, Warning, TEXT("OnRep_ToggleUnitDetection: %d"), ToggleUnitDetection);
+	//UE_LOG(LogTemp, Warning, TEXT("OnRep_ToggleUnitDetection: %d"), ToggleUnitDetection);
 }
 
 
@@ -149,7 +151,6 @@ void AGASUnit::SetupAbilitySystemDelegates()
 		// Register a delegate to be called when an ability is activated
 		AbilitySystemComponent->AbilityActivatedCallbacks.AddUObject(this, &AGASUnit::OnAbilityActivated);
 		AbilitySystemComponent->AbilityEndedCallbacks.AddUObject(this, &AGASUnit::OnAbilityEnded);
-		//UE_LOG(LogTemp, Log, TEXT("SetupAbilitySystemDelegates: Delegate for ability activation registered successfully."));
 	}
 	else
 	{
@@ -162,10 +163,7 @@ void AGASUnit::SetupAbilitySystemDelegates()
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
-	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityActivated: %s"), *ActivatedAbility->GetName());
-
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
-
 }
 
 void AGASUnit::SetToggleUnitDetection_Implementation(bool ToggleTo)
@@ -218,8 +216,7 @@ void AGASUnit::ActivateAbilityByInputID(
 			AbilityQueue.Enqueue(Queued);
 		}else
 		{
-			ActivatedAbilityInstance->ClickCount++;
-			ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
+			FireMouseHitAbility(HitResult);
 		}
 	}
 	else
@@ -238,9 +235,7 @@ void AGASUnit::ActivateAbilityByInputID(
 		{
 			if (ActivatedAbilityInstance) 
 			{
-				ActivatedAbilityInstance->ClickCount++;
-				ActivatedAbilityInstance->OnAbilityMouseHit(HitResult);
-				//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
+				FireMouseHitAbility(HitResult);
 			}
 		}
 		else if (!bIsActivated)
@@ -261,7 +256,6 @@ void AGASUnit::ActivateAbilityByInputID(
 
 void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 {
-	//UE_LOG(LogTemp, Warning, TEXT("OnAbilityEnded: %s"), *EndedAbility->GetName());
 		// Example: delay by half a second
 		const float DelayTime = 0.1f; 
 		FTimerHandle TimerHandle;
@@ -287,25 +281,19 @@ void AGASUnit::ActivateNextQueuedAbility()
 		bool bDequeued = AbilityQueue.Dequeue(Next);
 		if (bDequeued && AbilitySystemComponent)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("Dequeued next ability: %s"), *Next.AbilityClass->GetName());
-			
+
 			CurrentSnapshot = Next;
-
-
-			
 			QueSnapshot.Remove(Next);
 			ActivatedAbilityInstance = nullptr;
 			// 2) Activate the next queued ability
 			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
-			//if (bIsActivated) UE_LOG(LogTemp, Warning, TEXT("Activation Succeeded : %s"), *Next.AbilityClass->GetName());
+			
 			if (bIsActivated && Next.HitResult.IsValidBlockingHit())
 			{
 				
 				if (ActivatedAbilityInstance)
 				{
-					ActivatedAbilityInstance->ClickCount++;
-					ActivatedAbilityInstance->OnAbilityMouseHit(Next.HitResult);
-					//CurrentAbilityCanBeCanceled = ActivatedAbilityInstance->AbilityCanBeCanceled;
+					FireMouseHitAbility(Next.HitResult);
 				}
 			}
 			else
@@ -324,7 +312,6 @@ void AGASUnit::ActivateNextQueuedAbility()
 	}
 }
 
-
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
@@ -336,6 +323,39 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 	}
 	
 	return nullptr;
+}
+
+void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
+{
+	if (ActivatedAbilityInstance)
+	{
+		FVector ALocation = GetActorLocation();
+		FVector Direction = InHitResult.Location - ALocation;
+		float Distance = FVector::Dist(InHitResult.Location, ALocation);
+		// Zero out the Z component to restrict rotation to the XY plane
+		Direction.Z = 0;
+
+		if (!Direction.IsNearlyZero() && (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range) && (ActivatedAbilityInstance->ClickCount >= 1 || ActivatedAbilityInstance->RotateToMouseWithMouseEvent))
+		{
+			FRotator NewRotation = Direction.Rotation();
+		
+			ABuildingBase* BuildingBase = Cast<ABuildingBase>(this);
+			if (!BuildingBase || BuildingBase->CanMove)
+			{
+				SetActorRotation(NewRotation);
+			}
+		}
+
+		if (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range)
+		{
+			ActivatedAbilityInstance->ClickCount++;
+			ActivatedAbilityInstance->OnAbilityMouseHit(InHitResult);
+		}else
+		{
+			CancelCurrentAbility();
+		}
+	}
+	
 }
 
 bool AGASUnit::DequeueAbility(int Index)
@@ -393,6 +413,11 @@ void AGASUnit::CancelCurrentAbility()
 		// Check if the active ability can be canceled.
 		if (ActivatedAbilityInstance->AbilityCanBeCanceled)
 		{
+			if(CurrentDraggedAbilityIndicator)
+			{
+				CurrentDraggedAbilityIndicator->Destroy(true, true);
+			}
+			
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;

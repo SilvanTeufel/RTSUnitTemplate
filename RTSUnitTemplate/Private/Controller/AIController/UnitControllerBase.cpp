@@ -193,7 +193,7 @@ void AUnitControllerBase::OnUnitDetected(const TArray<AActor*>& DetectedUnits, b
 
 void AUnitControllerBase::RotateToAttackUnit(AUnitBase* AttackingUnit, AUnitBase* UnitToAttack, float DeltaSeconds)
 {
-	if (!AttackingUnit || !UnitToAttack || !RotateToUnitToChase || AttackingUnit->CurrentSnapshot.AbilityClass) return;
+	if (!AttackingUnit || !UnitToAttack || !RotateToUnitToChase) return;
 
 	// Calculate direction to target (ignoring Z-axis for horizontal rotation)
 	FVector ToTarget = UnitToAttack->GetActorLocation() - AttackingUnit->GetActorLocation();
@@ -468,7 +468,8 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->UnitControlTimer = (UnitBase->UnitControlTimer + DeltaSeconds);
 	UnitBase->HideHealthWidget();
 	UnitBase->KillLoadedUnits();
-
+	UnitBase->CanActivateAbilities = false;
+	
 	if (!DeadEffectsExecuted)
 	{
 		UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
@@ -593,7 +594,7 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 void AUnitControllerBase::DetectUnitsAndSetState(AUnitBase* UnitBase, float DeltaSeconds, bool SetState)
 {
 
-	if(IsUnitDetected || UnitBase->CurrentSnapshot.AbilityClass) return;
+	if(IsUnitDetected) return;
 	
 		TArray<AActor*> DetectedUnits;
 		DetectUnitsFromGameMode(UnitBase, DetectedUnits, SightRadius);
@@ -984,6 +985,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 	//DetectUnits(UnitBase, DeltaSeconds, true);
 	//LoseUnitToChase(UnitBase);
+	DetectAndLoseUnits();
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
 	{
