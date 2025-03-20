@@ -317,10 +317,8 @@ void AControllerBase::LeftClickSelect_Implementation()
 
 int AControllerBase::GetHighestPriorityWidgetIndex()
 {
-	// Index of the highest-priority unit found so far
-	int32 BestIndex = 0;  
-	// Store the best priority found so far; start with -1 so any non-empty set is better
-	int32 BestPriority = -1;    
+	int32 BestIndex = 0;
+	int32 MaxAbilities = -1;
 
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
@@ -330,24 +328,25 @@ int AControllerBase::GetHighestPriorityWidgetIndex()
 			return i;
 		}
 
-		// Compute a priority score based on how many ability arrays are non-empty
-		int32 Priority = 0;
-		Priority += (SelectedUnits[i]->DefaultAbilities.Num() > 0) ? 1 : 0;
-		Priority += (SelectedUnits[i]->SecondAbilities.Num()  > 0) ? 1 : 0;
-		Priority += (SelectedUnits[i]->ThirdAbilities.Num()   > 0) ? 1 : 0;
-		Priority += (SelectedUnits[i]->FourthAbilities.Num()  > 0) ? 1 : 0;
+		// Calculate total number of abilities
+		int32 TotalAbilities = 0;
+		TotalAbilities += SelectedUnits[i]->DefaultAbilities.Num();
+		TotalAbilities += SelectedUnits[i]->SecondAbilities.Num();
+		TotalAbilities += SelectedUnits[i]->ThirdAbilities.Num();
+		TotalAbilities += SelectedUnits[i]->FourthAbilities.Num();
 
-		// Update BestIndex if this unit has an equal or greater priority
-		// (so we get the last unit among equals)
-		if (Priority >= BestPriority)
+		// Update BestIndex if this unit has more abilities
+		// (or if equal, pick the last one among them)
+		if (TotalAbilities >= MaxAbilities)
 		{
 			BestIndex = i;
-			BestPriority = Priority;
+			MaxAbilities = TotalAbilities;
 		}
 	}
 
 	return BestIndex;
 }
+
 
 void AControllerBase::SetWidgets(int Index)
 {
