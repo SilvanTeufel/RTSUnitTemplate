@@ -346,7 +346,7 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 			}
 		}
 
-		if (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range)
+		if (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range || ActivatedAbilityInstance->ClickCount == 0)
 		{
 			ActivatedAbilityInstance->ClickCount++;
 			ActivatedAbilityInstance->OnAbilityMouseHit(InHitResult);

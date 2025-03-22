@@ -841,7 +841,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
         		if (Unit->CurrentSnapshot.AbilityClass)
         		{
         			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-        			if (AbilityCDO && Distance > AbilityCDO->Range)
+        			if (AbilityCDO && Distance > AbilityCDO->Range && AbilityCDO->Range != 0.f)
         			{
         				AbilityIndicatorBlinkTimer = AbilityIndicatorBlinkTimer + DeltaSeconds;
         				if (AbilityIndicatorBlinkTimer > 0.25f)

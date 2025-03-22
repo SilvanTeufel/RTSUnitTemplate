@@ -39,6 +39,38 @@ void AUpgradeGameMode::InitializeUpgradesForTeams()
             InitializeSingleUpgrade(TeamId, TEXT("Teleport"), false, nullptr);
             InitializeSingleUpgrade(TeamId, TEXT("Charge"), false, nullptr);
         }
+
+        for (int32 TeamId = 1; TeamId <= 8; ++TeamId)
+        {
+            InitializeSingleUpgrade(TeamId, TEXT("1"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("2"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("3"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("4"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("5"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("6"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("7"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("8"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("9"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("10"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("11"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("12"), false, nullptr);
+        }
+
+        for (int32 TeamId = 1; TeamId <= 8; ++TeamId)
+        {
+            InitializeSingleUpgrade(TeamId, TEXT("A"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("B"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("C"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("D"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("E"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("F"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("G"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("H"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("I"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("J"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("K"), false, nullptr);
+            InitializeSingleUpgrade(TeamId, TEXT("L"), false, nullptr);
+        }
     }
 }
 
