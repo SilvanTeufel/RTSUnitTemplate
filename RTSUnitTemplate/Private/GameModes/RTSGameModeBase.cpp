@@ -12,6 +12,7 @@
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Controller/AIController/BuildingControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
@@ -245,11 +246,32 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
 			CameraControllerBase->Multi_HideEnemyWaypoints();
+			
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
 
 			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
 		}
 	}
+
+	SpawnAIFogManager();
+}
+
+void ARTSGameModeBase::SpawnAIFogManager()
+{
+	// TSGameMode->AllUnits is onyl available on Server why we start running on server
+	// We Mutlicast to CLient and send him AllUnits as parameter
+
+	for (int32 i = 0; i < AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
+		// Every Controller can Check his own TeamId
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && !Unit->SpawnedFogManager)
+		{
+			Unit->SpawnFogOfWarManagerTeamIndependent(GetWorld()->GetFirstPlayerController());
+		}
+	}
+
+
 }
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
@@ -573,7 +595,12 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
-
+		APlayerController* MyPC = GetWorld()->GetFirstPlayerController();
+		if (MyPC)
+		{
+			UnitBase->SpawnFogOfWarManagerTeamIndependent(MyPC);
+		}
+		
 		if(SpawnParameter.Attributes)
 		{
 			UnitBase->DefaultAttributeEffect = SpawnParameter.Attributes;
@@ -698,6 +725,14 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				}
 				*/
 				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
+		
+				APlayerController* MyPC = GetWorld()->GetFirstPlayerController();
+				if (MyPC)
+				{
+					UnitBase->SpawnFogOfWarManagerTeamIndependent(MyPC);
+				}
+
 				
 				if(SpawnParameter.Attributes)
 				{

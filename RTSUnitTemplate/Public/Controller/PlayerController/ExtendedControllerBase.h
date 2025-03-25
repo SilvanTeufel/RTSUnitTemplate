@@ -281,7 +281,7 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetFogManager(const TArray<AActor*>& AllUnits);
-
+	
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetFogManagerUnit(APerformanceUnit* Unit);
 

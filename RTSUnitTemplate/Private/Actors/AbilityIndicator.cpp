@@ -45,6 +45,7 @@ void AAbilityIndicator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AAbilityIndicator, TeamId);
+	DOREPLIFETIME(AAbilityIndicator, IndicatorMesh);
 }
 
 // Sets the position of the indicator

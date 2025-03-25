@@ -77,6 +77,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SpawnFogOfWarManager(APlayerController* PC);
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void SpawnFogOfWarManagerTeamIndependent(APlayerController* PC);
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void DestroyFogManager();
@@ -137,7 +140,7 @@ public:
 	int DetectorOverlaps = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float VisibilityOffset = 0.0f;
+	float VisibilityOffset = 150.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HealthCompCreated = false;

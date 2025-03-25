@@ -47,10 +47,7 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool IsPlayer = false;
-
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
-	bool IsInFog = false;
-
+	
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool CanActivateAbilities = true;
 	
@@ -122,22 +119,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetMeshRotationServer();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool CanOnlyAttackGround = false;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool CanOnlyAttackFlying = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool CanDetectInvisible = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool IsInvisible = false;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool IsFlying = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float FlyHeight = 500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -396,6 +393,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateUnitNavigation();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void AddUnitToChase(AActor* OtherActor);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DetectFriendlyUnits = false;
 };
 
 

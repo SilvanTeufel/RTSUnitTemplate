@@ -148,8 +148,66 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 					if (SpawnedFogManager && SpawnedFogManager->Mesh)
 					{
 						// Scale the Mesh component of the spawned FogOfWarManager
+						SpawnedFogManager->PlayerController = ControllerBase;
 						SpawnedFogManager->TeamId = TeamId;
 						SpawnedFogManager->PlayerTeamId =  ControllerBase->SelectableTeamId;//ControllerBase->SelectableTeamId;
+						SpawnedFogManager->OwningUnit = this;
+						SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
+						SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);
+						// Bind overlap events using the appropriate class and instance
+						SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
+						SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
+	
+				
+						// Finish spawning the actor. This will trigger its BeginPlay().
+						UGameplayStatics::FinishSpawningActor(SpawnedFogManager, SpawnTransform);
+						UE_LOG(LogTemp, Warning, TEXT("SpawnedFogManager! %d"), SpawnedFogManager->PlayerTeamId);
+						if (SpawnedFogManager)
+						{
+							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
+						}
+						
+					}
+	}
+	
+}
+
+void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("World is not valid."));
+		return;
+	}
+
+	if (!EnableFog || !FogOfWarManagerClass) return;
+	
+	AControllerBase* ControllerBase = Cast<AControllerBase>(PC);
+	
+	if(SpawnedFogManager) return;
+	
+	if (FogOfWarManagerClass && ControllerBase)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnFogOfWarManagerTeamIndependent!"));
+					FVector SpawnLocation = GetActorLocation();
+					FRotator SpawnRotation = FRotator::ZeroRotator;
+					FTransform SpawnTransform(SpawnRotation, SpawnLocation);
+					// Spawn the FogOfWarManager at the new location
+					SpawnedFogManager = World->SpawnActorDeferred<AFogOfWarManager>(FogOfWarManagerClass, SpawnTransform);
+
+					if (SpawnedFogManager)
+					{
+						SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
+					}
+
+					if (SpawnedFogManager && SpawnedFogManager->Mesh)
+					{
+						// Scale the Mesh component of the spawned FogOfWarManager
+						SpawnedFogManager->ManagerSetsVisibility = false;
+						SpawnedFogManager->PlayerController = ControllerBase;
+						SpawnedFogManager->TeamId = TeamId;
+						SpawnedFogManager->PlayerTeamId = TeamId;//ControllerBase->SelectableTeamId;
 						SpawnedFogManager->OwningUnit = this;
 						SpawnedFogManager->Mesh->SetWorldScale3D(FVector(SightRadius, SightRadius, 1.f )*FogManagerMultiplier);
 						SpawnedFogManager->Mesh->SetRelativeLocation(FogManagerPositionOffset);

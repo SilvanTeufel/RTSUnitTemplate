@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/FogOfWarManager.h"
+
+#include "Characters/Unit/HealingUnit.h"
 #include "Hud/HUDBase.h"
 
 #include "Characters/Unit/PerformanceUnit.h"
@@ -62,27 +64,104 @@ void AFogOfWarManager::Tick(float DeltaTime)
 }
 
 
-void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void AFogOfWarManager::AddUnitToChase(AActor* OtherActor)
 {
+    if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: OtherActor is invalid"));
+        return;
+    }
+    
+    // Get the current (detecting) unit from OwningUnit
+    AUnitBase* CurrentUnit = Cast<AUnitBase>(OwningUnit);
+    if (!CurrentUnit)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: OwningUnit is invalid"));
+        return;
+    }
+
+    if (PlayerController)
+    {
+        AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+        ControllerBase->AddUnitToChase(CurrentUnit, OtherActor);
+    }
+}
+
+void AFogOfWarManager::RemoveUnitToChase_Implementation(AActor* OtherActor)
+{
+    // Check if the actor is valid, not pending kill, and its low-level memory is okay.
+    if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
+    {
+        return;
+    }
+    
+    
+    AUnitBase* DetectingUnit = Cast<AUnitBase>(OwningUnit);
+    if (!DetectingUnit) return;
+
+
+    if (PlayerController)
+    {
+        AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+        ControllerBase->RemoveUnitToChase(DetectingUnit, OtherActor);
+    }
+}
+
+void AFogOfWarManager::HandleBeginOverlapDetection(AActor* OtherActor)
+{
+
+    if (!ManagerSetsVisibility) return;
+    
+    if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
+    {
+        return;
+    }
+    
     AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
     AUnitBase* DetectingUnit = Cast<AUnitBase>(OwningUnit);
     
     if (Unit && PlayerTeamId != Unit->TeamId)
     {
-            if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->IsInvisible)
-            {
-                Unit->IsInvisible = false;
-                Unit->DetectorOverlaps++;
-            }
+        if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->IsInvisible)
+        {
+            Unit->IsInvisible = false;
+            Unit->DetectorOverlaps++;
+        }
         
-            Unit->IsVisibleEnemy = true;
-            Unit->FogManagerOverlaps++;
+        Unit->IsVisibleEnemy = true;
+        Unit->FogManagerOverlaps++;
+
+        /*
+        // Delay adding the unit to allow its TeamId to be set
+        FTimerHandle TimerHandle;
+        GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, Unit]()
+        {
+            AddUnitToChase(Unit);
+        }, 0.1f, false);
+        */
     }
+    
 }
 
-void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+    HandleBeginOverlapDetection(OtherActor);
+    AddUnitToChase(OtherActor);
+}
+
+
+
+// Existing code: Handle end overlap adjustments
+void AFogOfWarManager::HandleEndOverlapDetection(AActor* OtherActor)
 {
 
+    if (!ManagerSetsVisibility) return;
+    
+    if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
+    {
+        return;
+    }
+    
     AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
     AUnitBase* DetectingUnit = Cast<AUnitBase>(OwningUnit);
     
@@ -119,5 +198,19 @@ void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent
             Unit->IsVisibleEnemy = false;
         }
     }
+}
+
+void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    HandleEndOverlapDetection(OtherActor);
+
+    /*
+    FTimerHandle TimerHandle;
+ 
+    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, OtherActor]() {
   
+        RemoveUnitToChase(OtherActor);
+    }, 1.5f, false);
+
+    */
 }

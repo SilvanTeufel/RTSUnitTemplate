@@ -341,8 +341,6 @@ void AHUDBase::DeselectAllUnits()
 
 void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
 {
-	//TArray<int> DetectedCount;
-	DetectingUnit->IsInFog = true;
 
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	

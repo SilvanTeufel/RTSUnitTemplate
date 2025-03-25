@@ -1719,3 +1719,4 @@ void AExtendedControllerBase::Multi_HideEnemyWaypoints_Implementation()
 		}
 	}
 }
+

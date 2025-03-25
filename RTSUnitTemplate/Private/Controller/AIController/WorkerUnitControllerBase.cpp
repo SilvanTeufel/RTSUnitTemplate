@@ -534,9 +534,9 @@ void AWorkerUnitControllerBase::GoToBuild(AUnitBase* UnitBase, float DeltaSecond
 		return;
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-	const FVector BaseLocation = UnitBase->BuildArea->GetActorLocation();
+	//const FVector BaseLocation = UnitBase->BuildArea->GetActorLocation();
 
-	//BaseLocation = GetGroundLocation(BaseLocation, UnitBase);
+	const FVector BaseLocation = GetGroundLocation(UnitBase->BuildArea->GetActorLocation(), UnitBase);
 	SetUEPathfinding(UnitBase, DeltaSeconds, BaseLocation);
 }
 
@@ -548,19 +548,20 @@ FVector AWorkerUnitControllerBase::GetGroundLocation(FVector ALocation, AUnitBas
 	{
 
 		// Now adjust the Z-coordinate of PatrolCloseLocation to ensure it's above terrain
-		const FVector Start = FVector(ALocation.X, ALocation.Y, ALocation.Z + UnitBase->LineTraceZDistance);  // Start from a point high above the PatrolCloseLocation
-		const FVector End = FVector(ALocation.X, ALocation.Y, ALocation.Z - UnitBase->LineTraceZDistance);  // End at a point below the PatrolCloseLocation
+		const FVector Start = FVector(ALocation.X, ALocation.Y, ALocation.Z + 1000.f);  // Start from a point high above the PatrolCloseLocation
+		const FVector End = FVector(ALocation.X, ALocation.Y, ALocation.Z - 1000.f);  // End at a point below the PatrolCloseLocation
 
 		FHitResult HitResult;
 		FCollisionQueryParams CollisionParams;
-		CollisionParams.AddIgnoredActor(this);  // Ignore this actor during the trace
-
+		CollisionParams.AddIgnoredActor(UnitBase);  // Ignore this actor during the trace
+		CollisionParams.AddIgnoredActor(UnitBase->BuildArea);
+		
 		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams))
 		{
 			AActor* HitActor = HitResult.GetActor();
 
 			// Check if we hit the landscape
-			if (HitActor && HitActor->IsA(ALandscape::StaticClass()) )
+			if (HitActor) // && HitActor->IsA(ALandscape::StaticClass()) 
 			{
 				// Hit landscape
 				// Set the Z-coordinate accordingly
@@ -822,7 +823,10 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
         EnemyTransform.SetLocation(Location);
     }
 	
-
+	if (TeamId)
+	{
+		UnitBase->TeamId = TeamId;
+	}
 	
     // --------------------------------------------
     // 5) Jetzt wird der Actor final in die Welt gesetzt

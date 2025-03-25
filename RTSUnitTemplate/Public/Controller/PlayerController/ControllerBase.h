@@ -294,4 +294,10 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void DeQueAbility(AUnitBase* UnitBase, int ButtonIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void AddUnitToChase(AUnitBase* DetectingUnit, AActor* OtherActor);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveUnitToChase(AUnitBase* DetectingUnit, AActor* OtherActor);
 };

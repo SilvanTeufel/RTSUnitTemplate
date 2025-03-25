@@ -43,6 +43,8 @@ private:
 	// Timer handle for delayed movement
 	//FTimerHandle MoveRetryTimerHandle;
 
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	bool DisableUnitControllerDetection = true;
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;

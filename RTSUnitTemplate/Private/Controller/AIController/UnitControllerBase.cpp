@@ -26,8 +26,10 @@
 void AUnitControllerBase::DetectAndLoseUnits()
 {
 	// Assuming UnitBase is an accessible variable or parameter
-	 // Replace this with actual reference to UnitBase
+	// Replace this with actual reference to UnitBase
 
+	if (DisableUnitControllerDetection) return;
+	
 	if(!RTSGameMode)
 	{
 		RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
@@ -57,6 +59,7 @@ void AUnitControllerBase::DetectAndLoseUnits()
 			DetectUnitsAndSetState(MyUnitBase, 0, SetState);
 		}
 	}
+
 }
 
 AUnitControllerBase::AUnitControllerBase()
@@ -383,7 +386,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 		break;
 		case UnitData::Rooted:
 			{
-				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Idle"));
+				if(Debug)UE_LOG(LogTemp, Warning, TEXT("Rooted"));
 				Rooted(UnitBase, DeltaSeconds);
 			}
 			break;
@@ -517,9 +520,6 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
     {
         return;
     }
-
-    // Mark the detecting unit as being in fog.
-    DetectingUnit->IsInFog = true;
     
     if (DebugDetection)
     {
@@ -985,6 +985,10 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 	//DetectUnits(UnitBase, DeltaSeconds, true);
 	//LoseUnitToChase(UnitBase);
+	
+	UnitBase->UnitControlTimer += DeltaSeconds;
+	
+	if (UnitBase->UnitControlTimer >= 1.5f)
 	DetectAndLoseUnits();
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)
@@ -1001,7 +1005,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 
 	if(UnitBase->SetNextUnitToChase() && !UnitBase->IsOnPlattform)
 	{
-		UnitBase->SetUnitState(UnitData::Chase);
+			UnitBase->SetUnitState(UnitData::Chase);
 	}else if(!UnitBase->IsOnPlattform)
 		SetUnitBackToPatrol(UnitBase, DeltaSeconds);
 }

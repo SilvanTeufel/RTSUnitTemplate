@@ -1020,3 +1020,42 @@ void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoin
 		DefaultWaypoint = Waypoint;
 }
 
+void AControllerBase::AddUnitToChase_Implementation(AUnitBase* DetectingUnit, AActor* OtherActor)
+{
+
+	if (GetWorld() && GetWorld()->GetNetMode() != NM_Client)
+	{
+		UE_LOG(LogTemp, Log, TEXT("SERVER"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("CLIENT"));
+	}
+
+	if (DetectingUnit)
+	{
+		DetectingUnit->AddUnitToChase(OtherActor);
+	}
+}
+
+
+void AControllerBase::RemoveUnitToChase_Implementation(AUnitBase* DetectingUnit, AActor* OtherActor)
+{
+
+	// Check if the actor is valid, not pending kill, and its low-level memory is okay.
+	if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
+	{
+		return;
+	}
+	    
+	AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
+	
+	if (!Unit) return;
+	if (!DetectingUnit) return;
+
+	    
+	// Remove the unit from the chasing list.
+	if (DetectingUnit->UnitsToChase.Contains(Unit))
+		DetectingUnit->UnitsToChase.RemoveSingle(Unit);
+
+}

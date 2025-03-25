@@ -31,7 +31,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
-	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UPROPERTY(Replicated, EditAnywhere, Category = "Components")
 	UStaticMeshComponent* IndicatorMesh;
 	
 private:

@@ -39,14 +39,36 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	APlayerController* PlayerController;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AActor* OwningUnit;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DetectFriendlyUnits = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ManagerSetsVisibility = true;
 	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddUnitToChase(AActor* OtherActor);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveUnitToChase(AActor* OtherActor);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleBeginOverlapDetection(AActor* OtherActor);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleEndOverlapDetection(AActor* OtherActor);
 	// Handle collision events to reveal units
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
+
+	
 	// Handle collision end events to hide units
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
