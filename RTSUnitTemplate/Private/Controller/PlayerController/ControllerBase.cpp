@@ -1022,16 +1022,6 @@ void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoin
 
 void AControllerBase::AddUnitToChase_Implementation(AUnitBase* DetectingUnit, AActor* OtherActor)
 {
-
-	if (GetWorld() && GetWorld()->GetNetMode() != NM_Client)
-	{
-		UE_LOG(LogTemp, Log, TEXT("SERVER"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("CLIENT"));
-	}
-
 	if (DetectingUnit)
 	{
 		DetectingUnit->AddUnitToChase(OtherActor);

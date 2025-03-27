@@ -34,6 +34,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh;
 
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//UCapsuleComponent* TriggerCapsule;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int PlayerTeamId;
 

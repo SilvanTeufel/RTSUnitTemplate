@@ -900,18 +900,9 @@ void AUnitBase::UpdateUnitNavigation()
 
 void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
 {
-
-    if (GetWorld() && GetWorld()->GetNetMode() != NM_Client)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!ON SERVER!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
-    }else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!ON CLIENT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"));
-    }
     
     if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
     {
-    	UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: OtherActor is invalid"));
         return;
     }
 
@@ -919,7 +910,6 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     AUnitBase* DetectedUnit = Cast<AUnitBase>(OtherActor);
     if (!DetectedUnit)
     {
-    	UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: Failed to cast OtherActor to AUnitBase"));
         return;
     }
 
@@ -928,7 +918,6 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     // Only add the unit if it is alive.
     if (DetectedUnit->GetUnitState() == UnitData::Dead || GetUnitState() == UnitData::Dead)
     {
-    	UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: Either the detected unit or the current unit is dead"));
         return;
     }
 
@@ -956,8 +945,6 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     {
         // Add the detected unit to the UnitsToChase array
         UnitsToChase.Emplace(DetectedUnit);
-
-    	UE_LOG(LogTemp, Log, TEXT("AddUnitToChase: Added unit %s to chase list"), *DetectedUnit->GetName());
     }
     
     // Retrieve the detection toggle state
@@ -965,7 +952,6 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
 
     if (!SetState)
     {
-    	UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: Unit detection is toggled off"));
         return;
     }
     
@@ -991,23 +977,18 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
             // Adjust the state based on whether we're detecting friendly units
             if (DistanceToTarget <= AttackRange)
             {
-            	UE_LOG(LogTemp, Log, TEXT("AddUnitToChase: Unit set to ATTACK state"));
                 // If the target is within attack range, set state to Attack
                 if (shouldChase) SetUnitState(UnitData::Attack);
             }
             else if (DetectFriendlyUnits)
             {
                 // For friendly units, only chase if the current target's health is below max.
-
-            	UE_LOG(LogTemp, Log, TEXT("AddUnitToChase: Unit set to CHASE (friendly)"));
-                
                 if (shouldChase) SetUnitState(UnitData::Chase);
                 
             }
             else if (canChangeState)
             {
                 SetUnitState(UnitData::Chase);
-            	UE_LOG(LogTemp, Log, TEXT("AddUnitToChase: Unit set to CHASE (enemy)"));
             }
         }
     }

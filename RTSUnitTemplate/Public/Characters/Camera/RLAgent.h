@@ -2,14 +2,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Memory/SharedMemoryManager.h"
 #include "RLAgent.generated.h"
 
-/**
- * ARLAgent is an RL-controlled character that inherits camera and character functionality
- * from AExtendedCameraBase. The RL algorithm provides input values and desired camera states
- * directly to the decision function.
- */
 
 USTRUCT(BlueprintType)
 struct FGameStateData
@@ -54,19 +51,27 @@ public:
     virtual void Tick(float DeltaTime) override;
 
     // Setup input (optional – you might not bind physical input if RL supplies values)
-    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+    //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-    /**
-     * Process RL decision parameters. This function will be called by your external RL algorithm.
-     * @param Action - The action chosen by the RL policy (you'll need to define the structure of this array).
-     */
-    UFUNCTION(BlueprintCallable, Category = "RLAgent|RL")
+
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
     void ReceiveRLAction();
 
 private:
     FGameStateData GatherGameState();
 
+
+    // Manage shared memory
+    void UpdateGameState();
+    void CheckForNewActions();
+
+    FSharedMemoryManager* SharedMemoryManager;
+
+    FTimerHandle RLUpdateTimerHandle;
+
+    
     // Add any member variables needed to store the current state or facilitate actions
     TArray<class AUnitBase*> GetMyUnits();
     TArray<class AUnitBase*> GetEnemyUnits();
 };
+

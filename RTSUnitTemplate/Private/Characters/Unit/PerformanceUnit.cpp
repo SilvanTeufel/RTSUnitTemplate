@@ -215,7 +215,7 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 						SpawnedFogManager->Mesh->OnComponentBeginOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshBeginOverlap);
 						SpawnedFogManager->Mesh->OnComponentEndOverlap.AddDynamic(SpawnedFogManager, &AFogOfWarManager::OnMeshEndOverlap);
 	
-				
+						SpawnedFogManager->Mesh->SetAffectDistanceFieldLighting(false);
 						// Finish spawning the actor. This will trigger its BeginPlay().
 						UGameplayStatics::FinishSpawningActor(SpawnedFogManager, SpawnTransform);
 						UE_LOG(LogTemp, Warning, TEXT("SpawnedFogManager! %d"), SpawnedFogManager->PlayerTeamId);

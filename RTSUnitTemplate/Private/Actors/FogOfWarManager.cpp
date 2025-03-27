@@ -68,7 +68,6 @@ void AFogOfWarManager::AddUnitToChase(AActor* OtherActor)
 {
     if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
     {
-        UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: OtherActor is invalid"));
         return;
     }
     
@@ -76,7 +75,6 @@ void AFogOfWarManager::AddUnitToChase(AActor* OtherActor)
     AUnitBase* CurrentUnit = Cast<AUnitBase>(OwningUnit);
     if (!CurrentUnit)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AddUnitToChase: OwningUnit is invalid"));
         return;
     }
 

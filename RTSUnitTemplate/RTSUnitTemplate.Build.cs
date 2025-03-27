@@ -30,8 +30,5 @@ public class RTSUnitTemplate : ModuleRules
 		// Widget dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "UMG", "MoviePlayer" });
 		
-		// RL
-		PublicDependencyModuleNames.AddRange(new string[] { "LearningAgents" });
-		
 	}
 }
