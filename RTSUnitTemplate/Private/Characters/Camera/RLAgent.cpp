@@ -36,6 +36,9 @@ void ARLAgent::BeginPlay()
         UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Failed to create SharedMemoryManager."));
     }
 
+    FInputActionValue InputActionValue;
+    InputActionValue = FInputActionValue(1.0f);
+    Input_Tab_Released(InputActionValue, 0);
     // Set up a timer to update the game state every 0.2 seconds (adjust as needed)
     GetWorldTimerManager().SetTimer(RLUpdateTimerHandle, this, &ARLAgent::UpdateGameState, 5.f, true);
 
@@ -43,19 +46,38 @@ void ARLAgent::BeginPlay()
 
 void ARLAgent::UpdateGameState()
 {
-
-
-
-    
     UE_LOG(LogTemp, Log, TEXT("UpdateGameState"));
     FGameStateData GameState = GatherGameState();
 
     // Convert GameStateData to JSON (or another format your RL process understands)
-    FString GameStateJSON = FString::Printf(TEXT("{\"MyUnits\": %d, \"EnemyUnits\": %d, \"MyHealth\": %.2f, \"EnemyHealth\": %.2f}"),
-        GameState.MyUnitCount, GameState.EnemyUnitCount, GameState.MyTotalHealth, GameState.EnemyTotalHealth);
+    FString GameStateJSON = FString::Printf(TEXT("{\"MyUnits\": %d, \"EnemyUnits\": %d, \"MyHealth\": %.2f, \"EnemyHealth\": %.2f, \"MyAttack\": %.2f, \"EnemyAttack\": %.2f, \"AgentPosition\": [%.2f, %.2f, %.2f], \"AvgFriendlyPos\": [%.2f, %.2f, %.2f], \"AvgEnemyPos\": [%.2f, %.2f, %.2f]}"),
+        GameState.MyUnitCount,
+        GameState.EnemyUnitCount,
+        GameState.MyTotalHealth,
+        GameState.EnemyTotalHealth,
+        GameState.MyTotalAttackDamage,
+        GameState.EnemyTotalAttackDamage,
+        GameState.AgentPosition.X,
+        GameState.AgentPosition.Y,
+        GameState.AgentPosition.Z,
+        GameState.AverageFriendlyPosition.X,
+        GameState.AverageFriendlyPosition.Y,
+        GameState.AverageFriendlyPosition.Z,
+        GameState.AverageEnemyPosition.X,
+        GameState.AverageEnemyPosition.Y,
+        GameState.AverageEnemyPosition.Z
+    );
 
     // Write to shared memory
-    SharedMemoryManager->WriteGameState(GameStateJSON);
+    if (SharedMemoryManager)
+    {
+        SharedMemoryManager->WriteGameState(GameStateJSON);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
+    }
+
 
     // Check for new actions
     CheckForNewActions();
@@ -110,8 +132,22 @@ void ARLAgent::ReceiveRLAction()
     Input_LeftClick_Released(InputActionValue, NewCameraState);
 
     SwitchControllerStateMachine(InputActionValue, NewCameraState);
-    
-    
+
+
+    /*
+    ActionSpace:
+    0. InputActionValue = 0 or 1
+    1. Set AltIsPressed =  true/false
+    2. Set IsStrgPressed = true/ false
+    3. if(AltIsPressed) NewCameraState = 21 -26 -> Select Units with Tag Alt1-6
+    4. if(IsStrgPressed) NewCameraState = 18 -30 -> Select Units with Tag Strg1-6, F1-F4 And Q, W, E ,R
+    5. if(!IsStrgPressed) NewCameraState = 21 -26 -> Use Ability 1 - 6 From Array with Current Index
+    6. if(IsStrgPressed) NewCameraState = 13 -> Change AbilityArrayIndex
+    7. if(!IsStrgPressed) NewCameraState = 1, 2, 3, 4 -> Move Camera Pawn +/- x,y
+    8. if(!IsStrgPressed) NewCameraState = 111, 222, 333, 444 -> Stop Move Camera Pawn +/- x,y
+    9. if(!IsStrgPressed) LeftClickPressed(PawnPosition)
+    10. if(!IsStrgPressed) RightClickPressed(PawnPosition)
+    */
     
 }
 
@@ -124,16 +160,25 @@ FGameStateData ARLAgent::GatherGameState()
     if (!GameMode) return GameState;
 
     UE_LOG(LogTemp, Log, TEXT("GatherGameState2"));
-    
+
     ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
     if (!CameraControllerBase) return GameState;
 
     UE_LOG(LogTemp, Log, TEXT("GatherGameState3"));
+
+    // Get Agent Position
+    GameState.AgentPosition = GetActorLocation();
+
+    // Calculate Average Unit Positions
+    FVector SumFriendlyPositions = FVector::ZeroVector;
+    int32 NumFriendlyUnits = 0;
+    FVector SumEnemyPositions = FVector::ZeroVector;
+    int32 NumEnemyUnits = 0;
+
     for (AActor* Unit : GameMode->AllUnits)
     {
         AUnitBase* MyUnit = Cast<AUnitBase>(Unit);
 
-        
         if (MyUnit && MyUnit->IsValidLowLevelFast()) // Ensure the unit is valid
         {
             UAttributeSetBase* Attributes = MyUnit->Attributes;
@@ -145,6 +190,8 @@ FGameStateData ARLAgent::GatherGameState()
                     GameState.MyUnitCount++;
                     GameState.MyTotalHealth += Attributes->GetHealth();
                     GameState.MyTotalAttackDamage += Attributes->GetAttackDamage();
+                    SumFriendlyPositions += MyUnit->GetActorLocation();
+                    NumFriendlyUnits++;
                 }
                 else
                 {
@@ -152,10 +199,32 @@ FGameStateData ARLAgent::GatherGameState()
                     GameState.EnemyUnitCount++;
                     GameState.EnemyTotalHealth += Attributes->GetHealth();
                     GameState.EnemyTotalAttackDamage += Attributes->GetAttackDamage();
+                    SumEnemyPositions += MyUnit->GetActorLocation();
+                    NumEnemyUnits++;
                 }
             }
         }
     }
+
+    // Calculate Averages
+    if (NumFriendlyUnits > 0)
+    {
+        GameState.AverageFriendlyPosition = SumFriendlyPositions / NumFriendlyUnits;
+    }
+    else
+    {
+        GameState.AverageFriendlyPosition = FVector::ZeroVector; // Or some other default if no friendly units
+    }
+
+    if (NumEnemyUnits > 0)
+    {
+        GameState.AverageEnemyPosition = SumEnemyPositions / NumEnemyUnits;
+    }
+    else
+    {
+        GameState.AverageEnemyPosition = FVector::ZeroVector; // Or some other default if no enemy units
+    }
+
     return GameState;
 }
 

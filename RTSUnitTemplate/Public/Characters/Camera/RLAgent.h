@@ -30,6 +30,15 @@ struct FGameStateData
 
     UPROPERTY(BlueprintReadWrite)
     float EnemyTotalAttackDamage = 0.0f;
+    
+    UPROPERTY(BlueprintReadWrite)
+    FVector AgentPosition;
+
+    UPROPERTY(BlueprintReadWrite)
+    FVector AverageFriendlyPosition;
+
+    UPROPERTY(BlueprintReadWrite)
+    FVector AverageEnemyPosition;
 };
 
 
