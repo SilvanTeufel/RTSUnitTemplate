@@ -698,7 +698,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 	
     // Check for immediate collision with an enemy unit.
 	//DetectUnits(UnitBase, DeltaSeconds, false);
-	LoseUnitToChase(UnitBase);
+	//LoseUnitToChase(UnitBase);
 	
 	
 	if(UnitBase->CollisionUnit 
@@ -707,7 +707,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
     		UnitBase->UnitToChase = UnitBase->CollisionUnit;
     		UnitBase->UnitsToChase.Emplace(UnitBase->CollisionUnit);
     		UnitBase->CollisionUnit = nullptr;
-    } else if (!UnitBase->UnitToChase) // If no unit is being chased, try to find one, otherwise set the pathfinding.
+    } else if (!UnitBase->SetNextUnitToChase()) // If no unit is being chased, try to find one, otherwise set the pathfinding.
     {
         UnitBase->SetUEPathfinding = true;
         UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
@@ -986,9 +986,9 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 	//DetectUnits(UnitBase, DeltaSeconds, true);
 	//LoseUnitToChase(UnitBase);
 	
-	UnitBase->UnitControlTimer += DeltaSeconds;
+	//UnitBase->UnitControlTimer += DeltaSeconds;
 	
-	if (UnitBase->UnitControlTimer >= 1.5f)
+	//if (UnitBase->UnitControlTimer >= 1.5f)
 	DetectAndLoseUnits();
 	
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId != UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead && !UnitBase->IsOnPlattform)

@@ -2,14 +2,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Windows/MinWindows.h"
+#include "Windows/WindowsHWrapper.h"
 
 struct SharedData
 {
 	bool bNewGameStateAvailable;
 	bool bNewActionAvailable;
-	TCHAR GameState[256];  // Use TCHAR instead of char
-	TCHAR Action[256];     // Use TCHAR instead of char
+	TCHAR GameState[1024];  // Use TCHAR instead of char
+	TCHAR Action[1024];     // Use TCHAR instead of char
 };
 
 class FSharedMemoryManager

@@ -43,7 +43,7 @@ private:
 	// Timer handle for delayed movement
 	//FTimerHandle MoveRetryTimerHandle;
 
-	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	bool DisableUnitControllerDetection = true;
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)

@@ -5,6 +5,14 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Memory/SharedMemoryManager.h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers.h"
+
+
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonTypes.h" // Might be needed for FJsonValue types
+
 #include "RLAgent.generated.h"
 
 
@@ -13,32 +21,50 @@ struct FGameStateData
 {
     GENERATED_BODY()
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     int32 MyUnitCount = 0;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     int32 EnemyUnitCount = 0;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     float MyTotalHealth = 0.0f;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     float EnemyTotalHealth = 0.0f;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     float MyTotalAttackDamage = 0.0f;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     float EnemyTotalAttackDamage = 0.0f;
-    
-    UPROPERTY(BlueprintReadWrite)
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     FVector AgentPosition;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     FVector AverageFriendlyPosition;
 
-    UPROPERTY(BlueprintReadWrite)
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
     FVector AverageEnemyPosition;
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float PrimaryResource = 0.0f;
+    
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float SecondaryResource = 0.0f;
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float TertiaryResource = 0.0f;
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float RareResource = 0.0f;
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float EpicResource = 0.0f;
+
+    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+    float LegendaryResource = 0.0f;
 };
 
 
@@ -61,19 +87,24 @@ public:
 
     // Setup input (optional – you might not bind physical input if RL supplies values)
     //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
+    
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void ReceiveRLAction(FString ActionJSON);
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)
-    void ReceiveRLAction();
+    void PerformLeftClickAction(const FHitResult& HitResult);
+
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void PerformRightClickAction(const FHitResult& HitResult);
 
 private:
     FGameStateData GatherGameState();
 
-
     // Manage shared memory
     void UpdateGameState();
     void CheckForNewActions();
-
+    FString CreateGameStateJSON(const FGameStateData& GameState); // New function
+    
     FSharedMemoryManager* SharedMemoryManager;
 
     FTimerHandle RLUpdateTimerHandle;

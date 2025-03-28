@@ -30,5 +30,9 @@ public class RTSUnitTemplate : ModuleRules
 		// Widget dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "UMG", "MoviePlayer" });
 		
+		// Json dependencies
+		PublicDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities" });
+	
+		
 	}
 }

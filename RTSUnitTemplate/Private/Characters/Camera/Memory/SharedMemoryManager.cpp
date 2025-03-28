@@ -68,7 +68,7 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
     UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Address of SharedDataPtr->GameState: %p"), SharedDataPtr->GameState);
 
     int32 StringLength = GameStateJSON.Len();
-    int32 BufferSizeInChars = 256;
+    int32 BufferSizeInChars = 1024;
     int32 BytesToCopy = FMath::Min(StringLength, BufferSizeInChars - 1) * sizeof(TCHAR); // Leave space for null terminator
 
     if (BytesToCopy > 0)
@@ -76,6 +76,20 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
         FMemory::Memcpy(SharedDataPtr->GameState, *GameStateJSON, BytesToCopy);
     }
     SharedDataPtr->GameState[BytesToCopy / sizeof(TCHAR)] = TEXT('\0'); // Null-terminate
+
+
+	// Log the content of the GameState buffer
+	FString LogString;
+	for (int32 i = 0; i < BufferSizeInChars; ++i)
+	{
+		LogString += SharedDataPtr->GameState[i];
+		if (SharedDataPtr->GameState[i] == TEXT('\0'))
+		{
+			break; // Stop logging at the null terminator
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Content of SharedDataPtr->GameState: %s"), *LogString);
+
 
     SharedDataPtr->bNewGameStateAvailable = true;
     return true;
