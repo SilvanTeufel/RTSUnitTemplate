@@ -257,7 +257,7 @@ void AGASUnit::ActivateAbilityByInputID(
 void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 {
 		// Example: delay by half a second
-		const float DelayTime = 0.1f; 
+		const float DelayTime = 1.0f; 
 		FTimerHandle TimerHandle;
 		GetWorld()->GetTimerManager().SetTimer(
 			TimerHandle,
@@ -272,6 +272,78 @@ void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 
 }
 
+void AGASUnit::ActivateNextQueuedAbility()
+{
+	UE_LOG(LogTemp, Warning, TEXT("ActivateNextQueuedAbility called. Checking if there are abilities in the queue."));
+
+	// 1) Check if there's something waiting in the queue
+	if (!AbilityQueue.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Ability queue is NOT empty. Attempting to dequeue the next ability."));
+
+		FQueuedAbility Next;
+		bool bDequeued = AbilityQueue.Dequeue(Next);
+
+		if (bDequeued && AbilitySystemComponent)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Successfully dequeued ability: %s"), *Next.AbilityClass->GetName());
+
+			CurrentSnapshot = Next;
+			QueSnapshot.Remove(Next);
+			ActivatedAbilityInstance = nullptr;
+
+			// 2) Activate the next queued ability
+			UE_LOG(LogTemp, Warning, TEXT("Attempting to activate ability: %s"), *Next.AbilityClass->GetName());
+			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
+			
+			if (bIsActivated)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Ability %s activated successfully."), *Next.AbilityClass->GetName());
+
+				if (Next.HitResult.IsValidBlockingHit())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("HitResult is valid. Checking if ActivatedAbilityInstance exists."));
+					
+					if (ActivatedAbilityInstance)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("ActivatedAbilityInstance is valid. Firing Mouse Hit Ability."));
+						FireMouseHitAbility(Next.HitResult);
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("ActivatedAbilityInstance is NULL. Skipping FireMouseHitAbility."));
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("HitResult is NOT valid. Skipping FireMouseHitAbility."));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Failed to activate ability: %s. Resetting ActivatedAbilityInstance and CurrentSnapshot."), *Next.AbilityClass->GetName());
+				
+				ActivatedAbilityInstance = nullptr;
+				CurrentSnapshot = FQueuedAbility();
+
+				// Optionally re-queue the failed ability
+				// UE_LOG(LogTemp, Warning, TEXT("Requeuing ability: %s."), *Next.AbilityClass->GetName());
+				// AbilityQueue.Enqueue(Next); 
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to dequeue ability or AbilitySystemComponent is null."));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Ability queue is empty. Resetting ActivatedAbilityInstance and CurrentSnapshot."));
+		ActivatedAbilityInstance = nullptr;
+		CurrentSnapshot = FQueuedAbility();
+	}
+}
+/*
 void AGASUnit::ActivateNextQueuedAbility()
 {
 	// 1) Check if there's something waiting in the queue
@@ -310,7 +382,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 		ActivatedAbilityInstance = nullptr;
 		CurrentSnapshot = FQueuedAbility();
 	}
-}
+}*/
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

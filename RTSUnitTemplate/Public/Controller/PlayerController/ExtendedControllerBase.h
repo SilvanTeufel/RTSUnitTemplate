@@ -185,6 +185,9 @@ public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea(float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetWorkArea(FVector AreaLocation);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveAbilityIndicator(float DeltaSeconds);

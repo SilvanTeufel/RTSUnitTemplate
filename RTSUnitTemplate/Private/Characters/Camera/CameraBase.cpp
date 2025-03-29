@@ -586,7 +586,17 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 		CurrentCamSpeed.X = 0.f;
 	}
 
+	// Calculate the proposed new location.
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
 
+	// Check if the proposed location is within the set limits.
+	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
+		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
+	{
+		// Out of bounds: Do not move.
+		return;
+	}
+	
 	AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
 }
 
@@ -610,6 +620,14 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 	{
 		CurrentCamSpeed.X = 0.f;
 	}
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
+
+	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
+		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
+	{
+		return;
+	}
+	
 	
 	AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime);
 	//AddActorWorldOffset(NewPawnLocation * CamSpeed);
@@ -637,6 +655,14 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 		CurrentCamSpeed.Y = 0.f;
 	}
 
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
+
+	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
+		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
+	{
+		return;
+	}
+
 	AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime);
 }
 
@@ -661,5 +687,13 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 		CurrentCamSpeed.Y = 0.f;
 	}
 
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
+
+	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
+		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
+	{
+		return;
+	}
+	
 	AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
 }

@@ -97,6 +97,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = RLAgent)
     void PerformRightClickAction(const FHitResult& HitResult);
 
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void AddWorkerToResource(EResourceType ResourceType, int TeamId);
+
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
+    
 private:
     FGameStateData GatherGameState();
 
@@ -113,5 +119,8 @@ private:
     // Add any member variables needed to store the current state or facilitate actions
     TArray<class AUnitBase*> GetMyUnits();
     TArray<class AUnitBase*> GetEnemyUnits();
+
+private:
+    FTimerHandle MyTimerHandle;
 };
 
