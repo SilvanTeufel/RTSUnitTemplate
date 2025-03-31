@@ -41,7 +41,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToResourceExtraction:
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
+				UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
 				GoToResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}
@@ -337,13 +337,32 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 	// Check if Base is allready in Range /////////////////////////////
 
 	
-	if(!UnitBase->SetUEPathfinding)
-		return;
+	//if(!UnitBase->SetUEPathfinding)
+		//return;
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	const FVector ResourceLocation = UnitBase->ResourcePlace->GetActorLocation();
 
-	SetUEPathfinding(UnitBase, DeltaSeconds, ResourceLocation);
+	FVector GroundLocation = GetGroundLocationAndIgnore(ResourceLocation, UnitBase->ResourcePlace);
+
+
+	SetUEPathfinding(UnitBase, DeltaSeconds, GroundLocation);
+}
+
+FVector AWorkerUnitControllerBase::GetGroundLocationAndIgnore(const FVector& Origin, AActor* ActorToIgnore)
+{
+	FHitResult HitResult;
+	FVector Start = Origin;
+	FVector End = Origin - FVector(0.f, 0.f, 1000.f); // Trace downward 1000 units
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(ActorToIgnore); // Ignore the resource actor
+
+	// Perform the trace
+	if(GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+	{
+		return HitResult.ImpactPoint;
+	}
+	return Origin; // Fallback if trace fails
 }
 
 void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds)

@@ -261,6 +261,41 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
 
+	if (NewResourcePlace)
+	{
+		if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+		{
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		}
+		else if(!UnitBase->ResourcePlace)
+		{
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		}
+		UnitBase->ResourcePlace = NewResourcePlace;
+	}
+	else if (!UnitBase->ResourcePlace)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No suitable work area found for unit, try recursion %s (Team %d)"), *UnitBase->GetName(), UnitBase->TeamId);
+		
+		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
+		
+		if (NewResourcePlace)
+		{
+			if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+			{
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+			}
+			else if(!UnitBase->ResourcePlace)
+			{
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+			}
+			UnitBase->ResourcePlace = NewResourcePlace;
+		}
+	}
+
+	/*
 	if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
@@ -270,8 +305,8 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		Worker->ResourcePlace = NewResourcePlace;
-	}
-
+	}*/
+	
 	UnitBase->SetUEPathfinding = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 }

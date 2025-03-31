@@ -64,8 +64,8 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] WriteGameState called. GameStateJSON Length: %d"), GameStateJSON.Len());
-    UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Address of SharedDataPtr->GameState: %p"), SharedDataPtr->GameState);
+   // UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] WriteGameState called. GameStateJSON Length: %d"), GameStateJSON.Len());
+    //UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Address of SharedDataPtr->GameState: %p"), SharedDataPtr->GameState);
 
     int32 StringLength = GameStateJSON.Len();
     int32 BufferSizeInChars = 1024;
@@ -88,7 +88,7 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
 			break; // Stop logging at the null terminator
 		}
 	}
-	UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Content of SharedDataPtr->GameState: %s"), *LogString);
+	//UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Content of SharedDataPtr->GameState: %s"), *LogString);
 
 
     SharedDataPtr->bNewGameStateAvailable = true;

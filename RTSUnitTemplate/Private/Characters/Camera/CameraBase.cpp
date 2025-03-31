@@ -594,6 +594,7 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
 		// Out of bounds: Do not move.
+		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime*-(2.f));
 		return;
 	}
 	
@@ -625,6 +626,7 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
+		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime*-(2.f));
 		return;
 	}
 	
@@ -660,6 +662,7 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
+		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime*-(2.f));
 		return;
 	}
 
@@ -692,6 +695,7 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
+		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime*-(2.f));
 		return;
 	}
 	

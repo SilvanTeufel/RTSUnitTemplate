@@ -75,7 +75,7 @@ FString ARLAgent::CreateGameStateJSON(const FGameStateData& GameState)
 
 void ARLAgent::UpdateGameState()
 {
-    UE_LOG(LogTemp, Log, TEXT("UpdateGameState"));
+   // UE_LOG(LogTemp, Log, TEXT("UpdateGameState"));
     FGameStateData GameState = GatherGameState();
 
     // Convert GameStateData to JSON (or another format your RL process understands)
@@ -84,7 +84,7 @@ void ARLAgent::UpdateGameState()
     // Write to shared memory
     if (SharedMemoryManager)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Trying to send String: %s"), *GameStateJSON);
+        //UE_LOG(LogTemp, Warning, TEXT("Trying to send String: %s"), *GameStateJSON);
         SharedMemoryManager->WriteGameState(GameStateJSON);
     }
     else
@@ -99,9 +99,9 @@ void ARLAgent::UpdateGameState()
 
 void ARLAgent::CheckForNewActions()
 {
-    UE_LOG(LogTemp, Log, TEXT("CheckForNewActions"));
+    //UE_LOG(LogTemp, Log, TEXT("CheckForNewActions"));
     FString ActionJSON = SharedMemoryManager->ReadAction();
-    UE_LOG(LogTemp, Log, TEXT("ActionJSON: %s"), *ActionJSON);
+    //UE_LOG(LogTemp, Log, TEXT("ActionJSON: %s"), *ActionJSON);
     ReceiveRLAction(ActionJSON);
     /*
     if (!ActionJSON.IsEmpty())
@@ -129,12 +129,12 @@ void ARLAgent::Tick(float DeltaTime)
 
 void ARLAgent::ReceiveRLAction(FString ActionJSON)
 {
-    UE_LOG(LogTemp, Log, TEXT("ReceiveRLAction"));
+    //UE_LOG(LogTemp, Log, TEXT("ReceiveRLAction"));
     const FString UTF8_BOM = TEXT("\xEF\xBB\xBF");
     
     if (!ActionJSON.IsEmpty())
     {
-        UE_LOG(LogTemp, Log, TEXT("ActionJSON is not empty!: %s"), *ActionJSON);
+        //UE_LOG(LogTemp, Log, TEXT("ActionJSON is not empty!: %s"), *ActionJSON);
         // Check for and remove the BOM character
         FString CleanedActionJSON = ActionJSON.TrimStart();
 
@@ -142,12 +142,6 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
         {
             CleanedActionJSON.RemoveAt(0);
         }
-        /*
-        for (int32 i = 0; i < CleanedActionJSON.Len(); ++i)
-        {
-            TCHAR Char = CleanedActionJSON[i];
-            UE_LOG(LogTemp, Log, TEXT("Index %d: Char: '%c' (Code: %d / Hex: 0x%X)"), i, Char, Char, Char);
-        }*/
         
         TSharedPtr<FJsonObject> Action;
         TSharedRef<TJsonReader<TCHAR>> JsonReader = TJsonReaderFactory<TCHAR>::Create(CleanedActionJSON);
@@ -163,8 +157,6 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
             FInputActionValue InputActionValue(1.0f);
             int32 NewCameraState = 0;
-            // bool AltIsPressed = false;
-            // bool CtrlIsPressed = false;
             FString ActionName = Action->GetStringField(TEXT("action"));
 
             AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
@@ -200,10 +192,62 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
             if(ActionName.StartsWith("move_camera"))
             {
-                if (NewCameraState == 1) SetActorLocation(GetActorLocation()+FVector(50.0f, 0.0f, 0.0f));
-                else if (NewCameraState == 2) SetActorLocation(GetActorLocation()+FVector(-50.0f, 0.0f, 0.0f));
-                else if (NewCameraState == 3) SetActorLocation(GetActorLocation()+FVector(0.0f, 50.0f, 0.0f));
-                else if (NewCameraState == 4) SetActorLocation(GetActorLocation()+FVector(0.0f, -50.0f, 0.0f));
+                if (NewCameraState == 1)
+                {
+                    FVector NewLocation = GetActorLocation()+FVector(50.0f, 0.0f, 0.0f);
+
+                    // Check if the proposed location is within the set limits.
+                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
+                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
+                    {
+                        SetActorLocation(GetActorLocation()+FVector(-200.0f, 0.0f, 0.0f));
+                    }else
+                    {
+                        SetActorLocation(NewLocation);
+                    }
+                }
+                else if (NewCameraState == 2)
+                {
+                    FVector NewLocation = GetActorLocation()+FVector(-50.0f, 0.0f, 0.0f);
+
+                    // Check if the proposed location is within the set limits.
+                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
+                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
+                    {
+                        SetActorLocation(GetActorLocation()+FVector(200.0f, 0.0f, 0.0f));
+                    }else
+                    {
+                        SetActorLocation(NewLocation);
+                    }
+                }
+                else if (NewCameraState == 3)
+                {
+                    FVector NewLocation = GetActorLocation()+FVector(0.0f, 50.0f, 0.0f);
+
+                    // Check if the proposed location is within the set limits.
+                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
+                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
+                    {
+                        SetActorLocation(GetActorLocation()+FVector(0.0f, -200.0f, 0.0f));
+                    }else
+                    {
+                        SetActorLocation(NewLocation);
+                    }
+                }
+                else if (NewCameraState == 4)
+                {
+                    FVector NewLocation = GetActorLocation()+FVector(0.0f, -50.0f, 0.0f);
+
+                    // Check if the proposed location is within the set limits.
+                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
+                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
+                    {
+                        SetActorLocation(GetActorLocation()+FVector(0.0f, 200.0f, 0.0f));
+                    }else
+                    {
+                        SetActorLocation(NewLocation);
+                    }
+                }
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
             {
@@ -211,29 +255,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                
                 ExtendedController->SetWorkArea(GetActorLocation());
                 ExtendedController->DropWorkArea();
-               
-       
-                /*
-                if (ActionName == "move_camera")
-                {
-              
-                    // Create a timer delegate with a lambda that performs the four calls.
-                    FTimerDelegate TimerDel;
-                    TimerDel.BindLambda([this]()
-                    {
-                        AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
-                      
-                        ExtendedController->WIsPressedState = 2;
-                        ExtendedController->SIsPressedState = 2;
-                        ExtendedController->AIsPressedState = 2;
-                        ExtendedController->DIsPressedState = 2;
-              
-                    });
-
-                    // Schedule the timer to execute once after a small delay (e.g., 0.1 seconds)
-                    // Ensure that 'MyTimerHandle' is declared as an FTimerHandle in your class.
-                    GetWorld()->GetTimerManager().SetTimer(MyTimerHandle, TimerDel, 1.5f, false);
-                }*/
+                
             }
             else if (ActionName == "left_click")
             {
@@ -252,10 +274,8 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Left Click: No ground hit found."));
                 }
         
-                if (NewCameraState == 2)
-                    ExtendedController->LeftClickReleased();
-        
-
+                //if (NewCameraState == 2)
+                    //ExtendedController->LeftClickReleased();
             }
             else if (ActionName == "right_click")
             {
@@ -279,15 +299,18 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     AddWorkerToResource(EResourceType::Primary, ExtendedController->SelectableTeamId);
                 if (NewCameraState == 2)
                     RemoveWorkerFromResource(EResourceType::Primary, ExtendedController->SelectableTeamId);
+                if (NewCameraState == 3)
+                    AddWorkerToResource(EResourceType::Secondary, ExtendedController->SelectableTeamId);
+                if (NewCameraState == 4)
+                    RemoveWorkerFromResource(EResourceType::Secondary, ExtendedController->SelectableTeamId);
+                if (NewCameraState == 5)
+                    AddWorkerToResource(EResourceType::Tertiary, ExtendedController->SelectableTeamId);
+                if (NewCameraState == 6)
+                    RemoveWorkerFromResource(EResourceType::Tertiary, ExtendedController->SelectableTeamId);
             }
-
-
         } else
         {
-   
-      
             UE_LOG(LogTemp, Warning, TEXT("JSON Error: %s"), *JsonReader->GetErrorMessage());
-            
         }
     }
 
@@ -307,22 +330,82 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
 
     ExtendedController->AttackToggled = false;
 
-    /*
+    
     if (!ExtendedController->CheckClickOnTransportUnit(HitResult))
     {
         if (!ExtendedController->SelectedUnits.Num() || !ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
         {
             if (!ExtendedController->CheckClickOnWorkArea(HitResult))
             {
-                ExtendedController->RunUnitsAndSetWaypoints(HitResult);
+                RunUnitsAndSetWaypoints(HitResult, ExtendedController);
             }
         }
-    }*/
+    }
     /*
     if (ExtendedController->SelectedUnits.Num() && ExtendedController->SelectedUnits[0] && ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
     {
         ExtendedController->DestroyDraggedArea(ExtendedController->SelectedUnits[0]);
     }*/
+}
+
+void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* ExtendedController)
+{
+	int32 NumUnits = ExtendedController->SelectedUnits.Num();
+	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+	const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
+	AWaypoint* BWaypoint = nullptr;
+
+	bool PlayWaypointSound = false;
+	bool PlayRunSound = false;
+	
+	for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++) {
+		if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag)
+		if (ExtendedController->SelectedUnits[i] && ExtendedController->SelectedUnits[i]->UnitState != UnitData::Dead
+		    && !ExtendedController->SelectedUnits[i]->IsWorker) {
+			
+			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			int32 Row = i / GridSize;     // Row index
+			int32 Col = i % GridSize;     // Column index
+
+			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+			const FVector RunLocation = Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
+			
+			if(ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
+			{
+				//PlayWaypointSound = true;
+			}else if (ExtendedController->IsShiftPressed) {
+				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
+				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->RightClickRunShift(ExtendedController->SelectedUnits[i], RunLocation); // _Implementation
+				PlayRunSound = true;
+			}else if(ExtendedController->UseUnrealEnginePathFinding)
+			{
+				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->RightClickRunUEPF(ExtendedController->SelectedUnits[i], RunLocation, true); // _Implementation
+				PlayRunSound = true;
+			}
+			else {
+				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->RightClickRunDijkstraPF(ExtendedController->SelectedUnits[i], RunLocation, i); // _Implementation
+				PlayRunSound = true;
+			}
+		}
+	}
+
+	if (ExtendedController->WaypointSound && PlayWaypointSound)
+	{
+		UGameplayStatics::PlaySound2D(this, ExtendedController->WaypointSound);
+	}
+
+	if (ExtendedController->RunSound && PlayRunSound)
+	{
+		const float CurrentTime = GetWorld()->GetTimeSeconds();
+		if (CurrentTime - ExtendedController->LastRunSoundTime >= ExtendedController->RunSoundDelayTime) // Check if 3 seconds have passed
+		{
+			UGameplayStatics::PlaySound2D(this, ExtendedController->RunSound);
+			ExtendedController->LastRunSoundTime = CurrentTime; // Update the timestamp
+		}
+	}
 }
 
 void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
@@ -360,7 +443,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
 
         for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
         {
-            if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag)
+            if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag && !ExtendedController->SelectedUnits[i]->IsWorker)
             {
                 int32 Row = i / GridSize;     // Row index
                 int32 Col = i % GridSize;     // Column index
@@ -392,27 +475,21 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
         {
             UGameplayStatics::PlaySound2D(this, ExtendedController->AttackSound);
         }
-    }
-    else
-    {
-        ExtendedController->SetWorkArea(GetActorLocation());
-        ExtendedController->DropWorkArea();
-  
-        //LeftClickSelect_Implementation();
+    } else {
 
         AActor* HitActor = HitResult.GetActor();
         bool AbilityFired = false;
         for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
         {
-            if (ExtendedController->SelectedUnits[i] && ExtendedController->SelectedUnits[i]->CurrentSnapshot.AbilityClass && ExtendedController->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
+            if (ExtendedController->SelectedUnits[i] && !ExtendedController->SelectedUnits[i]->IsWorker && ExtendedController->SelectedUnits[i]->CurrentSnapshot.AbilityClass && ExtendedController->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
             {
                 ExtendedController->FireAbilityMouseHit(ExtendedController->SelectedUnits[i], HitResult);
                 AbilityFired = true;
             }
         }
-
+        /*
         if (AbilityFired) return;
-
+        
         AHUD* CurrentHUD = GetWorld()->GetFirstPlayerController()->GetHUD();
         AHUDBase* HUDBase = Cast<AHUDBase>(CurrentHUD);
 
@@ -441,7 +518,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
                 HUDBase->InitialPoint = HUDBase->GetMousePos2D();
                 HUDBase->bSelectFriendly = true;
             }
-        }
+        }*/
     }
 
     ExtendedController->LeftClickIsPressed = false; // Reset the pressed state
@@ -469,7 +546,7 @@ void ARLAgent::RemoveWorkerFromResource(EResourceType ResourceType, int TeamId)
 
 FGameStateData ARLAgent::GatherGameState()
 {
-    UE_LOG(LogTemp, Log, TEXT("GatherGameState"));
+    //UE_LOG(LogTemp, Log, TEXT("GatherGameState"));
     FGameStateData GameState;
     AGameModeBase* BaseGameMode = GetWorld()->GetAuthGameMode();
     AUpgradeGameMode* GameMode = Cast<AUpgradeGameMode>(BaseGameMode);

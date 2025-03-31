@@ -41,7 +41,7 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Ability)
 	bool UseAbilityQue = true;
-
+	
 	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	//FText ToolTipText = FText::FromString("PrimaryResource: 100 / SecondaryResource: 200 // Keyboard X");
 

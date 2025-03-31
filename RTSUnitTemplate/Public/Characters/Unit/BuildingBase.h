@@ -56,7 +56,7 @@ public:
 	void HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);
+	void SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, int32 RecursionCount = 0);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode);

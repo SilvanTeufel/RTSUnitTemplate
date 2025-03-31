@@ -57,6 +57,8 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category=RTSUnitTemplate)
 	TArray<FQueuedAbility> QueSnapshot;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = Ability)
+	int32 AbilityQueueSize = 0;
 	//UFUNCTION()
 	//void OnRep_QueSnapshot();
 	

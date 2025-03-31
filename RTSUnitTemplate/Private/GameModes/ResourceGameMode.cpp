@@ -471,11 +471,11 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 							//UE_LOG(LogTemp, Log, TEXT("Added Area!"));
 							SuitableWorkAreas.Add(WorkArea);
 						}
-					
 				}
 			}
 
-	//UE_LOG(LogTemp, Log, TEXT("Array Size %d"), SuitableWorkAreas.Num());
+		//if (!SuitableWorkAreas.Num() && WorkAreas.Num()) SuitableWorkAreas.Add(WorkAreas[0]);
+		//UE_LOG(LogTemp, Log, TEXT("Array Size %d"), SuitableWorkAreas.Num());
 	
 			return GetRandomClosestWorkArea(SuitableWorkAreas);
 

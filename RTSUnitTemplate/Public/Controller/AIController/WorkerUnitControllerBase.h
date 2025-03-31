@@ -38,6 +38,9 @@ public:
 	void GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector GetGroundLocationAndIgnore(const FVector& Origin, AActor* ActorToIgnore);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -98,6 +98,9 @@ public:
     void PerformRightClickAction(const FHitResult& HitResult);
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* ExtendedController);
+    
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
     void AddWorkerToResource(EResourceType ResourceType, int TeamId);
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)

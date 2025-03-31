@@ -110,7 +110,7 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 	
 }
 
-void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
+void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, int32 RecursionCount)
 {
 	// Log initial state
 	/*
@@ -119,20 +119,56 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 		UnitBase->TeamId,
 		UnitBase->ResourcePlace ? *UnitBase->ResourcePlace->GetName() : TEXT("None"));
 	*/
+	if (!ResourceGameMode) return;
 
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
+	UE_LOG(LogTemp, Warning, TEXT("WorkPlaces.Num(): %d"), WorkPlaces.Num());
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
-
+	if (NewResourcePlace)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NewResourcePlace.Num(): %s"), *NewResourcePlace->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NOT FOUND!!!!!!!"));
+	}
 	//UE_LOG(LogTemp, Log, TEXT("NewResourcePlace: %s"), NewResourcePlace ? *NewResourcePlace->GetName() : TEXT("None"));
-	if(UnitBase->ResourcePlace && NewResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+	if (NewResourcePlace)
 	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
-		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+		{
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		}
+		else if(!UnitBase->ResourcePlace)
+		{
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+		}
 		UnitBase->ResourcePlace = NewResourcePlace;
-	}else if(NewResourcePlace) //!UnitBase->ResourcePlace && 
+	}
+	else if (!UnitBase->ResourcePlace)
 	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		UnitBase->ResourcePlace = NewResourcePlace;
+		UE_LOG(LogTemp, Warning, TEXT("No suitable work area found for unit, try recursion %s (Team %d)"), *UnitBase->GetName(), UnitBase->TeamId);
+
+		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
+		
+		if (NewResourcePlace)
+		{
+			if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+			{
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+			}
+			else if(!UnitBase->ResourcePlace)
+			{
+				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+			}
+			UnitBase->ResourcePlace = NewResourcePlace;
+		}
+		// Handle the null case - perhaps log a warning and decide whether to keep the old resource or set a default.
+	
+		//SwitchResourceArea(UnitBase, ResourceGameMode);
+		// Optionally set UnitBase->ResourcePlace to a safe default or leave it unchanged.
 	}
 
 	UnitBase->SetUEPathfinding = true;
