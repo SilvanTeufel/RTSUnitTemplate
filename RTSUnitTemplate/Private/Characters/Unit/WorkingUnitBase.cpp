@@ -168,61 +168,16 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			SpawnedWorkArea->TeamId          = TeamId;
 			SpawnedWorkArea->IsPaid          = IsPaid;
 			SpawnedWorkArea->ConstructionCost = ConstructionCost;
-			//SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
-			// Keep track of this WorkArea if needed
+
 			CurrentDraggedWorkArea = SpawnedWorkArea;
 			CurrentDraggedWorkArea->SetReplicateMovement(true);
-			// Call a Multicast to hide the mesh on all clients
-			// (this call only makes sense if we are on the server, which we are).
 
-			// Create a delegate to call ShowWorkArea with our SpawnedWorkArea as a parameter
-			/*
-			FTimerDelegate TimerDelegate;
-			TimerDelegate.BindUFunction(this, FName("ShowWorkAreaIfNoFog"), CurrentDraggedWorkArea);
-			
-		
-			// Schedule the timer (on the server)
-			GetWorldTimerManager().SetTimer(
-				ShowWorkAreaTimerHandle,  // Our stored FTimerHandle
-				TimerDelegate,
-				0.01,
-				false                     // Don't loop, just once
-			);
-			*/
+
 		}
 	}
 }
 
-/*
-void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector SpawnLocation, const  FBuildingCost ConstructionCost, bool IsPaid)
-{
-		if (WorkAreaClass && !CurrentDraggedWorkArea) // ExtendedControllerBase->CurrentDraggedGround == nullptr &&
-		{
 
-			//FVector SpawnLocation = GetActorLocation()+FVector(0.f, 0.f, 500.f); // Assuming you want to use HitResult location as spawn point
-			FRotator SpawnRotation = FRotator::ZeroRotator;
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Owner = this;
-			// Assuming we want to set the pawn that is responsible for spawning
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	    
-			AWorkArea* SpawnedWorkArea = GetWorld()->SpawnActor<AWorkArea>(WorkAreaClass, SpawnLocation, SpawnRotation, SpawnParams);
-
-			if (SpawnedWorkArea)
-			{
-			
-				if(Waypoint) SpawnedWorkArea->NextWaypoint = Waypoint;
-				SpawnedWorkArea->TeamId = TeamId;
-				SpawnedWorkArea->IsPaid = IsPaid;
-				SpawnedWorkArea->ConstructionCost = ConstructionCost;
-				CurrentDraggedWorkArea = SpawnedWorkArea;
-				//BuildArea = SpawnedWorkArea;
-				//ClientReceiveWorkArea_Implementation(CurrentDraggedWorkArea);
-			}
-			
-		}
-}
-*/
 void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientArea)
 {
 	if (!OwningPlayerController)

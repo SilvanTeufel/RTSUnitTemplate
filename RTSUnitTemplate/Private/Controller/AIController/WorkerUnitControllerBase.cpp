@@ -41,7 +41,7 @@ void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSecond
 		break;
 		case UnitData::GoToResourceExtraction:
 			{
-				UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
+				//UE_LOG(LogTemp, Warning, TEXT("GoToResourceExtraction"));
 				GoToResourceExtraction(UnitBase, DeltaSeconds);
 				//if(!UnitBase->IsFriendly)UE_LOG(LogTemp, Warning, TEXT("None"));
 			}

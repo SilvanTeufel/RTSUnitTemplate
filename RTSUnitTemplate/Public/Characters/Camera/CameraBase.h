@@ -43,10 +43,10 @@ public:
 
 	// In your ACameraBase.h within the class declaration:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
-	FVector2D CameraPositionMin = FVector2D(-7000.0f, -7000.0f); // Example minimum limits for X and Y
+	FVector2D CameraPositionMin = FVector2D(-10000.0f, -10000.0f); // Example minimum limits for X and Y
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
-	FVector2D CameraPositionMax = FVector2D(7000.0f, 7000.0f); 
+	FVector2D CameraPositionMax = FVector2D(10000.0f, 10000.0f); 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

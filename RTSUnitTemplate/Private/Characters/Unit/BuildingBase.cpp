@@ -113,26 +113,13 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, int32 RecursionCount)
 {
 	// Log initial state
-	/*
-	UE_LOG(LogTemp, Log, TEXT("1111 ABuildingBase::SwitchResourceArea - Unit %s (Team %d) current resource place: %s"), 
-		*UnitBase->GetName(), 
-		UnitBase->TeamId,
-		UnitBase->ResourcePlace ? *UnitBase->ResourcePlace->GetName() : TEXT("None"));
-	*/
+
 	if (!ResourceGameMode) return;
 
 	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
-	UE_LOG(LogTemp, Warning, TEXT("WorkPlaces.Num(): %d"), WorkPlaces.Num());
+	
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
-	if (NewResourcePlace)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("NewResourcePlace.Num(): %s"), *NewResourcePlace->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("NOT FOUND!!!!!!!"));
-	}
-	//UE_LOG(LogTemp, Log, TEXT("NewResourcePlace: %s"), NewResourcePlace ? *NewResourcePlace->GetName() : TEXT("None"));
+
 	if (NewResourcePlace)
 	{
 		if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
@@ -165,21 +152,10 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 			}
 			UnitBase->ResourcePlace = NewResourcePlace;
 		}
-		// Handle the null case - perhaps log a warning and decide whether to keep the old resource or set a default.
-	
-		//SwitchResourceArea(UnitBase, ResourceGameMode);
-		// Optionally set UnitBase->ResourcePlace to a safe default or leave it unchanged.
 	}
 
 	UnitBase->SetUEPathfinding = true;
 	UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-
-	/*
-	UE_LOG(LogTemp, Log, TEXT("2222 ABuildingBase::SwitchResourceArea - Unit %s (Team %d) current resource place: %s"), 
-	*UnitBase->GetName(), 
-	UnitBase->TeamId,
-	UnitBase->ResourcePlace ? *UnitBase->ResourcePlace->GetName() : TEXT("None"));
-	*/
 }
 
 bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)

@@ -12,6 +12,7 @@
 #include "AIController.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Characters/Camera/RLAgent.h"
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -249,7 +250,15 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
 
-			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
+			if (CameraControllerBase->CameraBase)
+			{
+				CameraControllerBase->CameraBase->BlockControls = false;
+
+				ARLAgent* Agent = Cast<ARLAgent>(CameraControllerBase->CameraBase);
+				
+				if (Agent)
+					Agent->AgentInitialization();
+			}
 		}
 	}
 

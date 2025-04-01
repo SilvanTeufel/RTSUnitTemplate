@@ -105,6 +105,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)
     void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
+
+    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    void AgentInitialization();
     
 private:
     FGameStateData GatherGameState();

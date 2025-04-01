@@ -12,26 +12,44 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 {
     // Enable ticking for continuous RL decision processing.
     PrimaryActorTick.bCanEverTick = true;
-    SharedMemoryManager = new FSharedMemoryManager(TEXT("UnrealRLSharedMemory"), sizeof(SharedData));
+    //SharedMemoryManager = new FSharedMemoryManager(TEXT("UnrealRLSharedMemory"), sizeof(SharedData));
 }
 
 void ARLAgent::BeginPlay()
 {
     Super::BeginPlay();
+}
 
+
+void ARLAgent::AgentInitialization()
+{
+    FString MemoryName;
     // Optionally, if you want the player's view to start on this RL agent:
     APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
     if (PC)
     {
-       PC->SetViewTargetWithBlend(this, 0.5f);
-    }
+        
+        PC->SetViewTargetWithBlend(this, 0.5f);
+        
+        if (AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(PC))
+        {
+            // Retrieve the Team ID from ControllerBase
+            int32 TeamId = ControllerBase->SelectableTeamId;
+        
+            // Create the memory name using FString::Printf
+            MemoryName = FString::Printf(TEXT("UnrealRLSharedMemory_TeamId_%d"), TeamId);
 
-    FString SharedMemoryName = "UnrealRLSharedMemory"; // Make sure this matches your Python script
+            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] TRYING to create SharedMemoryManager."));
+            // Convert FString to TCHAR* for FSharedMemoryManager
+            SharedMemoryManager = new FSharedMemoryManager(*MemoryName, sizeof(SharedData));
+        }
+    }
+    
     SIZE_T MemorySizeNeeded = sizeof(SharedData);
     
     if (SharedMemoryManager)
     {
-        UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *SharedMemoryName, MemorySizeNeeded);
+        UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *MemoryName, MemorySizeNeeded);
     }
     else
     {
@@ -43,7 +61,6 @@ void ARLAgent::BeginPlay()
     Input_Tab_Released(InputActionValue, 0);
     // Set up a timer to update the game state every 0.2 seconds (adjust as needed)
     GetWorldTimerManager().SetTimer(RLUpdateTimerHandle, this, &ARLAgent::UpdateGameState, 0.1f, true);
-
 }
 
 FString ARLAgent::CreateGameStateJSON(const FGameStateData& GameState)
@@ -80,7 +97,7 @@ void ARLAgent::UpdateGameState()
 
     // Convert GameStateData to JSON (or another format your RL process understands)
     FString GameStateJSON = CreateGameStateJSON(GameState);
-
+    
     // Write to shared memory
     if (SharedMemoryManager)
     {
@@ -99,26 +116,9 @@ void ARLAgent::UpdateGameState()
 
 void ARLAgent::CheckForNewActions()
 {
-    //UE_LOG(LogTemp, Log, TEXT("CheckForNewActions"));
     FString ActionJSON = SharedMemoryManager->ReadAction();
     //UE_LOG(LogTemp, Log, TEXT("ActionJSON: %s"), *ActionJSON);
     ReceiveRLAction(ActionJSON);
-    /*
-    if (!ActionJSON.IsEmpty())
-    {
-        TSharedPtr<FJsonObject> JsonObject;
-        TSharedRef<TJsonReader<TCHAR>> JsonReader = TJsonReaderFactory<TCHAR>::Create(ActionJSON);
-
-        if (FJsonSerializer::Deserialize(JsonReader, JsonObject) && JsonObject.IsValid())
-        {
-            // Pass the parsed JSON object to ReceiveRLAction
-            ReceiveRLAction(JsonObject);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Failed to deserialize Action JSON: %s"), *ActionJSON);
-        }
-    }*/
 }
 
 void ARLAgent::Tick(float DeltaTime)
