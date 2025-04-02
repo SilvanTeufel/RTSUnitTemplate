@@ -1756,7 +1756,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 		
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
 
-		if(WorkArea)
+		if(WorkArea && !WorkArea->IsNoBuildZone)
 		{
 			TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkArea->Type;
 		
