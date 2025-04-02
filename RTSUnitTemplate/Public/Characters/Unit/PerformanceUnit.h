@@ -23,7 +23,7 @@ public:
 	APerformanceUnit(const FObjectInitializer& ObjectInitializer);
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
+	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

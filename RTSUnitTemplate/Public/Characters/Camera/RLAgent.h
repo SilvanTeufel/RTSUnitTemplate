@@ -7,6 +7,7 @@
 #include "Memory/SharedMemoryManager.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 
 
 #include "Serialization/JsonReader.h"
@@ -92,7 +93,7 @@ public:
     void ReceiveRLAction(FString ActionJSON);
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)
-    void PerformLeftClickAction(const FHitResult& HitResult);
+    void PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled);
 
     UFUNCTION(BlueprintCallable, Category = RLAgent)
     void PerformRightClickAction(const FHitResult& HitResult);
@@ -106,15 +107,32 @@ public:
     UFUNCTION(BlueprintCallable, Category = RLAgent)
     void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
 
-    UFUNCTION(BlueprintCallable, Category = RLAgent)
+    UFUNCTION(Category = RLAgent)
     void AgentInitialization();
+
+    // Called from the client to request game state data.
+    UFUNCTION(Server, Reliable)
+    void Server_RequestGameState(int32 SelectableTeamId);
+
+    // Called on the client to receive the game state data.
+    UFUNCTION(Client, Reliable)
+    void Client_ReceiveGameState(const FGameStateData& GameState);
+    
+    // Existing function to gather game state on the server.
+    FGameStateData GatherGameState(int32 SelectableTeamId);
     
 private:
-    FGameStateData GatherGameState();
+
+   // FGameStateData GatherGameState();
 
     // Manage shared memory
+    UFUNCTION( Category = RLAgent)
     void UpdateGameState();
+
+    UFUNCTION( Category = RLAgent)
     void CheckForNewActions();
+
+    
     FString CreateGameStateJSON(const FGameStateData& GameState); // New function
     
     FSharedMemoryManager* SharedMemoryManager;
@@ -123,8 +141,8 @@ private:
 
     
     // Add any member variables needed to store the current state or facilitate actions
-    TArray<class AUnitBase*> GetMyUnits();
-    TArray<class AUnitBase*> GetEnemyUnits();
+   // TArray<class AUnitBase*> GetMyUnits();
+    //TArray<class AUnitBase*> GetEnemyUnits();
 
 private:
     FTimerHandle MyTimerHandle;

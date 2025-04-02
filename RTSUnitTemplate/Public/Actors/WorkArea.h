@@ -65,7 +65,8 @@ class RTSUNITTEMPLATE_API AWorkArea : public AActor
 public:	
 	// Sets default values for this actor's properties
 	AWorkArea();
-	
+
+	FTimerHandle HideWorkAreaTimerHandle;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -93,6 +94,9 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 0;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsNoBuildZone = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffect;

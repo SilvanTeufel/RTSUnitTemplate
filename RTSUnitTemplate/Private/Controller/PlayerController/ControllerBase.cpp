@@ -741,19 +741,23 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
+				//UE_LOG(LogTemp, Warning, TEXT("This is a Building!!"));
 				//PlayWaypointSound = true;
 			}else if (IsShiftPressed) {
+				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
 				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
+				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunUEPF(SelectedUnits[i], RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
+				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
 				PlayRunSound = true;

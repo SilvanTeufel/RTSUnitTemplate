@@ -197,6 +197,9 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToWork(AUnitBase* Worker);
+
+	UFUNCTION(Server, Reliable)
+	void SendWorkerToBase(AUnitBase* Worker);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();
@@ -281,20 +284,5 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastEndsEvent(AUnitBase* UnitBase);
 	
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_SetFogManager(const TArray<AActor*>& AllUnits);
-	
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_SetFogManagerUnit(APerformanceUnit* Unit);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_ShowWidgetsWhenLocallyControlled();
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_SetCamLocation(FVector NewLocation);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_HideEnemyWaypoints();
 	
 };

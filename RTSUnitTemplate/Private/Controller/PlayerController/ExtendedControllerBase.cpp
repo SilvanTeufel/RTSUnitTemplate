@@ -6,6 +6,7 @@
 #include "GameplayTagsManager.h"
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
@@ -721,6 +722,10 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     	else if (OverlappedWorkArea)
                     	{
                     		OverlappedMesh = OverlappedWorkArea->Mesh;
+                    		if(OverlappedWorkArea->IsNoBuildZone)
+                    		{
+                    			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    		}
                     	}
                     	if (!OverlappedMesh)
                     	{
@@ -1097,6 +1102,17 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 }
 
 
+void AExtendedControllerBase::SendWorkerToBase_Implementation(AUnitBase* Worker)
+{
+	if (!Worker)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Worker is null! Cannot proceed."));
+		return;
+	}
+	
+	Worker->SetUnitState(UnitData::GoToBase);
+}
+
 bool AExtendedControllerBase::DropWorkArea()
 {
 	if(SelectedUnits.Num() && SelectedUnits[0])
@@ -1108,19 +1124,21 @@ bool AExtendedControllerBase::DropWorkArea()
 		SelectedUnits[0]->CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
 	
 		bool bIsOverlappingWithValidArea = false;
-
+		bool IsNoBuildZone = false;
 		// Loop through the overlapping actors to check if they are instances of AWorkArea or ABuildingBase
 		for (AActor* OverlappedActor : OverlappingActors)
 		{
 			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
 			{
+				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
+				if (NoBuildZone && NoBuildZone->IsNoBuildZone) IsNoBuildZone = NoBuildZone->IsNoBuildZone;
 				bIsOverlappingWithValidArea = true;
 				break;
 			}
 		}
-
+	
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
-		if (bIsOverlappingWithValidArea && !WorkAreaIsSnapped) // bIsOverlappingWithValidArea &&
+		if ((bIsOverlappingWithValidArea && !WorkAreaIsSnapped) || IsNoBuildZone) // bIsOverlappingWithValidArea &&
 		{
 			if (DropWorkAreaFailedSound)
 			{
@@ -1128,8 +1146,9 @@ bool AExtendedControllerBase::DropWorkArea()
 			}
 			
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
+			SelectedUnits[0]->BuildArea = nullptr;
 			CancelCurrentAbility(SelectedUnits[0]);
-
+			SendWorkerToBase(SelectedUnits[0]);
 			return true;
 		}
 
@@ -1143,7 +1162,6 @@ bool AExtendedControllerBase::DropWorkArea()
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
 		}
-		
 		//CurrentDraggedWorkArea = nullptr;
 	}
 	return false;
@@ -1402,7 +1420,9 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 	Worker->CurrentDraggedWorkArea->RemoveAreaFromGroup();
 	Worker->CurrentDraggedWorkArea->Destroy();
 	Worker->CurrentDraggedWorkArea = nullptr;
-	if (AUnitBase* Unit = Cast<AUnitBase>(Worker))
+	AUnitBase* Unit = Cast<AUnitBase>(Worker);
+	
+	if (Unit && Unit->IsWorker)
 	{
 		CancelCurrentAbility(Unit);
 	}
@@ -1410,6 +1430,7 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 
 void AExtendedControllerBase::RightClickPressed()
 {
+	
 	AttackToggled = false;
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
@@ -1426,11 +1447,13 @@ void AExtendedControllerBase::RightClickPressed()
 		}
 	}
 
+
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		DestroyDraggedArea(SelectedUnits[0]);
 	}
-}
+	
+}	
 
 void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 {
@@ -1596,15 +1619,18 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
-	if(Worker)
-	{
-		Worker->ResourcePlace = WorkArea;
-		Worker->SetUnitState(UnitData::GoToResourceExtraction);
-	}
+	if (!Worker || !Worker->IsWorker) return;
+	
+	Worker->ResourcePlace = WorkArea;
+	Worker->SetUnitState(UnitData::GoToResourceExtraction);
+	
 }
 
 void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
+
+	if (!Worker || !Worker->IsWorker) return;
+	
 	Worker->BuildArea = WorkArea;
 	// Check if the worker is overlapping with the build area
 	if (Worker->IsOverlappingActor(Worker->BuildArea))
@@ -1747,7 +1773,6 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 					{
 						
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
-
 						SendWorkerToResource(Worker, WorkArea);
 					}
 				}
@@ -1787,100 +1812,3 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 		}
 	//}
 }
-
-void AExtendedControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
-{
-	if (!IsLocalController()) return;
-	
-	// TSGameMode->AllUnits is onyl available on Server why we start running on server
-	// We Mutlicast to CLient and send him AllUnits as parameter
-	TArray<AUnitBase*> NewSelection;
-	for (int32 i = 0; i < AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		// Every Controller can Check his own TeamId
-		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
-		{
-			NewSelection.Add(Unit);
-		}else if (Unit && Unit->SpawnedFogManager)
-		{
-			Unit->DestroyFogManager();
-		}
-	}
-
-	// And we can create the FogManager
-	for (int32 i = 0; i < NewSelection.Num(); i++)
-	{
-		if (NewSelection[i] && NewSelection[i]->TeamId == SelectableTeamId)
-		{
-			NewSelection[i]->IsMyTeam = true;
-			NewSelection[i]->SpawnFogOfWarManager(this);
-		}
-	}
-
-	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
-	if (Camera)
-		Camera->SetupResourceWidget(this);
-}
-
-
-void AExtendedControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
-{
-	if (Unit->TeamId == SelectableTeamId)
-	{
-		Unit->IsMyTeam = true;
-		Unit->SpawnFogOfWarManager(this);
-	}
-}
-
-void AExtendedControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()
-{
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
-	
-	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
-	if (Camera)
-		Camera->ShowWidgetsWhenLocallyControlled();
-}
-
-void AExtendedControllerBase::Multi_SetCamLocation_Implementation(FVector NewLocation)
-{
-	//if (!IsLocalController()) return;
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
-	
-	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
-	if (Camera)
-		Camera->SetActorLocation(NewLocation);
-}
-
-void AExtendedControllerBase::Multi_HideEnemyWaypoints_Implementation()
-{
-	// Only execute for the local controller
-	if (!IsLocalController())
-	{
-		return;
-	}
-	//if (!IsLocalController()) return;
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideEnemyWaypoints_Implementation - TeamId is now: %d"), SelectableTeamId);
-	// Try to get all AWaypoints* Waypoint with TArray from Map
-	// Compare Waypoint->TeamId with SelectableTeamId (from this Class)
-	// If Unequal please hide
-	// If TeamId == 0 dont hide
-
-	// Retrieve all waypoints from the world
-	TArray<AActor*> FoundWaypoints;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWaypoint::StaticClass(), FoundWaypoints);
-
-	// Iterate over each waypoint
-	for (AActor* Actor : FoundWaypoints)
-	{
-		if (AWaypoint* Waypoint = Cast<AWaypoint>(Actor))
-		{
-			// Hide the waypoint if its TeamId is different from our team AND it isn't neutral (TeamId == 0)
-			if (Waypoint->TeamId != SelectableTeamId && Waypoint->TeamId != 0)
-			{
-				Waypoint->SetActorHiddenInGame(true);
-			}
-		}
-	}
-}
-

@@ -24,14 +24,13 @@ void ARLAgent::BeginPlay()
 void ARLAgent::AgentInitialization()
 {
     FString MemoryName;
-    // Optionally, if you want the player's view to start on this RL agent:
-    APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-    if (PC)
+ 
+    if (AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController()))
     {
         
-        PC->SetViewTargetWithBlend(this, 0.5f);
+        ExtendedController->SetViewTargetWithBlend(this, 0.5f);
         
-        if (AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(PC))
+        if (AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(ExtendedController))
         {
             // Retrieve the Team ID from ControllerBase
             int32 TeamId = ControllerBase->SelectableTeamId;
@@ -47,13 +46,16 @@ void ARLAgent::AgentInitialization()
     
     SIZE_T MemorySizeNeeded = sizeof(SharedData);
     
-    if (SharedMemoryManager)
+    if (GetWorld() && GetWorld()->IsNetMode(ENetMode::NM_Client))
     {
-        UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *MemoryName, MemorySizeNeeded);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Failed to create SharedMemoryManager."));
+        if (SharedMemoryManager)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *MemoryName, MemorySizeNeeded);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Failed to create SharedMemoryManager."));
+        }
     }
 
     FInputActionValue InputActionValue;
@@ -93,31 +95,17 @@ FString ARLAgent::CreateGameStateJSON(const FGameStateData& GameState)
 void ARLAgent::UpdateGameState()
 {
    // UE_LOG(LogTemp, Log, TEXT("UpdateGameState"));
-    FGameStateData GameState = GatherGameState();
 
-    // Convert GameStateData to JSON (or another format your RL process understands)
-    FString GameStateJSON = CreateGameStateJSON(GameState);
+    ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+    if (!CameraControllerBase) return;
     
-    // Write to shared memory
-    if (SharedMemoryManager)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("Trying to send String: %s"), *GameStateJSON);
-        SharedMemoryManager->WriteGameState(GameStateJSON);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
-    }
-
-
-    // Check for new actions
-    CheckForNewActions();
+    Server_RequestGameState(CameraControllerBase->SelectableTeamId);
 }
 
 void ARLAgent::CheckForNewActions()
 {
     FString ActionJSON = SharedMemoryManager->ReadAction();
-    //UE_LOG(LogTemp, Log, TEXT("ActionJSON: %s"), *ActionJSON);
+
     ReceiveRLAction(ActionJSON);
 }
 
@@ -129,12 +117,11 @@ void ARLAgent::Tick(float DeltaTime)
 
 void ARLAgent::ReceiveRLAction(FString ActionJSON)
 {
-    //UE_LOG(LogTemp, Log, TEXT("ReceiveRLAction"));
+
     const FString UTF8_BOM = TEXT("\xEF\xBB\xBF");
     
     if (!ActionJSON.IsEmpty())
     {
-        //UE_LOG(LogTemp, Log, TEXT("ActionJSON is not empty!: %s"), *ActionJSON);
         // Check for and remove the BOM character
         FString CleanedActionJSON = ActionJSON.TrimStart();
 
@@ -148,7 +135,6 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
         if (FJsonSerializer::Deserialize(JsonReader, Action) && Action.IsValid())
         {
-            UE_LOG(LogTemp, Log, TEXT("Successful Deserialized!"));
             if (!Action.IsValid())
             {
                 UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Received invalid Action JSON."));
@@ -264,10 +250,14 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 FHitResult HitResult;
                 FCollisionQueryParams CollisionParams;
                 CollisionParams.AddIgnoredActor(this); // Ignore this actor
-
-                if (NewCameraState == 1 && GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocationDown, ECC_Visibility, CollisionParams))
+                bool IsHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocationDown, ECC_Visibility, CollisionParams);
+                
+                if (NewCameraState == 1 && IsHit)
                 {
-                    PerformLeftClickAction(HitResult);
+                    PerformLeftClickAction(HitResult, false);
+                }else if (NewCameraState == 2 && IsHit)
+                {
+                    PerformLeftClickAction(HitResult, true);
                 }
                 else
                 {
@@ -341,11 +331,11 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
             }
         }
     }
-    /*
+ 
     if (ExtendedController->SelectedUnits.Num() && ExtendedController->SelectedUnits[0] && ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
     {
         ExtendedController->DestroyDraggedArea(ExtendedController->SelectedUnits[0]);
-    }*/
+    }
 }
 
 void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* ExtendedController)
@@ -408,7 +398,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 	}
 }
 
-void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
+void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled)
 {
     AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
     if (!ExtendedController)
@@ -416,8 +406,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
         UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformLeftClickAction."));
         return;
     }
-
-   // ExtendedController->LeftClickIsPressed = true;
+    
     ExtendedController->AbilityArrayIndex = 0;
 
     if (!ExtendedController->CameraBase || ExtendedController->CameraBase->TabToggled) return;
@@ -430,10 +419,8 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
             ExtendedController->CancelAbilitiesIfNoBuilding(ExtendedController->SelectedUnits[i]);
         }
     }
-    else if (ExtendedController->AttackToggled)
+    else if (AttackToggled)
     {
-        ExtendedController->AttackToggled = false;
-
         int32 NumUnits = ExtendedController->SelectedUnits.Num();
         const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
         AWaypoint* BWaypoint = nullptr;
@@ -456,7 +443,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
                 }
                 else
                 {
-                    ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Silver);
+                    ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     ExtendedController->LeftClickAttack(ExtendedController->SelectedUnits[i], RunLocation);
                     PlayAttackSound = true;
                 }
@@ -476,49 +463,14 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult)
             UGameplayStatics::PlaySound2D(this, ExtendedController->AttackSound);
         }
     } else {
-
-        AActor* HitActor = HitResult.GetActor();
-        bool AbilityFired = false;
         for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
         {
             if (ExtendedController->SelectedUnits[i] && !ExtendedController->SelectedUnits[i]->IsWorker && ExtendedController->SelectedUnits[i]->CurrentSnapshot.AbilityClass && ExtendedController->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
             {
                 ExtendedController->FireAbilityMouseHit(ExtendedController->SelectedUnits[i], HitResult);
-                AbilityFired = true;
+
             }
         }
-        /*
-        if (AbilityFired) return;
-        
-        AHUD* CurrentHUD = GetWorld()->GetFirstPlayerController()->GetHUD();
-        AHUDBase* HUDBase = Cast<AHUDBase>(CurrentHUD);
-
-        if (HitResult.bBlockingHit && HUDBase)
-        {
-            if (!HitActor->IsA(ALandscape::StaticClass()))
-                ExtendedController->ClickedActor = HitActor;
-            else
-                ExtendedController->ClickedActor = nullptr;
-
-            AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
-            const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
-
-            if (UnitBase && (UnitBase->TeamId == ExtendedController->SelectableTeamId || ExtendedController->SelectableTeamId == 0) && !SUnit)
-            {
-                HUDBase->DeselectAllUnits();
-                HUDBase->SetUnitSelected(UnitBase);
-                ExtendedController->DragUnitBase(UnitBase);
-
-
-                if (ExtendedController->CameraBase->AutoLockOnSelect)
-                    ExtendedController->LockCameraToUnit = true;
-            }
-            else
-            {
-                HUDBase->InitialPoint = HUDBase->GetMousePos2D();
-                HUDBase->bSelectFriendly = true;
-            }
-        }*/
     }
 
     ExtendedController->LeftClickIsPressed = false; // Reset the pressed state
@@ -543,17 +495,43 @@ void ARLAgent::RemoveWorkerFromResource(EResourceType ResourceType, int TeamId)
     //UpdateWidget();
 }
 
-
-FGameStateData ARLAgent::GatherGameState()
+void ARLAgent::Server_RequestGameState_Implementation(int32 SelectableTeamId)
 {
-    //UE_LOG(LogTemp, Log, TEXT("GatherGameState"));
+
+    // Gather game state data on the server.
+    FGameStateData GameState = GatherGameState(SelectableTeamId);
+    
+    // Send the data back to the client.
+    Client_ReceiveGameState(GameState);
+}
+
+void ARLAgent::Client_ReceiveGameState_Implementation(const FGameStateData& GameState)
+{
+    // Convert GameStateData to JSON (or another format your RL process understands)
+    FString GameStateJSON = CreateGameStateJSON(GameState);
+    
+    // Write to shared memory
+    if (SharedMemoryManager)
+    {
+        SharedMemoryManager->WriteGameState(GameStateJSON);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
+    }
+
+
+    // Check for new actions
+    CheckForNewActions();
+}
+
+FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
+{
     FGameStateData GameState;
+    
     AGameModeBase* BaseGameMode = GetWorld()->GetAuthGameMode();
     AUpgradeGameMode* GameMode = Cast<AUpgradeGameMode>(BaseGameMode);
     if (!GameMode) return GameState;
-
-    ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-    if (!CameraControllerBase) return GameState;
 
     // Get Agent Position
     GameState.AgentPosition = GetActorLocation();
@@ -573,7 +551,7 @@ FGameStateData ARLAgent::GatherGameState()
             UAttributeSetBase* Attributes = MyUnit->Attributes;
             if (Attributes && Attributes->IsValidLowLevelFast()) // Ensure attributes are valid
             {
-                if (MyUnit->TeamId == CameraControllerBase->SelectableTeamId)
+                if (MyUnit->TeamId == SelectableTeamId)
                 {
                     GameState.MyUnitCount++;
                     GameState.MyTotalHealth += Attributes->GetHealth();
@@ -613,9 +591,9 @@ FGameStateData ARLAgent::GatherGameState()
     }
 
     // Get Resources
-    if (GameMode && CameraControllerBase)
+    if (GameMode)
     {
-        int32 MyTeamId = CameraControllerBase->SelectableTeamId;
+        int32 MyTeamId = SelectableTeamId;
         GameState.PrimaryResource = GameMode->GetResource(MyTeamId, EResourceType::Primary);
         GameState.SecondaryResource = GameMode->GetResource(MyTeamId, EResourceType::Secondary);
         GameState.TertiaryResource = GameMode->GetResource(MyTeamId, EResourceType::Tertiary);
@@ -626,50 +604,3 @@ FGameStateData ARLAgent::GatherGameState()
 
     return GameState;
 }
-
-TArray<AUnitBase*> ARLAgent::GetMyUnits()
-{
-    TArray<AUnitBase*> MyUnits;
-    AGameModeBase* BaseGameMode = GetWorld()->GetAuthGameMode();
-    ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(BaseGameMode);
-    ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-
-    if (GameMode && CameraControllerBase)
-    {
-        for (AActor* UnitActor : GameMode->AllUnits)
-        {
-            if (AUnitBase* Unit = Cast<AUnitBase>(UnitActor))
-            {
-                if (Unit->TeamId == CameraControllerBase->SelectableTeamId)
-                {
-                    MyUnits.Add(Unit);
-                }
-            }
-        }
-    }
-    return MyUnits;
-}
-
-TArray<AUnitBase*> ARLAgent::GetEnemyUnits()
-{
-    TArray<AUnitBase*> EnemyUnits;
-    AGameModeBase* BaseGameMode = GetWorld()->GetAuthGameMode();
-    ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(BaseGameMode);
-    ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-
-    if (GameMode && CameraControllerBase)
-    {
-        for (AActor* UnitActor : GameMode->AllUnits)
-        {
-            if (AUnitBase* Unit = Cast<AUnitBase>(UnitActor))
-            {
-                if (Unit->TeamId != CameraControllerBase->SelectableTeamId)
-                {
-                    EnemyUnits.Add(Unit);
-                }
-            }
-        }
-    }
-    return EnemyUnits;
-}
-

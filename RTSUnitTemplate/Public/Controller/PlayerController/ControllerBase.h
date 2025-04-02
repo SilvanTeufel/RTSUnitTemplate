@@ -110,13 +110,6 @@ public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickSelect();
-	/*
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickPressed", Keywords = "RTSUnitTemplate LeftClickPressed"), Category = RTSUnitTemplate)
-		void LeftClickPressed();
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LeftClickReleased", Keywords = "RTSUnitTemplate LeftClickReleased"), Category = RTSUnitTemplate)
-		void LeftClickReleased();
-	*/
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int CurrentUnitWidgetIndex = 0;

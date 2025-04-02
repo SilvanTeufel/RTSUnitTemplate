@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Controller/Input/EnhancedInputComponentBase.h"
 #include "CameraControllerBase.generated.h"
@@ -12,7 +12,7 @@
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API ACameraControllerBase : public AExtendedControllerBase
+class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 {
 	GENERATED_BODY()
 	

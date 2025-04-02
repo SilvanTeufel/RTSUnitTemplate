@@ -247,18 +247,15 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
 			CameraControllerBase->Multi_HideEnemyWaypoints();
-			
+
+			UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!"));
+			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
+	
+			CameraControllerBase->AgentInit();
+		
+
+			UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!"));
 			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
-
-			if (CameraControllerBase->CameraBase)
-			{
-				CameraControllerBase->CameraBase->BlockControls = false;
-
-				ARLAgent* Agent = Cast<ARLAgent>(CameraControllerBase->CameraBase);
-				
-				if (Agent)
-					Agent->AgentInitialization();
-			}
 		}
 	}
 

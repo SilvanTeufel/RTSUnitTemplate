@@ -10,6 +10,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
@@ -102,7 +103,7 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 	APlayerController* PlayerController = World->GetFirstPlayerController();
 	if (PlayerController)
 	{
-		AExtendedControllerBase* ControllerBase = Cast<AExtendedControllerBase>(PlayerController);
+		ACustomControllerBase* ControllerBase = Cast<ACustomControllerBase>(PlayerController);
 		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
 			OwningPlayerController = ControllerBase;
@@ -365,11 +366,22 @@ void APerformanceUnit::ShowWorkAreaIfNoFog_Implementation(AWorkArea* WorkArea)
 				//WorkArea->Mesh->SetVisibility(IsVisible, /* PropagateToChildren = */ true);
 				//WorkArea->SceneRoot->SetVisibility(true, true);
 				WorkArea->Mesh->SetHiddenInGame(false);
+
+				if (WorkArea->IsNoBuildZone)
+				{
+					// Set a timer to call a lambda function after 5 seconds
+					GetWorld()->GetTimerManager().SetTimer(WorkArea->HideWorkAreaTimerHandle, [WorkArea]()
+					{
+						if (WorkArea && WorkArea->Mesh)
+						{
+							WorkArea->Mesh->SetHiddenInGame(true);
+						}
+					}, 5.0f, false);
+				}
 			}
 		}
 	}
 }
-
 
 void APerformanceUnit::ShowAbilityIndicator_Implementation(AAbilityIndicator* AbilityIndicator)
 {
