@@ -68,6 +68,7 @@ namespace WorkAreaData
 		Legendary UMETA(DisplayName = "Legendary"),
 		Base UMETA(DisplayName = "Base"),
 		BuildArea UMETA(DisplayName = "BuildArea"),
+		NoBuildZone UMETA(DisplayName = "NoBuildZone"),
 	};
 }
 

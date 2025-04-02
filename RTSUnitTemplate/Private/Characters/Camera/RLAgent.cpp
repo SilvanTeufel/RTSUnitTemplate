@@ -311,6 +311,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
 void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
 {
+    /*
     AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
     if (!ExtendedController)
     {
@@ -336,6 +337,7 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
     {
         ExtendedController->DestroyDraggedArea(ExtendedController->SelectedUnits[0]);
     }
+    */
 }
 
 void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* ExtendedController)
@@ -400,6 +402,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled)
 {
+    /*
     AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
     if (!ExtendedController)
     {
@@ -474,6 +477,8 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     }
 
     ExtendedController->LeftClickIsPressed = false; // Reset the pressed state
+
+    */
 }
 void ARLAgent::AddWorkerToResource(EResourceType ResourceType, int TeamId)
 {
