@@ -147,6 +147,12 @@ public:
 	float BuildTime = 5.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AvailableResourceAmount = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MaxAvailableResourceAmount = AvailableResourceAmount;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildZOffset = 200.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -183,4 +189,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	FRotator ServerMeshRotationBuilding = FRotator (0.f, -90.f, 0.f);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SetScale(FVector NewScale);
 };

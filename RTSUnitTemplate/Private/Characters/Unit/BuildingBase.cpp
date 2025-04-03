@@ -120,37 +120,41 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
 
-	if (NewResourcePlace)
+	if (IsValid(NewResourcePlace))
 	{
-		if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+		if(IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
-		else if(!UnitBase->ResourcePlace)
+		else if(!IsValid(UnitBase->ResourcePlace))
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
 		UnitBase->ResourcePlace = NewResourcePlace;
 	}
-	else if (!UnitBase->ResourcePlace)
+	else if (!IsValid(UnitBase->ResourcePlace))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No suitable work area found for unit, try recursion %s (Team %d)"), *UnitBase->GetName(), UnitBase->TeamId);
-
 		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
 		
 		if (NewResourcePlace)
 		{
-			if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+			if(IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
 			{
 				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
 				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 			}
-			else if(!UnitBase->ResourcePlace)
+			else if(!IsValid(UnitBase->ResourcePlace))
 			{
 				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 			}
 			UnitBase->ResourcePlace = NewResourcePlace;
+		}else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("No WorkAreas, set to Idle!"));
+			UnitBase->SetUEPathfinding = true;
+			UnitBase->SetUnitState(UnitData::Idle);
+			return;
 		}
 	}
 
@@ -160,6 +164,7 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 
 bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
+
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(UnitBase);
 
 	if (BuildAreas.Num() > 3) BuildAreas.SetNum(3);

@@ -52,19 +52,22 @@ AWorkArea::AWorkArea()
 
 	//SceneRoot->SetVisibility(false, true);
 	
-	if (HasAuthority())
-	{
+	//if (HasAuthority())
+	//{
 		bReplicates = true;
+		bAlwaysRelevant = true;
 		//SetReplicateMovement(true);
-	}
+	//}
 
-	Mesh->SetIsReplicated(false);
+	Mesh->SetIsReplicated(true); // was false
+	MaxAvailableResourceAmount = AvailableResourceAmount;
 }
 
 // Called when the game starts or when spawned
 void AWorkArea::BeginPlay()
 {
 	Super::BeginPlay();
+	MaxAvailableResourceAmount = AvailableResourceAmount;
 	SetReplicateMovement(true);
 }
 
@@ -420,5 +423,10 @@ void AWorkArea::DespawnWorkResource(AWorkResource* WorkResource)
 		WorkResource = nullptr;
 		//WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	}
+}
+
+void AWorkArea::Multicast_SetScale_Implementation(FVector NewScale)
+{
+	SetActorScale3D(NewScale);
 }
 

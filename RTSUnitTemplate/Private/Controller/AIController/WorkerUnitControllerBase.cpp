@@ -244,7 +244,15 @@ void AWorkerUnitControllerBase::IdleWorker(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->SetUnitState(UnitData::Chase);
 	}else if(!UnitBase->IsOnPlattform)
 	{
-		if(UnitBase->UnitControlTimer > IdleTime) UnitBase->SetUnitState(UnitData::GoToBase);
+		if(UnitBase->UnitControlTimer > IdleTime)
+		{
+			if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode))
+			{
+				TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
+				if (WorkPlaces.Num() > 0)
+					UnitBase->SetUnitState(UnitData::GoToBase);
+			}
+		}
 	}
 }
 
@@ -305,9 +313,11 @@ void AWorkerUnitControllerBase::EvasionWorker(AUnitBase* UnitBase, FVector Colli
 
 void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if(!UnitBase || !UnitBase->ResourcePlace) return;
-
-	//DetectUnits(UnitBase, DeltaSeconds, false);
+	if(!UnitBase || !IsValid(UnitBase->ResourcePlace))
+	{
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		return;
+	}
 	
 	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 	if(UnitBase->CollisionUnit && UnitBase->CollisionUnit->TeamId == UnitBase->TeamId && UnitBase->CollisionUnit->GetUnitState() != UnitData::Dead)
@@ -367,7 +377,11 @@ FVector AWorkerUnitControllerBase::GetGroundLocationAndIgnore(const FVector& Ori
 
 void AWorkerUnitControllerBase::ResourceExtraction(AUnitBase* UnitBase, float DeltaSeconds)
 {
-	if(!UnitBase || !UnitBase->ResourcePlace) return;
+	if(!UnitBase || !IsValid(UnitBase->ResourcePlace))
+	{
+		UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
+		return;
+	}
 
 	//DetectUnits(UnitBase, DeltaSeconds, false);
 	
@@ -694,9 +708,15 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 	
 	if (MyWorkResource != nullptr)
 	{
-		if(ActorToLockOn)
+
+		if (!ActorToLockOn || !ActorToLockOn->ResourcePlace || !ActorToLockOn->ResourcePlace->Mesh)
 		{
+			return;
+		}
+		
 			if(ActorToLockOn->WorkResource) ActorToLockOn->WorkResource->Destroy(true);
+		
+	
 			//MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
 			MyWorkResource->IsAttached = true;
 			MyWorkResource->ResourceType = ResourceType;
@@ -705,9 +725,37 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 			
 			ActorToLockOn->WorkResource = MyWorkResource;
 
-
 			
-			/// Attack Socket with Delay //////////////
+			ActorToLockOn->ResourcePlace->AvailableResourceAmount = ActorToLockOn->ResourcePlace->AvailableResourceAmount - ActorToLockOn->WorkResource->Amount;
+
+			if (ActorToLockOn->ResourcePlace->AvailableResourceAmount == 0.f)
+			{
+				ActorToLockOn->ResourcePlace->Destroy(true);
+				ActorToLockOn->ResourcePlace = nullptr;
+			}else
+			{
+				// Retrieve the available and maximum resource amounts
+				float Available = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
+				float MaxAvailable = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
+
+				// Default scale if MaxAvailable is zero
+				float NewScale = 0.4f;
+
+				if (!FMath::IsNearlyZero(MaxAvailable))
+				{
+					// Compute the ratio and clamp it between 0.0 and 1.0 for safety
+					float Ratio = FMath::Clamp(Available / MaxAvailable, 0.0f, 1.0f);
+
+					// Linear interpolation: scale will be 0.4 when Ratio is 0 and 1.0 when Ratio is 1
+					NewScale = 0.4f + Ratio * (1.0f - 0.4f);
+				}
+			
+				// Set the mesh's uniform scale using the computed linear scale
+				ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
+			}
+
+	
+			/// Attach Socket with Delay //////////////
 			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, false);
 			FName SocketName = FName("ResourceSocket");
 			
@@ -723,7 +771,7 @@ void AWorkerUnitControllerBase::SpawnWorkResource(EResourceType ResourceType, FV
 			};
 
 			AttachWorkResource();
-		}
+		
 	}
 	
 }

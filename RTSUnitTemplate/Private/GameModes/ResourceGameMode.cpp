@@ -232,7 +232,7 @@ ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Work
 
 	for (ABuildingBase* Base : Bases)
 	{
-		if (Worker->TeamId == Base->TeamId)
+		if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
 		{
 			float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
 			if (DistanceSquared < MinDistanceSquared)
@@ -266,6 +266,13 @@ AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const
 
 TArray<AWorkArea*> AResourceGameMode::GetFiveClosestResourcePlaces(AWorkingUnitBase* Worker)
 {
+	WorkAreaGroups.PrimaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.SecondaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.TertiaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.RareAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.EpicAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.LegendaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	
 	TArray<AWorkArea*> AllAreas;
 	// Combine all resource areas into a single array for simplicity
 	AllAreas.Append(WorkAreaGroups.PrimaryAreas);
@@ -330,6 +337,9 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBase(AWorkingUnitBase* Worker)
 
 TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Worker)
 {
+	// Clean up all arrays in WorkAreaGroups to remove invalid pointers
+	WorkAreaGroups.BuildAreas.RemoveAll([](const AWorkArea* Area) { return !IsValid(Area); });
+    
 	TArray<AWorkArea*> AllAreas;
 	// Combine all resource areas into a single array for simplicity
 	AllAreas.Append(WorkAreaGroups.BuildAreas);
@@ -422,6 +432,14 @@ float AResourceGameMode::GetResource(int TeamId, EResourceType RType)
 
 TArray<AWorkArea*> AResourceGameMode::GetClosestResourcePlaces(AWorkingUnitBase* Worker)
 {
+	// Clean up all arrays in WorkAreaGroups to remove invalid pointers
+	WorkAreaGroups.PrimaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.SecondaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.TertiaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.RareAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.EpicAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.LegendaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+    
 	TArray<AWorkArea*> AllAreas;
 	// Combine all resource areas into a single array for simplicity
 	AllAreas.Append(WorkAreaGroups.PrimaryAreas);

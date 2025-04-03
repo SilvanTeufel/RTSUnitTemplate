@@ -3,6 +3,7 @@
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 
+#include "EngineUtils.h"
 #include "GameplayTagsManager.h"
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
@@ -399,7 +400,11 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
 
     FHitResult HitResult;
     FCollisionQueryParams TraceParams(FName(TEXT("WorkAreaGroundTrace")), true, DraggedArea);
-    TraceParams.AddIgnoredActor(DraggedArea);
+    //TraceParams.AddIgnoredActor(DraggedArea);
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		TraceParams.AddIgnoredActor(*It);
+	}
 
     if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, TraceParams))
     {
@@ -640,8 +645,14 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     FHitResult HitResult;
     FCollisionQueryParams CollisionParams;
     CollisionParams.bTraceComplex = true;
-    CollisionParams.AddIgnoredActor(DraggedWorkArea);
+    //CollisionParams.AddIgnoredActor(DraggedWorkArea);
 
+	// Ignore all actors of class AWorkArea
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		CollisionParams.AddIgnoredActor(*It);
+	}
+	
     bool bHit = GetWorld()->LineTraceSingleByChannel(
         HitResult,
         Start,
@@ -713,7 +724,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
                     if (OverlappedWorkArea || OverlappedBuilding)
                     {
-
+						bool StopLoop = false;
                     	UStaticMeshComponent* OverlappedMesh = nullptr;
                     	if (OverlappedBuilding)
                     	{
@@ -725,6 +736,15 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     		if(OverlappedWorkArea->IsNoBuildZone)
                     		{
                     			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			//break;
+                    		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
+                    			OverlappedWorkArea->Type == WorkAreaData::Secondary ||
+                    			OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
+                    			OverlappedWorkArea->Type == WorkAreaData::Rare ||
+                    			OverlappedWorkArea->Type == WorkAreaData::Epic ||
+                    			OverlappedWorkArea->Type == WorkAreaData::Legendary)
+                    		{
+                    			break;
                     		}
                     	}
                     	if (!OverlappedMesh)
@@ -737,6 +757,8 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     		// If there's no mesh on this overlapped actor, skip to the next actor
                     		continue;
                     	}
+
+				
                     	
                     	FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
                     	FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
@@ -1131,7 +1153,8 @@ bool AExtendedControllerBase::DropWorkArea()
 			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
 			{
 				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
-				if (NoBuildZone && NoBuildZone->IsNoBuildZone) IsNoBuildZone = NoBuildZone->IsNoBuildZone;
+				if (NoBuildZone && NoBuildZone->IsNoBuildZone == true) IsNoBuildZone = NoBuildZone->IsNoBuildZone;
+				
 				bIsOverlappingWithValidArea = true;
 				break;
 			}
