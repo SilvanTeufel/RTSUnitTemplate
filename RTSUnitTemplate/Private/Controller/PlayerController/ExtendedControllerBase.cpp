@@ -736,7 +736,7 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     		if(OverlappedWorkArea->IsNoBuildZone)
                     		{
                     			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
-                    			//break;
+                    			break;
                     		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
                     			OverlappedWorkArea->Type == WorkAreaData::Secondary ||
                     			OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
@@ -911,6 +911,20 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
                     	else if (OverlappedWorkArea)
                     	{
                     		OverlappedMesh = OverlappedWorkArea->Mesh;
+                    		
+                    		if(OverlappedWorkArea->IsNoBuildZone)
+                    		{
+                    			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			break;
+                    		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
+								OverlappedWorkArea->Type == WorkAreaData::Secondary ||
+								OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
+								OverlappedWorkArea->Type == WorkAreaData::Rare ||
+								OverlappedWorkArea->Type == WorkAreaData::Epic ||
+								OverlappedWorkArea->Type == WorkAreaData::Legendary)
+                    		{
+                    			break;
+                    		}
                     	}
                     	if (!OverlappedMesh)
                     	{
@@ -1168,8 +1182,21 @@ bool AExtendedControllerBase::DropWorkArea()
 				UGameplayStatics::PlaySound2D(this, DropWorkAreaFailedSound);
 			}
 			
+			/*
+			if (RTSGameMode)
+			{
+				// Cast to your custom game mode class.
+				AResourceGameMode* MyGameMode = Cast<AResourceGameMode>(RTSGameMode);
+				if (MyGameMode)
+				{
+					// Use ModifyResource to adjust the resource amount.
+					// Here we refund the construction cost to the ability's team.
+					MyGameMode->ModifyResourceCCost(SelectedUnits[0]->CurrentDraggedWorkArea->ConstructionCost, SelectedUnits[0]->TeamId);
+				}
+			}*/
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			SelectedUnits[0]->BuildArea = nullptr;
+
 			CancelCurrentAbility(SelectedUnits[0]);
 			SendWorkerToBase(SelectedUnits[0]);
 			return true;
@@ -1336,8 +1363,9 @@ void AExtendedControllerBase::LeftClickPressed()
 				int32 Row = i / GridSize;     // Row index
 				int32 Col = i % GridSize;     // Column index
 				
-				const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
-			
+				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+				RunLocation = TraceRunLocation(RunLocation);
+				
 				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 				{
 					// Do Nothing

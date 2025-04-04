@@ -370,7 +370,7 @@ public:
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, AWaypoint* Waypoint, int UnitCount = 1, bool SummonContinuously = true);
+		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);

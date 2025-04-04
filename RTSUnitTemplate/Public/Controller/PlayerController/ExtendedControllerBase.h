@@ -138,10 +138,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
 	bool WorkAreaIsSnapped = false;
 	
-	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapGap = 50.f;
 
-	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapDistance = 100.f;
 	
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)

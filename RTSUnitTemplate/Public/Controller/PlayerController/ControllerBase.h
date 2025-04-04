@@ -172,6 +172,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawDebugCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector TraceRunLocation(FVector RunLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypoints(FHitResult Hit);

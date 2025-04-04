@@ -1338,6 +1338,17 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
 	QueryParams.AddIgnoredActor(Unit->UnitToChase);
+
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		QueryParams.AddIgnoredActor(*It);
+	}
+
+	// Add all AUnitBase actors to the ignore list.
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		QueryParams.AddIgnoredActor(*It);
+	}
 	
     bool bHit = GetWorld()->LineTraceSingleByChannel(
         HitResult,

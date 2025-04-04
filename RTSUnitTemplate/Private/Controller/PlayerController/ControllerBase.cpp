@@ -6,6 +6,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Core/UnitData.h"
 #include "AIController.h"
+#include "EngineUtils.h"
 #include "Landscape.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
@@ -634,6 +635,7 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	PlayWaypointSound = true;
 	
 	NewWPLocation.Z += RelocateWaypointZOffset;
+	
 	if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
 	{
 		if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
@@ -718,6 +720,39 @@ void AControllerBase::DrawDebugCircleAtLocation(UWorld* World, const FVector& Lo
 	);
 }
 
+FVector AControllerBase::TraceRunLocation(FVector RunLocation)
+{
+	// Setup trace start and end positions (adjust as needed).
+	FVector TraceStart = RunLocation + FVector(0, 0, 1000);
+	FVector TraceEnd = RunLocation - FVector(0, 0, 1000);
+
+	FCollisionQueryParams QueryParams;
+	// Ignore the building actor itself.
+	
+
+	// Add all AWorkArea actors to the ignore list.
+
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		QueryParams.AddIgnoredActor(*It);
+	}
+
+	// Add all AUnitBase actors to the ignore list.
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		QueryParams.AddIgnoredActor(*It);
+	}
+
+	FHitResult HitResult;
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+	{
+		// Set NewWPLocation to the impact point from the trace.
+		RunLocation = HitResult.ImpactPoint;
+	}
+
+	return RunLocation;
+}
+
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
 	int32 NumUnits = SelectedUnits.Num();
@@ -737,7 +772,9 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			int32 Col = i % GridSize;     // Column index
 
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-			const FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+			FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+
+			RunLocation = TraceRunLocation(RunLocation);
 			
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{

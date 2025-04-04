@@ -238,10 +238,12 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
             {
                 SwitchControllerStateMachine(InputActionValue, NewCameraState);
-               
-                ExtendedController->SetWorkArea(GetActorLocation());
-                ExtendedController->DropWorkArea();
-                
+
+                if (ActionName.StartsWith("switch_camera_state_ability"))
+                {
+                    ExtendedController->SetWorkArea(GetActorLocation());
+                    ExtendedController->DropWorkArea();
+                }
             }
             else if (ActionName == "left_click")
             {
@@ -360,8 +362,8 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 			int32 Col = i % GridSize;     // Column index
 
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-			const FVector RunLocation = Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
-			
+			FVector RunLocation = Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
+		    RunLocation = ExtendedController->TraceRunLocation(RunLocation);
 			if(ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
 				//PlayWaypointSound = true;
@@ -438,8 +440,8 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 int32 Row = i / GridSize;     // Row index
                 int32 Col = i % GridSize;     // Column index
 
-                const FVector RunLocation = HitResult.Location + ExtendedController->CalculateGridOffset(Row, Col);
-
+                FVector RunLocation = HitResult.Location + ExtendedController->CalculateGridOffset(Row, Col);
+                RunLocation = ExtendedController->TraceRunLocation(RunLocation);
                 if (ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
                 {
                     // Do Nothing

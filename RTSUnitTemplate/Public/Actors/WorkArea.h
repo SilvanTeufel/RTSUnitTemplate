@@ -147,7 +147,7 @@ public:
 	float BuildTime = 5.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float AvailableResourceAmount = 50.f;
+	float AvailableResourceAmount = 200.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxAvailableResourceAmount = AvailableResourceAmount;

@@ -15,6 +15,7 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/ActorChannel.h"
+#include "GameModes/ResourceGameMode.h"
 
 
 // Called when the game starts or when spawned
@@ -494,6 +495,21 @@ void AGASUnit::CancelCurrentAbility()
 			{
 				CurrentDraggedAbilityIndicator->Destroy(true, true);
 			}
+
+			/*
+			// Retrieve the game mode.
+			AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(this);
+			if (GameModeBase)
+			{
+				// Cast to your custom game mode class.
+				AResourceGameMode* MyGameMode = Cast<AResourceGameMode>(GameModeBase);
+				if (MyGameMode)
+				{
+					// Use ModifyResource to adjust the resource amount.
+					// Here we refund the construction cost to the ability's team.
+					MyGameMode->ModifyResourceCCost(ActivatedAbilityInstance->ConstructionCost, TeamId);
+				}
+			}*/
 			
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
