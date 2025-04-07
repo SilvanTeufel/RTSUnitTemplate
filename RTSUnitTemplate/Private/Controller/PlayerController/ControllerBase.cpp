@@ -953,7 +953,6 @@ void AControllerBase::JumpCamera()
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		CameraBase->JumpCamera(Hit);
-
 	}
 }
 

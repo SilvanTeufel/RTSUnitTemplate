@@ -1468,6 +1468,12 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Pathfinding failed. Reason: %s"), 
 			*UEnum::GetValueAsString(PathResult.Result));
+		
+		if (PathResult.Result == ENavigationQueryResult::Error) 
+		{
+			Unit->SetUnitState(UnitData::Idle);
+			return false;
+		}
 		DirectMoveToLocation(Unit, DestinationLocation);
 		return false;
 	}

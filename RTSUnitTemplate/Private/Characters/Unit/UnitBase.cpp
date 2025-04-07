@@ -668,6 +668,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
 
 bool AUnitBase::SetNextUnitToChase()
 {
+	// Entferne alle Einheiten, die ungültig, tot oder außerhalb der Sichtweite sind.
+	UnitsToChase.RemoveAll([this](const AUnitBase* Unit) -> bool {
+		return !IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > SightRadius;
+	});
 	
 	if (UnitsToChase.IsEmpty()) return false;
     
@@ -686,11 +690,6 @@ bool AUnitBase::SetNextUnitToChase()
 			}
 		}
 	}
-
-	// Remove dead units in-place using the RemoveAll function which is more efficient.
-	UnitsToChase.RemoveAll([](const AUnitBase* Unit) -> bool {
-		return !Unit || Unit->GetUnitState() == UnitData::Dead;
-	});
 
 	// Set the closest living unit as the target, if any.
 	if (ClosestUnit)
