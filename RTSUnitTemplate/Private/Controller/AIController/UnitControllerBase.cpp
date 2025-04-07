@@ -19,6 +19,8 @@
 #include "GameModes/RTSGameModeBase.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "CrowdManagerBase.h"
+#include "NavModifierVolume.h"
+#include "NavAreas/NavArea_Null.h"
 #include "Navigation/CrowdAgentInterface.h"
 #include "Navigation/CrowdManager.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -1338,6 +1340,7 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
 	QueryParams.AddIgnoredActor(Unit->UnitToChase);
+	QueryParams.bTraceComplex = true;
 
 	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
 	{
@@ -1354,10 +1357,24 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
         HitResult,
         StartLocation,
         EndLocation,
-        ECC_Pawn, // Trace against pawns only
+        ECC_Visibility, // Trace against pawns only
         QueryParams
     );
 
+	if (bHit && HitResult.GetActor())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Hit actor: %s"), *HitResult.GetActor()->GetName());
+		ANavModifierVolume* NavModifierVolume = Cast<ANavModifierVolume>(HitResult.GetActor());
+		if (NavModifierVolume)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Successfully hit a NavModifierVolume"));
+			return false;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Hit actor is not a NavModifierVolume"));
+		}
+	}
 	// Draw the line trace for visualization
 	//FColor TraceColor = bHit ? FColor::Red : FColor::Green;
 	//DrawDebugLine(GetWorld(), StartLocation, EndLocation, TraceColor, false, 2.0f, 0, 1.0f);
@@ -1391,6 +1408,8 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 {
 	
 	// Do a LineTrace here and just do a Regular Move if it succe
+	//
+	/*
 	FHitResult HitResult;
 	if (!PerformLineTrace(Unit, DestinationLocation,  HitResult))
 	{
@@ -1398,7 +1417,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 		// A Walk without Navigation System
 		return true;
 	}
-	
+	*/
 	
 	//UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
 	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
@@ -1406,6 +1425,12 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 		return false;
 	}
 
+	if (Unit->IsFlying)
+	{
+		DirectMoveToLocation(Unit, DestinationLocation);
+		return true;
+	}
+	
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)
 	{
@@ -1413,6 +1438,8 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 		return false;
 	}
 
+	// Proceed with Pathfinding...
+	
 	// Configure the move request
 	FAIMoveRequest MoveRequest(DestinationLocation);
 	MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
