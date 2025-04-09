@@ -564,6 +564,68 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 	SetActorLocation(NewPawnLocation);
 }
 
+/*
+void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
+{
+    // Calculate movement direction based on the camera's yaw.
+    const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180);
+    const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180);
+    const FVector NewPawnLocation = FVector(0.3f * CosYaw, 0.3f * SinYaw, 0);
+
+    // Accelerate the camera's speed until it reaches the maximum speed,
+    // or decelerate it if required.
+    if (!Decelerate && CurrentCamSpeed.X < CamSpeed)
+    {
+        CurrentCamSpeed.X += AccelerationRate * DeltaTime;
+        CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
+    }
+    else if (Decelerate && CurrentCamSpeed.X > 0.f)
+    {
+        CurrentCamSpeed.X -= DecelerationRate * DeltaTime;
+        CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
+    }
+    else if (Decelerate)
+    {
+        CurrentCamSpeed.X = 0.f;
+    }
+
+    // Calculate the proposed new location based on current speed.
+    FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
+
+    // Perform a line trace to get the correct Z location.
+    // Define start and end for the trace - here we use 1000 units above and below.
+    const float TraceVerticalRange = 3000.f;
+    const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
+    const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+
+    FHitResult HitResult;
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+
+    bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+    if (bHit)
+    {
+        // If the camera's proposed Z is lower than the hit location's Z, update it.
+        if (ProposedLocation.Z < HitResult.Location.Z)
+        {
+            // Optionally you may add an extra offset if needed.
+            ProposedLocation.Z = HitResult.Location.Z;
+        }
+    }
+
+    // Check if the proposed location is within the defined horizontal bounds.
+    if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
+        ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
+    {
+        // Out of bounds: move the camera in the opposite direction as a corrective measure.
+        AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime * -5.f);
+        return;
+    }
+
+    // Finally, move the actor to the new, possibly adjusted, location.
+    // You could use either SetActorLocation or continue using AddActorWorldOffset:
+    SetActorLocation(ProposedLocation);
+}*/
 
 void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 {
@@ -589,6 +651,27 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 	// Calculate the proposed new location.
 	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
 
+	// Perform a line trace to get the correct Z location.
+	// Define start and end for the trace - here we use 1000 units above and below.
+	const float TraceVerticalRange = 3000.f;
+	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
+	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	if (bHit)
+	{
+		// If the camera's proposed Z is lower than the hit location's Z, update it.
+		if (ProposedLocation.Z < HitResult.Location.Z)
+		{
+			// Optionally you may add an extra offset if needed.
+			ProposedLocation.Z = HitResult.Location.Z+10.f;
+		}
+	}
+	
 	// Check if the proposed location is within the set limits.
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
@@ -598,7 +681,8 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 		return;
 	}
 	
-	AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
+	SetActorLocation(ProposedLocation);
+	//AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
 }
 
 void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
@@ -621,18 +705,38 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 	{
 		CurrentCamSpeed.X = 0.f;
 	}
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.X * DeltaTime);
 
+	// Perform a line trace to get the correct Z location.
+	// Define start and end for the trace - here we use 1000 units above and below.
+	const float TraceVerticalRange = 3000.f;
+	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
+	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	if (bHit)
+	{
+		// If the camera's proposed Z is lower than the hit location's Z, update it.
+		if (ProposedLocation.Z < HitResult.Location.Z)
+		{
+			// Optionally you may add an extra offset if needed.
+			ProposedLocation.Z = HitResult.Location.Z+10.f;
+		}
+	}
+	
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
-		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime*-(2.f));
+		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime*-(5.f));
 		return;
 	}
 	
-	
-	AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime);
-	//AddActorWorldOffset(NewPawnLocation * CamSpeed);
+	SetActorLocation(ProposedLocation);
+	//AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime);
 }
 
 void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
@@ -659,14 +763,36 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 
 	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
 
+	// Perform a line trace to get the correct Z location.
+	// Define start and end for the trace - here we use 1000 units above and below.
+	const float TraceVerticalRange = 3000.f;
+	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
+	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	if (bHit)
+	{
+		// If the camera's proposed Z is lower than the hit location's Z, update it.
+		if (ProposedLocation.Z < HitResult.Location.Z)
+		{
+			// Optionally you may add an extra offset if needed.
+			ProposedLocation.Z = HitResult.Location.Z+10.f;
+		}
+	}
+	
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
-		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime*-(2.f));
+		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime*-(5.f));
 		return;
 	}
 
-	AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime);
+	SetActorLocation(ProposedLocation);
+	//AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime);
 }
 
 void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
@@ -690,14 +816,36 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 		CurrentCamSpeed.Y = 0.f;
 	}
 
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
+	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
 
+	// Perform a line trace to get the correct Z location.
+	// Define start and end for the trace - here we use 1000 units above and below.
+	const float TraceVerticalRange = 3000.f;
+	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
+	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	if (bHit)
+	{
+		// If the camera's proposed Z is lower than the hit location's Z, update it.
+		if (ProposedLocation.Z < HitResult.Location.Z)
+		{
+			// Optionally you may add an extra offset if needed.
+			ProposedLocation.Z = HitResult.Location.Z+10.f;
+		}
+	}
+	
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
 		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
 	{
-		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime*-(2.f));
+		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime*-(5.f));
 		return;
 	}
-	
-	AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
+
+	SetActorLocation(ProposedLocation);
+	//AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
 }

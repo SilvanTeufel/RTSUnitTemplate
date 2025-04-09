@@ -62,7 +62,7 @@ void ABuildingControllerBase::BuildingControlStateMachine(AUnitBase* UnitBase, f
 		case UnitData::Idle:
 		{
 			//if(UnitBase->TeamId == 2)UE_LOG(LogTemp, Warning, TEXT("Idle"));
-			if(UnitBase->SetNextUnitToChase())
+			if(UnitBase->SetNextUnitToChase() && UnitBase->CanAttack)
 			{
 					
 				UnitBase->SetUnitState(UnitData::Chase);

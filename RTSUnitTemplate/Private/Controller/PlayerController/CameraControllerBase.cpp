@@ -345,6 +345,21 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				
 				if(AIsPressedState || DIsPressedState || WIsPressedState || SIsPressedState) CameraBase->SetCameraState(CameraData::MoveWASD);
 				else if(LockCameraToCharacter) CameraBase->SetCameraState(CameraData::LockOnCharacter);
+
+
+				// Sanity check that we have at least one "SelectedUnit"
+				if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
+				{
+					return;
+				}
+
+				AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
+				if (!DraggedWorkArea)
+				{
+					return;
+				}
+				
+				CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
 			}
 			break;
 		case CameraData::MoveWASD:
@@ -376,7 +391,20 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					{
 						CameraBase->SetCameraState(CameraData::UseScreenEdges);
 					}
-			
+
+				// Sanity check that we have at least one "SelectedUnit"
+				if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
+				{
+					return;
+				}
+
+				AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
+				if (!DraggedWorkArea)
+				{
+					return;
+				}
+				
+				CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
 
 		
 			}

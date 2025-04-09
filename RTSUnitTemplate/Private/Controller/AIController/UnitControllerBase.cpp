@@ -1005,7 +1005,7 @@ void AUnitControllerBase::Idle(AUnitBase* UnitBase, float DeltaSeconds)
 		UnitBase->SetUnitState(UnitData::Evasion);
 	}
 
-	if(UnitBase->SetNextUnitToChase() && !UnitBase->IsOnPlattform)
+	if(UnitBase->SetNextUnitToChase() && !UnitBase->IsOnPlattform && UnitBase->CanAttack)
 	{
 			UnitBase->SetUnitState(UnitData::Chase);
 	}else if(!UnitBase->IsOnPlattform)
@@ -1096,7 +1096,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	
 	if(UnitBase->GetToggleUnitDetection())
 	{
-		if(UnitBase->SetNextUnitToChase())
+		if(UnitBase->SetNextUnitToChase() && UnitBase->CanAttack)
 		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->UnitStatePlaceholder = UnitData::Run;
