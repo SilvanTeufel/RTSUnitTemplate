@@ -6,6 +6,7 @@
 //#include "PathSeekerBase.h"
 #include "Actors/AbilityIndicator.h"
 #include "GameFramework/Character.h"
+#include "Characters/Mass/MassActorBindingComponent.h"
 #include "Actors/Pickup.h"
 #include "Engine/World.h"
 #include "SpawnerUnit.generated.h"
@@ -34,7 +35,11 @@ UCLASS()
 class RTSUNITTEMPLATE_API ASpawnerUnit : public ACharacter
 {
 	GENERATED_BODY()
+	
 public:
+
+	ASpawnerUnit(const FObjectInitializer& ObjectInitializer);
+	
 	virtual void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
@@ -74,4 +79,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=Ability)
 	void DespawnCurrentAbilityIndicator();
+
+
+	// The Mass Actor Binding Component
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
+	UMassActorBindingComponent* MassActorBindingComponent;
 };

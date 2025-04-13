@@ -10,6 +10,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameplayEffect.h"
 #include "Characters/Unit/SpeakingUnit.h"
+#include "Controller/AIController/UnitMovementManager.h"
 #include "Developer/GraphColor/Private/appconst.h"
 #include "RTSGameModeBase.generated.h"
 
@@ -153,4 +154,16 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <ASpeakingUnit*> SpeakingUnits;
+
+	/*
+	// Getter for the movement manager
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	UUnitMovementManager* GetUnitMovementManager() const { return UnitMovementManager; }
+
+protected:
+	// The global movement manager instance
+	UPROPERTY()
+	UUnitMovementManager* UnitMovementManager;
+
+	*/
 };

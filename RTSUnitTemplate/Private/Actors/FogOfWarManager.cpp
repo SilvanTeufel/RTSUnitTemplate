@@ -56,12 +56,13 @@ void AFogOfWarManager::CheckForCollisions()
     }
 }
 
-
+/*
 void AFogOfWarManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
     
 }
+*/
 
 
 void AFogOfWarManager::AddUnitToChase(AActor* OtherActor)
@@ -144,7 +145,7 @@ void AFogOfWarManager::HandleBeginOverlapDetection(AActor* OtherActor)
 void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     HandleBeginOverlapDetection(OtherActor);
-    AddUnitToChase(OtherActor);
+   // AddUnitToChase(OtherActor);
 }
 
 

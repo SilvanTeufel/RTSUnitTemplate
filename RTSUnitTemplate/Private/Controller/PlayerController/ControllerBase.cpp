@@ -84,6 +84,16 @@ void AControllerBase::DisplayUnitCount()
 	{
 		int UnitCount = RTSGameMode->AllUnits.Num();
 		UE_LOG(LogTemp, Warning, TEXT("UnitCount: %d"), UnitCount);
+
+		        // Display the message on screen:
+                if (GEngine)
+                {
+                    // The first parameter (-1) creates a new message key.
+                    // The second parameter (5.f) is the duration in seconds that the message stays on screen.
+                    // The third parameter defines the text color.
+                    // The last parameter is the message string, formatted to include the unit count.
+                    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("UnitCount: %d"), UnitCount));
+                }
 	}
 
 }

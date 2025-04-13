@@ -67,21 +67,36 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float Max
 	//SetActorLocation(GetActorLocation());
 }
 
-void AAbilityUnit::StartAcceleratingTowardsDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart)
-{
-	if (GetUnitState() == UnitData::Dead && FVector::Dist(GetActorLocation(), ChargeDestination) >= RequiredDistanceToStart && FVector::Dist(GetActorLocation(), ChargeDestination) <= Attributes->Range.GetCurrentValue())
-		return;
-	
-	ChargeDestination = NewDestination;
-	TargetVelocity = NewTargetVelocity;
-	AccelerationRate = NewAccelerationRate;
-	RequiredDistanceToStart = NewRequiredDistanceToStart;
-	CurrentVelocity = FVector::ZeroVector;
-	
-	// Start a repeating timer which calls the Accelerate function
-	GetWorld()->GetTimerManager().SetTimer(AccelerationTimerHandle, this, &AAbilityUnit::Accelerate, 0.1f, true);
-}
 
+void AAbilityUnit::StartAcceleratingTowardsDestination(const FVector& NewDestination, float NewAccelerationRate, float NewRequiredDistanceToStart)
+{
+	// Don't initiate a charge if the unit is dead.
+	if (GetUnitState() == UnitData::Dead)
+	{
+		return;
+	}
+    
+	// Compute the current distance to the destination.
+	const FVector CurrentLocation = GetActorLocation();
+	const float DistanceToTarget = FVector::Dist(CurrentLocation, NewDestination);
+    
+	// If already close enough, abort the charge.
+	if (DistanceToTarget <= NewRequiredDistanceToStart)
+	{
+		return;
+	}
+    
+	// Compute the direction to the destination.
+	const FVector Direction = (NewDestination - CurrentLocation).GetSafeNormal();
+	
+	// Here we use LaunchCharacter to give the unit an instantaneous impulse.
+	// The impulse magnitude is based on the provided acceleration rate.
+	// The second and third parameters ensure our launch overrides any existing velocity in the XY and Z axes.
+	LaunchCharacter(Direction * NewAccelerationRate, true, false);
+
+	// Optionally, if you need to use NewTargetVelocity at some point (for example, to set a maximum speed),
+	// you can consider blending that in based on your game design.
+}
 void AAbilityUnit::Accelerate()
 {
 	if (GetUnitState() == UnitData::Dead)

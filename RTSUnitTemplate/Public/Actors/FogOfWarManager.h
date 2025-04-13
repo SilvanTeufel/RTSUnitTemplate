@@ -25,7 +25,10 @@ protected:
 
 public:	
 	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+	//virtual void Tick(float DeltaTime) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FogOfWar")
+	TArray<AActor*> LastOverlappingActors;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckForCollisions();

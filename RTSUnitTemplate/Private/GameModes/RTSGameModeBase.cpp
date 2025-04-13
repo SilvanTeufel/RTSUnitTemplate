@@ -14,6 +14,7 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Controller/AIController/BuildingControllerBase.h"
+#include "Controller/AIController/UnitMovementManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
@@ -30,6 +31,8 @@ void ARTSGameModeBase::BeginPlay()
 
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+
+	//UnitMovementManager = UUnitMovementManager::GetInstance(GetWorld());
 }
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
@@ -259,7 +262,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		}
 	}
 
-	SpawnAIFogManager();
+	//SpawnAIFogManager();
 }
 
 void ARTSGameModeBase::SpawnAIFogManager()

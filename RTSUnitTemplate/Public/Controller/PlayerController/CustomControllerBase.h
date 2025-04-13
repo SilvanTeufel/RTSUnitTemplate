@@ -4,6 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+
+
+#include "MassEntitySubsystem.h"
+#include "MassExecutor.h"
+#include "MassCommandBuffer.h"
+#include "MassNavigationFragments.h"
+#include "MassMovementFragments.h"
+#include "Engine/World.h"        // Include for UWorld, GEngine
+#include "Engine/Engine.h"       // Include for GEngine
+
+
 #include "CustomControllerBase.generated.h"
 
 /**
@@ -33,5 +44,7 @@ public:
 	
 	UFUNCTION(Client, Reliable)
 	void AgentInit();
-	
+
+	//UFUNCTION()
+	//void CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed = 300.0f, float AcceptanceRadius = 50.0f);
 };

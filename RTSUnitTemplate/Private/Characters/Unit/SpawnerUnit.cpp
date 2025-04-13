@@ -5,6 +5,20 @@
 #include "Actors/AbilityIndicator.h"
 #include "Net/UnrealNetwork.h"
 
+ASpawnerUnit::ASpawnerUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
+{
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+	
+	// Create the Mass Actor Binding Component
+	MassActorBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassActorBindingComponent"));
+	if (MassActorBindingComponent)
+	{
+		// Attach it to the root component (optional, depending on your needs)
+		MassActorBindingComponent->SetupAttachment(RootComponent);
+	}
+}
+
 void ASpawnerUnit::BeginPlay()
 {
 	Super::BeginPlay();

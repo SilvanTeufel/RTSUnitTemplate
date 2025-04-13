@@ -2,11 +2,16 @@
 
 #include "Characters/Unit/PerformanceUnit.h"
 
+#include "MassCommonFragments.h"
+#include "MassEntitySubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Actors/FogOfWarCentralManager.h"
+#include "Characters/Mass/MassActorBindingComponent.h"
+#include "Characters/Mass/UnitMassTag.h"
 #include "Kismet/GameplayStatics.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -15,9 +20,28 @@
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
 
+#include "MassEntitySubsystem.h"
+#include "MassSpawnerSubsystem.h" // If using Mass Spawner
+#include "MassArchetypeTypes.h"
+#include "MassCommonFragments.h"
+#include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
+#include "MassEntityTypes.h"
+#include "Characters/Mass/UnitMassTag.h"
+
+#include "Engine/World.h"              // For UWorld, GetWorld()
+#include "GameFramework/Actor.h"         // For FActorSpawnParameters, SpawnActo
+
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
 	bReplicates = true;
+/*
+	// Create the binding component and attach it to the actor's root.
+	MassBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassBindingComponent"));
+	if(MassBindingComponent)
+	{
+		MassBindingComponent->SetupAttachment(RootComponent);
+	}*/
 }
 
 void APerformanceUnit::Tick(float DeltaTime)
@@ -72,6 +96,7 @@ void APerformanceUnit::BeginPlay()
 
 
 	SetOwningPlayerControllerAndSpawnFogManager();
+	
 }
 
 void APerformanceUnit::Destroyed()
@@ -167,6 +192,13 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 						{
 							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
 						}
+
+						
+						for (TActorIterator<AFogOfWarCentralManager> It(GetWorld()); It; ++It)
+						{
+							It->FogManagers.Add(SpawnedFogManager);
+							break;
+						}
 						
 					}
 	}
@@ -224,7 +256,12 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 						{
 							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
 						}
-						
+
+						for (TActorIterator<AFogOfWarCentralManager> It(GetWorld()); It; ++It)
+						{
+							It->FogManagers.Add(SpawnedFogManager);
+							break;
+						}
 					}
 	}
 	

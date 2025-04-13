@@ -412,7 +412,7 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 		// Zero out the Z component to restrict rotation to the XY plane
 		Direction.Z = 0;
 
-		if (!Direction.IsNearlyZero() && (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range) && (ActivatedAbilityInstance->ClickCount >= 1 || ActivatedAbilityInstance->RotateToMouseWithMouseEvent))
+		if (!Direction.IsNearlyZero() && (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range) && ActivatedAbilityInstance->ClickCount >= 1 && ActivatedAbilityInstance->RotateToMouseWithMouseEvent)
 		{
 			FRotator NewRotation = Direction.Rotation();
 		

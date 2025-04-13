@@ -245,7 +245,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     						}
 
     						UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
-    						UnitBase->SetUEPathfinding = true;
+    						//UnitBase->SetUEPathfinding = true;
     						SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
     					}
     

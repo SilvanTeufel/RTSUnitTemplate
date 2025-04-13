@@ -8,6 +8,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AIController.h"
+#include "Landscape.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "UnrealEngine.h"
@@ -661,14 +662,18 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
 		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		if (ProposedLocation.Z < HitResult.Location.Z)
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
-			// Optionally you may add an extra offset if needed.
-			ProposedLocation.Z = HitResult.Location.Z+10.f;
+			if (ProposedLocation.Z < HitResult.Location.Z)
+			{
+				// Optionally you may add an extra offset if needed.
+				ProposedLocation.Z = HitResult.Location.Z+10.f;
+			}
 		}
 	}
 	
@@ -717,14 +722,18 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
 		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		if (ProposedLocation.Z < HitResult.Location.Z)
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
-			// Optionally you may add an extra offset if needed.
-			ProposedLocation.Z = HitResult.Location.Z+10.f;
+			if (ProposedLocation.Z < HitResult.Location.Z)
+			{
+				// Optionally you may add an extra offset if needed.
+				ProposedLocation.Z = HitResult.Location.Z+10.f;
+			}
 		}
 	}
 	
@@ -773,14 +782,18 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
 		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		if (ProposedLocation.Z < HitResult.Location.Z)
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
-			// Optionally you may add an extra offset if needed.
-			ProposedLocation.Z = HitResult.Location.Z+10.f;
+			if (ProposedLocation.Z < HitResult.Location.Z)
+			{
+				// Optionally you may add an extra offset if needed.
+				ProposedLocation.Z = HitResult.Location.Z+10.f;
+			}
 		}
 	}
 	
@@ -828,15 +841,19 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
-		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		if (ProposedLocation.Z < HitResult.Location.Z)
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
-			// Optionally you may add an extra offset if needed.
-			ProposedLocation.Z = HitResult.Location.Z+10.f;
+			if (ProposedLocation.Z < HitResult.Location.Z)
+			{
+				// Optionally you may add an extra offset if needed.
+				ProposedLocation.Z = HitResult.Location.Z+10.f;
+			}
 		}
+
 	}
 	
 	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||

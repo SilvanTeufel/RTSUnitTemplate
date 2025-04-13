@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GASUnit.h"
 #include "LevelUnit.h"
+#include "MassEntityTypes.h"
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
@@ -83,18 +84,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void DestroyFogManager();
-	/*
-	FTimerHandle PlayerControllerRetryHandle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	float PlayerControllerMaxWaitTime = 60.0f;          // Maximum time to wait for the controller
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	float PlayerControllerRetryInterval = 5.f;        // Retry every 0.1 seconds
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	float PlayerControllerTimeWaited = 0.0f;           // Tracks total wait time
-*/
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void SetOwningPlayerControllerAndSpawnFogManager();
@@ -225,5 +215,4 @@ public:
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	APlayerController* OwningPlayerController;
-	
 };

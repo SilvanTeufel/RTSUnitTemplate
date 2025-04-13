@@ -44,7 +44,7 @@ private:
 	//FTimerHandle MoveRetryTimerHandle;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	bool DisableUnitControllerDetection = true;
+	bool DisableUnitControllerDetection = false;
 	
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	AUnitBase* PendingUnit = nullptr;
@@ -83,7 +83,7 @@ public:
 	bool RotateToUnitToChase = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TickInterval = 0.15f; 
+	float TickInterval = 0.25f; 
 	
 	virtual void BeginPlay() override;
 
@@ -166,7 +166,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void Casting(AUnitBase* UnitBase, float DeltaSeconds);
-
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Dead", Keywords = "RTSUnitTemplate Dead"), Category = RTSUnitTemplate)
 		bool IsUnitToChaseInRange(AUnitBase* UnitBase);
@@ -175,16 +174,16 @@ public:
 		void Dead(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float UnitDetectionTimer = 0.0f;
+		float UnitDetectionTimer = 0.0f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float NewDetectionTime = 3.f;
+		float NewDetectionTime = 3.f;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsUnitDetected = false;
+		bool IsUnitDetected = false;
 
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
-	void CheckUnitDetectionTimer(float DeltaSeconds);
+		void CheckUnitDetectionTimer(float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable,  Category = RTSUnitTemplate)
 		void DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight);
@@ -226,10 +225,10 @@ public:
 		void Idle(AUnitBase* UnitBase, float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, FVector CollisionLocation);
+		void EvasionChase(AUnitBase* UnitBase, float DeltaSeconds, FVector CollisionLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation);
+		void EvasionIdle(AUnitBase* UnitBase, FVector CollisionLocation);
 
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

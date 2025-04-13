@@ -323,8 +323,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 				
 				if(UnitBase->UEPathfindingUsed)
 					RunUEPathfinding(UnitBase, DeltaSeconds);
-				else
-					Run(UnitBase, DeltaSeconds);
+				//else
+					//Run(UnitBase, DeltaSeconds);
 			}
 		break;
 		case UnitData::Chase:
@@ -753,7 +753,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
 
             UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
             UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
-            UnitBase->SetUEPathfinding = true;
+           // UnitBase->SetUEPathfinding = true;
             SetUEPathfinding(UnitBase, DeltaSeconds, UnitToChaseLocation);
         }
 
@@ -1113,8 +1113,6 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		return;
 	}
 
-	UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
-
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
@@ -1122,12 +1120,9 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->SetUnitState(UnitData::Idle);
 		return;
 	}
-	
-	if(UnitBase->GetVelocity().X == 0.0f && UnitBase->GetVelocity().Y == 0.0f) UnitBase->SetUEPathfinding = true;
-	
-	if(!UnitBase->SetUEPathfinding) return;
 
 	SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->RunLocation);
+	
 }
 
 void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSeconds)
@@ -1317,8 +1312,7 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	if(!UnitBase->SetUEPathfinding)
 		return false;
 	
-	//if (ControllerBase)
-	//{
+
 		UnitBase->SetWalkSpeed(UnitBase->Attributes->GetRunSpeed());
 		// You can use the controller here
 
@@ -1326,9 +1320,6 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 		UnitBase->SetUEPathfinding = false;
 		if(UnitToIgnore) return MoveToLocationUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location, UnitToIgnore);
 		return MoveToLocationUEPathFindingAvoidance(UnitBase, Location); // MoveToLocationUEPathFinding(UnitBase, Location);
-	//}
-
-	
 }
 
 bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
@@ -1368,7 +1359,7 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
 		if (NavModifierVolume)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Successfully hit a NavModifierVolume"));
-			return false;
+			return true;
 		}
 		else
 		{
@@ -1403,10 +1394,9 @@ bool AUnitControllerBase::DirectMoveToLocation(AUnitBase* Unit, const FVector& D
 	return true;
 }
 
-
 bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, const FVector& DestinationLocation, AUnitBase* UnitToIgnore)
 {
-	
+
 	// Do a LineTrace here and just do a Regular Move if it succe
 	//
 	/*
@@ -1416,8 +1406,8 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 		DirectMoveToLocation(Unit, DestinationLocation);
 		// A Walk without Navigation System
 		return true;
-	}
-	*/
+	}*/
+	
 	
 	//UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
 	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
