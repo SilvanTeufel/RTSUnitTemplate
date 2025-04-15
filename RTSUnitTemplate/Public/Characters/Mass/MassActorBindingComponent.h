@@ -6,7 +6,11 @@
 #include "MassEntitySubsystem.h"
 #include "Components/ActorComponent.h"
 #include "MassEntityTypes.h"
+#include "MassRepresentationTypes.h"
 #include "Characters/Mass/UnitMassTag.h"
+// Add near the top of UMassActorBindingComponent.h or .cpp
+#include "MassEntityConfigAsset.h"
+#include "MassEntityUtils.h" // For CreateEntityFromConfig helper
 #include "MassActorBindingComponent.generated.h"
 
 
@@ -29,21 +33,32 @@ protected:
 	UPROPERTY() // Don't save this pointer
 	UMassEntitySubsystem* MassEntitySubsystemCache;
 
-	UPROPERTY() 
-	UMassEntitySubsystem* MassSubsystem;
 public:	
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	//UPROPERTY()
+	// UMassEntityConfigAsset* UnitEntityConfig;
+	
 	UPROPERTY() 
 	AActor* MyOwner;
 	// Set by your spawner when binding the actor to a Mass entity.
 	//void SetMassEntityHandle(FMassEntityHandle InHandle) { MassEntityHandle = InHandle; }
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Mass ) 
+	UStaticMesh* UnitMassMesh;
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 
 	// Getter for the handle
 	FMassEntityHandle GetMassEntityHandle() const { return MassEntityHandle; }
+
+	FStaticMeshInstanceVisualizationDescHandle RegisterIsmDesc(UWorld* World, UStaticMesh* UnitStaticMesh);
 	
+	void SpawnMassUnitIsm(
+	FMassEntityManager& EntityManager,
+	UStaticMesh* UnitStaticMesh,
+	const FVector SpawnLocation,
+	UWorld* World);
 		
 };

@@ -50,7 +50,17 @@ void UActorTransformSyncProcessor::ConfigureQueries()
 
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    AccumulatedTime += Context.GetDeltaTimeSeconds();
+    
+    if (constexpr float TickInterval = 0.05f; AccumulatedTime < TickInterval) // Nur alle 0.2 Sekunden (also 5x pro Sekunde)
+    {
+        return; // Zu früh – überspringen
+    }
+
+    AccumulatedTime = 0.0f; // Reset
+    //Super::Execute(EntityManager, Context);
     //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute11111"));
+  
     EntityQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext& Context)
     {
         const int32 NumEntities = Context.GetNumEntities();
@@ -81,11 +91,23 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                     //UE_LOG(LogTemp, Log, TEXT("SECOND IF"));
                     // Get the transform (reading from const view is fine)
                     const FTransform& MassTransform = TransformFragments[i].GetTransform();
+                    FTransform ActorTransform = Actor->GetActorTransform();
                     //UE_LOG(LogTemp, Log, TEXT("MassTransform!!!! %s"), *MassTransform.ToString());
                     // Update the actor's transform using the calculated Mass transform
-                    Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                    FVector MassLocation = MassTransform.GetLocation();
+                    MassLocation.Z = Actor->GetActorLocation().Z; // ← bewahrt echte Höhe
+
+                    FTransform AdjustedTransform = MassTransform;
+                    AdjustedTransform.SetLocation(MassLocation);
+                    
+                    if (!ActorTransform.Equals(AdjustedTransform, 0.1f)) // Tolerance of 1cm / ~0.5 deg
+                    {
+                        Actor->SetActorTransform(AdjustedTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                    }
+                   // Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::TeleportPhysics);
                 }
             }
         }
     });
+    
 }

@@ -229,6 +229,7 @@ void AUnitControllerBase::CheckUnitDetectionTimer(float DeltaSeconds)
 
 void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float DeltaSeconds)
 {
+	/*
 
 		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
 		if(!UnitBase) return;
@@ -321,8 +322,8 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			{
 				if(Debug) UE_LOG(LogTemp, Warning, TEXT("Run"));
 				
-				if(UnitBase->UEPathfindingUsed)
-					RunUEPathfinding(UnitBase, DeltaSeconds);
+				//if(UnitBase->UEPathfindingUsed)
+					//RunUEPathfinding(UnitBase, DeltaSeconds);
 				//else
 					//Run(UnitBase, DeltaSeconds);
 			}
@@ -411,6 +412,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			}
 		break;
 		}
+	*/
 }
 
 void AUnitControllerBase::Rooted(AUnitBase* UnitBase, float DeltaSeconds)

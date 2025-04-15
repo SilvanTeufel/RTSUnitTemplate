@@ -399,7 +399,7 @@ void AExtendedCameraBase::Input_RightClick_Pressed(const FInputActionValue& Inpu
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->RightClickPressed();
+		CameraControllerBase->RightClickPressedMass();
 	}
 }
 

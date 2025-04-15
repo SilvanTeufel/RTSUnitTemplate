@@ -196,3 +196,161 @@ void  ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObjec
 	UE_LOG(LogTemp, Log, TEXT("CorrectSetUnitMoveTarget: Updated shared move target for entity %s"), *InEntity.DebugGetDescription());
 }
 */
+void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
+{
+    UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: WorldContextObject is invalid or could not provide World."));
+        return;
+    }
+
+    UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+    if (!MassSubsystem)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: MassEntitySubsystem not found. Is Mass enabled?"));
+        return;
+    }
+
+    FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+    if (!EntityManager.IsEntityValid(InEntity))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *InEntity.DebugGetDescription());
+        return;
+    }
+
+    // --- Access the PER-ENTITY fragment ---
+    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
+
+    if (!MoveTargetFragmentPtr)
+    {
+        // If the entity doesn't have the fragment yet, you might need to add it.
+        // Depending on your setup, it might be added by an Archetype or Trait already.
+        // If you need to add it manually:
+        // EntityManager.AddFragmentData<FMassMoveTargetFragment>(InEntity);
+        // MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
+
+        // Alternatively, if it's an error that it's missing:
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *InEntity.DebugGetDescription());
+        return;
+    }
+
+    // Now, modify the specific entity's fragment data
+    MoveTargetFragmentPtr->Center = NewTargetLocation;
+    MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Move; // Set the intended action
+    MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
+    MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+    MoveTargetFragmentPtr->Forward = FVector::ForwardVector; // Or calculate based on direction to target if needed
+    
+    // If you need to trigger network replication or specific actions:
+    MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
+    // MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
+	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
+	if (MoveTargetFragmentPtr) // Check ptr again just in case
+	{
+		UE_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget for Entity %s: Action triggered. CurrentAction is now: %s"),
+			   *InEntity.DebugGetDescription(),
+			   *UEnum::GetValueAsString(MoveTargetFragmentPtr->GetCurrentAction()));
+	}
+	
+    UE_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget: Updated move target for entity %s"), *InEntity.DebugGetDescription());
+}
+
+void ACustomControllerBase::RightClickPressedMass()
+{
+	
+	AttackToggled = false;
+	FHitResult Hit;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
+	
+	if (!CheckClickOnTransportUnit(Hit))
+	{
+		if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
+		{
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+			if(!CheckClickOnWorkArea(Hit))
+			{
+				RunUnitsAndSetWaypointsMass(Hit);
+			}
+		}
+	}
+
+
+	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
+	{
+		DestroyDraggedArea(SelectedUnits[0]);
+	}
+	
+}
+
+
+void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
+{
+	int32 NumUnits = SelectedUnits.Num();
+	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
+	const int32 GridSize = ComputeGridSize(NumUnits);
+	AWaypoint* BWaypoint = nullptr;
+
+	bool PlayWaypointSound = false;
+	bool PlayRunSound = false;
+	
+	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
+		if (SelectedUnits[i] != CameraUnitWithTag)
+		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
+			
+			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
+			int32 Row = i / GridSize;     // Row index
+			int32 Col = i % GridSize;     // Column index
+
+			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
+			FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+
+			RunLocation = TraceRunLocation(RunLocation);
+
+			float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
+			FMassEntityHandle MassEntityHandle =  SelectedUnits[i]->MassActorBindingComponent->GetMassEntityHandle();
+			
+			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Speed : %f"), Speed);
+			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("This is a Building!!"));
+				//PlayWaypointSound = true;
+			}else if (IsShiftPressed) {
+				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
+	
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+
+				PlayRunSound = true;
+			}else if(UseUnrealEnginePathFinding)
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				PlayRunSound = true;
+			}
+			else {
+				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
+				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				PlayRunSound = true;
+			}
+		}
+	}
+
+	if (WaypointSound && PlayWaypointSound)
+	{
+		UGameplayStatics::PlaySound2D(this, WaypointSound);
+	}
+
+	if (RunSound && PlayRunSound)
+	{
+		const float CurrentTime = GetWorld()->GetTimeSeconds();
+		if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime) // Check if 3 seconds have passed
+		{
+			UGameplayStatics::PlaySound2D(this, RunSound);
+			LastRunSoundTime = CurrentTime; // Update the timestamp
+		}
+	}
+}

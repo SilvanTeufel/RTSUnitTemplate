@@ -19,6 +19,8 @@ class RTSUNITTEMPLATE_API UActorTransformSyncProcessor : public UMassProcessor
 public:
 	UActorTransformSyncProcessor();
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float AccumulatedTime = 0.0f;
 protected:
 	virtual void ConfigureQueries() override;
 	virtual void Initialize(UObject& Owner) override;

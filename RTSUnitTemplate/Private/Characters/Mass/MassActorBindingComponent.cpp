@@ -11,6 +11,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Characters/Mass/UnitMassTag.h" // Include your custom tag definition (Adjust path)
+#include "MassEntityUtils.h"
 
 #include "MassRepresentationSubsystem.h"  
 #include "MassRepresentationTypes.h"
@@ -32,9 +33,10 @@ void UMassActorBindingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	// Cache subsystem here too if needed for Tick
+	UWorld* World = GetWorld();
+	
 	if(!MassEntitySubsystemCache)
 	{
-		UWorld* World = GetWorld();
 		if(World)
 		{
 			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
@@ -46,14 +48,25 @@ void UMassActorBindingComponent::BeginPlay()
 		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
 	}
 
-	UWorld* World = GetWorld();
+
 	if (!World)
 	{
 		return; // World might not be valid yet
 	}
 	
-	MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	MyOwner = GetOwner();
+
+	if(MassEntitySubsystemCache )
+	{
+		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit"));
+		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+		
+		SpawnMassUnitIsm(
+		EntityManager,
+		UnitMassMesh,
+		MyOwner->GetActorLocation() + FVector(0, 0, 200.f) ,
+		World);
+	}
 }
 
 
@@ -80,18 +93,13 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
         return FMassEntityHandle();
     }
 
-    // Cache or get the subsystem
-    if(!MassEntitySubsystemCache)
-    {
-         MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
-    }
-
+	
     if (!MassEntitySubsystemCache)
     {
         UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Cannot create entity for %s, MassEntitySubsystem not found."), *Owner->GetName());
         return FMassEntityHandle();
     }
-	
+
     // 1. Define the Archetype (Hardcoded here, could be made configurable)
 	TArray<const UScriptStruct*> FragmentsAndTags = {
 		FTransformFragment::StaticStruct(),
@@ -103,6 +111,10 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		FMassActorFragment::StaticStruct(),             // ** CRUCIAL for linking **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(), // Needed by representation system
+
+    	FAgentRadiusFragment::StaticStruct(),
+		FMassForceFragment::StaticStruct(),
+		FMassAvoidanceColliderFragment::StaticStruct(),
 	};
 
 	// 1. Create the Archetype Creation Parameters
@@ -163,6 +175,18 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	RepLODFrag.PrevLOD = EMassLOD::Max; // Indicate it wasn't visible before
 
 
+	if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(NewEntityHandle))
+	{
+		RadiusFrag->Radius = 35.f; // Set a sensible radius
+		UE_LOG(LogTemp, Log, TEXT("Entity %s: Set AgentRadius = %.2f"), *NewEntityHandle.DebugGetDescription(), RadiusFrag->Radius);
+	}
+	
+	if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(NewEntityHandle))
+	{
+		*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(35.f)); // Set shape AND radius
+		UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *NewEntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
+	}
+
     // 4. Store the handle within this component
     MassEntityHandle = NewEntityHandle;
 
@@ -171,21 +195,46 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
     return MassEntityHandle;
 }
 
+void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid())
+	{
+		return;
+	}
+/*
+	if (MassEntitySubsystemCache)
+	{
+		const FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetEntityManager();
+		if (const FMassRepresentationFragment* RepFrag = EntityManager.GetFragmentDataPtr<FMassRepresentationFragment>(MassEntityHandle))
+		{
+			if (RepFrag->StaticMeshDescHandle.IsValid())
+			{
+				UE_LOG(LogTemp, Log, TEXT("TickComponent: Valid StaticMeshDescHandle, Index: %d"), RepFrag->StaticMeshDescHandle.ToIndex());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TickComponent: Invalid StaticMeshDescHandle in Representation Fragment."));
+			}
+		}
+	}*/
+}
+/*
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction); // <-- Call the base class tick function
-	/*
+	
 	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid()) // Combine checks for clarity
 	{
 		return;
 	}
 	//UE_LOG(LogTemp, Log, TEXT("TickComponent!!!!"));
 	
-	if (MassSubsystem) // No need to check IsValid() again here, already done above
+	if (MassEntitySubsystemCache) // No need to check IsValid() again here, already done above
 	{
 		// Get the EntityManager from the subsystem
-		const FMassEntityManager& EntityManager = MassSubsystem->GetEntityManager();
+		const FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetEntityManager();
 
 		// Retrieve the transform fragment data for this entity using the EntityManager
 
@@ -203,6 +252,7 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 				{
 					UE_LOG(LogTemp, Log, TEXT("NewLocation!!!! %s"), *NewLocation.ToString());
 					MyOwner->SetActorLocation(NewLocation);
+					
 					// Optionally update rotation only if needed/changed significantly too
 					// Optionally update rotation/scale as needed:
 					// Owner->SetActorRotation(TransformFragment->GetTransform().GetRotation());
@@ -214,12 +264,12 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 			}
 		}
 	}
-	*/
-}
+	
+}*/
 
 // Example helper: Create and register a static mesh description, returning a handle.
 // (The actual function and signature may differ. Consult UE5.5 documentation for the correct API.)
-FStaticMeshInstanceVisualizationDescHandle RegisterISMDesc(UWorld* World, UStaticMesh* UnitStaticMesh)
+FStaticMeshInstanceVisualizationDescHandle UMassActorBindingComponent::RegisterIsmDesc(UWorld* World, UStaticMesh* UnitStaticMesh)
 {
 	// 1. Construct the VisualizationDesc
 	FStaticMeshInstanceVisualizationDesc VisDesc;
@@ -236,25 +286,29 @@ FStaticMeshInstanceVisualizationDescHandle RegisterISMDesc(UWorld* World, UStati
 
 	// (Optional) Set up a collision profile if needed:
 	// VisDesc.SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
-
 	// 2. Access the updated subsystem.
 	if (UMassRepresentationSubsystem* RepresentationSubsystem = World->GetSubsystem<UMassRepresentationSubsystem>())
 	{
-		// 3. Register or find an existing descriptor.
-		// The new subsystem should provide functionality such as FindOrAddStaticMeshDesc.
-		return RepresentationSubsystem->FindOrAddStaticMeshDesc(VisDesc);
+		FStaticMeshInstanceVisualizationDescHandle Handle = RepresentationSubsystem->FindOrAddStaticMeshDesc(VisDesc);
+		UE_LOG(LogTemp, Log, TEXT("RegisterIsmDesc: Handle Valid: %s, Index: %d for Mesh %s"),
+			Handle.IsValid() ? TEXT("True") : TEXT("False"),
+			Handle.ToIndex(),
+			*GetNameSafe(UnitStaticMesh)); // Use GetNameSafe
+		return Handle;
 	}
 
 	// Return an invalid handle if the subsystem could not be retrieved.
 	return FStaticMeshInstanceVisualizationDescHandle();
 }
 
-void SpawnMassUnitISM(
+void UMassActorBindingComponent::SpawnMassUnitIsm(
     FMassEntityManager& EntityManager,
     UStaticMesh* UnitStaticMesh,
-    FVector SpawnLocation,
+    const FVector SpawnLocation,
     UWorld* World)
 {
+
+	UE_LOG(LogTemp, Log, TEXT("Try SpawnMassUnitIsm"));
     if (!UnitStaticMesh)
     {
         UE_LOG(LogTemp, Error, TEXT("SpawnMassUnit: UnitStaticMesh is null!"));
@@ -266,6 +320,16 @@ void SpawnMassUnitISM(
         FTransformFragment::StaticStruct(),
         FMassRepresentationFragment::StaticStruct(),
         FMassRepresentationLODFragment::StaticStruct(),
+
+    	// --- ADD YOUR CUSTOM FRAGMENTS TO THE ARCHETYPE DEFINITION ---
+		FUnitStatsFragment::StaticStruct(),      // Add stats
+    	FUnitStateFragment::StaticStruct(),      // Add state
+
+    	// --- Add other fragments needed for RTS units potentially ---
+	    FMassMoveTargetFragment::StaticStruct(), // For pathfinding/movement commands
+	    FMassVelocityFragment::StaticStruct(),   // For current movement physics
+	   // FTeamMemberFragment::StaticStruct(),    // Example if you have teams
+	   // FSelectableTag::StaticStruct()          // Example if units can be selected
     };
 
     FMassArchetypeHandle ArchetypeHandle = EntityManager.CreateArchetype(FragmentsAndTags);
@@ -288,6 +352,11 @@ void SpawnMassUnitISM(
     FTransformFragment& TransformFrag = EntityManager.GetFragmentDataChecked<FTransformFragment>(NewEntityHandle);
     TransformFrag.GetMutableTransform().SetLocation(SpawnLocation);
 
+	FTransform& Transform = TransformFrag.GetMutableTransform();
+	Transform.SetLocation(SpawnLocation);
+	Transform.SetRotation(FQuat::Identity);
+	Transform.SetScale3D(FVector(1.0f, 1.0f, 1.0f)); // Ensure proper scale
+	
     // Representation LOD
     FMassRepresentationLODFragment& RepLODFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationLODFragment>(NewEntityHandle);
     RepLODFrag.LOD = EMassLOD::High;
@@ -301,7 +370,8 @@ void SpawnMassUnitISM(
     RepFrag.LowResTemplateActorIndex  = INDEX_NONE;
 
     // 4. Register the StaticMesh desc and store the handle
-    FStaticMeshInstanceVisualizationDescHandle MeshDescHandle = RegisterISMDesc(World, UnitStaticMesh);
+    FStaticMeshInstanceVisualizationDescHandle MeshDescHandle = RegisterIsmDesc(World, UnitStaticMesh);
+	
     if (!MeshDescHandle.IsValid())
     {
         UE_LOG(LogTemp, Error, TEXT("SpawnMassUnitISM: Failed to register static mesh description!"));
@@ -311,5 +381,36 @@ void SpawnMassUnitISM(
     // Store it in the fragment
     RepFrag.StaticMeshDescHandle = MeshDescHandle;
 
+	
+	if (RepFrag.StaticMeshDescHandle.IsValid())
+	{
+		UE_LOG(LogTemp, Log, TEXT("SpawnMassUnitIsm: Valid StaticMeshDescHandle, Index: %d"), RepFrag.StaticMeshDescHandle.ToIndex());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnMassUnitIsm: Invalid StaticMeshDescHandle in Representation Fragment."));
+	}
+	
+	// --- 4. INITIALIZE YOUR CUSTOM FRAGMENTS ---
+	FUnitStatsFragment& StatsFrag = EntityManager.GetFragmentDataChecked<FUnitStatsFragment>(NewEntityHandle);
+	StatsFrag.CurrentHealth = StatsFrag.MaxHealth; // Set current health to max health initially
+
+	FUnitStateFragment& StateFrag = EntityManager.GetFragmentDataChecked<FUnitStateFragment>(NewEntityHandle);
+	StateFrag.CurrentState = EUnitState::Idle;     // Set initial state to Idle
+	StateFrag.TargetEntity.Reset();                // Ensure no initial target
+
+
+	
+	FMassMoveTargetFragment& MoveTargetFrag = EntityManager.GetFragmentDataChecked<FMassMoveTargetFragment>(NewEntityHandle);
+	MoveTargetFrag.Center = SpawnLocation; // Target is current location initially
+	MoveTargetFrag.DistanceToGoal = 0.f;
+	MoveTargetFrag.DesiredSpeed.Set(0.f);
+	MoveTargetFrag.IntentAtGoal = EMassMovementAction::Stand;
+	MoveTargetFrag.Forward = TransformFrag.GetTransform().GetRotation().GetForwardVector();
+	
+	
+	FMassVelocityFragment& VelocityFrag = EntityManager.GetFragmentDataChecked<FMassVelocityFragment>(NewEntityHandle);
+	VelocityFrag.Value = FVector::ZeroVector;
+	DrawDebugSphere(World, SpawnLocation, 25.0f, 12, FColor::Green, false, 15.0f);
     UE_LOG(LogTemp, Log, TEXT("SpawnMassUnitISM: Created Entity %d with ISM representation."), NewEntityHandle.Index);
 }
