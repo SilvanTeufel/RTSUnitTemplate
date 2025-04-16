@@ -66,3 +66,43 @@ private:
     // Query to select entities with the required movement and navigation components.
     FMassEntityQuery EntityQuery;
 };
+
+
+/*
+ *
+*#pragma once
+
+#include "CoreMinimal.h"
+#include "MassProcessor.h"
+#include "MassEntityTypes.h"
+#include "UnitMovementProcessor.generated.h"
+
+// Forward Declarations
+class UNavigationSystemV1;
+struct FMassExecutionContext;
+struct FTransformFragment;
+struct FMassVelocityFragment;
+struct FMassMoveTargetFragment;
+struct FMassNavigationPathFragment; // Unser neues Path Fragment
+struct FUnitMassTag; // Dein spezifisches Unit Tag
+
+UCLASS()
+class RTSUNITTEMPLATE_API UUnitMovementProcessor : public UMassProcessor
+{
+GENERATED_BODY()
+
+public:
+UUnitMovementProcessor();
+
+protected:
+virtual void ConfigureQueries() override;
+virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+
+private:
+FMassEntityQuery EntityQuery;
+
+// Akzeptanzradius für Wegpunkte auf dem Pfad (könnte auch aus einem Fragment kommen)
+UPROPERTY(EditDefaultsOnly, Category = "Movement")
+float PathWaypointAcceptanceRadius = 50.0f;
+};
+*/

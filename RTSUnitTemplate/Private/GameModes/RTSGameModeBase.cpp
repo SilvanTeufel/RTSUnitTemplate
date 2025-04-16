@@ -17,6 +17,12 @@
 #include "Controller/AIController/UnitMovementManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+
+#include "NavigationSystem.h"
+#include "NavMesh/NavMeshPath.h" // Für FPathFindingQuery, FNavPathPoint etc.
+#include "NavFilters/NavigationQueryFilter.h" // Für UNavigationQueryFilter
+#include "AI/Navigation/NavigationTypes.h" // Für FPathFindingResult
+
 #include "Engine/Engine.h"
 
 
@@ -34,6 +40,87 @@ void ARTSGameModeBase::BeginPlay()
 
 	//UnitMovementManager = UUnitMovementManager::GetInstance(GetWorld());
 }
+
+void ARTSGameModeBase::NavInitialisation()
+{
+    UWorld* World = GetWorld();
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+    if (NavSystem)
+    {
+        ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(); // Default NavData instance
+        if (NavData)
+        {
+            // Try to find two random, reachable points on the NavMesh.
+            FNavLocation PointA, PointB;
+            bool bFoundPointA = NavSystem->GetRandomReachablePointInRadius(NavData->GetBounds().GetCenter(), 
+                                                                            NavData->GetBounds().GetExtent().Size() / 2.0f, 
+                                                                            PointA);
+            bool bFoundPointB = NavSystem->GetRandomReachablePointInRadius(PointA.Location, 
+                                                                            5000.0f, 
+                                                                            PointB); // Second point near the first
+
+            if (bFoundPointA && bFoundPointB && PointA.Location != PointB.Location)
+            {
+                UE_LOG(LogTemp, Log, TEXT("Found valid points. Performing dummy pathfinding query..."));
+
+                // Use the controlled Pawn as the navigation agent.
+                APawn* Pawn = World->GetFirstPlayerController()->GetPawn();
+                if (!Pawn)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("No Pawn found to use as navigation agent."));
+                    return;
+                }
+                
+                INavAgentInterface* NavAgent = Cast<INavAgentInterface>(Pawn);
+                if (!NavAgent)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Pawn does not implement INavAgentInterface."));
+                    return;
+                }
+                /*
+                // Create a new instance of the navigation query filter.
+                UNavigationQueryFilter* NavQueryFilterObj = NewObject<UNavigationQueryFilter>(this, UNavigationQueryFilter::StaticClass());
+                if (!NavQueryFilterObj)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Failed to create a navigation query filter object."));
+                    return;
+                }*/
+
+                // Call the non-static GetQueryFilter member function with the required parameters.
+               // FSharedConstNavQueryFilter QueryFilter = NavQueryFilterObj->GetQueryFilter(*NavData, this);
+
+
+            	// Create a default query filter
+            	FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
+
+            	// Construct the pathfinding query.
+            	// Note: The first parameter (QueryUser) is often your pawn or actor.
+            	
+
+            	
+                // Now create the dummy pathfinding query with the proper parameters.
+                FPathFindingQuery DummyQuery(*NavAgent, *NavData, PointA.Location, PointB.Location, QueryFilter);
+                FPathFindingResult PathResult = NavSystem->FindPathSync(DummyQuery);
+                UE_LOG(LogTemp, Log, TEXT("Dummy pathfinding complete. Success: %s"), 
+                       PathResult.IsSuccessful() ? TEXT("Yes") : TEXT("No"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Could not find two valid random points on the NavMesh for warmup query."));
+                // Optional: try with fixed coordinates known to be valid.
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Default NavData instance not found for warmup."));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Navigation System not found for warmup."));
+    }
+}
+
 
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
@@ -262,6 +349,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		}
 	}
 
+	NavInitialisation();
 	//SpawnAIFogManager();
 }
 

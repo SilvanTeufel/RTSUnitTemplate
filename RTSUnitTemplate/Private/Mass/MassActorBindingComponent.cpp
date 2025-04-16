@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Characters/Mass/MassActorBindingComponent.h"
+#include "Mass/MassActorBindingComponent.h"
 
 
 // --- REQUIRED MASS INCLUDES ---
@@ -10,7 +10,7 @@
 #include "MassCommonFragments.h"
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
-#include "Characters/Mass/UnitMassTag.h" // Include your custom tag definition (Adjust path)
+#include "Mass/UnitMassTag.h" // Include your custom tag definition (Adjust path)
 #include "MassEntityUtils.h"
 
 #include "MassRepresentationSubsystem.h"  

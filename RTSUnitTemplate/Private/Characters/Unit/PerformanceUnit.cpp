@@ -10,8 +10,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Actors/FogOfWarCentralManager.h"
-#include "Characters/Mass/MassActorBindingComponent.h"
-#include "Characters/Mass/UnitMassTag.h"
 #include "Kismet/GameplayStatics.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -19,15 +17,6 @@
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
-
-#include "MassEntitySubsystem.h"
-#include "MassSpawnerSubsystem.h" // If using Mass Spawner
-#include "MassArchetypeTypes.h"
-#include "MassCommonFragments.h"
-#include "MassMovementFragments.h"
-#include "MassNavigationFragments.h"
-#include "MassEntityTypes.h"
-#include "Characters/Mass/UnitMassTag.h"
 
 #include "Engine/World.h"              // For UWorld, GetWorld()
 #include "GameFramework/Actor.h"         // For FActorSpawnParameters, SpawnActo

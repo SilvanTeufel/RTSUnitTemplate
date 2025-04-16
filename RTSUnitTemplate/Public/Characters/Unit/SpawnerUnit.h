@@ -6,7 +6,7 @@
 //#include "PathSeekerBase.h"
 #include "Actors/AbilityIndicator.h"
 #include "GameFramework/Character.h"
-#include "Characters/Mass/MassActorBindingComponent.h"
+#include "Mass/MassActorBindingComponent.h"
 #include "Actors/Pickup.h"
 #include "Engine/World.h"
 #include "SpawnerUnit.generated.h"

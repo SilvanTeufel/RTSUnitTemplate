@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Characters/Mass/ActorTransformSyncProcessor.h"
+#include "Mass/ActorTransformSyncProcessor.h"
 
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
@@ -9,12 +9,14 @@
 #include "MassRepresentationFragments.h"  // For FMassRepresentationLODFragment
 #include "MassRepresentationTypes.h"      // For FMassRepresentationLODParams, EMassLOD
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
+#include "Characters/Unit/UnitBase.h"
 #include "GameFramework/Actor.h"
 
 UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here
 {
-    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
+    //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
+    //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Editor);
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     // Optional ExecutionOrder settings...
@@ -50,14 +52,21 @@ void UActorTransformSyncProcessor::ConfigureQueries()
 
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    AccumulatedTime += Context.GetDeltaTimeSeconds();
-    
-    if (constexpr float TickInterval = 0.05f; AccumulatedTime < TickInterval) // Nur alle 0.2 Sekunden (also 5x pro Sekunde)
+    /*
+    UWorld* World = EntityManager.GetWorld()
+    if ( World && World->GetNetMode() == NM_Client)
+    {
+        return;
+    }
+    */
+    AccumulatedTimeA += Context.GetDeltaTimeSeconds();
+    AccumulatedTimeB += Context.GetDeltaTimeSeconds();
+    if (constexpr float TickInterval = 0.05f; AccumulatedTimeA < TickInterval) // Nur alle 0.2 Sekunden (also 5x pro Sekunde)
     {
         return; // Zu früh – überspringen
     }
-
-    AccumulatedTime = 0.0f; // Reset
+    
+    AccumulatedTimeA = 0.0f; // Reset
     //Super::Execute(EntityManager, Context);
     //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute11111"));
   
@@ -85,9 +94,12 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 //UE_LOG(LogTemp, Log, TEXT("FIRST IF"));
                 // Get the AActor* from the MUTABLE view. This should resolve the const error.
                 AActor* Actor = ActorFragments[i].GetMutable();
-
-                if (IsValid(Actor)) // Good practice to check if the actor is valid
+                AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+                bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog ||  UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
+                    
+                if (IsValid(Actor) && UnitBase && (UnitIsVisible || AccumulatedTimeB > 0.5f)) // Good practice to check if the actor is valid
                 {
+                    AccumulatedTimeB = 0.0f;
                     //UE_LOG(LogTemp, Log, TEXT("SECOND IF"));
                     // Get the transform (reading from const view is fine)
                     const FTransform& MassTransform = TransformFragments[i].GetTransform();

@@ -62,7 +62,10 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	int GatherControllerTimer = 2.f;
 	
 	virtual void BeginPlay() override;
-
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void NavInitialisation();
+	
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)

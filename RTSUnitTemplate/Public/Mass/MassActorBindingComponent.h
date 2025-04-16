@@ -7,7 +7,7 @@
 #include "Components/ActorComponent.h"
 #include "MassEntityTypes.h"
 #include "MassRepresentationTypes.h"
-#include "Characters/Mass/UnitMassTag.h"
+#include "Mass/UnitMassTag.h"
 // Add near the top of UMassActorBindingComponent.h or .cpp
 #include "MassEntityConfigAsset.h"
 #include "MassEntityUtils.h" // For CreateEntityFromConfig helper

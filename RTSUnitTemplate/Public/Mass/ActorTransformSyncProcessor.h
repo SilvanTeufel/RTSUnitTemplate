@@ -20,7 +20,10 @@ public:
 	UActorTransformSyncProcessor();
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float AccumulatedTime = 0.0f;
+	float AccumulatedTimeA = 0.0f;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float AccumulatedTimeB = 0.0f;
 protected:
 	virtual void ConfigureQueries() override;
 	virtual void Initialize(UObject& Owner) override;
