@@ -32,11 +32,13 @@ struct FUnitNavigationPathFragment : public FMassFragment
 		PathTargetLocation = FVector::ZeroVector;
 		// LastPathUpdateTime = 0.f;
 	}
-};
 
-// Optional: Tag if needed for separate pathing processor later
-// USTRUCT()
-// struct FMassNeedsPathTag : public FMassTag
-// {
-//     GENERATED_BODY()
-// };
+	bool HasValidPath() const
+	{
+		// FNavPathSharedPtr::IsValid() checks if the shared pointer is not null.
+		// You could potentially add && CurrentPath->IsValid() if the FNavigationPath
+		// object itself has further internal validity checks you want to include,
+		// but checking the pointer is usually the primary step.
+		return CurrentPath.IsValid();
+	}
+};

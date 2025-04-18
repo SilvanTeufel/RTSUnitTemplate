@@ -24,9 +24,18 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	float AccumulatedTimeB = 0.0f;
+
+	/** Geschwindigkeit, mit der sich der Actor in die Bewegungsrichtung dreht (Grad pro Sekunde). */
+	UPROPERTY(EditDefaultsOnly, Category = "Rotation")
+	float ActorRotationSpeed = 10*360.0f;
+
+	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
+	UPROPERTY(EditDefaultsOnly, Category = "Rotation")
+	float MinMovementDistanceForRotation = 1.0f;
+	
 protected:
 	virtual void ConfigureQueries() override;
-	virtual void Initialize(UObject& Owner) override;
+	//virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 private:

@@ -35,6 +35,7 @@ void UDetectionProcessor::ConfigureQueries()
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Einfaches Throttling (BESSER: Prozessor seltener ticken lassen!) ---
+    //UE_LOG(LogTemp, Log, TEXT("Execute DetectionProcessor!!!!!!!!!"));
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < DetectionInterval)
     {
@@ -42,7 +43,8 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     }
     TimeSinceLastRun = 0.0f;
     // --- Ende Throttling ---
-
+    //UE_LOG(LogTemp, Log, TEXT("DetectionProcessor!!!!!!!!!"));
+    
     // HINWEIS ZUR PERFORMANCE:
     // Die folgende Implementierung ist ein PLATZHALTER und EXTREM INEFFIZIENT (N^2 Komplexität)!
     // Eine echte Implementierung MUSS Spatial Queries verwenden (Octree, MassSignalSubsystem etc.),
@@ -54,6 +56,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     TArray<FMassCombatStatsFragment> AllStats;
     TArray<FMassAgentCharacteristicsFragment> AllCharacteristics;
 
+    /*
     FMassEntityQuery AllUnitsQuery;
     AllUnitsQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     AllUnitsQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
@@ -194,4 +197,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
         } // Ende Schleife für Entities dieses Prozessors
     }); // Ende ForEachEntityChunk für diesen Prozessor
+
+    */
 }

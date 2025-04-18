@@ -54,5 +54,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypointsMass(FHitResult Hit);
-	
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LeftClickPressedMass();
+
+	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
+	void LeftClickAttackMass(AUnitBase* Unit, FVector Location);
+
+	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
+	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location);
 };

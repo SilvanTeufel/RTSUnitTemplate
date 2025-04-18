@@ -3,6 +3,7 @@
 
 #include "Controller/PlayerController/CustomControllerBase.h"
 
+#include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 
@@ -134,68 +135,6 @@ void ACustomControllerBase::AgentInit_Implementation()
 }
 
 
-/**
- * Gives a move command to a specific Mass entity by adding or updating its FMassMoveTargetFragment.
- * Uses deferred commands for safety. Should be placed in an appropriate manager class, controller, or BPL.
- *
- * @param WorldContextObject Context object to get the World.
- * @param InEntity The handle of the entity to command.
- * @param NewTargetLocation The destination location vector.
- * @param DesiredSpeed The speed at which the entity should move towards the target.
- * @param AcceptanceRadius The distance from the target at which the entity should stop.
- */
-/*
-void  ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
-{
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: WorldContextObject is invalid or could not provide World."));
-		return;
-	}
-
-	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-	if (!MassSubsystem)
-	{
-		UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: MassEntitySubsystem not found. Is Mass enabled?"));
-		return;
-	}
-
-	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-
-	if (!EntityManager.IsEntityValid(InEntity))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *InEntity.DebugGetDescription());
-		return;
-	}
-
-	// Define a hash key for the shared fragment.
-	// Use a suitable hash value. Here it's hardcoded,
-	// but in a real use-case the hash could be computed based on some criteria.
-	constexpr uint32 SharedFragmentHash = 0x12345678;
-
-	// Retrieve (or create) the shared fragment as a const reference.
-	const FSharedStruct& SharedFragmentStructConst = EntityManager.GetOrCreateSharedFragment<FMassMoveTargetFragment>(SharedFragmentHash);
-
-
-	// Remove the const to allow modification.
-	FSharedStruct& SharedFragmentStruct = const_cast<FSharedStruct&>(SharedFragmentStructConst);
-
-	// Using Get<T> to obtain a mutable reference to the FMassMoveTargetFragment.
-	FMassMoveTargetFragment& SharedFragment = SharedFragmentStruct.Get<FMassMoveTargetFragment>();
-
-	
-	// Update the shared fragment's data.
-	SharedFragment.Center = NewTargetLocation;
-	SharedFragment.IntentAtGoal = EMassMovementAction::Move;
-	SharedFragment.DesiredSpeed.Set(DesiredSpeed);
-	SharedFragment.SlackRadius = AcceptanceRadius;
-
-	// Optionally, you might log that the shared target was updated.
-	// Note: All entities that reference this shared fragment with the same hash will see these new values.
-	UE_LOG(LogTemp, Log, TEXT("CorrectSetUnitMoveTarget: Updated shared move target for entity %s"), *InEntity.DebugGetDescription());
-}
-*/
 void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
 {
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
@@ -321,19 +260,21 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 	
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
-
+				SelectedUnits[i]->SetUnitState(UnitData::Run);
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				SelectedUnits[i]->SetUnitState(UnitData::Run);
 				PlayRunSound = true;
 			}
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				SelectedUnits[i]->SetUnitState(UnitData::Run);
 				PlayRunSound = true;
 			}
 		}
@@ -354,3 +295,186 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		}
 	}
 }
+
+
+void ACustomControllerBase::LeftClickPressedMass()
+{
+	LeftClickIsPressed = true;
+	AbilityArrayIndex = 0;
+	
+	if (!CameraBase || CameraBase->TabToggled) return;
+	
+	if(AltIsPressed)
+	{
+		DestroyWorkArea();
+		for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		{
+			CancelAbilitiesIfNoBuilding(SelectedUnits[i]);
+		}
+		
+	}else if (AttackToggled) {
+		AttackToggled = false;
+		FHitResult Hit;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+		int32 NumUnits = SelectedUnits.Num();
+		const int32 GridSize = ComputeGridSize(NumUnits);
+		AWaypoint* BWaypoint = nullptr;
+
+		bool PlayWaypointSound = false;
+		bool PlayAttackSound = false;
+		
+		for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		{
+			if (SelectedUnits[i] != CameraUnitWithTag)
+			{
+				int32 Row = i / GridSize;     // Row index
+				int32 Col = i % GridSize;     // Column index
+				
+				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+				RunLocation = TraceRunLocation(RunLocation);
+				
+				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
+				{
+					// Do Nothing
+				}else
+				{
+					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+					LeftClickAttackMass(SelectedUnits[i], RunLocation);
+					PlayAttackSound = true;
+				}
+			}
+			
+			if (SelectedUnits[i])
+				FireAbilityMouseHit(SelectedUnits[i], Hit);
+		}
+
+		if (WaypointSound && PlayWaypointSound)
+		{
+			UGameplayStatics::PlaySound2D(this, WaypointSound);
+		}
+
+		if (AttackSound && PlayAttackSound)
+		{
+			UGameplayStatics::PlaySound2D(this, AttackSound);
+		}
+		
+	}
+	else {
+		DropWorkArea();
+		//LeftClickSelect_Implementation();
+
+		
+		FHitResult Hit_Pawn;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
+
+		bool AbilityFired = false;
+		for (int32 i = 0; i < SelectedUnits.Num(); i++)
+		{
+				if (SelectedUnits[i] && SelectedUnits[i]->CurrentSnapshot.AbilityClass && SelectedUnits[i]->CurrentDraggedAbilityIndicator)
+				{
+						FireAbilityMouseHit(SelectedUnits[i], Hit_Pawn);
+						AbilityFired = true;
+				}
+		}
+		
+		if (AbilityFired) return;
+		
+		if (Hit_Pawn.bBlockingHit && HUDBase)
+		{
+			AActor* HitActor = Hit_Pawn.GetActor();
+			
+			if(!HitActor->IsA(ALandscape::StaticClass()))
+				ClickedActor = Hit_Pawn.GetActor();
+			else
+				ClickedActor = nullptr;
+			
+			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
+			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
+			
+			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
+			{
+				HUDBase->DeselectAllUnits();
+				HUDBase->SetUnitSelected(UnitBase);
+				DragUnitBase(UnitBase);
+		
+				
+				if(CameraBase->AutoLockOnSelect)
+					LockCameraToUnit = true;
+			}
+			else {
+				HUDBase->InitialPoint = HUDBase->GetMousePos2D();
+				HUDBase->bSelectFriendly = true;
+			}
+		}
+	}
+	
+}
+
+void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location)
+{
+	if (Unit && Unit->UnitState != UnitData::Dead) {
+	
+		FHitResult Hit_Pawn;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
+
+		if (Hit_Pawn.bBlockingHit)
+		{
+			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
+					
+			if(UnitBase && !UnitBase->TeamId)
+			{
+				/// Focus Enemy Units ///
+				Unit->UnitToChase = UnitBase;
+				SetUnitState_Replication(Unit, 3);
+				
+			}else if(UseUnrealEnginePathFinding)
+			{
+					
+				if (Unit && Unit->UnitState != UnitData::Dead)
+				{
+					LeftClickAMoveUEPFMass(Unit, Location);
+				}
+					
+			}else
+			{
+				LeftClickAMove(Unit, Location);
+			}
+		}else if(UseUnrealEnginePathFinding)
+		{
+			if (Unit &&Unit->UnitState != UnitData::Dead)
+			{
+				/// A-Move Units ///
+				LeftClickAMoveUEPFMass(Unit, Location);
+			}
+					
+		}
+			
+	}
+}
+
+void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Unit, FVector Location)
+{
+	if (!Unit) return;
+
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
+
+	float Speed = Unit->Attributes->GetBaseRunSpeed();
+	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
+	
+	SetUnitState_Replication(Unit,1);
+	CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, Location, Speed, 40.f);
+	Unit->SetUnitState(UnitData::Run);
+	MoveToLocationUEPathFinding(Unit, Location);
+}
+
+/*
+CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+SelectedUnits[i]->SetUnitState(UnitData::Run);
+*/

@@ -3,8 +3,15 @@
 #include "MassEntityManager.h"
 
 // Fragmente und Tags
+#include "MassActorSubsystem.h"
 #include "MassCommonFragments.h"
 #include "MassMovementFragments.h"
+#include "MassNavigationTypes.h"
+
+#include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
+#include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "Characters/Unit/UnitBase.h"
+
 #include "Mass/UnitMassTag.h"
 
 
@@ -45,7 +52,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-
+            TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>(); 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -53,7 +60,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassCombatStatsFragment& Stats = StatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-
+         
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // 1. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
@@ -61,6 +68,8 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
+                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                UnitBase->SetUnitState(UnitData::Chase);
                 StopMovement(MoveTarget, World);
                 VelocityList[i].Value = FVector::ZeroVector;
                 StateFrag.StateTimer = 0.f; // Reset Timer
@@ -79,13 +88,15 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 // Ja -> Anhalten und zu Pause wechseln (bereitet Angriff vor)
                 ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity); // Zu Pause, nicht direkt Attack
+               
+                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                UnitBase->SetUnitState(UnitData::Pause);
                 StopMovement(MoveTarget, World);
                  VelocityList[i].Value = FVector::ZeroVector;
                 StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
             }
-            else
-            {
+         
                 // 4. Außer Reichweite -> Weiter verfolgen
                 UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
 
@@ -94,7 +105,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
                  // TODO: Hier könnten Fähigkeiten aktiviert werden (Offensive, Throw etc.)
                  // z.B. via Signal oder ActorFragment Call, wenn noch nicht im Cooldown
-            }
+            
 
             // Rotation wird idealerweise von UUnitMovementProcessor oder ULookAtProcessor gehandhabt
         }
@@ -103,19 +114,33 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
 void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
 {
-    /*
-    MoveTarget.CreateNewAction(EMassMovementAction::Move, *World);
+    // Sicherheitscheck für World Pointer
+    if (!World)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UpdateMoveTarget: World is null!"));
+        return;
+    }
+    
+    // Modifiziere das übergebene Fragment direkt
+    MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
     MoveTarget.Center = TargetLocation;
     MoveTarget.DesiredSpeed.Set(Speed);
-    MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht
-    MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung
-
-    */
+    MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
+    MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
+    MoveTarget.Forward = (TargetLocation - MoveTarget.Center).GetSafeNormal(); // Optional: Richtung setzen
 }
- void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
+
+void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 {
-    /*
-    MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World);
+    // Sicherheitscheck für World Pointer
+    if (!World)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
+        return;
+    }
+
+    // Modifiziere das übergebene Fragment direkt
+    MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
     MoveTarget.DesiredSpeed.Set(0.f);
-    */
+    // Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
 }

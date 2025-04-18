@@ -21,14 +21,14 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     bAutoRegisterWithProcessingPhases = true;
     // Optional ExecutionOrder settings...
 }
-
+/*
 void UActorTransformSyncProcessor::Initialize(UObject& Owner)
 {
     Super::Initialize(Owner);
     // You don't necessarily need the RepresentationSubsystem pointer directly
     // if you use FMassActorFragment for the actor link.
 }
-
+*/
 void UActorTransformSyncProcessor::ConfigureQueries()
 {
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
@@ -36,6 +36,7 @@ void UActorTransformSyncProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+    //EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // <-- HINZUGEFÜGT: Geschwindigkeit lesen für Rotation
     EntityQuery.RegisterWithProcessor(*this); // Important!
     // Shared fragment defining LOD distances, etc. Might not be strictly needed
     // in Execute if just checking LOD level, but good practice to include.
@@ -52,74 +53,89 @@ void UActorTransformSyncProcessor::ConfigureQueries()
 
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    /*
-    UWorld* World = EntityManager.GetWorld()
-    if ( World && World->GetNetMode() == NM_Client)
+    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
+
+    // --- Temporäres Throttling ---
+    AccumulatedTimeA += ActualDeltaTime;
+    AccumulatedTimeB += ActualDeltaTime;
+
+    if (constexpr float TickInterval = 0.05f; AccumulatedTimeA < TickInterval)
     {
         return;
     }
-    */
-    AccumulatedTimeA += Context.GetDeltaTimeSeconds();
-    AccumulatedTimeB += Context.GetDeltaTimeSeconds();
-    if (constexpr float TickInterval = 0.05f; AccumulatedTimeA < TickInterval) // Nur alle 0.2 Sekunden (also 5x pro Sekunde)
+    AccumulatedTimeA = 0.0f;
+    // --- Ende Throttling ---
+
+    //UE_LOG(LogTemp, Warning, TEXT("!!!!??????UActorTransformSyncProcessor!!!!!"));
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // WICHTIG: ActualDeltaTime für die Interpolation einfangen
+        [this, ActualDeltaTime](FMassExecutionContext& ChunkContext)
     {
-        return; // Zu früh – überspringen
-    }
-    
-    AccumulatedTimeA = 0.0f; // Reset
-    //Super::Execute(EntityManager, Context);
-    //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute11111"));
-  
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext& Context)
-    {
-        const int32 NumEntities = Context.GetNumEntities();
+        const int32 NumEntities = ChunkContext.GetNumEntities();
 
-        // Use GetFragmentView (ReadOnly) for fragments you only read from.
-        const TConstArrayView<FTransformFragment> TransformFragments = Context.GetFragmentView<FTransformFragment>();
-        const TConstArrayView<FMassRepresentationLODFragment> RepresentationLODFragments = Context.GetFragmentView<FMassRepresentationLODFragment>();
+        const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassRepresentationLODFragment> RepresentationLODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
+        // const TConstArrayView<FMassVelocityFragment> VelocityFragments = ChunkContext.GetFragmentView<FMassVelocityFragment>(); // <-- Entfernt
+        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 
-        // Use GetMutableFragmentView (ReadWrite) for FMassActorFragment as needed.
-        // Assign to a non-const TArrayView.
-        TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>();
+        const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation); // Quadrat für Vergleich
 
-        // Optionally get shared LOD Params if needed for more complex logic
-        // const FMassRepresentationLODParams& LODParams = Context.GetConstSharedFragment<FMassRepresentationLODParams>();
-        //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute22222"));
-        //UE_LOG(LogTemp, Log, TEXT("NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            // Check if the current LOD is not "Off" (reading from const view is fine)
-            //if (RepresentationLODFragments[i].LOD > EMassLOD::Off)
-            {
-                //UE_LOG(LogTemp, Log, TEXT("FIRST IF"));
-                // Get the AActor* from the MUTABLE view. This should resolve the const error.
-                AActor* Actor = ActorFragments[i].GetMutable();
-                AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-                bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog ||  UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
-                    
-                if (IsValid(Actor) && UnitBase && (UnitIsVisible || AccumulatedTimeB > 0.5f)) // Good practice to check if the actor is valid
-                {
-                    AccumulatedTimeB = 0.0f;
-                    //UE_LOG(LogTemp, Log, TEXT("SECOND IF"));
-                    // Get the transform (reading from const view is fine)
-                    const FTransform& MassTransform = TransformFragments[i].GetTransform();
-                    FTransform ActorTransform = Actor->GetActorTransform();
-                    //UE_LOG(LogTemp, Log, TEXT("MassTransform!!!! %s"), *MassTransform.ToString());
-                    // Update the actor's transform using the calculated Mass transform
-                    FVector MassLocation = MassTransform.GetLocation();
-                    MassLocation.Z = Actor->GetActorLocation().Z; // ← bewahrt echte Höhe
+            AActor* Actor = ActorFragments[i].GetMutable();
+            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 
-                    FTransform AdjustedTransform = MassTransform;
-                    AdjustedTransform.SetLocation(MassLocation);
-                    
-                    if (!ActorTransform.Equals(AdjustedTransform, 0.1f)) // Tolerance of 1cm / ~0.5 deg
-                    {
-                        Actor->SetActorTransform(AdjustedTransform, false, nullptr, ETeleportType::TeleportPhysics);
-                    }
-                   // Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::TeleportPhysics);
+            if (!IsValid(UnitBase)) continue; // Gültigkeitsprüfung
+
+            // Sichtbarkeitsprüfung (wie vorher)
+            bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog || UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
+            if (!UnitIsVisible && AccumulatedTimeB <= 0.5f) continue;
+            if(UnitIsVisible || AccumulatedTimeB > 0.5f) AccumulatedTimeB = 0.0f; // Reset für Sichtbarkeitstimer
+
+            // --- Transform Synchronisation ---
+            const FTransform& MassTransform = TransformFragments[i].GetTransform();
+            const FVector CurrentActorLocation = Actor->GetActorLocation(); // Aktuelle (Alte) Actor-Position
+            const FQuat CurrentActorRotation = Actor->GetActorQuat();   // Aktuelle (Alte) Actor-Rotation
+
+            // --- Neue Zielposition (Z-angepasst) ---
+            FVector FinalLocation = MassTransform.GetLocation();
+            FinalLocation.Z = CurrentActorLocation.Z; // Höhe des Actors beibehalten
+            //UE_LOG(LogTemp, Warning, TEXT("FinalLocation! %s"), *FinalLocation.ToString());
+            // --- Ziel-Rotation basierend auf Positionsänderung berechnen ---
+            FQuat TargetRotation = CurrentActorRotation; // Standard: Aktuelle Rotation beibehalten
+            const FVector MoveDirection = FinalLocation - CurrentActorLocation; // Richtung von Alt nach Neu
+
+            // Nur rotieren, wenn eine signifikante Bewegung stattgefunden hat
+            if (MoveDirection.SizeSquared() > MinMovementDistanceSq) // Prüfe gegen Mindestdistanz
+            {
+                FVector MoveDirection2D = MoveDirection;
+                MoveDirection2D.Z = 0.0f; // Nur horizontale Bewegung für Rotation berücksichtigen
+
+                if (MoveDirection2D.Normalize()) // Sicherstellen, dass Vektor nicht Null ist nach Z-Entfernung
+                {
+                    TargetRotation = MoveDirection2D.ToOrientationQuat();
                 }
+                // Wenn MoveDirection2D Null war (nur vertikale Bewegung), bleibt TargetRotation unverändert (CurrentActorRotation)
             }
-        }
-    });
-    
+            // Wenn keine signifikante Bewegung stattfand, bleibt TargetRotation ebenfalls unverändert
+
+            // --- Rotation interpolieren ---
+            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, ActualDeltaTime * (ActorRotationSpeed / 90.f)); // Rotationsgeschwindigkeit ggf. anpassen
+
+            // --- Finale Actor Transform zusammenbauen ---
+            FTransform FinalActorTransform;
+            FinalActorTransform.SetLocation(FinalLocation);
+            FinalActorTransform.SetRotation(SmoothedRotation);
+            FinalActorTransform.SetScale3D(MassTransform.GetScale3D()); // Skalierung von Mass übernehmen
+
+            // --- Actor Transform setzen (nur wenn nötig) ---
+            if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
+            {
+                //UE_LOG(LogTemp, Warning, TEXT("END FinalLocation! %s"), *FinalLocation.ToString());
+                //Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::None);
+                Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                //Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::TeleportPhysics);
+            }
+        } // Ende for each entity
+    }); // Ende ForEachEntityChunk
 }

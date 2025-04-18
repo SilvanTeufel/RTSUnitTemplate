@@ -47,6 +47,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Mass ) 
 	UStaticMesh* UnitMassMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	TObjectPtr<UMassEntityConfigAsset> EntityConfig;
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 

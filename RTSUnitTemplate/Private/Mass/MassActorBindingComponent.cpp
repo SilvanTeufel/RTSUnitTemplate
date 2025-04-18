@@ -5,6 +5,7 @@
 
 
 // --- REQUIRED MASS INCLUDES ---
+#include "MassSpawnerSubsystem.h"
 #include "MassEntityManager.h"
 #include "MassArchetypeTypes.h"
 #include "MassCommonFragments.h"
@@ -20,6 +21,11 @@
 #include "MassRepresentationFragments.h"
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
 #include "GameFramework/Actor.h"
+#include "Mass/UnitNavigationFragments.h"
+#include "MassEntityTemplateRegistry.h" 
+#include "Steering/MassSteeringFragments.h"
+#include "Avoidance/MassAvoidanceFragments.h"
+#include "MassEntitySubsystem.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -69,10 +75,16 @@ void UMassActorBindingComponent::BeginPlay()
 	}
 }
 
-
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
     // Prevent creating multiple entities for the same component
+
+	if (!EntityConfig) // Check if the EntityConfig is assigned
+	{
+		UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: EntityConfig is not set on Actor %s!"), *GetOwner()->GetName());
+		return FMassEntityHandle();
+	}
+
     if (MassEntityHandle.IsValid())
     {
         UE_LOG(LogTemp, Warning, TEXT("UMassActorBindingComponent: Entity already created for Actor %s."), *GetOwner()->GetName());
@@ -100,40 +112,101 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
         return FMassEntityHandle();
     }
 
-    // 1. Define the Archetype (Hardcoded here, could be made configurable)
 	TArray<const UScriptStruct*> FragmentsAndTags = {
-		FTransformFragment::StaticStruct(),
-		FMassVelocityFragment::StaticStruct(),
-		FMassMoveTargetFragment::StaticStruct(),
-		FUnitMassTag::StaticStruct(),
+    	// Core Movement & State
+    	FTransformFragment::StaticStruct(),
+		FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
+		FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
+		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
+		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
 
-    	// --- ADD REQUIRED FRAGMENTS FOR ACTOR SYNC & REPRESENTATION ---
-		FMassActorFragment::StaticStruct(),             // ** CRUCIAL for linking **
+    	FMassMovementParameters::StaticStruct(), 
+		// Steering & Avoidance
+		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
+		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
+
+		// Your Custom Logic
+		FUnitMassTag::StaticStruct(),                   // Your custom tag
+		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
+
+		// Actor Representation & Sync
+		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
-		FMassRepresentationLODFragment::StaticStruct(), // Needed by representation system
-
-    	FAgentRadiusFragment::StaticStruct(),
-		FMassForceFragment::StaticStruct(),
-		FMassAvoidanceColliderFragment::StaticStruct(),
+		FMassRepresentationLODFragment::StaticStruct()  // Needed by representation system
 	};
 
 	// 1. Create the Archetype Creation Parameters
-	FMassArchetypeCreationParams CreationParams;
-	CreationParams.ChunkMemorySize=0;
-	CreationParams.DebugName=FName("UMassActorBindingComponent");
+
 	
 	// Get the NON-CONST EntityManager (This is correct now)
 	FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 
 
+	// --- Get Archetype DIRECTLY from UMassEntityConfigAsset ---
+
+	// 1. Get the Entity Template directly from the Config Asset
+	//const FMassEntityTemplate& EntityTemplate = EntityConfig->GetOrCreateEntityTemplate(*World); // <-- Use the method on the Config Asset itself!
+
+	// 2. Get the Archetype Handle from the Template
+	//FMassArchetypeHandle ArchetypeHandle = EntityTemplate.GetArchetype();
+
+	
+	// --- End Archetype Retrieval ---
+	FMassArchetypeCreationParams CreationParams;
+	CreationParams.ChunkMemorySize=0;
+	CreationParams.DebugName=FName("UMassActorBindingComponent");
 	FMassArchetypeHandle ArchetypeHandle = EntityManager.CreateArchetype(FragmentsAndTags, CreationParams);
 	
 	if (!ArchetypeHandle.IsValid()) {
 		UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Failed to create archetype for %s!"), *Owner->GetName());
 		return FMassEntityHandle();
 	}
-	
-    FMassEntityHandle NewEntityHandle = EntityManager.CreateEntity(ArchetypeHandle);
+
+	// --- Define and Package Shared Fragment Values ---
+	FMassMovementParameters MovementParamsInstance;
+	MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
+	MovementParamsInstance.MaxAcceleration = 1000.0f; // Set desired value
+	MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
+	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.05f; // Example: +/- 5% variance
+	MovementParamsInstance.HeightSmoothingTime = 0.2f; 
+	// Ensure values are validated if needed (or use MovementParamsInstance.GetValidated())
+	// FMassMovementParameters ValidatedParams = MovementParamsInstance.GetValidated();
+
+	// Get the const shared fragment handle for this specific set of parameter values
+	FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
+
+	// Package the shared fragments
+	FMassArchetypeSharedFragmentValues SharedValues;
+	SharedValues.AddConstSharedFragment(MovementParamSharedFragment);
+	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
+
+	// 2. Steering Parameters (Using default values initially)
+	FMassMovingSteeringParameters MovingSteeringParamsInstance;
+	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
+	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
+	SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
+
+	FMassStandingSteeringParameters StandingSteeringParamsInstance;
+	// You can modify defaults here if needed
+	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
+	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
+
+	// 3. Avoidance Parameters (Using default values initially)
+	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
+	// You can modify defaults here if needed: MovingAvoidanceParamsInstance.PredictiveAvoidanceTime = 1.5f;
+	FConstSharedStruct MovingAvoidanceParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated()); // Use GetValidated if it exists
+	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
+
+	FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
+	// You can modify defaults here if needed
+	FConstSharedStruct StandingAvoidanceParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated()); // Use GetValidated if it exists
+	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
+
+	// ***** --- ADD THIS LINE --- *****
+	SharedValues.Sort(); // Sort the internal lists before passing to CreateEntity
+	// ***** --- END ADDED LINE --- *****
+
+    FMassEntityHandle NewEntityHandle = EntityManager.CreateEntity(ArchetypeHandle, SharedValues);
 
     if (!NewEntityHandle.IsValid())
     {
@@ -159,8 +232,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	MoveTargetFrag.DesiredSpeed.Set(0.f);             // No desired speed initially
 	MoveTargetFrag.IntentAtGoal = EMassMovementAction::Stand; // Default action is to stand
 	MoveTargetFrag.Forward = Owner->GetActorForwardVector(); // Align forward direction initially
-
 	// --- INITIALIZE NEWLY ADDED FRAGMENTS ---
+
+	//FMassMovementParameters& MoveParameters = EntityManager.GetFragmentDataChecked<FMassMovementParameters>(NewEntityHandle);
+
+	
+
 
 	// 3d. Initialize Actor Fragment ** THIS ESTABLISHES THE LINK **
 	FMassActorFragment& ActorFrag = EntityManager.GetFragmentDataChecked<FMassActorFragment>(NewEntityHandle);

@@ -47,6 +47,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
+	//FTimerHandle CollisionTimerHandle;
+	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void IsDead();
 

@@ -268,7 +268,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		IsDead();
 	} 
 
-
+	/*  // THIS IS NOT SAVE FOR MASS
 	if (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build)
 	{
 		// Ensure CapsuleComponent is valid
@@ -282,7 +282,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 			//UE_LOG(LogTemp, Warning, TEXT("SetUnitState: GetCapsuleComponent() returned nullptr when setting to Overlap."));
 		}
 	}else
-	{
+	{	
 		if (!GetWorld())
 		{
 			//UE_LOG(LogTemp, Error, TEXT("SetUnitState: GetWorld() returned nullptr."));
@@ -290,8 +290,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		}
 
 		// Define a member variable for the timer handle if needed
-		FTimerHandle CollisionTimerHandle;
-
+		
 		// Create a delegate that safely captures a weak reference to 'this'
 		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([WeakThis = TWeakObjectPtr<AAbilityUnit>(this)]()
 		{
@@ -312,14 +311,19 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 			}
 		});
 
-		// Set the timer with that delegate
-		GetWorld()->GetTimerManager().SetTimer(
-			CollisionTimerHandle,  // Ensure CollisionTimerHandle is a member variable if you need to manage it
-			TimerDelegate,
-			5.0f,  // Delay in seconds
-			false  // One-shot
-		);
-	}
+		if (UWorld* World = GetWorld())
+		{
+			// Set the timer with that delegate
+			
+			World->GetTimerManager().SetTimer(
+				CollisionTimerHandle,  // Ensure CollisionTimerHandle is a member variable if you need to manage it
+				TimerDelegate,
+				5.0f,  // Delay in seconds
+				false  // One-shot
+			);
+		}
+		
+	}*/
 	
 	UnitState = NewUnitState;
 }

@@ -10,4 +10,10 @@ URunStateProcessor::URunStateProcessor()
 void URunStateProcessor::ConfigureQueries()
 {
 	//Super::ConfigureQueries();
+	EntityQuery.RegisterWithProcessor(*this);
+}
+
+void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+	
 }

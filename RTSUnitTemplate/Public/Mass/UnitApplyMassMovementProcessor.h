@@ -4,20 +4,22 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
-#include "RunStateProcessor.generated.h"
+#include "UnitApplyMassMovementProcessor.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API URunStateProcessor : public UMassProcessor
+class RTSUNITTEMPLATE_API UUnitApplyMassMovementProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
-
-	URunStateProcessor();
 public:
+	UUnitApplyMassMovementProcessor();
+
+protected:
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+
 private:
 	FMassEntityQuery EntityQuery;
 };

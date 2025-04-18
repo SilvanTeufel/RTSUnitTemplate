@@ -370,7 +370,7 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->LeftClickPressed();
+		CameraControllerBase->LeftClickPressedMass();
 		CameraControllerBase->JumpCamera();
 	}
 

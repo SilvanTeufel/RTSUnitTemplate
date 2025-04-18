@@ -167,6 +167,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 {
                     ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
                     ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
+                    AUnitBase* AttackerUnitBase = Cast<AUnitBase>(AttackerActor);
+                    AttackerUnitBase->SetUnitState(UnitData::Chase);
                     StateFrag.StateTimer = 0.f;
                     continue;
                 }
@@ -178,6 +180,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 // Angriff beendet -> Wechsle zu Pause
                 ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity);
+                AUnitBase* AttackerUnitBase = Cast<AUnitBase>(AttackerActor);
+                AttackerUnitBase->SetUnitState(UnitData::Pause);
                 StateFrag.StateTimer = 0.0f; // Timer für Pause zurücksetzen
                 continue;
             }

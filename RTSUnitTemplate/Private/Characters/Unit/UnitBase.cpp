@@ -93,7 +93,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	GetCapsuleComponent()->SetIsReplicated(false);
 	GetMesh()->SetIsReplicated(false);
 }
-
+/*
 void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
@@ -126,7 +126,7 @@ void AUnitBase::ResetCollisionCooldown()
 {
 	bCanProcessCollision = true;
 }
-
+*/
 void AUnitBase::CreateHealthWidgetComp()
 {
 	// Check if the HealthWidgetComp is already created
@@ -202,7 +202,7 @@ void AUnitBase::BeginPlay()
 		SetMeshRotationServer();
 	}
 
-	SetCollisionCooldown();
+	//SetCollisionCooldown();
 
 	InitHealthbarOwner();
 }

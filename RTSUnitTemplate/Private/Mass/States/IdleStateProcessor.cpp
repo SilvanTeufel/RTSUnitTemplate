@@ -3,9 +3,11 @@
 #include "Mass/States/IdleStateProcessor.h" // Dein Prozessor-Header
 
 // Andere notwendige Includes...
+#include "MassActorSubsystem.h"
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
 #include "MassMovementFragments.h"      // FMassVelocityFragment
+#include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
 
 // ...
@@ -45,6 +47,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         // === KORREKTUR HIER ===
         // Mutable View für State Fragment holen (enthält den Timer)
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); 
 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
@@ -69,6 +72,8 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
+                AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                Actor->SetUnitState(UnitData::Chase);
                 // === KORREKTUR HIER ===
                 StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;
@@ -86,7 +91,9 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             if (!bIsOnPlattform && bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= SetUnitsBackToPatrolTime)
             {
                 ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStatePatrolTag>(Entity);
+                ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
+                AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                Actor->SetUnitState(UnitData::PatrolRandom);
                  // === KORREKTUR HIER ===
                 StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;

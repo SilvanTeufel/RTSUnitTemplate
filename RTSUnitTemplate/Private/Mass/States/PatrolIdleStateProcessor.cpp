@@ -3,7 +3,9 @@
 #include "MassEntityManager.h"
 
 // Fragmente und Tags
+#include "MassActorSubsystem.h"
 #include "MassMovementFragments.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
 
 UPatrolIdleStateProcessor::UPatrolIdleStateProcessor()
@@ -35,7 +37,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-
+            TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
         const float CurrentWorldTime = Context.GetWorld()->GetTimeSeconds();
 
@@ -56,6 +58,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
              {
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
+                 AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                 Actor->SetUnitState(UnitData::Chase);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;
@@ -78,6 +82,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                  // Idle-Zeit abgelaufen -> Wechsle zurück zu PatrolRandom
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
+                 AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                 Actor->SetUnitState(UnitData::PatrolRandom);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;

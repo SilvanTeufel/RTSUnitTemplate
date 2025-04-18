@@ -3,9 +3,11 @@
 #include "MassEntityManager.h"
 
 // Fragmente und Tags
+#include "MassActorSubsystem.h"
 #include "MassMovementFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "MassCommonFragments.h" // Für Transform
+#include "Characters/Unit/UnitBase.h"
 
 UPauseStateProcessor::UPauseStateProcessor()
 {
@@ -23,7 +25,6 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Sicherstellen, dass Velocity 0 ist
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
-
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -38,7 +39,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
          const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-
+            TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+            
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -48,7 +50,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassVelocityFragment& Velocity = VelocityList[i];
-
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // 1. Sicherstellen, dass Einheit steht
@@ -59,6 +60,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
+                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                UnitBase->SetUnitState(UnitData::Idle);
                 StateFrag.StateTimer = 0.f;
                 continue;
             }
@@ -77,6 +80,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      // Noch/wieder in Reichweite -> Wechsle zu Attack
                      ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                      ChunkContext.Defer().AddTag<FMassStateAttackTag>(Entity);
+                     AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                     UnitBase->SetUnitState(UnitData::Attack);
                      StateFrag.StateTimer = 0.f; // Reset Timer für Attack-Dauer
                      // Hier könnte ein Signal gesendet werden "StartAttackAnimation"
                 }
@@ -85,6 +90,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      // Nicht mehr in Reichweite -> Wechsle zurück zu Chase
                      ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                      ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
+                     AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
+                     UnitBase->SetUnitState(UnitData::Chase);
                      StateFrag.StateTimer = 0.f;
                 }
                 continue; // Zustand gewechselt

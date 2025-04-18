@@ -83,6 +83,8 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                  StateFrag.StateTimer = 0.f;
+             	 UnitBase->SetUnitState(UnitData::Chase);
+             	
                  continue;
              }
 
@@ -103,6 +105,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                   {
                        ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                        ChunkContext.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
+                  		UnitBase->SetUnitState(UnitData::PatrolIdle);
                        StateFrag.StateTimer = 0.f; // Timer für Idle-Dauer starten
                        // Bewegung stoppen
                        MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World);
@@ -120,6 +123,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                              // Konnte kein neues Ziel finden -> vielleicht zu Idle wechseln?
                              ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                              ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Fallback zu Idle
+                        	 UnitBase->SetUnitState(UnitData::Idle);
                              StateFrag.StateTimer = 0.f;
                              continue;
                         }
@@ -167,7 +171,7 @@ void UPatrolRandomStateProcessor::SetNewRandomPatrolTarget(FMassPatrolFragment& 
         MoveTarget.CreateNewAction(EMassMovementAction::Move, *World);
         MoveTarget.Center = RandomPoint.Location;
         // Geschwindigkeit aus Stats holen (benötigt Stats Fragment hier)
-         // TODO: Hier Zugriff auf FMassCombatStatsFragment bekommen, wenn nötig!
+        // TODO: Hier Zugriff auf FMassCombatStatsFragment bekommen, wenn nötig!
         MoveTarget.DesiredSpeed.Set(600.f); // Beispiel: Feste Geschwindigkeit hier
         MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
         MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius
