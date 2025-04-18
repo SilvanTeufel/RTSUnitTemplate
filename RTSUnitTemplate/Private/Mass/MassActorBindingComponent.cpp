@@ -183,6 +183,9 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	// 2. Steering Parameters (Using default values initially)
 	FMassMovingSteeringParameters MovingSteeringParamsInstance;
 	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
+	MovingSteeringParamsInstance.ReactionTime = 0.05f; // Faster reaction (Default 0.3)
+	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
+
 	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
 	SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
 

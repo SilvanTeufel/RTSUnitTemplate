@@ -54,9 +54,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
     {
         const int32 NumEntities = Context.GetNumEntities();
         if (NumEntities == 0) return;
-
-        UE_LOG(LogTemp, Log, TEXT("UUnitApplyMassMovementProcessor: Processing Chunk with %d entities!"), NumEntities);
-
+    	
         // --- Get required data ---
         const FMassMovementParameters& MovementParams = Context.GetConstSharedFragment<FMassMovementParameters>();
         const TConstArrayView<FMassSteeringFragment> SteeringList = Context.GetFragmentView<FMassSteeringFragment>(); // Get Steering
@@ -95,18 +93,11 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 
             // Clamp final speed
             Velocity.Value = Velocity.Value.GetClampedToMaxSize(MaxSpeed);
-
-            // --- Logging ---
-            UE_LOG(LogTemp, Log, TEXT("EntityIdx %d | DesiredV: %s | PrevV: %s | Force: %s | AccelIn: %s | DeltaV: %s | NewV: %s | MaxSpd: %.1f | Accel: %.1f"),
-                   EntityIndex, *DesiredVelocity.ToString(), *PrevVelocity.ToString(), *Force.Value.ToString(),
-                   *AccelInput.ToString(), *VelocityDelta.ToString(), *Velocity.Value.ToString(), MaxSpeed, Acceleration);
-
+        	
             // --- Apply final velocity to position ---
             FVector CurrentLocation = CurrentTransform.GetLocation();
             FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
             CurrentTransform.SetTranslation(NewLocation);
-            UE_LOG(LogTemp, Log, TEXT("EntityIdx %d | PrevLoc: %s | NewLoc: %s"),
-                   EntityIndex, *CurrentLocation.ToString(), *NewLocation.ToString());
 
             // Reset force for the next frame (usually done by force generating systems, but good practice here)
             Force.Value = FVector::ZeroVector;

@@ -74,8 +74,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         const int32 NumEntities = ChunkContext.GetNumEntities();
 
         const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
-        const TConstArrayView<FMassRepresentationLODFragment> RepresentationLODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
-        // const TConstArrayView<FMassVelocityFragment> VelocityFragments = ChunkContext.GetFragmentView<FMassVelocityFragment>(); // <-- Entfernt
+
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 
         const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation); // Quadrat für Vergleich
@@ -117,7 +116,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 }
                 // Wenn MoveDirection2D Null war (nur vertikale Bewegung), bleibt TargetRotation unverändert (CurrentActorRotation)
             }
-            // Wenn keine signifikante Bewegung stattfand, bleibt TargetRotation ebenfalls unverändert
 
             // --- Rotation interpolieren ---
             const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, ActualDeltaTime * (ActorRotationSpeed / 90.f)); // Rotationsgeschwindigkeit ggf. anpassen
@@ -131,10 +129,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             // --- Actor Transform setzen (nur wenn nötig) ---
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {
-                //UE_LOG(LogTemp, Warning, TEXT("END FinalLocation! %s"), *FinalLocation.ToString());
-                //Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::None);
                 Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::TeleportPhysics);
-                //Actor->SetActorTransform(FinalActorTransform, false, nullptr, ETeleportType::TeleportPhysics);
             }
         } // Ende for each entity
     }); // Ende ForEachEntityChunk
