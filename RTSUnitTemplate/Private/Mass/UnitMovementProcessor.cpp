@@ -7,6 +7,8 @@
 #include "NavigationSystem.h"
 #include "NavigationData.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"
+#include "MassSignalSubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
 // Remove direct velocity/transform includes if no longer directly used
 // #include "MassCommonFragments.h" // Keep if still reading Transform
@@ -39,10 +41,13 @@ void UUnitMovementProcessor::ConfigureQueries()
 
 void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
- 
+    //UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!UnitMovementProcessor Execute!!!!! "));
+    // --- TEST ---
+
+    
     UWorld* World = EntityManager.GetWorld();
     if (!World) return; // Early out
-
+    
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     if (!NavSystem) return;
 
@@ -94,10 +99,18 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
             {
                 if (PathFrag.HasValidPath()) PathFrag.ResetPath();
-                // Optional: Set UnitState Idle via a signal or deferred command if needed
-                // UnitBase->SetUnitState(UnitData::Idle); // DON'T DO THIS DIRECTLY IN PROCESSOR - Use Signals/Deferred Commands
 
+             
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                if (!SignalSubsystem)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("NO SIGNALSUBSYSTEM FOUND!!!!!!"));
+                     continue; // Handle missing subsystem
+                }
+            
+                SignalSubsystem->SignalEntityDeferred(ChunkContext,UnitSignals::ReachedDestination, ChunkContext.GetEntity(i));
                 UE_LOG(LogTemp, Warning, TEXT("!!!!!Stop here, DesiredVelocity remains ZeroVector!!!!! %s"),  *Steering.DesiredVelocity.ToString());
+               
                 continue; // Stop here, DesiredVelocity remains ZeroVector
             }
 

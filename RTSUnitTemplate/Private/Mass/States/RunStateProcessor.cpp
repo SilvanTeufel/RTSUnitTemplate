@@ -3,6 +3,8 @@
 
 #include "Mass/States/RunStateProcessor.h"
 
+#include "Mass/UnitMassTag.h"
+
 URunStateProcessor::URunStateProcessor()
 {
 }
@@ -10,10 +12,11 @@ URunStateProcessor::URunStateProcessor()
 void URunStateProcessor::ConfigureQueries()
 {
 	//Super::ConfigureQueries();
+	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::All);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
 void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	
+	UE_LOG(LogTemp, Warning, TEXT("URunStateProcessor!"));
 }
