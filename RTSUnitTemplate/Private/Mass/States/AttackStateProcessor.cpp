@@ -11,6 +11,7 @@
 #include "MassActorSubsystem.h"  
 // Für Actor-Cast und Projektil-Spawn (Beispiel)
 #include "Characters/Unit/UnitBase.h"
+#include "Mass/Signals/MySignals.h"
 
 
 // Signal Definitionen (Beispiel - diese müssen irgendwo global definiert werden)
@@ -53,6 +54,8 @@ void UAttackStateProcessor::ConfigureQueries()
 
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UWorld* World = Context.GetWorld(); // World für MoveTarget holen
+
     // Stelle sicher, dass das Signal Subsystem gültig ist
     if (!SignalSubsystem)
     {
@@ -72,7 +75,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const auto ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
         TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>();
               
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
@@ -84,7 +86,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassVelocityFragment& Velocity = VelocityList[i];
-            const FMassActorFragment& ActorFrag = ActorList[i]; // ReadOnly reicht meist
             AActor* AttackerActor = ActorFragments[i].GetMutable(); // Actor holen
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -122,14 +123,24 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 {
                     if (Stats.bUseProjectile)
                     {
+                        
                         // === KORREKTER AUFRUF HIER ===
                         // Argumente: EntityManager, ChunkContext, Attacker-Entity, Ziel-Entity, Attacker-Actor
-                        SpawnProjectileFromActor(EntityManager, ChunkContext, Entity, TargetFrag.TargetEntity, AttackerActor);
+                        // SpawnProjectileFromActor(EntityManager, ChunkContext, Entity, TargetFrag.TargetEntity, AttackerActor);
                         // =============================
+                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                        if (!SignalSubsystem) continue;
+                    
+                        SignalSubsystem->SignalEntity(UnitSignals::RangedAttack, Entity);
                         
                     }
                     else // Nahkampf
                     {
+                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                        if (!SignalSubsystem) continue;
+                        
+                        SignalSubsystem->SignalEntity(UnitSignals::MeleeAttack, Entity);
+                        /*
                         // Schaden senden
                         // bool bIsMagic = Stats.bIsDoingMagicDamage; // Annahme: Flag im StatsFragment
                         bool bIsMagic = false; // Beispiel
@@ -158,30 +169,43 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                              // SignalSubsystem->SignalEntity(TargetFrag.TargetEntity, UE::Mass::Signals::TriggerEffect, ImpactEffectPayload);
                              // SignalSubsystem->SignalEntity(TargetFrag.TargetEntity, UE::Mass::Signals::ForceState, IsAttackedStatePayload);
                              // UE_LOG(LogTemp, Log, TEXT("Signaling target reactions for Entity [%d]"), TargetFrag.TargetEntity.Index);
-                        }
+                        }*/
                     }
                     // Markieren, dass diese Entität in diesem Tick angegriffen hat
                     EntitiesThatAttackedThisTick.Add(Entity);
                 }
-                else // Ziel außer Reichweite gekommen während der Attack-Animation
+              /*  else // Ziel außer Reichweite gekommen während der Attack-Animation
                 {
+                    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                      if (!SignalSubsystem)
+                      {
+                           continue; // Handle missing subsystem
+                      }
+                      SignalSubsystem->SignalEntity(
+                      UnitSignals::Chase,
+                      Entity);
+                    
                     ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
                     ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
-                    AUnitBase* AttackerUnitBase = Cast<AUnitBase>(AttackerActor);
-                    AttackerUnitBase->SetUnitState(UnitData::Chase);
                     StateFrag.StateTimer = 0.f;
                     continue;
-                }
-            } // Ende Schadens-/Projektil-Anwendung
+                }*/
+            } 
 
             // 5. Prüfen, ob die Angriffs-Aktion (ohne Pause) abgeschlossen ist
             if (StateFrag.StateTimer >= AttackDuration)
             {
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                   if (!SignalSubsystem)
+                   {
+                        continue; // Handle missing subsystem
+                   }
+                   SignalSubsystem->SignalEntity(
+                   UnitSignals::Pause,
+                   Entity);
                 // Angriff beendet -> Wechsle zu Pause
                 ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity);
-                AUnitBase* AttackerUnitBase = Cast<AUnitBase>(AttackerActor);
-                AttackerUnitBase->SetUnitState(UnitData::Pause);
                 StateFrag.StateTimer = 0.0f; // Timer für Pause zurücksetzen
                 continue;
             }

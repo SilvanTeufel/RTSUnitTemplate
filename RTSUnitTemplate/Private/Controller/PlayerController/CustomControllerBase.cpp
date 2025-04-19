@@ -184,7 +184,11 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
     
     // If you need to trigger network replication or specific actions:
     MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
-    // MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
+
+	EntityManager.Defer().AddTag<FMassStateRunTag>(InEntity);
+
+
+	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
 	if (MoveTargetFragmentPtr) // Check ptr again just in case
 	{

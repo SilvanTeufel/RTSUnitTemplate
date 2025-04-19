@@ -7,8 +7,10 @@
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
 #include "MassMovementFragments.h"      // FMassVelocityFragment
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"
 
 // ...
 
@@ -37,31 +39,26 @@ void UIdleStateProcessor::ConfigureQueries()
 
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext& ChunkContext)
+
+    const UWorld* World = EntityManager.GetWorld();
+    if (!World) return;
+    
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, World](FMassExecutionContext& ChunkContext)
     {
+        
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
-        // === KORREKTUR HIER ===
-        // Mutable View für State Fragment holen (enthält den Timer)
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); 
 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            // === KORREKTUR HIER ===
-            // Referenz auf das State Fragment holen
+ 
             FMassAIStateFragment& StateFrag = StateList[i];
-
-            // --- 1. Bewegung stoppen ---
-            VelocityList[i].Value = FVector::ZeroVector;
-
-            // --- (Platzhalter für Kollisionslogik) ---
 
             // --- 3. Prüfen auf gefundenes Ziel ---
             const FMassAITargetFragment& TargetFrag = TargetList[i];
@@ -70,20 +67,22 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             if (TargetFrag.bHasValidTarget && bCanAttack /* && Bedingungen */)
             {
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                  if (!SignalSubsystem)
+                  {
+                       continue; // Handle missing subsystem
+                  }
+                  SignalSubsystem->SignalEntity(
+                  UnitSignals::Chase,
+                  Entity);
+                
                 ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
-                AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                Actor->SetUnitState(UnitData::Chase);
-                // === KORREKTUR HIER ===
                 StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;
             }
-
-            // --- 4. Prüfen auf Rückkehr zur Patrouille ---
-            // === KORREKTUR HIER ===
-            // Timer über State Fragment inkrementieren und lesen
+            
             StateFrag.StateTimer += DeltaTime;
-
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
             bool bHasPatrolRoute = PatrolFrag.CurrentWaypointIndex != INDEX_NONE;
             bool bIsOnPlattform = false; // Dein Flag hier aus Stats o.ä.
@@ -92,8 +91,16 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
-                AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                Actor->SetUnitState(UnitData::PatrolRandom);
+
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                  if (!SignalSubsystem)
+                  {
+                       continue; // Handle missing subsystem
+                  }
+                  SignalSubsystem->SignalEntity(
+                  UnitSignals::PatrolRandom,
+                  Entity);
+                
                  // === KORREKTUR HIER ===
                 StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;

@@ -5,8 +5,10 @@
 // Fragmente und Tags
 #include "MassActorSubsystem.h"
 #include "MassMovementFragments.h"
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"
 
 UPatrolIdleStateProcessor::UPatrolIdleStateProcessor()
 {
@@ -29,6 +31,9 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
 
 void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UWorld* World = EntityManager.GetWorld();
+    if (!World) return;
+    
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
     {
@@ -56,10 +61,17 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             // 2. Ziel gefunden? -> Zu Chase wechseln
              if (TargetFrag.bHasValidTarget)
              {
+                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                   if (!SignalSubsystem)
+                   {
+                        continue; // Handle missing subsystem
+                   }
+                   SignalSubsystem->SignalEntity(
+                   UnitSignals::Chase,
+                   Entity);
+                 
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
-                 AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                 Actor->SetUnitState(UnitData::Chase);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;
@@ -80,10 +92,17 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
              if (EndTimePtr && CurrentWorldTime >= *EndTimePtr)
              {
                  // Idle-Zeit abgelaufen -> Wechsle zurück zu PatrolRandom
+                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                    if (!SignalSubsystem)
+                    {
+                         continue; // Handle missing subsystem
+                    }
+                    SignalSubsystem->SignalEntity(
+                    UnitSignals::PatrolRandom,
+                    Entity);
+                 
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
-                 AUnitBase* Actor = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                 Actor->SetUnitState(UnitData::PatrolRandom);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;

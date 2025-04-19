@@ -21,8 +21,12 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
 
     // Optional: Nur für bestimmte Zustände laufen lassen?
-    // EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
-    // EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
     // ...
 
     // Schließe tote Einheiten aus
@@ -56,7 +60,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     TArray<FMassCombatStatsFragment> AllStats;
     TArray<FMassAgentCharacteristicsFragment> AllCharacteristics;
 
-    /*
+  
     FMassEntityQuery AllUnitsQuery;
     AllUnitsQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     AllUnitsQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
@@ -198,5 +202,5 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         } // Ende Schleife für Entities dieses Prozessors
     }); // Ende ForEachEntityChunk für diesen Prozessor
 
-    */
+ 
 }

@@ -84,7 +84,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  if (UnitBase)
                  {
                     // UnitBase->UnitWillDespawn(); // Deine Funktion aufrufen
-                     // UnitBase->SpawnPickupsArray();
+                    // UnitBase->SpawnPickupsArray();
                  }
 
                  // Entität zerstören

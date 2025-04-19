@@ -10,73 +10,103 @@
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/UnitBase.h" // Include your AUnitBase header
 #include "Mass/Signals/MySignals.h" // Include your signal definition header
-
-// Define the signal name again or include where it's defined
-namespace UnitSignals
-{
-    extern const FName ReachedDestination; // Assuming definition is elsewhere now
-    // const FName ReachedDestination = FName("UnitReachedDestination"); // Or define here if local
-}
+#include "Widgets/UnitBaseHealthBar.h"
 
 UUnitStateProcessor::UUnitStateProcessor()
 {
-    // This processor is event-driven, so phase/group isn't critical unless
-    // it needs specific ordering relative to other signal handlers.
-    // ExecutionFlags = (int32)EProcessorExecutionFlags::All; // Run everywhere
     ProcessingPhase = EMassProcessingPhase::PostPhysics; // Run fairly late
-    bAutoRegisterWithProcessingPhases = false; // Don't need ticking execute
+    bAutoRegisterWithProcessingPhases = true; // Don't need ticking execute
 }
 
 void UUnitStateProcessor::Initialize(UObject& Owner)
 {
     Super::Initialize(Owner);
-
     // Get subsystems
     SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>();
     EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 
     if (SignalSubsystem)
     {
-        // Register the handler function to listen for the specific signal name
-        // Using AddUObject requires the handler function to be a UFUNCTION,
-        // OR use AddRaw/AddSP/AddLambda if the handler is not a UFUNCTION.
-        // Let's use AddRaw for simplicity here, assuming OnUnitReachedDestination is just a standard C++ member func.
-        ReachedDestinationSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedDestination)
-            .AddUObject(this, &UUnitStateProcessor::OnUnitReachedDestination);
-            // .AddRaw(this, &UUnitStateProcessor::OnUnitReachedDestination); // Alternative if not UFUNCTION
+        UE_LOG(LogTemp, Log, TEXT("UUnitStateProcessor Initializing Signal Handlers..."));
 
-         UE_LOG(LogTemp, Log, TEXT("UUnitStateProcessor Initialized and Registered Signal Handler for %s"), *UnitSignals::ReachedDestination.ToString());
+        // List of signal names that should trigger ChangeUnitState
+
+        // Register the same handler function for each signal in the list
+        for (const FName& SignalName : StateChangeSignals)
+        {
+            // Use AddUFunction since ChangeUnitState is a UFUNCTION
+            FDelegateHandle NewHandle = SignalSubsystem->GetSignalDelegateByName(SignalName)
+                .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, ChangeUnitState));
+
+            StateChangeSignalDelegateHandle.Add(NewHandle);
+            // Optional: Store handles if you need precise unregistration later
+            // if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
+
+            UE_LOG(LogTemp, Log, TEXT("Registered ChangeUnitState for signal: %s"), *SignalName.ToString());
+        }
+
+
+    	MeleeAttackSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UnitMeeleAttack));
+    	RangedAttackSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UnitRangedAttack));
+
+    }else
+    {
+        UE_LOG(LogTemp, Error, TEXT("UUnitStateProcessor failed to get SignalSubsystem!"));
     }
-     else
-     {
-          UE_LOG(LogTemp, Error, TEXT("UUnitStateProcessor failed to get SignalSubsystem!"));
-     }
 }
 
 
 void UUnitStateProcessor::BeginDestroy()
 {
-    UE_LOG(LogTemp, Log, TEXT("UUnitStateProcessor BeginDestroy called."));
     
         // --- Perform your cleanup here ---
         // Unregister the signal handler
-        if (SignalSubsystem && ReachedDestinationSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+    for (int i = 0; i < StateChangeSignalDelegateHandle.Num(); i++)
+    {
+        if (SignalSubsystem && StateChangeSignalDelegateHandle[i].IsValid()) // Check if subsystem and handle are valid
         {
-            SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedDestination).Remove(ReachedDestinationSignalDelegateHandle);
-            UE_LOG(LogTemp, Log, TEXT("Unregistered Signal Handler in BeginDestroy."));
+            SignalSubsystem->GetSignalDelegateByName(StateChangeSignals[i])
+            .Remove(StateChangeSignalDelegateHandle[i]);
+            
+            StateChangeSignalDelegateHandle[i].Reset();
         }
+    }
+
+	if (SignalSubsystem && MeleeAttackSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack)
+		.Remove(MeleeAttackSignalDelegateHandle);
+            
+		MeleeAttackSignalDelegateHandle.Reset();
+	}
+	
+	if (SignalSubsystem && RangedAttackSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack)
+		.Remove(RangedAttackSignalDelegateHandle);
+            
+		RangedAttackSignalDelegateHandle.Reset();
+	}
+	
     SignalSubsystem = nullptr; // Null out pointers if needed
     EntitySubsystem = nullptr;
     // --- End Cleanup ---
-
     Super::BeginDestroy();
 }
 
 void UUnitStateProcessor::ConfigureQueries()
 {
+    EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UUnitStateProcessor::OnUnitReachedDestination(FName SignalName, TConstArrayView<FMassEntityHandle> Entities)
+void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+  
+}
+
+void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     if (!EntitySubsystem)
     {
@@ -85,9 +115,6 @@ void UUnitStateProcessor::OnUnitReachedDestination(FName SignalName, TConstArray
     }
 
     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-    
-            
-    UE_LOG(LogTemp, Log, TEXT("OnUnitReachedDestination signal received for %d entities."), Entities.Num());
 
     for (const FMassEntityHandle& Entity : Entities)
     {
@@ -95,10 +122,7 @@ void UUnitStateProcessor::OnUnitReachedDestination(FName SignalName, TConstArray
         {
             continue;
         }
-
-        // Get the ActorFragment to find the corresponding AUnitBase
-        // Note: Accessing Actors directly here can be slow if many entities arrive at once.
-        // Consider alternative approaches (like setting a Mass state tag) if performance becomes an issue.
+        
         FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
         if (ActorFragPtr)
         {
@@ -110,7 +134,42 @@ void UUnitStateProcessor::OnUnitReachedDestination(FName SignalName, TConstArray
                 {
                     UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to Idle."), *UnitBase->GetName(), Entity.Index, Entity.SerialNumber);
                     // ** Finally call the function **
-                    UnitBase->SetUnitState(UnitData::Idle); // Make sure UnitData::Idle is accessible
+                    if (SignalName == UnitSignals::Idle)
+                        {
+                        UnitBase->SetUnitState(UnitData::Idle); // Make sure UnitData::Idle is accessible
+                    }
+                    else if (SignalName == UnitSignals::Chase)
+                    {
+                        UnitBase->SetUnitState(UnitData::Chase); // Assuming UnitData::Chase exists
+                    }
+                    else if (SignalName == UnitSignals::Attack)
+                    {
+                        UnitBase->SetUnitState(UnitData::Attack); // Assuming UnitData::Attack exists
+                    }
+                    else if (SignalName == UnitSignals::Dead)
+                    {
+                        UnitBase->SetUnitState(UnitData::Dead); // Assuming UnitData::Death exists
+                    }
+                    else if (SignalName == UnitSignals::PatrolIdle)
+                    {
+                        UnitBase->SetUnitState(UnitData::PatrolIdle);
+                    }
+                    else if (SignalName == UnitSignals::PatrolRandom)
+                    {
+                        UnitBase->SetUnitState(UnitData::PatrolRandom);
+                    }
+                    else if (SignalName == UnitSignals::Pause)
+                    {
+                        UnitBase->SetUnitState(UnitData::Pause);
+                    }
+                    else if (SignalName == UnitSignals::Run)
+                    {
+                        UnitBase->SetUnitState(UnitData::Run);
+                    }
+                    else if (SignalName == UnitSignals::Casting)
+                    {
+                        UnitBase->SetUnitState(UnitData::Casting); // Assuming UnitData::Cast exists
+                    }
                 }
                 else
                 {
@@ -122,10 +181,127 @@ void UUnitStateProcessor::OnUnitReachedDestination(FName SignalName, TConstArray
                   UE_LOG(LogTemp, Warning, TEXT("Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber);
              }
         }
-         else
-         {
+        else
+        {
              // This could happen if the processor handling the signal doesn't ensure entities have FMassActorFragment.
               UE_LOG(LogTemp, Warning, TEXT("Entity %d:%d received ReachedDestination signal but has no ActorFragment."), Entity.Index, Entity.SerialNumber);
-         }
+        }
     }
+}
+
+void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("OnUnitReachedDestination called but EntitySubsystem is null!"));
+		return;
+	}
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) // Double check entity validity
+		{
+			continue;
+		}
+        
+		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		if (ActorFragPtr)
+		{
+			AActor* Actor = ActorFragPtr->GetMutable(); // Use Get() for const access if possible, GetMutable() otherwise
+			if (IsValid(Actor)) // Check Actor validity
+			{
+				AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+				if(!UnitBase->UseProjectile )
+				{
+					// Attack without Projectile
+						float NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetArmor();
+						
+						if(UnitBase->IsDoingMagicDamage)
+							NewDamage = UnitBase->Attributes->GetAttackDamage() - UnitBase->UnitToChase->Attributes->GetMagicResistance();
+							
+						if(UnitBase->UnitToChase->Attributes->GetShield() <= 0)
+							UnitBase->UnitToChase->SetHealth_Implementation(UnitBase->UnitToChase->Attributes->GetHealth()-NewDamage);
+						else
+							UnitBase->UnitToChase->SetShield_Implementation(UnitBase->UnitToChase->Attributes->GetShield()-UnitBase->Attributes->GetAttackDamage());
+
+						UnitBase->LevelData.Experience++;
+
+						if(UnitBase->HealthWidgetComp)
+							if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(UnitBase->HealthWidgetComp->GetUserWidgetObject()))
+							{
+								HealthBarWidget->UpdateWidget();
+							}
+								
+						UnitBase->ServerMeeleImpactEvent();
+						
+						UnitBase->UnitToChase->ActivateAbilityByInputID(UnitBase->UnitToChase->DefensiveAbilityID, UnitBase->UnitToChase->DefensiveAbilities);
+						UnitBase->UnitToChase->FireEffects(UnitBase->MeleeImpactVFX, UnitBase->MeleeImpactSound, UnitBase->ScaleImpactVFX, UnitBase->ScaleImpactSound, UnitBase->MeeleImpactVFXDelay, UnitBase->MeleeImpactSoundDelay);
+								
+						if (!UnitBase->UnitToChase->UnitsToChase.Contains(UnitBase))
+						{
+							// If not, add UnitBase to the array
+							UnitBase->UnitToChase->UnitsToChase.Emplace(UnitBase);
+							UnitBase->UnitToChase->SetNextUnitToChase();
+						}
+							
+						if(UnitBase->UnitToChase->GetUnitState() != UnitData::Run &&
+							UnitBase->UnitToChase->GetUnitState() != UnitData::Attack &&
+							UnitBase->UnitToChase->GetUnitState() != UnitData::Casting &&
+							UnitBase->UnitToChase->GetUnitState() != UnitData::Rooted &&
+							UnitBase->UnitToChase->GetUnitState() != UnitData::Pause)
+						{
+							UnitBase->UnitToChase->UnitControlTimer = 0.f;
+							UnitBase->UnitToChase->SetUnitState( UnitData::IsAttacked );
+						}else if(UnitBase->UnitToChase->GetUnitState() == UnitData::Casting)
+						{
+							UnitBase->UnitToChase->UnitControlTimer -= UnitBase->UnitToChase->ReduceCastTime;
+						}else if(UnitBase->UnitToChase->GetUnitState() == UnitData::Rooted)
+						{
+							UnitBase->UnitToChase->UnitControlTimer -= UnitBase->UnitToChase->ReduceRootedTime;
+						}
+				}
+			}
+		}
+	}
+}
+
+void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("OnUnitReachedDestination called but EntitySubsystem is null!"));
+		return;
+	}
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) // Double check entity validity
+		{
+			continue;
+		}
+        
+		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		if (ActorFragPtr)
+		{
+			AActor* Actor = ActorFragPtr->GetMutable(); // Use Get() for const access if possible, GetMutable() otherwise
+			if (IsValid(Actor)) // Check Actor validity
+			{
+				AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+				if(UnitBase->UseProjectile)
+				{
+						UnitBase->ServerStartAttackEvent_Implementation();
+						UnitBase->SetUnitState(UnitData::Attack);
+						UnitBase->ActivateAbilityByInputID(UnitBase->AttackAbilityID, UnitBase->AttackAbilities);
+						UnitBase->ActivateAbilityByInputID(UnitBase->ThrowAbilityID, UnitBase->ThrowAbilities);
+						if(UnitBase->Attributes->GetRange() >= 600.f) UnitBase->ActivateAbilityByInputID(UnitBase->OffensiveAbilityID, UnitBase->OffensiveAbilities);
+			
+						UnitBase->SpawnProjectile(UnitBase->UnitToChase, UnitBase);
+				}
+			}
+		}
+	}
 }

@@ -20,7 +20,7 @@ USTRUCT() struct FMassStateChaseTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateAttackTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassStateMovingTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
+USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
 
 // --- Patrouillen-Zustände ---
 USTRUCT() struct FMassStatePatrolTag : public FMassTag { GENERATED_BODY() }; // Direkt zum WP

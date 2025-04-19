@@ -7,7 +7,9 @@
 #include "MassMovementFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "MassCommonFragments.h" // Für Transform
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Mass/Signals/MySignals.h"
 
 UPauseStateProcessor::UPauseStateProcessor()
 {
@@ -30,6 +32,9 @@ void UPauseStateProcessor::ConfigureQueries()
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UWorld* World = EntityManager.GetWorld();
+    if (!World) return;
+    
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
     {
@@ -58,10 +63,17 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
              // 2. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                if (!SignalSubsystem)
+                {
+                     continue; // Handle missing subsystem
+                }
+                SignalSubsystem->SignalEntity(
+                UnitSignals::Idle,
+                Entity);
+                
                 ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
-                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                UnitBase->SetUnitState(UnitData::Idle);
                 StateFrag.StateTimer = 0.f;
                 continue;
             }
@@ -77,21 +89,34 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
                 if (DistSq <= AttackRangeSq)
                 {
+                    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                     if (!SignalSubsystem)
+                     {
+                          continue; // Handle missing subsystem
+                     }
+                     SignalSubsystem->SignalEntity(
+                     UnitSignals::Attack,
+                     Entity);
+                    
                      // Noch/wieder in Reichweite -> Wechsle zu Attack
                      ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                      ChunkContext.Defer().AddTag<FMassStateAttackTag>(Entity);
-                     AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                     UnitBase->SetUnitState(UnitData::Attack);
                      StateFrag.StateTimer = 0.f; // Reset Timer für Attack-Dauer
                      // Hier könnte ein Signal gesendet werden "StartAttackAnimation"
                 }
                 else
                 {
+                    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                     if (!SignalSubsystem)
+                     {
+                          continue; // Handle missing subsystem
+                     }
+                     SignalSubsystem->SignalEntity(
+                     UnitSignals::Chase,
+                     Entity);
                      // Nicht mehr in Reichweite -> Wechsle zurück zu Chase
                      ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                      ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
-                     AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                     UnitBase->SetUnitState(UnitData::Chase);
                      StateFrag.StateTimer = 0.f;
                 }
                 continue; // Zustand gewechselt

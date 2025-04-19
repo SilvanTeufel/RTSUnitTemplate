@@ -26,5 +26,5 @@ protected:
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 private:
 	FMassEntityQuery EntityQuery;
-	void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, class AUnitBase* UnitBaseActor, UNavigationSystemV1* NavSys, UWorld* World); // Helper
+	void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, UNavigationSystemV1* NavSys, UWorld* World); // Helper
 };

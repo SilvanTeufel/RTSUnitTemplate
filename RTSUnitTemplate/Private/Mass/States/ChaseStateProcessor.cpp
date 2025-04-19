@@ -10,9 +10,11 @@
 
 #include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"
 
 
 UChaseStateProcessor::UChaseStateProcessor()
@@ -51,8 +53,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-            TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>(); 
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -66,12 +67,18 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // 1. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                 if (!SignalSubsystem)
+                 {
+                      continue; // Handle missing subsystem
+                 }
+                 SignalSubsystem->SignalEntity(
+                 UnitSignals::Idle,
+                 Entity);
+                
                 ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
-                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                UnitBase->SetUnitState(UnitData::Chase);
-                StopMovement(MoveTarget, World);
-                VelocityList[i].Value = FVector::ZeroVector;
+                
                 StateFrag.StateTimer = 0.f; // Reset Timer
                 continue;
             }
@@ -85,29 +92,24 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // 3. In Angriffsreichweite?
             if (DistSq <= AttackRangeSq)
             {
-                // Ja -> Anhalten und zu Pause wechseln (bereitet Angriff vor)
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                if (!SignalSubsystem)
+                {
+                     continue; // Handle missing subsystem
+                }
+                SignalSubsystem->SignalEntity(
+                UnitSignals::Pause,
+                Entity);
+                
                 ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity); // Zu Pause, nicht direkt Attack
-               
-                AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragments[i].GetMutable());
-                UnitBase->SetUnitState(UnitData::Pause);
-                StopMovement(MoveTarget, World);
-                 VelocityList[i].Value = FVector::ZeroVector;
+
                 StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
             }
          
-                // 4. Außer Reichweite -> Weiter verfolgen
-                UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
-
-                // TODO: Hier könnte Evasion-Logik geprüft werden (z.B. auf Tag reagieren)
-                // if (ChunkContext.DoesEntityHaveTag<FCollidingWithFriendlyTag>(Entity)) { ... -> Evasion }
-
-                 // TODO: Hier könnten Fähigkeiten aktiviert werden (Offensive, Throw etc.)
-                 // z.B. via Signal oder ActorFragment Call, wenn noch nicht im Cooldown
-            
-
-            // Rotation wird idealerweise von UUnitMovementProcessor oder ULookAtProcessor gehandhabt
+            // 4. Außer Reichweite -> Weiter verfolgen
+            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
         }
     });
 }

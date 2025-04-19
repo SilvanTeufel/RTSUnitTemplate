@@ -17,7 +17,18 @@ struct FUnitReachedDestinationSignal // No FMassSignal inheritance needed
 
 namespace UnitSignals
 {
-	const FName ReachedDestination = FName("UnitReachedDestination");
+	//const FName ReachedDestination = FName("UnitReachedDestination");
+	const FName Idle(TEXT("Idle"));
+	const FName Chase(TEXT("Chase"));
+	const FName Attack(TEXT("Attack"));
+	const FName Dead(TEXT("Dead"));
+	const FName PatrolIdle(TEXT("PatrolIdle"));
+	const FName PatrolRandom(TEXT("PatrolRandom"));
+	const FName Pause(TEXT("Pause"));
+	const FName Run(TEXT("Run"));
+	const FName Casting(TEXT("Cast"));
 	// Define other signal names here if needed
+	const FName MeleeAttack(TEXT("MeeleAttack"));
+	const FName RangedAttack(TEXT("RangedAttack"));
 }
 // Add other custom signal structs here if needed

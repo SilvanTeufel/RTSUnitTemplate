@@ -10,8 +10,10 @@
 
 #include "MassActorSubsystem.h"   
 #include "MassNavigationFragments.h"
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h" // Für Cast
 #include "Actors/Waypoint.h"      // Für Waypoint-Interaktion (falls noch nötig)
+#include "Mass/Signals/MySignals.h"
 
 UPatrolRandomStateProcessor::UPatrolRandomStateProcessor()
 {
@@ -59,8 +61,6 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FTransformFragment> TransformFragments = Context.GetFragmentView<FTransformFragment>();
-
-        TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>();
         	
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -70,20 +70,25 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformFragments[i].GetTransform();
-        	AActor* Actor = ActorFragments[i].GetMutable();
-          
-            AUnitBase* UnitBase = Cast<AUnitBase>(Actor); // Cast für spezifische Logik (falls nötig)
-
+    
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
              // 1. Ziel gefunden? -> Zu Chase wechseln
              if (TargetFrag.bHasValidTarget)
              {
+             	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+				if (!SignalSubsystem)
+				{
+					 continue; // Handle missing subsystem
+				}
+				SignalSubsystem->SignalEntity(
+				UnitSignals::Chase,
+				Entity);
+             	
                  ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                  ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                  StateFrag.StateTimer = 0.f;
-             	 UnitBase->SetUnitState(UnitData::Chase);
              	
                  continue;
              }
@@ -95,35 +100,44 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
              if (bHasReachedCurrentTarget || MoveTarget.GetCurrentAction() != EMassMovementAction::Move)
              {
-                  // Ziel erreicht ODER Bewegung wurde gestoppt/ist nicht Move
 
-                  // 3a. Zufällig entscheiden, ob wir jetzt idlen sollen
-                  // Annahme: PatrolFragment hat Idle-Prozentsatz
-                  // float IdleChance = PatrolFrag.PatrolCloseIdlePercentage; // Beispiel
-                   float IdleChance = 30.0f; // Beispiel: 30% Chance zu idlen
+             	float IdleChance = 30.0f; // Beispiel: 30% Chance zu idlen
                   if (FMath::FRand() * 100.0f < IdleChance)
                   {
+                  	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+					if (!SignalSubsystem)
+					{
+						 continue; // Handle missing subsystem
+					}
+					SignalSubsystem->SignalEntity(
+					UnitSignals::PatrolIdle,
+					Entity);
+                  	
                        ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                        ChunkContext.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
-                  		UnitBase->SetUnitState(UnitData::PatrolIdle);
                        StateFrag.StateTimer = 0.f; // Timer für Idle-Dauer starten
-                       // Bewegung stoppen
-                       MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World);
-                       MoveTarget.DesiredSpeed.Set(0.f);
                        continue;
                   }
                   else
                   {
                        // 3b. Kein Idle -> Neues zufälliges Ziel setzen
-                       SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, UnitBase, NavSys, World);
+                       SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World);
                        // MoveTarget wird in der Helper-Funktion aktualisiert
                         if (MoveTarget.GetCurrentAction() == EMassMovementAction::Move) {
                              StateFrag.StateTimer = 0.f; // Reset Timer bei neuem Ziel
                         } else {
                              // Konnte kein neues Ziel finden -> vielleicht zu Idle wechseln?
+                        	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+							   if (!SignalSubsystem)
+							   {
+									continue; // Handle missing subsystem
+							   }
+							   SignalSubsystem->SignalEntity(
+							   UnitSignals::Idle,
+							   Entity);
+                        	
                              ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                              ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Fallback zu Idle
-                        	 UnitBase->SetUnitState(UnitData::Idle);
                              StateFrag.StateTimer = 0.f;
                              continue;
                         }
@@ -134,7 +148,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
     });
 }
 
-void UPatrolRandomStateProcessor::SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, AUnitBase* UnitBaseActor, UNavigationSystemV1* NavSys, UWorld* World)
+void UPatrolRandomStateProcessor::SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, UNavigationSystemV1* NavSys, UWorld* World)
 {
     // Diese Funktion repliziert die Logik aus SetPatrolCloseLocation / SetUEPathfindingRandomLocation
     // Braucht Zugriff auf Waypoint-Daten (Annahme: in PatrolFrag oder über Actor/Entity)

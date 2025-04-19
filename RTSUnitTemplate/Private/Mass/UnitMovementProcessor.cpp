@@ -34,6 +34,14 @@ void UUnitMovementProcessor::ConfigureQueries()
 
     // Add relevant tags (like FUnitMassTag)
     EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+
+    // 2. State Tag (Must have EITHER Run OR Chase)
+    // Using EMassFragmentPresence::Any creates an OR group for these tags.
+    EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);     // Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
+    EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
+    EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
+    
     // Add other tags like Dead/Rooted checks if necessary
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -70,10 +78,8 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         const TConstArrayView<FMassMoveTargetFragment> TargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FUnitNavigationPathFragment> PathList = ChunkContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
         const TArrayView<FMassSteeringFragment> SteeringList = ChunkContext.GetMutableFragmentView<FMassSteeringFragment>();
-        // Potentially read actor fragments if needed for logic (e.g., UnitState)
-        // const TConstArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetFragmentView<FMassActorFragment>();
 
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // May not be needed directly here anymore
+        //const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // May not be needed directly here anymore
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -100,17 +106,20 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             {
                 if (PathFrag.HasValidPath()) PathFrag.ResetPath();
 
-             
+                const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                 if (!SignalSubsystem)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("NO SIGNALSUBSYSTEM FOUND!!!!!!"));
                      continue; // Handle missing subsystem
                 }
-            
-                SignalSubsystem->SignalEntityDeferred(ChunkContext,UnitSignals::ReachedDestination, ChunkContext.GetEntity(i));
-                UE_LOG(LogTemp, Warning, TEXT("!!!!!Stop here, DesiredVelocity remains ZeroVector!!!!! %s"),  *Steering.DesiredVelocity.ToString());
-               
+                SignalSubsystem->SignalEntity(
+                UnitSignals::Idle,
+                Entity);
+                
+                ChunkContext.Defer().RemoveTag<FMassStateRunTag>(Entity);
+                ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+                ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                ChunkContext.Defer().RemoveTag<FMassStatePatrolTag>(Entity);
                 continue; // Stop here, DesiredVelocity remains ZeroVector
             }
 
@@ -132,19 +141,15 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                  }
                  // --- End Pathfinding ---
             }
-
-            // 3. Determine Current Move Target Point (Waypoint or Final Destination)
+            
             FVector CurrentTargetPoint = FinalDestination; // Default to final goal
-            bool bFollowingPath = false;
             if (PathFrag.HasValidPath())
             {
                  const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                  if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                  {
-                     bFollowingPath = true;
                      CurrentTargetPoint = PathPoints[PathFrag.CurrentPathPointIndex].Location;
-
-                     // Use your waypoint acceptance logic
+                     
                      const float WaypointAcceptanceRadiusSq = FMath::Square(PathWaypointAcceptanceRadius);
                      if (FVector::DistSquared(CurrentLocation, CurrentTargetPoint) <= WaypointAcceptanceRadiusSq)
                      {
@@ -152,7 +157,6 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                          if (!PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                          {
                              PathFrag.ResetPath(); // Reached end of path points
-                             bFollowingPath = false;
                              CurrentTargetPoint = FinalDestination;
                          }
                          else
@@ -163,25 +167,14 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                  }
                  else { PathFrag.ResetPath(); } // Invalid index
             }
-
-            // 4. Calculate Desired Velocity towards the Current Target Point
+            
             FVector MoveDir = CurrentTargetPoint - CurrentLocation;
             if (!MoveDir.IsNearlyZero(0.1f)) // Use a small tolerance
             {
                 MoveDir.Normalize();
-                // ******** KEY CHANGE ********
-                // Store the result in the Steering Fragment, don't apply it to the transform!
                 Steering.DesiredVelocity = MoveDir * DesiredSpeed;
-                UE_LOG(LogTemp, Warning, TEXT("!!!!!SET  Steering.DesiredVelocity!!!!! %s"),  *Steering.DesiredVelocity.ToString());
-                // ***************************
             }
-
-            UE_LOG(LogTemp, Warning, TEXT("!!!!!New  Steering.DesiredVelocity!!!!! %s"),  *Steering.DesiredVelocity.ToString());
-            // else: We are very close to the current target point or final destination (if no path)
-            // Steering.DesiredVelocity remains ZeroVector (from reset earlier) or gets set to zero by MoveDir being near zero.
-
-            // --- REMOVED: Direct Transform Update ---
-            // Transform.AddToTranslation(Velocity * DeltaTime); // <-- DELETE THIS
+            
 
         } // End loop through entities
     }); // End ForEachEntityChunk
