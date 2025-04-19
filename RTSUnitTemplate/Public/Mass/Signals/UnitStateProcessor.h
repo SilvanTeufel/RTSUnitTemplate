@@ -75,7 +75,8 @@ private:
 	  FName SignalName,
 	  TArray<FMassEntityHandle>& Entities
 	);
-	
+
+	UFUNCTION()
 	void UnitRangedAttack(
 	  FName SignalName,
 	  TArray<FMassEntityHandle>& Entities

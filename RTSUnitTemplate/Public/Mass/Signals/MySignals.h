@@ -30,5 +30,33 @@ namespace UnitSignals
 	// Define other signal names here if needed
 	const FName MeleeAttack(TEXT("MeeleAttack"));
 	const FName RangedAttack(TEXT("RangedAttack"));
+	const FName UnitInDetectionRange(TEXT("UnitInDetectionRange"));
 }
+
+USTRUCT()
+struct FUnitPresenceSignal
+{
+	GENERATED_BODY()
+
+	// Using UPROPERTY can help with debugging/reflection but adds minor overhead.
+	// Remove UPROPERTY() if not needed.
+	
+	UPROPERTY()
+	FMassEntityHandle SignalerEntity; // The entity broadcasting this signal
+
+	UPROPERTY()
+	FVector_NetQuantize Location = FVector::ZeroVector; // Use NetQuantize for potential network relevance
+
+	UPROPERTY()
+	int32 TeamId = -1;
+
+	UPROPERTY()
+	bool bIsInvisible = false;
+
+	UPROPERTY()
+	bool bIsFlying = false;
+
+	// Add other relevant data that detectors might need without accessing fragments directly
+	// e.g., maybe a faction identifier, or specific target type flags
+};
 // Add other custom signal structs here if needed

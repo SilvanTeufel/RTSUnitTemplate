@@ -3,7 +3,13 @@
 #include "MassEntityManager.h"
 #include "MassCommonFragments.h"
 #include "MassEntityUtils.h" // Für Schleifen über alle Entitäten (ineffizient!)
+#include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"
+#include "MassSignalTypes.h" 
+#include "MassStateTreeFragments.h"  // For FMassStateDeadTag
+#include "MassNavigationFragments.h" // For FMassAgentCharacteristicsFragment
+
 
 UDetectionProcessor::UDetectionProcessor()
 {
@@ -12,8 +18,16 @@ UDetectionProcessor::UDetectionProcessor()
     bAutoRegisterWithProcessingPhases = true;
 }
 
+void UDetectionProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>();
+}
+
 void UDetectionProcessor::ConfigureQueries()
 {
+    // Tell the base class which signal we care about:
+
     // Dieser Prozessor läuft für alle Einheiten, die Ziele erfassen sollen
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel schreiben
@@ -36,6 +50,181 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UDetectionProcessor::SignalEntities(FMassEntityManager& EntityManager,
+                                         FMassExecutionContext& Context,
+                                         FMassSignalNameLookup& EntitySignals)
+{
+    // 1) Gather *all* alive units into flat arrays so we can iterate
+    //    over them per-detector.  (O(N) once per tick.)
+    TArray<FMassEntityHandle> AllEntities;
+    TArray<FTransform>        AllTransforms;
+    TArray<FMassCombatStatsFragment>       AllStats;
+    TArray<FMassAgentCharacteristicsFragment> AllChars;
+
+    {
+        FMassEntityQuery AllUnitsQuery;
+        AllUnitsQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+        AllUnitsQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+        AllUnitsQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+        AllUnitsQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+
+        AllUnitsQuery.ForEachEntityChunk(EntityManager, Context,
+        [&](FMassExecutionContext& ChunkCtx)
+        {
+            const int32 Num = ChunkCtx.GetNumEntities();
+            const auto& TfView   = ChunkCtx.GetFragmentView<FTransformFragment>();
+            const auto& StatsView= ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
+            const auto& CharView = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+
+            for (int32 i = 0; i < Num; ++i)
+            {
+                AllEntities.Add( ChunkCtx.GetEntity(i) );
+                AllTransforms.Add( TfView[i].GetTransform() );
+                AllStats.Add( StatsView[i] );
+                AllChars.Add( CharView[i] );
+            }
+        });
+    }
+
+    if (AllEntities.Num() == 0)
+    {
+        // Nothing alive to detect
+        return;
+    }
+
+    // 2) Now run your detector query, but *only* process those that actually got the ping
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    [&](FMassExecutionContext& ChunkCtx)
+    {
+        const int32 Num = ChunkCtx.GetNumEntities();
+        const auto& TfView       = ChunkCtx.GetFragmentView<FTransformFragment>();
+        const auto&      TargetView    = ChunkCtx.GetMutableFragmentView<FMassAITargetFragment>();
+        const auto& StatsView    = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
+        const auto& CharView     = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+
+        for (int32 i = 0; i < Num; ++i)
+        {
+            const FMassEntityHandle Me = ChunkCtx.GetEntity(i);
+
+            // did I get a UnitInDetectionRange signal?
+            TArray<FName> MySignals;
+            EntitySignals.GetSignalsForEntity(Me, MySignals);
+            if (!MySignals.Contains(UnitSignals::UnitInDetectionRange))
+            {
+                // nope—skip
+                continue;
+            }
+
+            // pull my data
+            const FTransform&                   MeTf    = TfView[i].GetTransform();
+            const FMassCombatStatsFragment&    MeStats = StatsView[i];
+            const FMassAgentCharacteristicsFragment& MeChars = CharView[i];
+
+            const FVector MeLoc           = MeTf.GetLocation();
+            const float   SightSq         = FMath::Square(MeStats.SightRadius);
+            const float   LoseSightSq     = FMath::Square(MeStats.LoseSightRadius);
+
+            // best‑target tracking
+            FMassEntityHandle BestTarget;
+            float MinDistSq = SightSq;
+            FVector BestLoc = FVector::ZeroVector;
+            bool bFound   = false;
+            bool bStillOK = false;
+            FVector LastKnown = FVector::ZeroVector;
+
+            // 3) N² search: check every other unit
+            for (int32 j = 0; j < AllEntities.Num(); ++j)
+            {
+                const FMassEntityHandle They = AllEntities[j];
+                if (They == Me) 
+                {
+                    continue;
+                }
+
+                // same‑team?
+                if (AllStats[j].TeamId == MeStats.TeamId)
+                {
+                    continue;
+                }
+
+                // can I see/fight them?
+                const auto& TChars = AllChars[j];
+                if (TChars.bIsInvisible && !MeChars.bCanDetectInvisible) 
+                {
+                    continue;
+                }
+                const bool bCanAttack = ( TChars.bIsFlying   && MeChars.bCanAttackFlying ) ||
+                                        (!TChars.bIsFlying && MeChars.bCanAttackGround );
+                if (!bCanAttack) 
+                {
+                    continue;
+                }
+
+                // distance
+                const FVector ThemLoc = AllTransforms[j].GetLocation();
+                const float   Dsq     = FVector::DistSquared(MeLoc, ThemLoc);
+                if (Dsq > SightSq) 
+                {
+                    continue;
+                }
+
+                // is this closer?
+                if (Dsq < MinDistSq)
+                {
+                    MinDistSq      = Dsq;
+                    BestTarget     = They;
+                    BestLoc        = ThemLoc;
+                    bFound         = true;
+                }
+
+                // did we already have a target, and is *that* one still in lose‑range?
+                if (TargetView[i].TargetEntity.IsSet() && They == TargetView[i].TargetEntity)
+                {
+                    if (Dsq <= LoseSightSq)
+                    {
+                        bStillOK     = true;
+                        LastKnown    = ThemLoc;
+                    }
+                }
+            }
+
+            // 4) Write back into the AITarget fragment + tag
+            const bool bHadTarget = TargetView[i].bHasValidTarget && TargetView[i].TargetEntity.IsSet();
+            if (bFound)
+            {
+                TargetView[i].TargetEntity      = BestTarget;
+                TargetView[i].LastKnownLocation = BestLoc;
+                TargetView[i].bHasValidTarget   = true;
+            }
+            else if (bHadTarget && bStillOK)
+            {
+                // keep old target
+                TargetView[i].LastKnownLocation = LastKnown;
+                TargetView[i].bHasValidTarget   = true;
+            }
+            else
+            {
+                // lost it
+                TargetView[i].TargetEntity.Reset();
+                TargetView[i].bHasValidTarget = false;
+            }
+
+            // tag add/remove
+            if (TargetView[i].bHasValidTarget)
+            {
+                ChunkCtx.Defer().AddTag<FMassHasTargetTag>(Me);
+            }
+            else
+            {
+                ChunkCtx.Defer().RemoveTag<FMassHasTargetTag>(Me);
+            }
+        }
+    });
+}
+
+
+
+/*
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Einfaches Throttling (BESSER: Prozessor seltener ticken lassen!) ---
@@ -201,6 +390,4 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
         } // Ende Schleife für Entities dieses Prozessors
     }); // Ende ForEachEntityChunk für diesen Prozessor
-
- 
-}
+}*/
