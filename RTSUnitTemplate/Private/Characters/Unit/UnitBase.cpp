@@ -397,12 +397,54 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 
 void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
 {
-	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-	if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
-	{
-		OpenHealthWidget = true;
-	}
-	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+	 // Capture necessary data for the lambda
+    TWeakObjectPtr<AUnitBase> WeakThis(this); // Sicherer Zeiger auf 'this'
+    float LocalHealthWidgetDisplayDuration = HealthWidgetDisplayDuration; // Kopiere relevante Daten
+    // Kopiere auch NewHealth, OldHealth etc., falls im GameThread-Teil benötigt
+
+    if (!IsInGameThread())
+    {
+        // Führe den kritischen Teil auf dem Game Thread aus
+        AsyncTask(ENamedThreads::GameThread, [WeakThis, LocalHealthWidgetDisplayDuration, NewHealth, OldHealth]()
+        {
+            // Prüfe, ob das Objekt noch existiert, wenn der Task ausgeführt wird
+            if (AUnitBase* StrongThis = WeakThis.Get())
+            {
+                UWorld* World = StrongThis->GetWorld();
+                if (World)
+                {
+                    // Führe hier die Logik aus, die den GameThread benötigt
+                    ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+                    if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)) // Verwende StrongThis->Member
+                    {
+                       StrongThis->OpenHealthWidget = true;
+                    }
+
+                    World->GetTimerManager().SetTimer(
+                        StrongThis->HealthWidgetTimerHandle, // Verwende StrongThis->Member
+                        StrongThis,
+                        &AUnitBase::HideHealthWidget,
+                        LocalHealthWidgetDisplayDuration,
+                        false);
+                }
+            }
+            // else: Das Objekt wurde zerstört, bevor der Task lief. Tu nichts.
+        });
+    }
+    else
+    {
+        // Wir sind bereits auf dem Game Thread, alles sicher
+        UWorld* World = GetWorld();
+        if (World && IsValid(this)) // Sicherheitschecks beibehalten
+        {
+             ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+             if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+             {
+                OpenHealthWidget = true;
+             }
+            World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+        }
+    }
 }
 
 void AUnitBase::HideHealthWidget()
@@ -420,13 +462,61 @@ void AUnitBase::SetShield_Implementation(float NewShield)
 
 void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 {
-	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-	if(NewShield <= OldShield && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
-	{
-		OpenHealthWidget = true;
-	}
+	// Capture necessary data for the lambda
+	TWeakObjectPtr<AUnitBase> WeakThis(this); // Sicherer Zeiger auf 'this'
+	float LocalHealthWidgetDisplayDuration = HealthWidgetDisplayDuration; // Kopiere relevante Daten
+	// Kopiere auch NewHealth, OldHealth etc., falls im GameThread-Teil benötigt
 
-	GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+	if (!IsInGameThread())
+	{
+		// Führe den kritischen Teil auf dem Game Thread aus
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, LocalHealthWidgetDisplayDuration, NewShield, OldShield]()
+		{
+			// Prüfe, ob das Objekt noch existiert, wenn der Task ausgeführt wird
+			if (AUnitBase* StrongThis = WeakThis.Get())
+			{
+				UWorld* World = StrongThis->GetWorld();
+			   if (World)
+			   {
+				   // AuthGameMode holen
+				   ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+	                
+				   // Shield‑Collapse Check
+				   if (NewShield <= OldShield
+					   && RTSGameMode
+					   && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)
+				   {
+					   StrongThis->OpenHealthWidget = true;
+				   }
+
+				   // Timer setzen, um das Widget später zu verstecken
+				   World->GetTimerManager().SetTimer(
+					   StrongThis->HealthWidgetTimerHandle,
+					   StrongThis,
+					   &AUnitBase::HideHealthWidget,
+					   LocalHealthWidgetDisplayDuration,
+					   false
+				   );
+			   }
+			}
+			// else: Das Objekt wurde zerstört, bevor der Task lief. Tu nichts.
+		});
+	}
+	else
+	{
+		// Wir sind bereits auf dem Game Thread, alles sicher
+		UWorld* World = GetWorld();
+		if (World && IsValid(this)) // Sicherheitschecks beibehalten
+		{
+			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+			if(NewShield <= OldShield && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+			{
+				OpenHealthWidget = true;
+			}
+
+			World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+		}
+	}
 }
 
 

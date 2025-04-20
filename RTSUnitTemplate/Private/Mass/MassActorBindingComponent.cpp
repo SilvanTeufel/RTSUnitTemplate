@@ -26,6 +26,8 @@
 #include "Steering/MassSteeringFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "MassEntitySubsystem.h"
+#include "Actors/Waypoint.h"
+#include "Characters/Unit/UnitBase.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -40,7 +42,9 @@ void UMassActorBindingComponent::BeginPlay()
 	Super::BeginPlay();
 	// Cache subsystem here too if needed for Tick
 	UWorld* World = GetWorld();
-	
+	MyOwner = GetOwner();
+	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+	UE_LOG(LogTemp, Log, TEXT("BeginPlay MassUnit TeamId %d"), UnitBase->TeamId);
 	if(!MassEntitySubsystemCache)
 	{
 		if(World)
@@ -51,6 +55,8 @@ void UMassActorBindingComponent::BeginPlay()
 
 	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
 	{
+		
+		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit %d"), UnitBase->TeamId);
 		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
 	}
 
@@ -59,8 +65,7 @@ void UMassActorBindingComponent::BeginPlay()
 	{
 		return; // World might not be valid yet
 	}
-	
-	MyOwner = GetOwner();
+
 
 	if(MassEntitySubsystemCache )
 	{
@@ -78,12 +83,12 @@ void UMassActorBindingComponent::BeginPlay()
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
     // Prevent creating multiple entities for the same component
-
+	/*
 	if (!EntityConfig) // Check if the EntityConfig is assigned
 	{
 		UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: EntityConfig is not set on Actor %s!"), *GetOwner()->GetName());
 		return FMassEntityHandle();
-	}
+	}*/
 
     if (MassEntityHandle.IsValid())
     {
@@ -165,10 +170,10 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	// --- Define and Package Shared Fragment Values ---
 	FMassMovementParameters MovementParamsInstance;
 	MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
-	MovementParamsInstance.MaxAcceleration = 1000.0f; // Set desired value
+	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
 	MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
-	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.05f; // Example: +/- 5% variance
-	MovementParamsInstance.HeightSmoothingTime = 0.2f; 
+	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
+	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
 	// Ensure values are validated if needed (or use MovementParamsInstance.GetValidated())
 	// FMassMovementParameters ValidatedParams = MovementParamsInstance.GetValidated();
 
@@ -183,7 +188,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	// 2. Steering Parameters (Using default values initially)
 	FMassMovingSteeringParameters MovingSteeringParamsInstance;
 	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
-	MovingSteeringParamsInstance.ReactionTime = 0.05f; // Faster reaction (Default 0.3)
+	MovingSteeringParamsInstance.ReactionTime = 0.0f; // Faster reaction (Default 0.3) // 0.05f;
 	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
 
 	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
@@ -267,12 +272,136 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *NewEntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
 	}
 
+	// --- Call Helper Function to Initialize Stats ---
+	InitializeMassEntityStatsFromOwner(EntityManager, NewEntityHandle, Owner); // <<< CALL THE NEW FUNCTION
+
     // 4. Store the handle within this component
     MassEntityHandle = NewEntityHandle;
 
     UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent: Created Mass Entity %d and linked to Actor %s"), MassEntityHandle.Index, *Owner->GetName());
 
     return MassEntityHandle;
+}
+
+void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager,
+	FMassEntityHandle EntityHandle, AActor* OwnerActor)
+{
+	 // --- Get Owner References (Replace Placeholders) ---
+    // We assume OwnerActor is valid as it's checked before calling this function
+    AUnitBase* UnitOwner = Cast<AUnitBase>(OwnerActor); // <<< REPLACE AUnitBase
+    UAttributeSetBase* UnitAttributes = nullptr; // <<< REPLACE UUnitAttributesComponent
+
+    if (UnitOwner)
+    {
+        UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s is not of expected type 'AUnitBase'. Using default stats."), *OwnerActor->GetName());
+    }
+
+    if (UnitOwner && !UnitAttributes)
+    {
+         UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s (%s) is missing expected 'UUnitAttributesComponent'. Using default stats."), *OwnerActor->GetName(), *UnitOwner->GetName());
+    }
+    // --- End: Get Owner References ---
+
+
+    float CalculatedAgentRadius = 35.f; // Default radius, will be updated from stats if possible
+
+    // --- INITIALIZE NEW FRAGMENTS ---
+
+    // 1. Combat Stats Fragment
+    if (FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle))
+    {
+        if (UnitOwner && UnitAttributes) // Use data from Actor/Attributes if available
+        {
+            // <<< REPLACE Getters with your actual function names >>>
+            CombatStatsFrag->MaxHealth = UnitAttributes->GetMaxHealth();
+            CombatStatsFrag->Health = CombatStatsFrag->MaxHealth; // Start full
+            CombatStatsFrag->AttackRange = UnitAttributes->GetRange();
+            CombatStatsFrag->AttackDamage = UnitAttributes->GetAttackDamage();
+            //CombatStatsFrag->AttackSpeed = UnitAttributes->GetAttackSpeed();
+            CombatStatsFrag->RunSpeed = UnitAttributes->GetRunSpeed();
+            CombatStatsFrag->TeamId = UnitOwner->TeamId; // Assuming GetTeamId() is on AUnitBase
+            CombatStatsFrag->Armor = UnitAttributes->GetArmor();
+            CombatStatsFrag->MagicResistance = UnitAttributes->GetMagicResistance();
+            CombatStatsFrag->MaxShield = UnitAttributes->GetMaxShield();
+            CombatStatsFrag->Shield = CombatStatsFrag->MaxShield; // Start full
+            //CombatStatsFrag->AgentRadius = UnitAttributes->GetAgentRadius(); // Get radius from stats
+            //CombatStatsFrag->AcceptanceRadius = UnitAttributes->GetAcceptanceRadius();
+            CombatStatsFrag->SightRadius = SightRadius;// We need to add this to Attributes i guess;
+            CombatStatsFrag->LoseSightRadius = LoseSightRadius;// We need to add this to Attributes i guess;
+            CombatStatsFrag->AttackPauseDuration = AttackPauseDuration;// We need to add this to Attributes i guess;
+            CombatStatsFrag->bCanAttack = UnitOwner->CanAttack; // Assuming CanAttack() on Attributes
+            CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
+
+            //CalculatedAgentRadius = CombatStatsFrag->AgentRadius; // Use the value from stats
+        }
+        else // Use default values
+        {
+            *CombatStatsFrag = FMassCombatStatsFragment(); // Initialize with struct defaults
+            CombatStatsFrag->TeamId = 0; // Sensible default team
+            //CalculatedAgentRadius = CombatStatsFrag->AgentRadius; // Use default struct radius
+             UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Combat Stats."), *EntityHandle.DebugGetDescription());
+        }
+    }
+
+    // 2. Agent Characteristics Fragment
+    if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+    {
+        if (UnitOwner) // Use data from Actor if available
+        {
+            // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
+            CharFrag->bIsFlying = UnitOwner->IsFlying; // Assuming direct property access
+            CharFrag->bCanAttackFlying = UnitOwner->CanOnlyAttackFlying;
+            CharFrag->bCanAttackGround = UnitOwner->CanOnlyAttackFlying;
+            CharFrag->bIsInvisible = UnitOwner->IsInvisible;
+            CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
+        }
+        else // Use default values
+        {
+             *CharFrag = FMassAgentCharacteristicsFragment(); // Initialize with struct defaults
+             UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Agent Characteristics."), *EntityHandle.DebugGetDescription());
+        }
+    }
+
+    // 3. Patrol Fragment
+    if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
+    {
+        if (UnitOwner && UnitOwner->NextWaypoint) // Use config from Actor if available
+        {
+            // <<< REPLACE Properties with your actual variable names >>>
+            PatrolFrag->bLoopPatrol = UnitOwner->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
+            //PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
+            //PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
+            PatrolFrag->RandomPatrolMinIdleTime = UnitOwner->NextWaypoint->PatrolCloseMinInterval;
+            PatrolFrag->RandomPatrolMaxIdleTime = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
+        }
+         else // Use default values
+         {
+             *PatrolFrag = FMassPatrolFragment(); // Initialize with struct defaults
+             UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Patrol Config."), *EntityHandle.DebugGetDescription());
+         }
+         // Ensure transient data starts clean regardless of source
+         PatrolFrag->CurrentWaypointIndex = INDEX_NONE;
+         PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
+    }
+
+    // --- Initialize Radius/Avoidance Fragments USING the calculated AgentRadius ---
+    // (Moved here as it depends on CombatStats)
+    if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(EntityHandle))
+    {
+       RadiusFrag->Radius = CalculatedAgentRadius;
+       UE_LOG(LogTemp, Log, TEXT("Entity %s: Set AgentRadius = %.2f"), *EntityHandle.DebugGetDescription(), RadiusFrag->Radius);
+    }
+
+    if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(EntityHandle))
+    {
+       // Make sure collider type matches expectations (Circle assumed here)
+       *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(CalculatedAgentRadius));
+       UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *EntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
+    }
 }
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -402,7 +531,7 @@ void UMassActorBindingComponent::SpawnMassUnitIsm(
         FMassRepresentationLODFragment::StaticStruct(),
 
     	// --- ADD YOUR CUSTOM FRAGMENTS TO THE ARCHETYPE DEFINITION ---
-		FUnitStatsFragment::StaticStruct(),      // Add stats
+		FMassCombatStatsFragment::StaticStruct(),      // Add stats
     	FUnitStateFragment::StaticStruct(),      // Add state
 
     	// --- Add other fragments needed for RTS units potentially ---
@@ -472,14 +601,11 @@ void UMassActorBindingComponent::SpawnMassUnitIsm(
 	}
 	
 	// --- 4. INITIALIZE YOUR CUSTOM FRAGMENTS ---
-	FUnitStatsFragment& StatsFrag = EntityManager.GetFragmentDataChecked<FUnitStatsFragment>(NewEntityHandle);
-	StatsFrag.CurrentHealth = StatsFrag.MaxHealth; // Set current health to max health initially
+	FMassCombatStatsFragment& StatsFrag = EntityManager.GetFragmentDataChecked<FMassCombatStatsFragment>(NewEntityHandle);
+	StatsFrag.Health = StatsFrag.MaxHealth; // Set current health to max health initially
 
 	FUnitStateFragment& StateFrag = EntityManager.GetFragmentDataChecked<FUnitStateFragment>(NewEntityHandle);
-	StateFrag.CurrentState = EUnitState::Idle;     // Set initial state to Idle
 	StateFrag.TargetEntity.Reset();                // Ensure no initial target
-
-
 	
 	FMassMoveTargetFragment& MoveTargetFrag = EntityManager.GetFragmentDataChecked<FMassMoveTargetFragment>(NewEntityHandle);
 	MoveTargetFrag.Center = SpawnLocation; // Target is current location initially

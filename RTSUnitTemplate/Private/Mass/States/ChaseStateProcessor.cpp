@@ -42,6 +42,8 @@ void UChaseStateProcessor::ConfigureQueries()
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
+
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
@@ -85,7 +87,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // 2. Distanz zum Ziel prüfen
             // Annahme: AgentRadius enthält relevante Größe des Ziels und der eigenen Einheit
-            const float EffectiveAttackRange = Stats.AttackRange + Stats.AgentRadius; // Vereinfacht
+            const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius; // Vereinfacht
             const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
@@ -116,20 +118,57 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
 void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
 {
+    // --- Log Entry Point and Inputs ---
+    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Entered Function ----")); // Log entry
+
     // Sicherheitscheck für World Pointer
     if (!World)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UpdateMoveTarget: World is null!"));
+        // Log the error and exit
+        UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
         return;
     }
-    
-    // Modifiziere das übergebene Fragment direkt
+
+    // Log Input Values
+    // Using %s for FVector::ToString() requires the '*' to get the TCHAR*
+    // Using %.2f for float Speed to show two decimal places
+    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: Input - TargetLocation: %s, Speed: %.2f"), *TargetLocation.ToString(), Speed);
+
+    // --- Modify the Fragment ---
     MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
     MoveTarget.Center = TargetLocation;
     MoveTarget.DesiredSpeed.Set(Speed);
     MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
     MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
-    MoveTarget.Forward = (TargetLocation - MoveTarget.Center).GetSafeNormal(); // Optional: Richtung setzen
+
+    // --- Forward Vector Calculation ---
+    // IMPORTANT: This calculation currently uses TargetLocation - MoveTarget.Center.
+    // Since MoveTarget.Center was just set to TargetLocation, this difference will be ZERO.
+    // GetSafeNormal() on a ZeroVector returns FVector::ZeroVector.
+    // You likely want to calculate the Forward vector based on the *current* entity location,
+    // which isn't passed to this function. Assuming the current logic is intended (e.g., maybe
+    // the movement system interprets ZeroVector Forward differently), we'll log it as is.
+    FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
+    MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
+
+    // --- Log Final State of the Fragment ---
+    // Log the values *after* modification to confirm they were set correctly.
+    // Assuming FMassDesiredSpeed has a .Get() method or similar to retrieve the float value.
+    // Logging Enum as integer for simplicity: (int32)MoveTarget.IntentAtGoal
+    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: Output - MoveTarget Updated - Center: %s, DesiredSpeed: %.2f, SlackRadius: %.1f, Forward: %s, IntentAtGoal: %d"),
+           *MoveTarget.Center.ToString(),
+           MoveTarget.DesiredSpeed.Get(), // Adjust if .Get() is not the correct way to access the speed float
+           MoveTarget.SlackRadius,
+           *MoveTarget.Forward.ToString(),
+           (int32)MoveTarget.IntentAtGoal);
+
+    // Log the potentially problematic PreNormalizedForward vector
+     if (PreNormalizedForward.IsNearlyZero())
+     {
+         UE_LOG(LogTemp, Warning, TEXT("UChaseStateProcessor::UpdateMoveTarget: PreNormalizedForward vector was %s (nearly zero), resulting Forward is %s."), *PreNormalizedForward.ToString(), *MoveTarget.Forward.ToString());
+     }
+
+     UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Exiting Function ----")); // Log exit
 }
 
 void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)

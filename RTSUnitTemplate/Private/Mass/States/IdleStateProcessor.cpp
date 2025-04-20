@@ -39,7 +39,7 @@ void UIdleStateProcessor::ConfigureQueries()
 
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-
+    UE_LOG(LogTemp, Log, TEXT("UIdleStateProcessor::Execute!"));
     const UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     
@@ -67,6 +67,8 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             if (TargetFrag.bHasValidTarget && bCanAttack /* && Bedingungen */)
             {
+                UE_LOG(LogTemp, Log, TEXT("IDLE TO CHASE!!!!!!!"));
+                
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                   if (!SignalSubsystem)
                   {

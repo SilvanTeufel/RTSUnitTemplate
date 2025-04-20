@@ -12,11 +12,11 @@ URunStateProcessor::URunStateProcessor()
 void URunStateProcessor::ConfigureQueries()
 {
 	//Super::ConfigureQueries();
-	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::All);
+	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::All);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
 void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	UE_LOG(LogTemp, Warning, TEXT("URunStateProcessor!"));
+	//UE_LOG(LogTemp, Warning, TEXT("URunStateProcessor!"));
 }

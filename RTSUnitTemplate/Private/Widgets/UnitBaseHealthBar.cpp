@@ -42,6 +42,19 @@ void UUnitBaseHealthBar::CollapseWidget() {
 
 void UUnitBaseHealthBar::UpdateWidget()
 {
+	if ( !IsInGameThread() )
+	{
+		TWeakObjectPtr<UUnitBaseHealthBar> WeakThis(this);
+		AsyncTask(ENamedThreads::GameThread, [WeakThis]()
+		{
+			if ( UUnitBaseHealthBar* StrongThis = WeakThis.Get() )
+			{
+				StrongThis->UpdateWidget();
+			}
+		});
+		return;
+	}
+	
 	if (!OwnerCharacter)
 		return;
 	// Update Health values

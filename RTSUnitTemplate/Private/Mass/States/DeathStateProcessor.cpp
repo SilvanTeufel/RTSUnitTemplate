@@ -35,6 +35,7 @@ void UDeathStateProcessor::ConfigureQueries()
 
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor::Execute!"));
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
     {

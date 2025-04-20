@@ -21,6 +21,7 @@ USTRUCT() struct FMassStateAttackTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
+USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 
 // --- Patrouillen-Zustände ---
 USTRUCT() struct FMassStatePatrolTag : public FMassTag { GENERATED_BODY() }; // Direkt zum WP
@@ -39,43 +40,9 @@ USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY()
 
 
 USTRUCT()
-struct FUnitStatsFragment : public FMassFragment
-{
-	GENERATED_BODY()
-
-	UPROPERTY() // UPROPERTY helps with reflection if needed later
-	float MaxHealth = 100.0f;
-
-	UPROPERTY()
-	float CurrentHealth = 100.0f;
-
-	UPROPERTY()
-	float AttackDamage = 10.0f;
-
-	UPROPERTY()
-	float AttackRange = 300.0f;
-
-	UPROPERTY()
-	float MovementSpeed = 500.0f;
-};
-
-UENUM()
-enum class EUnitState : uint8
-{
-	Idle,
-	Moving,
-	Attacking,
-	Dead
-};
-
-USTRUCT()
 struct FUnitStateFragment : public FMassFragment
 {
 	GENERATED_BODY()
-
-	UPROPERTY()
-	EUnitState CurrentState = EUnitState::Idle;
-
 	// Could store target entity handle here if attacking/following
 	UPROPERTY()
 	FMassEntityHandle TargetEntity;
@@ -88,15 +55,7 @@ USTRUCT()
 struct FMassAIStateFragment : public FMassFragment
 {
     GENERATED_BODY()
-
-    /** Der aktuelle logische Zustand der KI-Einheit. */
-    UPROPERTY(VisibleAnywhere, Category = "AI", Transient) // Transient, da es sich ständig ändert
-   TEnumAsByte<UnitData::EState> CurrentState = UnitData::Idle;
-
-    /** Der vorherige Zustand, nützlich für Rückkehrlogiken (ersetzt UnitStatePlaceholder). */
-    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-    TEnumAsByte<UnitData::EState> PreviousState = UnitData::Idle;
-
+	
     /** Timer, der für Aktionen innerhalb des aktuellen Zustands verwendet wird (z.B. Attack-Cooldown, Pause-Dauer, Zeit im Idle-Zustand). Wird bei Zustandswechsel zurückgesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     float StateTimer = 0.f;
@@ -172,20 +131,20 @@ struct FMassCombatStatsFragment : public FMassFragment
     float MaxShield = 0.f; // Maximaler Schildwert
 
     /** Radius, der für Distanzberechnungen zum AttackRange addiert wird (ersetzt GetActorBounds-Logik). */
-    UPROPERTY(EditAnywhere, Category = "Stats")
-    float AgentRadius = 50.f;
+	//UPROPERTY(EditAnywhere, Category = "Stats")
+    //float AgentRadius = 50.f;
 
     /** Wie nah muss die Einheit an ihr Ziel kommen, bevor sie anhält (für Bewegung). */
-    UPROPERTY(EditAnywhere, Category = "Stats")
-    float AcceptanceRadius = 50.f; // Entspricht StopRunTolerance / SlackRadius
+    //UPROPERTY(EditAnywhere, Category = "Stats")
+    //float AcceptanceRadius = 50.f; // Entspricht StopRunTolerance / SlackRadius
 
     /** Sichtweite für die Zielerfassung. */
     UPROPERTY(EditAnywhere, Category = "Stats")
-    float SightRadius = 1000.f;
+    float SightRadius = 2000.f;
 
     /** Distanz, ab der ein Ziel verloren wird. */
     UPROPERTY(EditAnywhere, Category = "Stats")
-    float LoseSightRadius = 1500.f;
+    float LoseSightRadius = 2500.f;
 
     /** Dauer der Pause zwischen Angriffen (könnte auch aus AttackSpeed berechnet werden). */
     UPROPERTY(EditAnywhere, Category = "Stats")

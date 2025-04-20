@@ -25,11 +25,16 @@ protected:
 	virtual void Initialize(UObject& Owner) override;
 	virtual void ConfigureQueries() override;
 	// This is where you respond to the signal
+	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	virtual void SignalEntities(FMassEntityManager& EntityManager,
 								FMassExecutionContext& Context,
 								FMassSignalNameLookup& EntitySignals);
 
 private:
+
+	void HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities);
+
+	
 	FMassEntityQuery EntityQuery;
 
 	// Timer, um diesen Prozessor nicht jeden Frame laufen zu lassen
@@ -39,4 +44,14 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+
+	// Handle for the bound delegate, used for unbinding (though standard unbinding might be tricky)
+	FDelegateHandle SignalDelegateHandle;
+
+	// Buffer to store entities received from the signal delegate between calls
+	// Key: Signal Name, Value: Array of Entities that signaled
+	TMap<FName, TArray<FMassEntityHandle>> ReceivedSignalsBuffer;
+
+	// Keep track of processed entities from buffer to handle target loss check correctly
+	TSet<FMassEntityHandle> SignaledEntitiesProcessedThisTick;
 };

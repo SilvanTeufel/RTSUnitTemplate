@@ -187,6 +187,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
 	EntityManager.Defer().AddTag<FMassStateRunTag>(InEntity);
 
+	EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
 
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
@@ -474,8 +475,9 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	
 	SetUnitState_Replication(Unit,1);
 	CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, Location, Speed, 40.f);
+
 	Unit->SetUnitState(UnitData::Run);
-	MoveToLocationUEPathFinding(Unit, Location);
+	//MoveToLocationUEPathFinding(Unit, Location);
 }
 
 /*

@@ -53,6 +53,8 @@ public:
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 
+	void InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle, AActor* OwnerActor); // <<< ADD THIS
+
 	// Getter for the handle
 	FMassEntityHandle GetMassEntityHandle() const { return MassEntityHandle; }
 
@@ -63,5 +65,13 @@ public:
 	UStaticMesh* UnitStaticMesh,
 	const FVector SpawnLocation,
 	UWorld* World);
-		
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float SightRadius = 2000.f; 
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float LoseSightRadius = 2500.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float AttackPauseDuration = 0.5f;
 };

@@ -83,7 +83,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
 
             // Calculate change in velocity applying acceleration and external forces
-            FVector VelocityDelta = (AccelInput + Force.Value) * DeltaTime;
+            FVector VelocityDelta = (AccelInput + Force.Value) * DeltaTime * 4.f;
 
             // Store previous velocity for logging if needed
             FVector PrevVelocity = Velocity.Value;

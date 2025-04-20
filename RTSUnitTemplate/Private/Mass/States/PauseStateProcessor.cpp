@@ -32,6 +32,7 @@ void UPauseStateProcessor::ConfigureQueries()
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UE_LOG(LogTemp, Log, TEXT("UPauseStateProcessor::Execute!"));
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     
@@ -83,7 +84,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (StateFrag.StateTimer >= Stats.AttackPauseDuration) // AttackPauseDuration muss im StatsFragment sein
             {
                 // Pause vorbei, prüfe ob Angriff möglich ist
-                const float EffectiveAttackRange = Stats.AttackRange + Stats.AgentRadius;
+                const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius;
                 const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 

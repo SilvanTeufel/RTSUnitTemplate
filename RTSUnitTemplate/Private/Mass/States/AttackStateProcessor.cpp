@@ -54,6 +54,7 @@ void UAttackStateProcessor::ConfigureQueries()
 
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UE_LOG(LogTemp, Log, TEXT("UAttackStateProcessor::Execute!"));
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
     // Stelle sicher, dass das Signal Subsystem gültig ist
@@ -115,7 +116,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             if (StateFrag.StateTimer >= DamageApplicationTime && !EntitiesThatAttackedThisTick.Contains(Entity))
             {
                 // Prüfen, ob Ziel noch in Reichweite ist
-                const float EffectiveAttackRange = Stats.AttackRange + Stats.AgentRadius; // Vereinfacht
+                const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius; // Vereinfacht
                 const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
@@ -123,11 +124,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 {
                     if (Stats.bUseProjectile)
                     {
-                        
-                        // === KORREKTER AUFRUF HIER ===
-                        // Argumente: EntityManager, ChunkContext, Attacker-Entity, Ziel-Entity, Attacker-Actor
-                        // SpawnProjectileFromActor(EntityManager, ChunkContext, Entity, TargetFrag.TargetEntity, AttackerActor);
-                        // =============================
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                         if (!SignalSubsystem) continue;
                     
@@ -140,42 +136,13 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                         if (!SignalSubsystem) continue;
                         
                         SignalSubsystem->SignalEntity(UnitSignals::MeleeAttack, Entity);
-                        /*
-                        // Schaden senden
-                        // bool bIsMagic = Stats.bIsDoingMagicDamage; // Annahme: Flag im StatsFragment
-                        bool bIsMagic = false; // Beispiel
-                        float Damage = Stats.AttackDamage;
-                        SendDamageSignal(ChunkContext, Entity, TargetFrag.TargetEntity, Damage, bIsMagic);
-
-                        // Angreifer-spezifische Dinge über Actor auslösen
-                        AUnitBase* AttackerUnitBase = Cast<AUnitBase>(AttackerActor);
-                        if (AttackerUnitBase)
-                        {
-                            // Erfahrung erhöhen (Beispiel)
-                            // AttackerUnitBase->LevelData.Experience++; // Vorsicht bei direktem Zugriff! Besser über Event/Signal
-
-                            // Effekte/Sounds auslösen
-                            AttackerUnitBase->ServerMeeleImpactEvent(); // Beispiel für RPC-Aufruf
-                            // AttackerUnitBase->FireEffects(AttackerUnitBase->MeleeImpactVFX, ...); // Oder direkter Effekt
-
-                            // Widget Update (wenn nötig) - Besser Event-basiert
-                            // if (AttackerUnitBase->HealthWidgetComp) { ... }
-                        }
-
-                        // Ziel-spezifische Reaktionen auslösen (via Signal)
-                        if (TargetFrag.TargetEntity.IsSet())
-                        {
-                             // SignalSubsystem->SignalEntity(TargetFrag.TargetEntity, UE::Mass::Signals::ActivateAbility, DefensiveAbilityPayload);
-                             // SignalSubsystem->SignalEntity(TargetFrag.TargetEntity, UE::Mass::Signals::TriggerEffect, ImpactEffectPayload);
-                             // SignalSubsystem->SignalEntity(TargetFrag.TargetEntity, UE::Mass::Signals::ForceState, IsAttackedStatePayload);
-                             // UE_LOG(LogTemp, Log, TEXT("Signaling target reactions for Entity [%d]"), TargetFrag.TargetEntity.Index);
-                        }*/
                     }
                     // Markieren, dass diese Entität in diesem Tick angegriffen hat
                     EntitiesThatAttackedThisTick.Add(Entity);
                 }
-              /*  else // Ziel außer Reichweite gekommen während der Attack-Animation
+                else // Ziel außer Reichweite gekommen während der Attack-Animation
                 {
+                    UE_LOG(LogTemp, Log, TEXT("Attack TO CHASE!!!!!!!"));
                     UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                       if (!SignalSubsystem)
                       {
@@ -189,7 +156,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                     StateFrag.StateTimer = 0.f;
                     continue;
-                }*/
+                }
             } 
 
             // 5. Prüfen, ob die Angriffs-Aktion (ohne Pause) abgeschlossen ist
