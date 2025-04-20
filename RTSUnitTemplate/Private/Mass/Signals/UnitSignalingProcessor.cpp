@@ -45,7 +45,7 @@ void UUnitSignalingProcessor::ConfigureQueries()
 
 void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-  
+    // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
     if (!SignalSubsystem)
     {
         UE_LOG(LogMass, Error, TEXT("%s: MassSignalSubsystem is missing."), *GetName());
@@ -56,6 +56,7 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
+        // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! %d"), NumEntities);
         // const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
         // const auto Stats = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         // const auto Characteristics = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();

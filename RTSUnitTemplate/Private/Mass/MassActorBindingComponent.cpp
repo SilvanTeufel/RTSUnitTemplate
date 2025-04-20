@@ -133,7 +133,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		// Your Custom Logic
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
-
+    	
+    	FMassAIStateFragment::StaticStruct(),
+    	FMassAITargetFragment::StaticStruct(), 
+    	FMassCombatStatsFragment::StaticStruct(), 
+    	FMassAgentCharacteristicsFragment::StaticStruct(), 
+    	
 		// Actor Representation & Sync
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
@@ -354,8 +359,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         {
             // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
             CharFrag->bIsFlying = UnitOwner->IsFlying; // Assuming direct property access
-            CharFrag->bCanAttackFlying = UnitOwner->CanOnlyAttackFlying;
-            CharFrag->bCanAttackGround = UnitOwner->CanOnlyAttackFlying;
+            CharFrag->bCanOnlyAttackFlying = UnitOwner->CanOnlyAttackFlying;
+            CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackFlying;
             CharFrag->bIsInvisible = UnitOwner->IsInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
         }

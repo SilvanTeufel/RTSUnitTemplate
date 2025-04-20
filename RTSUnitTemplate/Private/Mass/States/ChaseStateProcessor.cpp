@@ -42,7 +42,7 @@ void UChaseStateProcessor::ConfigureQueries()
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
+    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
 
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
@@ -102,7 +102,8 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 SignalSubsystem->SignalEntity(
                 UnitSignals::Pause,
                 Entity);
-                
+
+                UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
                 ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                 ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity); // Zu Pause, nicht direkt Attack
 

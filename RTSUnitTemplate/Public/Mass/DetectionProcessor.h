@@ -26,12 +26,15 @@ protected:
 	virtual void ConfigureQueries() override;
 	// This is where you respond to the signal
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-	virtual void SignalEntities(FMassEntityManager& EntityManager,
+	/*virtual void SignalEntities(FMassEntityManager& EntityManager,
 								FMassExecutionContext& Context,
-								FMassSignalNameLookup& EntitySignals);
+								FMassSignalNameLookup& EntitySignals);*/
 
 private:
 
+	UPROPERTY(Transient)
+	UWorld* World;
+	
 	void HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities);
 
 	

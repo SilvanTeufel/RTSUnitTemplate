@@ -60,6 +60,7 @@ private:
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
 
+	FDelegateHandle SetUnitToChaseSignalDelegateHandle;
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
 	// Cached subsystem pointers
@@ -81,4 +82,11 @@ private:
 	  FName SignalName,
 	  TArray<FMassEntityHandle>& Entities
 	);
+
+	UFUNCTION()
+	void SetUnitToChase(
+	  FName SignalName,
+	  TArray<FMassEntityHandle>& Entities
+	);
+	
 };

@@ -171,10 +171,10 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     bool bIsFlying = false;
 
     UPROPERTY(EditAnywhere, Category = "Characteristics")
-    bool bCanAttackFlying = true;
+    bool bCanOnlyAttackFlying = true;
 
     UPROPERTY(EditAnywhere, Category = "Characteristics")
-    bool bCanAttackGround = true;
+    bool bCanOnlyAttackGround = true;
 
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsInvisible = false;

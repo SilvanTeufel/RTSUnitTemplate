@@ -47,7 +47,6 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly); // Für Effekte/Projektile/XP
 
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -76,8 +75,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>();
-              
+ 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -87,7 +85,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassVelocityFragment& Velocity = VelocityList[i];
-            AActor* AttackerActor = ActorFragments[i].GetMutable(); // Actor holen
+        
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 

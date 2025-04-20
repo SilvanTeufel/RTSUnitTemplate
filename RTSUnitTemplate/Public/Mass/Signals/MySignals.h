@@ -31,6 +31,7 @@ namespace UnitSignals
 	const FName MeleeAttack(TEXT("MeeleAttack"));
 	const FName RangedAttack(TEXT("RangedAttack"));
 	const FName UnitInDetectionRange(TEXT("UnitInDetectionRange"));
+	const FName SetUnitToChase(TEXT("SetUnitToChase"));
 }
 
 USTRUCT()
