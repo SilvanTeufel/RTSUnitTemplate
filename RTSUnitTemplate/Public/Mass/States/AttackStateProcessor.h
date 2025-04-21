@@ -68,7 +68,7 @@ private:
     AActor* AttackerActo);
 
     // Verhindert mehrfaches Auslösen des Schadens/Projektils pro Attack-State pro Tick
-    TSet<FMassEntityHandle> EntitiesThatAttackedThisTick;
+    //TSet<FMassEntityHandle> EntitiesThatAttackedThisTick;
 
     // Gehört eigentlich in Config/Stats-Fragment
     UPROPERTY(EditDefaultsOnly, Category = "Attack")

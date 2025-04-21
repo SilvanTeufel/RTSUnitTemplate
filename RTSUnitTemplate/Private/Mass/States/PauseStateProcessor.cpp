@@ -27,7 +27,9 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Sicherstellen, dass Velocity 0 ist
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
-  
+    
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -73,8 +75,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 UnitSignals::Idle,
                 Entity);
                 
-                ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
                 StateFrag.StateTimer = 0.f;
                 continue;
             }
@@ -99,9 +99,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      UnitSignals::Attack,
                      Entity);
                     
-                     // Noch/wieder in Reichweite -> Wechsle zu Attack
-                     ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                     ChunkContext.Defer().AddTag<FMassStateAttackTag>(Entity);
                      StateFrag.StateTimer = 0.f; // Reset Timer für Attack-Dauer
                      // Hier könnte ein Signal gesendet werden "StartAttackAnimation"
                 }
@@ -116,8 +113,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      UnitSignals::Chase,
                      Entity);
                      // Nicht mehr in Reichweite -> Wechsle zurück zu Chase
-                     ChunkContext.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                     ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                      StateFrag.StateTimer = 0.f;
                 }
                 continue; // Zustand gewechselt

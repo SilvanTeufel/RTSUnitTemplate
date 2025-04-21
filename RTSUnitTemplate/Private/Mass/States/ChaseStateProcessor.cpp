@@ -42,7 +42,7 @@ void UChaseStateProcessor::ConfigureQueries()
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
+    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
 
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
@@ -75,12 +75,8 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                       continue; // Handle missing subsystem
                  }
                  SignalSubsystem->SignalEntity(
-                 UnitSignals::Idle,
+                 UnitSignals::Run,
                  Entity);
-                
-                ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder StateFrag.PreviousState Tag
-                
                 StateFrag.StateTimer = 0.f; // Reset Timer
                 continue;
             }
@@ -102,11 +98,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 SignalSubsystem->SignalEntity(
                 UnitSignals::Pause,
                 Entity);
-
                 UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
-                ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity); // Zu Pause, nicht direkt Attack
-
                 StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
             }
@@ -120,20 +112,20 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
 {
     // --- Log Entry Point and Inputs ---
-    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Entered Function ----")); // Log entry
+    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Entered Function ----")); // Log entry
 
     // Sicherheitscheck für World Pointer
     if (!World)
     {
         // Log the error and exit
-        UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
+        //UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
         return;
     }
 
     // Log Input Values
     // Using %s for FVector::ToString() requires the '*' to get the TCHAR*
     // Using %.2f for float Speed to show two decimal places
-    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: Input - TargetLocation: %s, Speed: %.2f"), *TargetLocation.ToString(), Speed);
+    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: Input - TargetLocation: %s, Speed: %.2f"), *TargetLocation.ToString(), Speed);
 
     // --- Modify the Fragment ---
     MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
@@ -156,6 +148,7 @@ void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget,
     // Log the values *after* modification to confirm they were set correctly.
     // Assuming FMassDesiredSpeed has a .Get() method or similar to retrieve the float value.
     // Logging Enum as integer for simplicity: (int32)MoveTarget.IntentAtGoal
+    /*
     UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: Output - MoveTarget Updated - Center: %s, DesiredSpeed: %.2f, SlackRadius: %.1f, Forward: %s, IntentAtGoal: %d"),
            *MoveTarget.Center.ToString(),
            MoveTarget.DesiredSpeed.Get(), // Adjust if .Get() is not the correct way to access the speed float
@@ -169,7 +162,7 @@ void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget,
          UE_LOG(LogTemp, Warning, TEXT("UChaseStateProcessor::UpdateMoveTarget: PreNormalizedForward vector was %s (nearly zero), resulting Forward is %s."), *PreNormalizedForward.ToString(), *MoveTarget.Forward.ToString());
      }
 
-     UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Exiting Function ----")); // Log exit
+     UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::UpdateMoveTarget: ---- Exiting Function ----"));*/ // Log exit
 }
 
 void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)

@@ -73,9 +73,6 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  UnitBase->CanActivateAbilities = false;
                  UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
                  ActorFragments[i].GetMutable()->SetActorEnableCollision(false); // Kollision am Actor deaktivieren
-
-                 // Optional: Setze ein Flag-Fragment, dass Effekte gespielt wurden
-                 // Context.Defer().AddTag<FPlayedDeathEffectsTag>(Entity);
             }
 
 
@@ -87,11 +84,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                     // UnitBase->UnitWillDespawn(); // Deine Funktion aufrufen
                     // UnitBase->SpawnPickupsArray();
                  }
-
-                 // Entität zerstören
-                 // Option A: Nur die Mass Entity zerstören (Actor bleibt ggf. kurz bestehen)
-                 // ChunkContext.Defer().DestroyEntity(Entity);
-
+                
                  // Option B: Den Actor zerstören (was oft auch die Entity entfernt, je nach Setup)
                  if (ActorFragments[i].IsValid())
                  {
@@ -103,9 +96,6 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                          ActorToDestroy->Destroy();
                          // UE_LOG(LogTemp, Log, TEXT("Destroying Actor for dead Entity [%d]"), Entity.Index);
                      }
-                     // WICHTIG: Wenn der Actor zerstört wird, wird oft automatisch
-                     // die Mass Entity durch das ActorSubsystem mitzerstört.
-                     // Ein zusätzliches Context.Defer().DestroyEntity(Entity) kann nötig sein oder zu Fehlern führen. Testen!
                  } else {
                       // Nur Entity zerstören, wenn kein Actor (mehr) da ist
                        ChunkContext.Defer().DestroyEntity(Entity);

@@ -61,7 +61,7 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
 
     // Optional: Nur für bestimmte Zustände laufen lassen?
-    EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
     /*
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
@@ -74,7 +74,9 @@ void UDetectionProcessor::ConfigureQueries()
 
     // Schließe tote Einheiten aus
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
 
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -157,7 +159,8 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 // --- Perform Checks ---
                 if (TargetStats.TeamId == CurrentDetectorStats.TeamId) continue;
                 if (TargetChars.bIsInvisible && !CurrentDetectorChars.bCanDetectInvisible) continue;
-
+                if (TargetStats.Health <= 0) continue;
+             
                 
                 bool bCanAttackTarget = true;
                 if (CurrentDetectorChars.bCanOnlyAttackGround && TargetChars.bIsFlying) bCanAttackTarget = false;
@@ -253,19 +256,16 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                        if (!SignalSubsystem) continue;
                         
-                       SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
-                 
-                    ChunkContext.Defer().AddTag<FMassStateChaseTag>(CurrentEntity);
-                    ChunkContext.Defer().RemoveTag<FMassStateRunTag>(CurrentEntity);
-                 
-                    ChunkContext.Defer().AddTag<FMassHasTargetTag>(CurrentEntity);
+                        SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
+                        SignalSubsystem->SignalEntity(UnitSignals::Chase, CurrentEntity);
              }
              else
              {
-                    UE_LOG(LogTemp, Log, TEXT("REMOVE Detection TO CHASE!!!!!!!"));
-                    ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(CurrentEntity);
+                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                 if (!SignalSubsystem) continue;
+                        
+                 SignalSubsystem->SignalEntity(UnitSignals::Run, CurrentEntity);
                  
-                    ChunkContext.Defer().RemoveTag<FMassHasTargetTag>(CurrentEntity);
              }
 
         } // End loop through detector entities in chunk

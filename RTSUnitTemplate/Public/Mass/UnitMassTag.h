@@ -46,6 +46,7 @@ struct FUnitStateFragment : public FMassFragment
 	// Could store target entity handle here if attacking/following
 	UPROPERTY()
 	FMassEntityHandle TargetEntity;
+	
 };
 
 //----------------------------------------------------------------------//
@@ -59,6 +60,12 @@ struct FMassAIStateFragment : public FMassFragment
     /** Timer, der für Aktionen innerhalb des aktuellen Zustands verwendet wird (z.B. Attack-Cooldown, Pause-Dauer, Zeit im Idle-Zustand). Wird bei Zustandswechsel zurückgesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     float StateTimer = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool HasAttacked = false;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FMassTag PlaceholderTag;
 };
 
 //----------------------------------------------------------------------//

@@ -10,9 +10,77 @@
 #include "MassCommonFragments.h" // Für Transform
 #include "MassActorSubsystem.h"  
 // Für Actor-Cast und Projektil-Spawn (Beispiel)
+#include "MassArchetypeTypes.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 
+namespace UE::Mass::Debug // Optional: Use a namespace for organization
+{
+    /**
+     * @brief Logs the tags currently present on a Mass Entity.
+     * @param Entity The entity handle to inspect.
+     * @param EntityManager A const reference to the entity manager for querying.
+     * @param LogOwner Optional UObject context for the log category (can be nullptr).
+     */
+    static void LogEntityTags(const FMassEntityHandle& Entity, const FMassEntityManager& EntityManager, const UObject* LogOwner = nullptr)
+    {
+        FString PresentTags = TEXT("Tags:");
+        bool bFoundTags = false;
+
+        // --- Get Archetype and Composition ---
+        const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
+        if (!ArchetypeHandle.IsValid())
+        {
+            // Use default LogTemp or context-specific log category if owner provided
+            UE_LOG(LogTemp, Warning, TEXT("Entity [%d:%d] has invalid archetype handle! Cannot log tags."), Entity.Index, Entity.SerialNumber);
+            return;
+        }
+
+        const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+
+        // --- Check all relevant tags using the Composition's Tag Bitset ---
+        // Primary States
+        if (Composition.Tags.Contains<FMassStateIdleTag>())      { PresentTags += TEXT(" Idle"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateChaseTag>())     { PresentTags += TEXT(" Chase"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateAttackTag>())    { PresentTags += TEXT(" Attack"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStatePauseTag>())     { PresentTags += TEXT(" Pause"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateDeadTag>())      { PresentTags += TEXT(" Dead"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateRunTag>())       { PresentTags += TEXT(" Run"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateDetectTag>())    { PresentTags += TEXT(" Detect"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateCastingTag>())   { PresentTags += TEXT(" Casting"); bFoundTags = true; }
+
+        // Patrol States
+        if (Composition.Tags.Contains<FMassStatePatrolTag>())       { PresentTags += TEXT(" Patrol"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStatePatrolRandomTag>()) { PresentTags += TEXT(" PatrolRandom"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStatePatrolIdleTag>())   { PresentTags += TEXT(" PatrolIdle"); bFoundTags = true; }
+
+        // Other States
+        if (Composition.Tags.Contains<FMassStateEvasionTag>())    { PresentTags += TEXT(" Evasion"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateRootedTag>())     { PresentTags += TEXT(" Rooted"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassStateIsAttackedTag>()) { PresentTags += TEXT(" IsAttacked"); bFoundTags = true; }
+
+        // Helper Tags
+        if (Composition.Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
+        if (Composition.Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
+
+        // --- Add checks for any other custom tags you use ---
+        // if (Composition.Tags.Contains<FMyCustomTag>()) { PresentTags += TEXT(" MyCustom"); bFoundTags = true; }
+
+
+        if (!bFoundTags) { PresentTags += TEXT(" [None Found]"); }
+
+        // --- Log the result ---
+        // Use a specific log category if desired, otherwise LogTemp is fine for debugging.
+        // Using LogOwner allows associating the log with a specific processor/object if needed.
+        UE_LOG(LogMass, Log, TEXT("Entity [%d:%d] %s"), // Using LogMass category example
+             Entity.Index, Entity.SerialNumber,
+             *PresentTags);
+
+        // Alternatively, stick to LogTemp if preferred:
+        // UE_LOG(LogTemp, Log, TEXT("Entity [%d:%d] Archetype [%s] %s"), ... );
+    }
+
+} // End namespace UE::Mass::Debug (or anonymous namespace if preferred)
 
 // Signal Definitionen (Beispiel - diese müssen irgendwo global definiert werden)
 namespace UE::Mass::Signals
@@ -48,6 +116,8 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+  
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -64,11 +134,14 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
     }
 
     // Set leeren, das speichert, wer in diesem Tick schon angegriffen hat
-    EntitiesThatAttackedThisTick.Reset();
+   //EntitiesThatAttackedThisTick.Reset();
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
     {
+
+
+            
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
@@ -89,6 +162,9 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
+
+            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+
             // 1. Sicherstellen, dass Einheit steht
             Velocity.Value = FVector::ZeroVector;
             // Rotation zum Ziel: Sollte idealerweise ein separater LookAtProcessor machen
@@ -96,8 +172,11 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             // 2. Ziel verloren oder ungültig? -> Zurück zu Idle/Chase
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
-                ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Oder Chase, je nach Logik
+                UE_LOG(LogTemp, Log, TEXT("TARGET NOT VALID ANYMORE!!!!!!!"));
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                if (!SignalSubsystem) continue;
+                    
+                SignalSubsystem->SignalEntity(UnitSignals::Chase, Entity);
                 StateFrag.StateTimer = 0.f;
                 continue;
             }
@@ -111,7 +190,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const float DamageApplicationTime = AttackDuration * DamageApplicationTimeFactor;
 
             // 4. Prüfen, ob der "Impact"-Zeitpunkt erreicht ist und wir noch nicht angegriffen haben
-            if (StateFrag.StateTimer >= DamageApplicationTime && !EntitiesThatAttackedThisTick.Contains(Entity))
+            if (StateFrag.StateTimer >= DamageApplicationTime) //&& !EntitiesThatAttackedThisTick.Contains(Entity)
             {
                 // Prüfen, ob Ziel noch in Reichweite ist
                 const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius; // Vereinfacht
@@ -120,25 +199,24 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    if (Stats.bUseProjectile)
+                    if (Stats.bUseProjectile && !StateFrag.HasAttacked)
                     {
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                         if (!SignalSubsystem) continue;
                     
                         SignalSubsystem->SignalEntity(UnitSignals::RangedAttack, Entity);
-                        
+                        StateFrag.HasAttacked = true;
                     }
-                    else // Nahkampf
+                    else if (!StateFrag.HasAttacked)// Nahkampf
                     {
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                         if (!SignalSubsystem) continue;
                         
                         SignalSubsystem->SignalEntity(UnitSignals::MeleeAttack, Entity);
+                        StateFrag.HasAttacked = true;
                     }
-                    // Markieren, dass diese Entität in diesem Tick angegriffen hat
-                    EntitiesThatAttackedThisTick.Add(Entity);
                 }
-                else // Ziel außer Reichweite gekommen während der Attack-Animation
+                else
                 {
                     UE_LOG(LogTemp, Log, TEXT("Attack TO CHASE!!!!!!!"));
                     UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
@@ -149,9 +227,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                       SignalSubsystem->SignalEntity(
                       UnitSignals::Chase,
                       Entity);
-                    
-                    ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-                    ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                     StateFrag.StateTimer = 0.f;
                     continue;
                 }
@@ -169,8 +244,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                    UnitSignals::Pause,
                    Entity);
                 // Angriff beendet -> Wechsle zu Pause
-                ChunkContext.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStatePauseTag>(Entity);
+                StateFrag.HasAttacked = false;
                 StateFrag.StateTimer = 0.0f; // Timer für Pause zurücksetzen
                 continue;
             }

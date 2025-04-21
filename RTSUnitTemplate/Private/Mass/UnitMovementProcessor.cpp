@@ -116,10 +116,6 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 UnitSignals::Idle,
                 Entity);
                 
-                ChunkContext.Defer().RemoveTag<FMassStateRunTag>(Entity);
-                ChunkContext.Defer().RemoveTag<FMassStateChaseTag>(Entity);
-                ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                ChunkContext.Defer().RemoveTag<FMassStatePatrolTag>(Entity);
                 continue; // Stop here, DesiredVelocity remains ZeroVector
             }
 

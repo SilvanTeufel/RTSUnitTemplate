@@ -68,7 +68,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             if (TargetFrag.bHasValidTarget && bCanAttack /* && Bedingungen */)
             {
                 UE_LOG(LogTemp, Log, TEXT("IDLE TO CHASE!!!!!!!"));
-                
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                   if (!SignalSubsystem)
                   {
@@ -78,8 +77,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                   UnitSignals::Chase,
                   Entity);
                 
-                ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                 StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;
             }
@@ -91,9 +88,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             if (!bIsOnPlattform && bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= SetUnitsBackToPatrolTime)
             {
-                ChunkContext.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-                ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
-
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                   if (!SignalSubsystem)
                   {

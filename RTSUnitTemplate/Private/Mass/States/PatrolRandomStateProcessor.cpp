@@ -86,11 +86,9 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				UnitSignals::Chase,
 				Entity);
              	
-                 ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                 ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
-                 StateFrag.StateTimer = 0.f;
+             	StateFrag.StateTimer = 0.f;
              	
-                 continue;
+             	continue;
              }
 
              // 2. Ist aktuelles Bewegungsziel noch gültig oder muss ein neues gesetzt werden?
@@ -113,10 +111,8 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					UnitSignals::PatrolIdle,
 					Entity);
                   	
-                       ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                       ChunkContext.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
-                       StateFrag.StateTimer = 0.f; // Timer für Idle-Dauer starten
-                       continue;
+                  	StateFrag.StateTimer = 0.f; // Timer für Idle-Dauer starten
+                  	continue;
                   }
                   else
                   {
@@ -136,8 +132,6 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							   UnitSignals::Idle,
 							   Entity);
                         	
-                             ChunkContext.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                             ChunkContext.Defer().AddTag<FMassStateIdleTag>(Entity); // Fallback zu Idle
                              StateFrag.StateTimer = 0.f;
                              continue;
                         }

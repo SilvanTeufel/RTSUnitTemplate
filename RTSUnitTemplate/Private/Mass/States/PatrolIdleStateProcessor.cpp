@@ -69,9 +69,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                    SignalSubsystem->SignalEntity(
                    UnitSignals::Chase,
                    Entity);
-                 
-                 ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                 ChunkContext.Defer().AddTag<FMassStateChaseTag>(Entity);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;
@@ -101,8 +98,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                     UnitSignals::PatrolRandom,
                     Entity);
                  
-                 ChunkContext.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                 ChunkContext.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                  StateFrag.StateTimer = 0.f;
                  IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;
