@@ -34,6 +34,9 @@ protected:
 
 	virtual void ConfigureQueries() override;
 private:
+	UPROPERTY(Transient)
+	UWorld* World;
+	
 	FMassEntityQuery EntityQuery;
 	// Handler function for the signal (must match delegate signature)
 

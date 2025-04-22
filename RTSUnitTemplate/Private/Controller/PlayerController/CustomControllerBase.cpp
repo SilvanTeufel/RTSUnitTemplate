@@ -161,8 +161,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
     // --- Access the PER-ENTITY fragment ---
     FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
-
-    if (!MoveTargetFragmentPtr)
+	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(InEntity);
+	
+    if (!MoveTargetFragmentPtr || !AiStatePtr)
     {
         // If the entity doesn't have the fragment yet, you might need to add it.
         // Depending on your setup, it might be added by an Archetype or Trait already.
@@ -175,6 +176,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
         return;
     }
 
+	AiStatePtr->StoredLocation = NewTargetLocation;
     // Now, modify the specific entity's fragment data
     MoveTargetFragmentPtr->Center = NewTargetLocation;
     MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Move; // Set the intended action
@@ -187,7 +189,19 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
 	EntityManager.Defer().AddTag<FMassStateRunTag>(InEntity);
 
-	EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
+	if (AttackToggled)
+	{
+		AttackToggled = false;
+		UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
+		EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
+	}else
+	{
+		UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(InEntity);
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(InEntity);
+	}
 
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
@@ -318,7 +332,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 		}
 		
 	}else if (AttackToggled) {
-		AttackToggled = false;
+		//AttackToggled = false;
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 

@@ -14,83 +14,6 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 
-namespace UE::Mass::Debug // Optional: Use a namespace for organization
-{
-    /**
-     * @brief Logs the tags currently present on a Mass Entity.
-     * @param Entity The entity handle to inspect.
-     * @param EntityManager A const reference to the entity manager for querying.
-     * @param LogOwner Optional UObject context for the log category (can be nullptr).
-     */
-    static void LogEntityTags(const FMassEntityHandle& Entity, const FMassEntityManager& EntityManager, const UObject* LogOwner = nullptr)
-    {
-        FString PresentTags = TEXT("Tags:");
-        bool bFoundTags = false;
-
-        // --- Get Archetype and Composition ---
-        const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
-        if (!ArchetypeHandle.IsValid())
-        {
-            // Use default LogTemp or context-specific log category if owner provided
-            UE_LOG(LogTemp, Warning, TEXT("Entity [%d:%d] has invalid archetype handle! Cannot log tags."), Entity.Index, Entity.SerialNumber);
-            return;
-        }
-
-        const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
-
-        // --- Check all relevant tags using the Composition's Tag Bitset ---
-        // Primary States
-        if (Composition.Tags.Contains<FMassStateIdleTag>())      { PresentTags += TEXT(" Idle"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateChaseTag>())     { PresentTags += TEXT(" Chase"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateAttackTag>())    { PresentTags += TEXT(" Attack"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePauseTag>())     { PresentTags += TEXT(" Pause"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateDeadTag>())      { PresentTags += TEXT(" Dead"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateRunTag>())       { PresentTags += TEXT(" Run"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateDetectTag>())    { PresentTags += TEXT(" Detect"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateCastingTag>())   { PresentTags += TEXT(" Casting"); bFoundTags = true; }
-
-        // Patrol States
-        if (Composition.Tags.Contains<FMassStatePatrolTag>())       { PresentTags += TEXT(" Patrol"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePatrolRandomTag>()) { PresentTags += TEXT(" PatrolRandom"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePatrolIdleTag>())   { PresentTags += TEXT(" PatrolIdle"); bFoundTags = true; }
-
-        // Other States
-        if (Composition.Tags.Contains<FMassStateEvasionTag>())    { PresentTags += TEXT(" Evasion"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateRootedTag>())     { PresentTags += TEXT(" Rooted"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateIsAttackedTag>()) { PresentTags += TEXT(" IsAttacked"); bFoundTags = true; }
-
-        // Helper Tags
-        if (Composition.Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
-
-        // --- Add checks for any other custom tags you use ---
-        // if (Composition.Tags.Contains<FMyCustomTag>()) { PresentTags += TEXT(" MyCustom"); bFoundTags = true; }
-
-
-        if (!bFoundTags) { PresentTags += TEXT(" [None Found]"); }
-
-        // --- Log the result ---
-        // Use a specific log category if desired, otherwise LogTemp is fine for debugging.
-        // Using LogOwner allows associating the log with a specific processor/object if needed.
-        UE_LOG(LogMass, Log, TEXT("Entity [%d:%d] %s"), // Using LogMass category example
-             Entity.Index, Entity.SerialNumber,
-             *PresentTags);
-
-        // Alternatively, stick to LogTemp if preferred:
-        // UE_LOG(LogTemp, Log, TEXT("Entity [%d:%d] Archetype [%s] %s"), ... );
-    }
-
-} // End namespace UE::Mass::Debug (or anonymous namespace if preferred)
-
-// Signal Definitionen (Beispiel - diese müssen irgendwo global definiert werden)
-namespace UE::Mass::Signals
-{
-    const FName TakeDamage = FName(TEXT("TakeDamage"));
-    // const FName TriggerEffect = FName(TEXT("TriggerEffect"));
-    // const FName ActivateAbility = FName(TEXT("ActivateAbility"));
-    // const FName ForceState = FName(TEXT("ForceState"));
-}
-
 
 UAttackStateProcessor::UAttackStateProcessor()
 {
@@ -150,7 +73,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
  
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-
+        UE_LOG(LogTemp, Log, TEXT("EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -161,8 +84,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-
-
+            
             UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
 
             // 1. Sicherstellen, dass Einheit steht
@@ -255,25 +177,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 }
 
 
-// --- Hilfsfunktionen ---
-
-void UAttackStateProcessor::SendDamageSignal(FMassExecutionContext& Context, FMassEntityHandle AttackerEntity, FMassEntityHandle TargetEntity, float DamageAmount, bool bIsMagicDamage)
-{
-    if (SignalSubsystem && TargetEntity.IsSet() && DamageAmount > 0)
-    {
-        // Erstelle Payload mit Details
-        FMassDamageSignalPayload Payload;
-        Payload.DamageAmount = DamageAmount;
-       /// Payload.bIsMagicDamage = bIsMagicDamage;
-        //Payload.Instigator = AttackerEntity;
-
-        // Sende Signal mit Payload an das Ziel-Entity
-        // === KORREKTUR HIER: Argumente in richtiger Reihenfolge ===
-        SignalSubsystem->SignalEntity(UE::Mass::Signals::TakeDamage, TargetEntity);
-        // Reihenfolge: SignalName, Entity, Payload
-         UE_LOG(LogTemp, Log, TEXT("Entity [%d] signaling damage [%.1f] to Entity [%d]"), AttackerEntity.Index, DamageAmount, TargetEntity.Index);
-    }
-}
 
 void UAttackStateProcessor::SpawnProjectileFromActor(
     FMassEntityManager& EntityManager, // <--- EntityManager als Parameter

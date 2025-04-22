@@ -27,6 +27,7 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Sicherstellen, dass Velocity 0 ist
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     
@@ -47,10 +48,12 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
             
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-
+            
+        UE_LOG(LogTemp, Log, TEXT("EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -59,7 +62,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassVelocityFragment& Velocity = VelocityList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            
+            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
             // 1. Sicherstellen, dass Einheit steht
             Velocity.Value = FVector::ZeroVector;
 
@@ -72,9 +77,10 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      continue; // Handle missing subsystem
                 }
                 SignalSubsystem->SignalEntity(
-                UnitSignals::Idle,
+                UnitSignals::Run,
                 Entity);
                 
+                UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
                 StateFrag.StateTimer = 0.f;
                 continue;
             }

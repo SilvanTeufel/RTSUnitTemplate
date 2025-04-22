@@ -29,6 +29,6 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	// Hilfsfunktion zum Setzen des Bewegungsziels
-	void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World);
+	//void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World);
 	void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World);
 };

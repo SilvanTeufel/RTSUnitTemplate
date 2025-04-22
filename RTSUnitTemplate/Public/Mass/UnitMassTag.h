@@ -4,6 +4,8 @@
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"
 #include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
+#include "MassNavigationTypes.h"
 #include "Core/UnitData.h"
 #include "UnitMassTag.generated.h"
 
@@ -22,6 +24,14 @@ USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // F
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
+
+// --- Worker-Zustände ---
+USTRUCT() struct FMassStateGoToBaseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
+USTRUCT() struct FMassStateGoToBuildTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateGoToResourceExtractionTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
+USTRUCT() struct FMassStateBuildTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateResourceExtractionTag : public FMassTag { GENERATED_BODY() };
+
 
 // --- Patrouillen-Zustände ---
 USTRUCT() struct FMassStatePatrolTag : public FMassTag { GENERATED_BODY() }; // Direkt zum WP
@@ -66,6 +76,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FMassTag PlaceholderTag;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector StoredLocation = FVector::ZeroVector;
 };
 
 //----------------------------------------------------------------------//
@@ -232,3 +245,24 @@ struct FMassPatrolFragment : public FMassFragment
     // Hier könnte auch eine Referenz auf eine FMassEntityHandle Liste mit Waypoint-Entities stehen
     // oder eine TArray<FVector> mit Positionen, je nachdem wie du Waypoints verwaltest.
 };
+
+inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
+{
+	if (!World)
+	{
+		// Log the error and exit
+		//UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
+		return;
+	}
+    
+	// --- Modify the Fragment ---
+	MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
+	MoveTarget.Center = TargetLocation;
+	MoveTarget.DesiredSpeed.Set(Speed);
+	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
+	MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
+
+
+	FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
+	MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
+}

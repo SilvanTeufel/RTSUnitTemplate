@@ -56,10 +56,7 @@ protected:
 
 private:
     FMassEntityQuery EntityQuery;
-
-    // Hilfsfunktion für Schaden via Signal
-    void SendDamageSignal(FMassExecutionContext& Context, FMassEntityHandle AttackerEntity, FMassEntityHandle TargetEntity, float DamageAmount, bool bIsMagicDamage);
-
+    
     // Hilfsfunktion für Projektil via ActorFragment
     void SpawnProjectileFromActor(FMassEntityManager& EntityManager, // <--- EntityManager als Parameter
     FMassExecutionContext& Context,
