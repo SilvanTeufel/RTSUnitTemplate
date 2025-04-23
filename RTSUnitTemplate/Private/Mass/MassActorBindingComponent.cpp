@@ -363,6 +363,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackFlying;
             CharFrag->bIsInvisible = UnitOwner->IsInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
+        	CharFrag->DespawnTime = DespawnTime;
         }
         else // Use default values
         {

@@ -39,7 +39,7 @@ void UIdleStateProcessor::ConfigureQueries()
 
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UIdleStateProcessor::Execute!"));
+    // UE_LOG(LogTemp, Log, TEXT("UIdleStateProcessor::Execute!"));
     const UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     

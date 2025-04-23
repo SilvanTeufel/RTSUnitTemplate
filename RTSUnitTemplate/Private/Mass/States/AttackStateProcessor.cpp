@@ -73,7 +73,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
  
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-        UE_LOG(LogTemp, Log, TEXT("EntityCount:! %d"), NumEntities);
+        UE_LOG(LogTemp, Log, TEXT("Attack EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -158,13 +158,13 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             if (StateFrag.StateTimer >= AttackDuration)
             {
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                   if (!SignalSubsystem)
-                   {
-                        continue; // Handle missing subsystem
-                   }
-                   SignalSubsystem->SignalEntity(
-                   UnitSignals::Pause,
-                   Entity);
+                if (!SignalSubsystem)
+                {
+                   continue; // Handle missing subsystem
+                }
+                SignalSubsystem->SignalEntity(
+                UnitSignals::Pause,
+                Entity);
                 // Angriff beendet -> Wechsle zu Pause
                 StateFrag.HasAttacked = false;
                 StateFrag.StateTimer = 0.0f; // Timer für Pause zurücksetzen

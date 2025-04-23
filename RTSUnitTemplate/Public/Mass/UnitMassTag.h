@@ -201,7 +201,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanDetectInvisible = false;
-	
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float DespawnTime = 5.f;
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
 };

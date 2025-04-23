@@ -83,7 +83,7 @@ void UDetectionProcessor::ConfigureQueries()
 
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-
+    UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
 // Check if we have any signals buffered for the detection signal name
     TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
     if (!SignaledEntitiesPtr || SignaledEntitiesPtr->IsEmpty())
@@ -113,6 +113,8 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+        UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
            
@@ -136,7 +138,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // --- Process ALL Buffered Signals (Manual Filtering) ---
             for (const FMassEntityHandle& PotentialTargetEntity : SignaledEntities)
             {
-
                 // Basic Filtering
                 if (PotentialTargetEntity == CurrentEntity) continue;
 
@@ -253,11 +254,11 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
              {
                     UE_LOG(LogTemp, Log, TEXT("Detection TO CHASE!!!!!!!"));
 
-                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                       UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                        if (!SignalSubsystem) continue;
                         
-                        SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
-                        SignalSubsystem->SignalEntity(UnitSignals::Chase, CurrentEntity);
+                       SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
+                       SignalSubsystem->SignalEntity(UnitSignals::Chase, CurrentEntity);
              }
              else
              {

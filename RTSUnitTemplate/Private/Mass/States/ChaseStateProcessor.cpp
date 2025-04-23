@@ -58,7 +58,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
-        UE_LOG(LogTemp, Log, TEXT("EntityCount:! %d"), NumEntities);
+        UE_LOG(LogTemp, Log, TEXT("Chase EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];

@@ -53,7 +53,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
             
-        UE_LOG(LogTemp, Log, TEXT("EntityCount:! %d"), NumEntities);
+        UE_LOG(LogTemp, Log, TEXT("Pause EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];

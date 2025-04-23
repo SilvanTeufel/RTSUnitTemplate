@@ -66,6 +66,7 @@ private:
 	FDelegateHandle SetUnitToChaseSignalDelegateHandle;
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
+	FDelegateHandle StartDeadSignalDelegateHandle;
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -92,4 +93,9 @@ private:
 	  TArray<FMassEntityHandle>& Entities
 	);
 	
+	UFUNCTION()
+	void HandleStartDead(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
 };

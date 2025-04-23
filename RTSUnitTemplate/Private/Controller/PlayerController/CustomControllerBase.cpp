@@ -191,7 +191,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
 	if (AttackToggled)
 	{
-		AttackToggled = false;
 		UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
 		EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
 	}else
@@ -332,7 +331,6 @@ void ACustomControllerBase::LeftClickPressedMass()
 		}
 		
 	}else if (AttackToggled) {
-		//AttackToggled = false;
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
@@ -367,7 +365,9 @@ void ACustomControllerBase::LeftClickPressedMass()
 			if (SelectedUnits[i])
 				FireAbilityMouseHit(SelectedUnits[i], Hit);
 		}
-
+		
+		AttackToggled = false;
+		
 		if (WaypointSound && PlayWaypointSound)
 		{
 			UGameplayStatics::PlaySound2D(this, WaypointSound);
@@ -461,7 +461,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 			}
 		}else if(UseUnrealEnginePathFinding)
 		{
-			if (Unit &&Unit->UnitState != UnitData::Dead)
+			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
 				/// A-Move Units ///
 				LeftClickAMoveUEPFMass(Unit, Location);

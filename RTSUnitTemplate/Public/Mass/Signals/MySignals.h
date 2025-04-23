@@ -34,6 +34,7 @@ namespace UnitSignals
 	const FName RangedAttack(TEXT("RangedAttack"));
 	const FName UnitInDetectionRange(TEXT("UnitInDetectionRange"));
 	const FName SetUnitToChase(TEXT("SetUnitToChase"));
+	const FName StartDead(TEXT("StartDead"));
 }
 
 USTRUCT()

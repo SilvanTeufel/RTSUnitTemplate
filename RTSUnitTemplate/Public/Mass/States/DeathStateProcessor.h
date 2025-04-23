@@ -23,8 +23,9 @@ protected:
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 private:
+	
 	FMassEntityQuery EntityQuery;
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
-	float DespawnTime = 5.0f; // Zeit bis zum Verschwinden
+	float DespawnTime = 15.0f; // Zeit bis zum Verschwinden
 };
