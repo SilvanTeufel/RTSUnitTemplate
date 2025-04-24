@@ -4,27 +4,24 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
-#include "MainStateProcessor.generated.h"
+#include "LookAtProcessor.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API UMainStateProcessor : public UMassProcessor
+class RTSUNITTEMPLATE_API ULookAtProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
-public:
-	UMainStateProcessor();
 
+	ULookAtProcessor();
+public:
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-	
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float ExecutionInterval = 0.5f;
-	
+	float AccumulatedTimeA = 0.0f;
+
 private:
 	FMassEntityQuery EntityQuery;
-
-	float TimeSinceLastRun = 0.0f;
-	
 };

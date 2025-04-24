@@ -66,7 +66,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
             // 1. Sicherstellen, dass Einheit steht
-            Velocity.Value = FVector::ZeroVector;
+            //Velocity.Value = FVector::ZeroVector;
 
              // 2. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
@@ -87,7 +87,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // 3. Timer für Pause-Dauer prüfen
             StateFrag.StateTimer += DeltaTime;
-            if (StateFrag.StateTimer >= Stats.AttackPauseDuration) // AttackPauseDuration muss im StatsFragment sein
+            if (StateFrag.StateTimer >= Stats.PauseDuration) // AttackPauseDuration muss im StatsFragment sein
             {
                 // Pause vorbei, prüfe ob Angriff möglich ist
                 const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius;
@@ -96,6 +96,14 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
                 if (DistSq <= AttackRangeSq)
                 {
+                    if (Stats.bUseProjectile)
+                    {
+                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                        if (!SignalSubsystem) continue;
+                    
+                        SignalSubsystem->SignalEntity(UnitSignals::RangedAttack, Entity);
+                    }
+                    
                     UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                      if (!SignalSubsystem)
                      {

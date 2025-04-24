@@ -30,6 +30,22 @@ void UMainStateProcessor::ConfigureQueries()
 
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        // Noch nicht Zeit, diesen Frame überspringen
+        return;
+    }
+
+    // --- Intervall erreicht, Logik ausführen ---
+
+    // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!UMainStateProcessor::Execute!!!!!!!!!!"));
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
@@ -48,7 +64,9 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-            UE_LOG(LogTemp, Log, TEXT("UMain NumEntities: %d"), NumEntities);
+            
+        UE_LOG(LogTemp, Log, TEXT("UMain NumEntities: %d"), NumEntities);
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i); // This is the current ("Attacker") entity
@@ -59,6 +77,11 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable now
 
+            if (SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntity(UnitSignals::SyncAttributes, Entity); // Use 'Entity' handle
+            }
+            
             // --- 1. Check CURRENT entity's health first ---
             if (StatsFrag.Health <= 0.f)
             {
@@ -81,10 +104,12 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     // Attempt to get the target's health from its CombatStats fragment
                     const FMassCombatStatsFragment* TargetStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
 
+                    UE_LOG(LogTemp, Error, TEXT("Entity %d:%d: Checking target %d:%d health: %.2f"),
+                    Entity.Index, Entity.SerialNumber, TargetEntity.Index, TargetEntity.SerialNumber, TargetStatsPtr->Health);
                     // Check if the target HAS combat stats AND if health is <= 0
                     if (TargetStatsPtr && TargetStatsPtr->Health <= 0.f)
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("Entity %d:%d found target %d:%d is dead. Clearing target & signaling Run."),
+                        UE_LOG(LogTemp, Error, TEXT("Entity %d:%d found target %d:%d is dead. Clearing target & signaling Run."),
                             Entity.Index, Entity.SerialNumber, TargetEntity.Index, TargetEntity.SerialNumber);
 
                         // Signal the CURRENT entity (Attacker) to Run

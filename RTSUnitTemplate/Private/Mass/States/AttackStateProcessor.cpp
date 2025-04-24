@@ -37,10 +37,12 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
-  
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None); // Exclude Chase too
+    EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None); // Already excluded by other logic, but explicit
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -63,8 +65,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         [&](FMassExecutionContext& ChunkContext)
     {
 
-
-            
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
@@ -88,17 +88,16 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
 
             // 1. Sicherstellen, dass Einheit steht
-            Velocity.Value = FVector::ZeroVector;
+            //Velocity.Value = FVector::ZeroVector;
             // Rotation zum Ziel: Sollte idealerweise ein separater LookAtProcessor machen
-
             // 2. Ziel verloren oder ungültig? -> Zurück zu Idle/Chase
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
-                UE_LOG(LogTemp, Log, TEXT("TARGET NOT VALID ANYMORE!!!!!!!"));
+                UE_LOG(LogTemp, Error, TEXT("TARGET NOT VALID ANYMORE!!!!!!!"));
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                 if (!SignalSubsystem) continue;
                     
-                SignalSubsystem->SignalEntity(UnitSignals::Chase, Entity);
+                SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
                 StateFrag.StateTimer = 0.f;
                 continue;
             }
@@ -107,12 +106,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             StateFrag.StateTimer += DeltaTime;
 
             // Gesamtdauer des Angriffs (ohne Pause)
-            const float AttackDuration = (Stats.AttackSpeed > KINDA_SMALL_NUMBER) ? (1.0f / Stats.AttackSpeed) : 1.0f;
-            // Zeitpunkt innerhalb der AttackDuration, an dem der "Impact" stattfindet
-            const float DamageApplicationTime = AttackDuration * DamageApplicationTimeFactor;
-
             // 4. Prüfen, ob der "Impact"-Zeitpunkt erreicht ist und wir noch nicht angegriffen haben
-            if (StateFrag.StateTimer >= DamageApplicationTime) //&& !EntitiesThatAttackedThisTick.Contains(Entity)
+            if (StateFrag.StateTimer <= Stats.AttackDuration) //&& !EntitiesThatAttackedThisTick.Contains(Entity)
             {
                 // Prüfen, ob Ziel noch in Reichweite ist
                 const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius; // Vereinfacht
@@ -121,15 +116,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    if (Stats.bUseProjectile && !StateFrag.HasAttacked)
-                    {
-                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                        if (!SignalSubsystem) continue;
-                    
-                        SignalSubsystem->SignalEntity(UnitSignals::RangedAttack, Entity);
-                        StateFrag.HasAttacked = true;
-                    }
-                    else if (!StateFrag.HasAttacked)// Nahkampf
+                    if (!Stats.bUseProjectile && !StateFrag.HasAttacked)// Nahkampf
                     {
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                         if (!SignalSubsystem) continue;
@@ -152,10 +139,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     StateFrag.StateTimer = 0.f;
                     continue;
                 }
-            } 
-
-            // 5. Prüfen, ob die Angriffs-Aktion (ohne Pause) abgeschlossen ist
-            if (StateFrag.StateTimer >= AttackDuration)
+            }else
             {
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                 if (!SignalSubsystem)

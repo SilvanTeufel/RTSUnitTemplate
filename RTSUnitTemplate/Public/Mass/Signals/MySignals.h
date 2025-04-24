@@ -35,6 +35,7 @@ namespace UnitSignals
 	const FName UnitInDetectionRange(TEXT("UnitInDetectionRange"));
 	const FName SetUnitToChase(TEXT("SetUnitToChase"));
 	const FName StartDead(TEXT("StartDead"));
+	const FName SyncAttributes(TEXT("SyncAttributes"));
 }
 
 USTRUCT()

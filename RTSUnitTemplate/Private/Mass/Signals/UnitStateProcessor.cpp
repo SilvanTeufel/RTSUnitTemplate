@@ -54,6 +54,9 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
             UE_LOG(LogTemp, Log, TEXT("Registered ChangeUnitState for signal: %s"), *SignalName.ToString());
         }
 
+    	SyncAttributesDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncAttributes)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncAttributes));
+    	
     	SetUnitToChaseSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SetUnitToChase));
 
@@ -87,7 +90,15 @@ void UUnitStateProcessor::BeginDestroy()
             StateChangeSignalDelegateHandle[i].Reset();
         }
     }
-
+	
+	if (SignalSubsystem && SyncAttributesDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncAttributes)
+		.Remove(SyncAttributesDelegateHandle);
+            
+		SyncAttributesDelegateHandle.Reset();
+	}
+	
 	if (SignalSubsystem && SetUnitToChaseSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
@@ -248,6 +259,99 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
         } // End For loop
     }); // End AsyncTask Lambda
 }
+void UUnitStateProcessor::SyncAttributes(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	// Gehe durch alle Entities, die mit dem Signal übergeben wurden
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		// Rufe die Funktion auf, die die eigentliche Arbeit für eine einzelne Entity macht
+		// Die internen Checks (Subsystem, Validität etc.) sind in der Hilfsfunktion enthalten.
+		SynchronizeStatsFromActorToFragment(Entity);
+	}
+}
+
+void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity)
+{
+    // --- Vorab-Checks außerhalb des AsyncTasks ---
+    if (!EntitySubsystem)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment: EntitySubsystem ist null!"));
+        return;
+    }
+
+    // Const EntityManager für Read-Only Checks vor dem Task
+    const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
+
+    if (!EntityManager.IsEntityValid(Entity))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Entity %d:%d ist ungültig."), Entity.Index, Entity.SerialNumber);
+        return;
+    }
+
+    // Den zugehörigen Actor holen (Read-Only Zugriff reicht hier)
+    const FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+    const AActor* Actor = ActorFrag ? ActorFrag->Get() : nullptr;
+    const AUnitBase* UnitActor = Cast<AUnitBase>(Actor); // Const Cast genügt
+
+    // Prüfen, ob wir einen gültigen Actor und dessen Attributes haben
+    // Ersetze 'Attributes', falls dein Member anders heißt
+    if (!IsValid(UnitActor) || !UnitActor->Attributes)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Konnte keinen gültigen AUnitBase Actor oder Attributes für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
+        return;
+    }
+
+    // --- Notwendige Daten für den AsyncTask erfassen ---
+    // const_cast ist für TWeakObjectPtr nötig, da der Ctor non-const erwartet.
+    TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
+    FMassEntityHandle CapturedEntity = Entity; // Handle per Wert kopieren
+
+    // --- AsyncTask an den GameThread senden ---
+    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity]() mutable
+    {
+        // --- Code in dieser Lambda läuft jetzt im GameThread ---
+        AUnitBase* StrongUnitActor = WeakUnitActor.Get();
+
+        // Subsystem-Validität im GameThread prüfen
+        if (!EntitySubsystem)
+        {
+            UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment (GameThread): EntitySubsystem wurde null!"));
+            return;
+        }
+        // Mutable EntityManager holen, um Fragment schreiben zu können
+        FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        // Actor- und Entity-Validität erneut im GameThread prüfen
+        if (StrongUnitActor && GTEntityManager.IsEntityValid(CapturedEntity))
+        {
+            // Das MUTABLE Combat Stats Fragment holen
+            FMassCombatStatsFragment* CombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
+            // Das Attribute Set holen (erneut auf Gültigkeit prüfen)
+            // Ersetze 'Attributes', falls dein Member anders heißt
+            UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
+
+            // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
+            if (CombatStatsFrag && AttributeSet)
+            {
+                // Sicherstellen, dass GetHealth/GetShield in deinem AttributeSet existieren
+                CombatStatsFrag->Health = AttributeSet->GetHealth();
+                CombatStatsFrag->Shield = AttributeSet->GetShield();
+            	CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
+            	CombatStatsFrag->MaxShield = AttributeSet->GetMaxHealth();
+            	CombatStatsFrag->AttackDamage = AttributeSet->GetAttackDamage();
+            	CombatStatsFrag->AttackRange = AttributeSet->GetRange();
+            	CombatStatsFrag->RunSpeed = AttributeSet->GetRunSpeed();
+            	CombatStatsFrag->Armor = AttributeSet->GetArmor();
+				CombatStatsFrag->MagicResistance = AttributeSet->GetMagicResistance();
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment (GameThread): Actor oder Entity %d:%d wurde ungültig vor der Synchronisation."), CapturedEntity.Index, CapturedEntity.SerialNumber);
+        }
+    }); // Ende AsyncTask Lambda
+}
+
 
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {

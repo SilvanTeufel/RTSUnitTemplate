@@ -36,6 +36,9 @@ void UActorTransformSyncProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     //EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // <-- HINZUGEFÜGT: Geschwindigkeit lesen für Rotation
     EntityQuery.RegisterWithProcessor(*this); // Important!
     // Shared fragment defining LOD distances, etc. Might not be strictly needed

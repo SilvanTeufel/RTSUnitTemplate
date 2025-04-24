@@ -48,6 +48,12 @@ private:
 	  TArray<FMassEntityHandle>& Entities
 	);
 
+	UFUNCTION() // Wichtig für Signal-Registrierung per Name oder Delegate
+	void SyncAttributes(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity);
+
 	const TArray<FName> StateChangeSignals = {
 		UnitSignals::Idle,
 		UnitSignals::Chase,
@@ -62,11 +68,15 @@ private:
 	
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
-
+	
+	FDelegateHandle SyncAttributesDelegateHandle;
+	
 	FDelegateHandle SetUnitToChaseSignalDelegateHandle;
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
 	FDelegateHandle StartDeadSignalDelegateHandle;
+
+
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -98,4 +108,5 @@ private:
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
+	
 };

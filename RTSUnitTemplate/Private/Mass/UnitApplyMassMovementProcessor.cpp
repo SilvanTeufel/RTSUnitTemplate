@@ -33,7 +33,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries()
 
 	// Tag requirements
 	EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< ADDED BACK
-
+	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
 	// Shared fragment requirement
 	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All); // <<< ADDED BACK
 	

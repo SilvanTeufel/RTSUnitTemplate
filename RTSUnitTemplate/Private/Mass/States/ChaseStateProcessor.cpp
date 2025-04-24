@@ -102,6 +102,8 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 SignalSubsystem->SignalEntity(
                 UnitSignals::Pause,
                 Entity);
+
+                StopMovement(MoveTarget, World);
                 UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
                 StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
@@ -112,30 +114,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         }
     });
 }
-/*
-void UChaseStateProcessor::UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
-{
-
-    // Sicherheitscheck für World Pointer
-    if (!World)
-    {
-        // Log the error and exit
-        //UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
-        return;
-    }
-    
-    // --- Modify the Fragment ---
-    MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
-    MoveTarget.Center = TargetLocation;
-    MoveTarget.DesiredSpeed.Set(Speed);
-    MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
-    MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
-
-
-    FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
-    MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
-    
-}*/
 
 void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 {

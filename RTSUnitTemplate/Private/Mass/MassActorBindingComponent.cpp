@@ -66,7 +66,7 @@ void UMassActorBindingComponent::BeginPlay()
 		return; // World might not be valid yet
 	}
 
-
+	/*
 	if(MassEntitySubsystemCache )
 	{
 		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit"));
@@ -77,7 +77,7 @@ void UMassActorBindingComponent::BeginPlay()
 		UnitMassMesh,
 		MyOwner->GetActorLocation() + FVector(0, 0, 200.f) ,
 		World);
-	}
+	}*/
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
@@ -337,8 +337,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             //CombatStatsFrag->AcceptanceRadius = UnitAttributes->GetAcceptanceRadius();
             CombatStatsFrag->SightRadius = SightRadius;// We need to add this to Attributes i guess;
             CombatStatsFrag->LoseSightRadius = LoseSightRadius;// We need to add this to Attributes i guess;
-            CombatStatsFrag->AttackPauseDuration = AttackPauseDuration;// We need to add this to Attributes i guess;
-            CombatStatsFrag->bCanAttack = UnitOwner->CanAttack; // Assuming CanAttack() on Attributes
+            CombatStatsFrag->PauseDuration = UnitOwner->PauseDuration;// We need to add this to Attributes i guess;
+        	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
+        	CombatStatsFrag->bCanAttack = UnitOwner->CanAttack; // Assuming CanAttack() on Attributes
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
 
             //CalculatedAgentRadius = CombatStatsFrag->AgentRadius; // Use the value from stats

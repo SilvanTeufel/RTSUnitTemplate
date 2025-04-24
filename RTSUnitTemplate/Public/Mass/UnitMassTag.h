@@ -129,11 +129,14 @@ struct FMassCombatStatsFragment : public FMassFragment
 
     /** Angriffe pro Sekunde. Wird genutzt, um Cooldown/Pausendauer zu berechnen. */
     UPROPERTY(EditAnywhere, Category = "Stats")
-    float AttackSpeed = 1.0f;
-
+    float AttackDuration = 0.7f;
+	
     UPROPERTY(EditAnywhere, Category = "Stats")
     float RunSpeed = 600.f;
 
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float RotationSpeed = 360.0f;
+	
     UPROPERTY(EditAnywhere, Category = "Stats")
     int32 TeamId = 0;
 
@@ -168,7 +171,7 @@ struct FMassCombatStatsFragment : public FMassFragment
 
     /** Dauer der Pause zwischen Angriffen (könnte auch aus AttackSpeed berechnet werden). */
     UPROPERTY(EditAnywhere, Category = "Stats")
-    float AttackPauseDuration = 0.5f;
+    float PauseDuration = 0.5f;
 
     /** Flag, ob die Einheit überhaupt angreifen kann. */
     UPROPERTY(EditAnywhere, Category = "Stats")

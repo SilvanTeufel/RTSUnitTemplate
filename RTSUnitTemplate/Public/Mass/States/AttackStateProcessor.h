@@ -66,11 +66,7 @@ private:
 
     // Verhindert mehrfaches Auslösen des Schadens/Projektils pro Attack-State pro Tick
     //TSet<FMassEntityHandle> EntitiesThatAttackedThisTick;
-
-    // Gehört eigentlich in Config/Stats-Fragment
-    UPROPERTY(EditDefaultsOnly, Category = "Attack")
-    float DamageApplicationTimeFactor = 0.5f; // Bei 50% der Angriffszeit Schaden anwenden/Projektil spawnen
-
+    
     // Cached Subsystem Pointer
     UPROPERTY(Transient)
     TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
