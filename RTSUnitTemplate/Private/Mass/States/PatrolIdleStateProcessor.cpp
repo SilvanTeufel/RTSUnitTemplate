@@ -26,6 +26,9 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly); // Idle-Zeiten lesen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Velocity auf 0
 
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -48,6 +51,9 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
+
+            UE_LOG(LogTemp, Log, TEXT("PatrolIdle EntityCount:! %d"), NumEntities);
+        	
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];

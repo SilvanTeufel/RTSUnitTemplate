@@ -54,8 +54,8 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
             UE_LOG(LogTemp, Log, TEXT("Registered ChangeUnitState for signal: %s"), *SignalName.ToString());
         }
 
-    	SyncAttributesDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncAttributes)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncAttributes));
+    	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
     	
     	SetUnitToChaseSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SetUnitToChase));
@@ -91,12 +91,12 @@ void UUnitStateProcessor::BeginDestroy()
         }
     }
 	
-	if (SignalSubsystem && SyncAttributesDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncAttributes)
-		.Remove(SyncAttributesDelegateHandle);
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
+		.Remove(SyncUnitBaseDelegateHandle);
             
-		SyncAttributesDelegateHandle.Reset();
+		SyncUnitBaseDelegateHandle.Reset();
 	}
 	
 	if (SignalSubsystem && SetUnitToChaseSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
@@ -148,13 +148,119 @@ void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
   
 }
 
+void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager)
+{
+	        // Check entity validity *on the game thread*
+            if (!EntityManager.IsEntityValid(Entity)) 
+            {
+                return;
+            }
+            
+            // Get fragments and actors *on the game thread*
+            FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+            if (ActorFragPtr)
+            {
+                AActor* Actor = ActorFragPtr->GetMutable(); 
+                if (IsValid(Actor)) 
+                {
+                    AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+                    if (UnitBase)
+                    {
+                        // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
+                        // --- Remove old tags ---
+                        // Note: Using EntityManager directly here, NOT a separate command buffer object usually.
+                        EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
+                        EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                        EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
+                    	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
+                    	
+                        //UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
+                        //       *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
+
+                        // --- Add new tag ---
+                        if (SignalName == UnitSignals::Idle) { EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity); }
+                        else if (SignalName == UnitSignals::Chase)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+	                        EntityManager.Defer().AddTag<FMassStateChaseTag>(Entity);
+                        }
+                        else if (SignalName == UnitSignals::Attack)
+                        {
+                        	EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
+	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
+                        }
+                        else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
+                        else if (SignalName == UnitSignals::PatrolIdle) { EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity); }
+                        else if (SignalName == UnitSignals::PatrolRandom) { EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity); }
+                        else if (SignalName == UnitSignals::Pause)
+                        {
+                        	EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
+                        	EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
+                        }
+                        else if (SignalName == UnitSignals::Run) { EntityManager.Defer().AddTag<FMassStateRunTag>(Entity); }
+                        else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
+                        else if (SignalName == UnitSignals::IsAttacked) { EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(Entity); }
+                        
+                        // --- Call Actor Function (Usually needs Game Thread too) ---
+                        // Assuming UnitData enum maps directly to SignalName logic
+                        if (SignalName == UnitSignals::Idle)
+                        {
+                        	
+                        	// --- Hole benötigte Daten für StopMovement HIER ---
+                        	/*
+                        	UWorld* World = UnitBase->GetWorld(); // Welt vom Actor holen
+							  FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
+
+							  // Prüfe, ob Daten gültig sind, bevor StopMovement aufgerufen wird
+							  if (World && MoveTargetPtr)
+							  {
+								  StopMovement(*MoveTargetPtr, World); // Pointer dereferenzieren!
+							  }
+							  else
+							  {
+								  //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
+									//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
+							  }
+                        	*/
+							  // --- Ende Daten holen & StopMovement ---
+                        	UnitBase->SetUnitState(UnitData::Idle);
+                        }
+                        else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
+                        else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
+                        else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
+                        else if (SignalName == UnitSignals::PatrolIdle) { UnitBase->SetUnitState(UnitData::PatrolIdle); }
+                        else if (SignalName == UnitSignals::PatrolRandom) { UnitBase->SetUnitState(UnitData::PatrolRandom); }
+                        else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
+                        else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
+                        else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
+                        else if (SignalName == UnitSignals::IsAttacked) { UnitBase->SetUnitState(UnitData::IsAttacked); }
+                    }
+                    // ... rest of your else logs for invalid casts/actors ...
+                }
+                 else
+                 {
+	                 //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber);
+                 }
+            }
+             else
+             {
+	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
+             }
+}
+
 void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     // **Keep initial checks outside AsyncTask if possible and thread-safe**
     if (!EntitySubsystem)
     {
         // Log error - This check itself is generally safe
-        UE_LOG(LogTemp, Error, TEXT("ChangeUnitState called but EntitySubsystem is null!"));
+        // UE_LOG(LogTemp, Error, TEXT("ChangeUnitState called but EntitySubsystem is null!"));
         return;
     }
 
@@ -173,7 +279,7 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
         // Re-check EntitySubsystem just in case? Usually fine if 'this' is valid.
         if (!EntitySubsystem) 
         {
-             UE_LOG(LogTemp, Error, TEXT("ChangeUnitState (GameThread): EntitySubsystem became null!"));
+             // UE_LOG(LogTemp, Error, TEXT("ChangeUnitState (GameThread): EntitySubsystem became null!"));
              return;
         }
 
@@ -211,8 +317,8 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
                         EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
                     	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
                     	
-                        UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
-                               *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
+                        //UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
+                        //       *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
 
                         // --- Add new tag ---
                         if (SignalName == UnitSignals::Idle) { EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity); }
@@ -240,7 +346,27 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
                         
                         // --- Call Actor Function (Usually needs Game Thread too) ---
                         // Assuming UnitData enum maps directly to SignalName logic
-                        if (SignalName == UnitSignals::Idle) { UnitBase->SetUnitState(UnitData::Idle); }
+                        if (SignalName == UnitSignals::Idle)
+                        {
+                        	
+                        	// --- Hole benötigte Daten für StopMovement HIER ---
+							  UWorld* World = UnitBase->GetWorld(); // Welt vom Actor holen
+							  FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
+
+							  // Prüfe, ob Daten gültig sind, bevor StopMovement aufgerufen wird
+							  if (World && MoveTargetPtr)
+							  {
+								  StopMovement(*MoveTargetPtr, World); // Pointer dereferenzieren!
+							  }
+							  else
+							  {
+								  //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
+									//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
+							  }
+                        	
+							  // --- Ende Daten holen & StopMovement ---
+                        	UnitBase->SetUnitState(UnitData::Idle);
+                        }
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
                         else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
@@ -253,13 +379,19 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
                     }
                     // ... rest of your else logs for invalid casts/actors ...
                 }
-                 else { UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber); }
+                 else
+                 {
+	                 //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber);
+                 }
             }
-             else { UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber); }
+             else
+             {
+	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
+             }
         } // End For loop
     }); // End AsyncTask Lambda
 }
-void UUnitStateProcessor::SyncAttributes(FName SignalName, TArray<FMassEntityHandle>& Entities)
+void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// Gehe durch alle Entities, die mit dem Signal übergeben wurden
 	for (const FMassEntityHandle& Entity : Entities)
@@ -267,6 +399,7 @@ void UUnitStateProcessor::SyncAttributes(FName SignalName, TArray<FMassEntityHan
 		// Rufe die Funktion auf, die die eigentliche Arbeit für eine einzelne Entity macht
 		// Die internen Checks (Subsystem, Validität etc.) sind in der Hilfsfunktion enthalten.
 		SynchronizeStatsFromActorToFragment(Entity);
+		SynchronizeUnitState(Entity);
 	}
 }
 
@@ -275,7 +408,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
     // --- Vorab-Checks außerhalb des AsyncTasks ---
     if (!EntitySubsystem)
     {
-        UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment: EntitySubsystem ist null!"));
+        //UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment: EntitySubsystem ist null!"));
         return;
     }
 
@@ -284,7 +417,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
     if (!EntityManager.IsEntityValid(Entity))
     {
-        UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Entity %d:%d ist ungültig."), Entity.Index, Entity.SerialNumber);
+        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Entity %d:%d ist ungültig."), Entity.Index, Entity.SerialNumber);
         return;
     }
 
@@ -297,7 +430,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
     // Ersetze 'Attributes', falls dein Member anders heißt
     if (!IsValid(UnitActor) || !UnitActor->Attributes)
     {
-        UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Konnte keinen gültigen AUnitBase Actor oder Attributes für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
+        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Konnte keinen gültigen AUnitBase Actor oder Attributes für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
         return;
     }
 
@@ -315,7 +448,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         // Subsystem-Validität im GameThread prüfen
         if (!EntitySubsystem)
         {
-            UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment (GameThread): EntitySubsystem wurde null!"));
+            //UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment (GameThread): EntitySubsystem wurde null!"));
             return;
         }
         // Mutable EntityManager holen, um Fragment schreiben zu können
@@ -343,21 +476,114 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             	CombatStatsFrag->RunSpeed = AttributeSet->GetRunSpeed();
             	CombatStatsFrag->Armor = AttributeSet->GetArmor();
 				CombatStatsFrag->MagicResistance = AttributeSet->GetMagicResistance();
+
+            	CombatStatsFrag->PauseDuration = StrongUnitActor->PauseDuration;// We need to add this to Attributes i guess;
+				CombatStatsFrag->AttackDuration = StrongUnitActor->AttackDuration;
+				CombatStatsFrag->bCanAttack = StrongUnitActor->CanAttack; // Assuming CanAttack() on Attributes
+				CombatStatsFrag->bUseProjectile = StrongUnitActor->UseProjectile; // Assuming UsesProjectile() on Attributes
+				CombatStatsFrag->CastTime = StrongUnitActor->CastTime;
+				CombatStatsFrag->IsInitialized = StrongUnitActor->IsInitialized;
             }
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment (GameThread): Actor oder Entity %d:%d wurde ungültig vor der Synchronisation."), CapturedEntity.Index, CapturedEntity.SerialNumber);
+            //UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment (GameThread): Actor oder Entity %d:%d wurde ungültig vor der Synchronisation."), CapturedEntity.Index, CapturedEntity.SerialNumber);
         }
     }); // Ende AsyncTask Lambda
 }
 
+void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
+{
+    // --- Vorab-Checks außerhalb des AsyncTasks ---
+    if (!EntitySubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState: EntitySubsystem ist null!"));
+        return;
+    }
+
+    const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager(); // Für Read-Only Checks
+
+    if (!EntityManager.IsEntityValid(Entity))
+    {
+        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeUnitState: Entity %d:%d ist ungültig."), Entity.Index, Entity.SerialNumber);
+        return;
+    }
+
+    const FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+    const AActor* Actor = ActorFrag ? ActorFrag->Get() : nullptr;
+    const AUnitBase* UnitActor = Cast<AUnitBase>(Actor);
+
+    // Prüfen auf gültigen Actor
+    if (!IsValid(UnitActor)) // Attributes Check hier vielleicht nicht nötig
+    {
+        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeUnitState: Konnte keinen gültigen AUnitBase Actor für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
+        return;
+    }
+
+    // --- Notwendige Daten für den AsyncTask erfassen ---
+    TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
+    FMassEntityHandle CapturedEntity = Entity;
+
+    // --- AsyncTask an den GameThread senden ---
+    // EntityManager aus Capture entfernt, nur 'this' benötigt
+    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity, &EntityManager]() mutable
+    {
+        // --- Code in dieser Lambda läuft jetzt im GameThread ---
+        AUnitBase* StrongUnitActor = WeakUnitActor.Get();
+
+        if (!EntitySubsystem)
+        {
+            //UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState (GameThread): EntitySubsystem wurde null!"));
+            return;
+        }
+        FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        // Actor- und Entity-Validität erneut im GameThread prüfen
+        if (StrongUnitActor && GTEntityManager.IsEntityValid(CapturedEntity))
+        {
+            // Prüfe den Zustand des Actors
+            if (StrongUnitActor->GetUnitState() == UnitData::IsAttacked)
+            {
+                // Hole World und MoveTarget Fragment *innerhalb* des Tasks
+                UWorld* World = StrongUnitActor->GetWorld();
+                FMassMoveTargetFragment* MoveTargetPtr = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
+
+                // Prüfe, ob beide erfolgreich geholt wurden
+                if (World && MoveTargetPtr)
+                {
+                     // Verwende GTEntityManager für Defer-Aufrufe im GameThread
+                	
+                     GTEntityManager.Defer().AddTag<FMassStateIsAttackedTag>(CapturedEntity);
+
+                     // Rufe StopMovement auf und DEREFERENZIERE den Pointer mit '*'
+                     StopMovement(*MoveTargetPtr, World); // Annahme: StopMovement erwartet FMassMoveTargetFragment&
+
+                     //UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState (GameThread): Set Entity %d:%d to IsAttacked state and stopped movement."), CapturedEntity.Index, CapturedEntity.SerialNumber);
+                }
+			}else if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom){
+
+				SwitchState(UnitSignals::PatrolRandom, CapturedEntity, EntityManager);
+
+            }
+            else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle){
+            	SwitchState(UnitSignals::PatrolIdle, CapturedEntity, EntityManager);
+			}
+            // Hier könnten weitere else if Blöcke für andere UnitData States folgen...
+            // else if (StrongUnitActor->GetUnitState() == UnitData::Idle) { ... }
+
+        }
+        else
+        {
+            // UE_LOG(LogTemp, Warning, TEXT("SynchronizeUnitState (GameThread): Actor or Entity %d:%d wurde ungültig vor der Synchronisation."), CapturedEntity.Index, CapturedEntity.SerialNumber);
+        }
+    }); // Ende AsyncTask Lambda
+}
 
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     if (!EntitySubsystem)
     {
-       UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack called but EntitySubsystem is null!")); // Changed log message context
+       //UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack called but EntitySubsystem is null!")); // Changed log message context
        return;
     }
 
@@ -390,7 +616,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 // Check if target entity is valid *before* dispatching
                 if (!EntityManager.IsEntityValid(TargetEntity))
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("UnitMeeleAttack: Target entity from TargetFragment is invalid for attacker %s."), *UnitBase->GetName());
+                    // UE_LOG(LogTemp, Warning, TEXT("UnitMeeleAttack: Target entity from TargetFragment is invalid for attacker %s."), *UnitBase->GetName());
                     continue; // Skip this attack
                 }
 
@@ -409,7 +635,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                     // *** FIX: 'this' is now captured, so EntitySubsystem is accessible ***
                     if (!EntitySubsystem)
                     {
-                         UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack (GameThread): EntitySubsystem became null!"));
+                         // UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack (GameThread): EntitySubsystem became null!"));
                          return;
                     }
                     FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -425,7 +651,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                     	
                     	if (!AttackerStats || !TargetStats)
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("UnitMeeleAttack (GameThread): Failed to get CombatStatsFragment for Attacker (%d) or Target (%d)."), AttackerStats != nullptr, TargetStats != nullptr);
+                            // UE_LOG(LogTemp, Warning, TEXT("UnitMeeleAttack (GameThread): Failed to get CombatStatsFragment for Attacker (%d) or Target (%d)."), AttackerStats != nullptr, TargetStats != nullptr);
                             return;
                         }
 
@@ -440,8 +666,8 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         float Defense = bIsMagicDamage ? TargetStats->MagicResistance : TargetStats->Armor;
                         float DamageAfterDefense = FMath::Max(0.0f, BaseDamage - Defense);
 
-                        UE_LOG(LogTemp, Log, TEXT("Unit %s attacking Unit %s. BaseDamage: %.2f, Defense: %.2f, FinalDamageApplied: %.2f, MagicDamage: %s"),
-                               *StrongAttacker->GetName(), *StrongTarget->GetName(), BaseDamage, Defense, DamageAfterDefense, bIsMagicDamage ? TEXT("True") : TEXT("False"));
+                        //UE_LOG(LogTemp, Log, TEXT("Unit %s attacking Unit %s. BaseDamage: %.2f, Defense: %.2f, FinalDamageApplied: %.2f, MagicDamage: %s"),
+                        //       *StrongAttacker->GetName(), *StrongTarget->GetName(), BaseDamage, Defense, DamageAfterDefense, bIsMagicDamage ? TEXT("True") : TEXT("False"));
 
                         float RemainingDamage = DamageAfterDefense;
                         if (TargetStats->Shield > 0)
@@ -450,14 +676,14 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         	TargetStats->Shield -= ShieldDamage;
                         	StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
                         	RemainingDamage -= ShieldDamage;
-                        	UE_LOG(LogTemp, Log, TEXT("Unit %s Shield Damage: %.2f. Shield Remaining: %.2f"), *StrongTarget->GetName(), ShieldDamage, TargetStats->Shield);
+                        	//UE_LOG(LogTemp, Log, TEXT("Unit %s Shield Damage: %.2f. Shield Remaining: %.2f"), *StrongTarget->GetName(), ShieldDamage, TargetStats->Shield);
                         }
                         if (RemainingDamage > 0)
                         {
                         	float HealthDamage = FMath::Min(TargetStats->Health, RemainingDamage);
                         	TargetStats->Health -= HealthDamage;
                         	StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
-                        	UE_LOG(LogTemp, Log, TEXT("Unit %s Health Damage: %.2f. Health Remaining: %.2f"), *StrongTarget->GetName(), HealthDamage, TargetStats->Health);
+                        	//UE_LOG(LogTemp, Log, TEXT("Unit %s Health Damage: %.2f. Health Remaining: %.2f"), *StrongTarget->GetName(), HealthDamage, TargetStats->Health);
                         }
                         TargetStats->Health = FMath::Max(0.0f, TargetStats->Health);
 
@@ -557,7 +783,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // Check target entity validity *before* dispatching
                 if (!EntityManager.IsEntityValid(TargetEntity))
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack: Target entity %d:%d is invalid for attacker %s."), TargetEntity.Index, TargetEntity.SerialNumber, *AttackerUnitBase->GetName());
+                    //UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack: Target entity %d:%d is invalid for attacker %s."), TargetEntity.Index, TargetEntity.SerialNumber, *AttackerUnitBase->GetName());
                     continue;
                 }
 
@@ -623,7 +849,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         // Check if TargetStats fragment is valid before using it
                         if (!TargetStats)
                         {
-                             UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target CombatStatsFragment for post-attack logic. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
+                             // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target CombatStatsFragment for post-attack logic. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
                              // Decide how to proceed: maybe return? or skip post-attack logic?
                              // For now, we'll skip the rest of the post-attack logic if TargetStats is missing.
                         }
@@ -632,7 +858,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                  // Check fragment needed for state timer changes
                                  if (!TargetAIStateFragment)
                                  {
-                                     UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target AIStateFragment for timer updates. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
+                                     // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target AIStateFragment for timer updates. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
                                  }
 
                                  // Get target's current Actor state
@@ -662,7 +888,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     } // End check Actors/Entities valid
                     else
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Attacker/Target Actor/Entity became invalid before post-attack logic."));
+                        // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Attacker/Target Actor/Entity became invalid before post-attack logic."));
                     }
                 }); // End AsyncTask Lambda
              } // End prerequisite check

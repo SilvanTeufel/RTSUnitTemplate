@@ -46,7 +46,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
     TimeSinceLastRun -= ExecutionInterval;
     
-    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!UMainStateProcessor::Execute!!!!!!!!!!"));
+    //UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!UMainStateProcessor::Execute!!!!!!!!!!"));
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
 
@@ -65,12 +65,13 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
             
-        UE_LOG(LogTemp, Log, TEXT("UMain NumEntities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("UMain NumEntities: %d"), NumEntities);
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i); // This is the current ("Attacker") entity
 
+            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
             // --- Get Fragments for the CURRENT entity ---
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassAITargetFragment& TargetFrag = TargetList[i]; // Mutable now
@@ -79,7 +80,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             if (SignalSubsystem)
             {
-                SignalSubsystem->SignalEntity(UnitSignals::SyncAttributes, Entity); // Use 'Entity' handle
+                SignalSubsystem->SignalEntity(UnitSignals::SyncUnitBase, Entity); // Use 'Entity' handle
             }
             
             // --- 1. Check CURRENT entity's health first ---

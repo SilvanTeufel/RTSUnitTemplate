@@ -130,6 +130,15 @@ struct FMassCombatStatsFragment : public FMassFragment
     /** Angriffe pro Sekunde. Wird genutzt, um Cooldown/Pausendauer zu berechnen. */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float AttackDuration = 0.7f;
+
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float IsAttackedDuration = 0.5f;
+
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float CastTime = 2.f;
+
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	bool IsInitialized = true;
 	
     UPROPERTY(EditAnywhere, Category = "Stats")
     float RunSpeed = 600.f;
@@ -270,4 +279,20 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 
 	FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
 	MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
+}
+
+
+inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
+{
+	// Sicherheitscheck für World Pointer
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
+		return;
+	}
+
+	// Modifiziere das übergebene Fragment direkt
+	MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
+	MoveTarget.DesiredSpeed.Set(0.f);
+	// Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
 }

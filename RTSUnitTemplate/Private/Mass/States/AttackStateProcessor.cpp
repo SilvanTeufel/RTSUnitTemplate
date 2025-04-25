@@ -48,13 +48,13 @@ void UAttackStateProcessor::ConfigureQueries()
 
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UAttackStateProcessor::Execute!"));
+    //UE_LOG(LogTemp, Log, TEXT("UAttackStateProcessor::Execute!"));
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
     // Stelle sicher, dass das Signal Subsystem gültig ist
     if (!SignalSubsystem)
     {
-        UE_LOG(LogTemp, Error, TEXT("UAttackStateProcessor: SignalSubsystem is invalid!"));
+        //UE_LOG(LogTemp, Error, TEXT("UAttackStateProcessor: SignalSubsystem is invalid!"));
         return;
     }
 
@@ -73,7 +73,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
  
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-        UE_LOG(LogTemp, Log, TEXT("Attack EntityCount:! %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("Attack EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -85,7 +85,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             
-            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
 
             // 1. Sicherstellen, dass Einheit steht
             //Velocity.Value = FVector::ZeroVector;
@@ -93,7 +93,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             // 2. Ziel verloren oder ungültig? -> Zurück zu Idle/Chase
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
-                UE_LOG(LogTemp, Error, TEXT("TARGET NOT VALID ANYMORE!!!!!!!"));
+                //UE_LOG(LogTemp, Error, TEXT("TARGET NOT VALID ANYMORE!!!!!!!"));
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                 if (!SignalSubsystem) continue;
                     
@@ -127,7 +127,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Log, TEXT("Attack TO CHASE!!!!!!!"));
+                    //UE_LOG(LogTemp, Log, TEXT("Attack TO CHASE!!!!!!!"));
                     UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                       if (!SignalSubsystem)
                       {

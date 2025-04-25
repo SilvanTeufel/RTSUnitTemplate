@@ -36,7 +36,7 @@ void UPauseStateProcessor::ConfigureQueries()
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UPauseStateProcessor::Execute!"));
+    // UE_LOG(LogTemp, Log, TEXT("UPauseStateProcessor::Execute!"));
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     
@@ -52,8 +52,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
             
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+
             
-        UE_LOG(LogTemp, Log, TEXT("Pause EntityCount:! %d"), NumEntities);
+        // UE_LOG(LogTemp, Log, TEXT("Pause EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];

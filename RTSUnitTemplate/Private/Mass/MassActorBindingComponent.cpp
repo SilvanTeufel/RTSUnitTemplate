@@ -132,6 +132,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 
 		// Your Custom Logic
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
+    	FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
     	
     	FMassAIStateFragment::StaticStruct(),
@@ -168,7 +169,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	FMassArchetypeHandle ArchetypeHandle = EntityManager.CreateArchetype(FragmentsAndTags, CreationParams);
 	
 	if (!ArchetypeHandle.IsValid()) {
-		UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Failed to create archetype for %s!"), *Owner->GetName());
+		//UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Failed to create archetype for %s!"), *Owner->GetName());
 		return FMassEntityHandle();
 	}
 
@@ -223,7 +224,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 
     if (!NewEntityHandle.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Failed to create Mass Entity for %s!"), *Owner->GetName());
+        //UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: Failed to create Mass Entity for %s!"), *Owner->GetName());
         return FMassEntityHandle();
     }
 	
@@ -268,13 +269,13 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(NewEntityHandle))
 	{
 		RadiusFrag->Radius = 35.f; // Set a sensible radius
-		UE_LOG(LogTemp, Log, TEXT("Entity %s: Set AgentRadius = %.2f"), *NewEntityHandle.DebugGetDescription(), RadiusFrag->Radius);
+		//UE_LOG(LogTemp, Log, TEXT("Entity %s: Set AgentRadius = %.2f"), *NewEntityHandle.DebugGetDescription(), RadiusFrag->Radius);
 	}
 	
 	if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(NewEntityHandle))
 	{
 		*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(35.f)); // Set shape AND radius
-		UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *NewEntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
+		//UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *NewEntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
 	}
 
 	// --- Call Helper Function to Initialize Stats ---
@@ -283,7 +284,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
     // 4. Store the handle within this component
     MassEntityHandle = NewEntityHandle;
 
-    UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent: Created Mass Entity %d and linked to Actor %s"), MassEntityHandle.Index, *Owner->GetName());
+    //UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent: Created Mass Entity %d and linked to Actor %s"), MassEntityHandle.Index, *Owner->GetName());
 
     return MassEntityHandle;
 }
@@ -302,12 +303,12 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s is not of expected type 'AUnitBase'. Using default stats."), *OwnerActor->GetName());
+        //UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s is not of expected type 'AUnitBase'. Using default stats."), *OwnerActor->GetName());
     }
 
     if (UnitOwner && !UnitAttributes)
     {
-         UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s (%s) is missing expected 'UUnitAttributesComponent'. Using default stats."), *OwnerActor->GetName(), *UnitOwner->GetName());
+         //UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s (%s) is missing expected 'UUnitAttributesComponent'. Using default stats."), *OwnerActor->GetName(), *UnitOwner->GetName());
     }
     // --- End: Get Owner References ---
 
@@ -341,7 +342,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
         	CombatStatsFrag->bCanAttack = UnitOwner->CanAttack; // Assuming CanAttack() on Attributes
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
-
+        	CombatStatsFrag->IsAttackedDuration = IsAttackedDuration;
+        	CombatStatsFrag->CastTime = UnitOwner->CastTime;
+        	CombatStatsFrag->IsInitialized = UnitOwner->IsInitialized;
             //CalculatedAgentRadius = CombatStatsFrag->AgentRadius; // Use the value from stats
         }
         else // Use default values
@@ -384,15 +387,15 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             //PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
             PatrolFrag->RandomPatrolMinIdleTime = UnitOwner->NextWaypoint->PatrolCloseMinInterval;
             PatrolFrag->RandomPatrolMaxIdleTime = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
+        	PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
         }
          else // Use default values
          {
              *PatrolFrag = FMassPatrolFragment(); // Initialize with struct defaults
-             UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Patrol Config."), *EntityHandle.DebugGetDescription());
+         	PatrolFrag->CurrentWaypointIndex = INDEX_NONE;
+         	PatrolFrag->TargetWaypointLocation = FVector::ZeroVector;
+         	UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Patrol Config."), *EntityHandle.DebugGetDescription());
          }
-         // Ensure transient data starts clean regardless of source
-         PatrolFrag->CurrentWaypointIndex = INDEX_NONE;
-         PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
     }
 
     // --- Initialize Radius/Avoidance Fragments USING the calculated AgentRadius ---

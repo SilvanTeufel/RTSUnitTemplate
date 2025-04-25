@@ -43,7 +43,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     const UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, World](FMassExecutionContext& ChunkContext)
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -65,9 +65,10 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             bool bCanAttack = true; // StatsFrag.bCanAttack; // Dein Flag hier
 
+           //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+            
             if (TargetFrag.bHasValidTarget && bCanAttack /* && Bedingungen */)
             {
-                UE_LOG(LogTemp, Log, TEXT("IDLE TO CHASE!!!!!!!"));
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                   if (!SignalSubsystem)
                   {

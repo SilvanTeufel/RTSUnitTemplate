@@ -363,6 +363,42 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+
+	// Prüfen, ob wir NICHT im Game Thread sind
+	if ( !IsInGameThread() )
+	{
+		// Sicherere Erfassung mit Weak Pointers für UObjects
+		TWeakObjectPtr<AProjectile> WeakThis(this);
+		TWeakObjectPtr<UPrimitiveComponent> WeakOverlappedComp(OverlappedComp);
+		TWeakObjectPtr<AActor> WeakOtherActor(OtherActor);
+		TWeakObjectPtr<UPrimitiveComponent> WeakOtherComp(OtherComp);
+		// HitResult und primitive Typen per Wert kopieren ist sicher
+		FHitResult CapturedSweepResult = SweepResult;
+
+		AsyncTask(ENamedThreads::GameThread,
+			[WeakThis, WeakOverlappedComp, WeakOtherActor, WeakOtherComp, OtherBodyIndex, bFromSweep, CapturedSweepResult]() // Erfasste Variablen
+		{
+		   // Starke Pointer im Game Thread holen
+		   AProjectile* StrongThis = WeakThis.Get();
+		   UPrimitiveComponent* StrongOverlappedComp = WeakOverlappedComp.Get();
+		   AActor* StrongOtherActor = WeakOtherActor.Get();
+		   UPrimitiveComponent* StrongOtherComp = WeakOtherComp.Get();
+
+		   // Prüfen, ob 'this' und ggf. andere kritische Objekte noch gültig sind
+		   if (StrongThis /* && StrongOverlappedComp && StrongOtherActor */) // Prüfe nach Bedarf
+		   {
+			  // Funktion erneut aufrufen, jetzt garantiert im Game Thread
+			  // Verwende die starken Pointer oder kopierten Werte
+			  StrongThis->OnOverlapBegin(StrongOverlappedComp, StrongOtherActor, StrongOtherComp, OtherBodyIndex, bFromSweep, CapturedSweepResult);
+			  // Oder ggf. direkt die _Implementation aufrufen:
+			  // StrongThis->OnOverlapBegin_Implementation(StrongOverlappedComp, StrongOtherActor, StrongOtherComp, OtherBodyIndex, bFromSweep, CapturedSweepResult);
+		   }
+		});
+		// Ursprüngliche Ausführung beenden
+		return;
+	}
+
+	
 	if(OtherActor)
 	{
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);

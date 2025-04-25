@@ -24,20 +24,22 @@ UPatrolRandomStateProcessor::UPatrolRandomStateProcessor()
 
 void UPatrolRandomStateProcessor::ConfigureQueries()
 {
-    EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::All);
+	EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::All); // Nur Chase-Entitäten
 
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite); // Random Target setzen
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Aktuelle Position
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly); // Ziel lesen
+	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position lesen
+	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
+	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
+	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
 
+	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     // Optional: ActorFragment für komplexere Abfragen (z.B. GetWorld, NavSys)
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
+   // EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 
     // Ignoriere Einheiten, die bereits am Ziel sind (vom Movement gesetzt)
-    EntityQuery.AddTagRequirement<FMassReachedDestinationTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassReachedDestinationTag>(EMassFragmentPresence::None);
 
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -46,6 +48,7 @@ void UPatrolRandomStateProcessor::ConfigureQueries()
 
 void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor!!!!!"));
      UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(Context.GetWorld());
      UWorld* World = Context.GetWorld();
      if(!NavSys || !World) return;
@@ -64,6 +67,9 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         	
         for (int32 i = 0; i < NumEntities; ++i)
         {
+
+        	UE_LOG(LogTemp, Log, TEXT("PatrolRandom EntityCount:! %d"), NumEntities);
+        	
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             FMassPatrolFragment& PatrolFrag = PatrolList[i];
@@ -121,7 +127,8 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                        // MoveTarget wird in der Helper-Funktion aktualisiert
                         if (MoveTarget.GetCurrentAction() == EMassMovementAction::Move) {
                              StateFrag.StateTimer = 0.f; // Reset Timer bei neuem Ziel
-                        } else {
+                        }
+                  		/*else {
                              // Konnte kein neues Ziel finden -> vielleicht zu Idle wechseln?
                         	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 							   if (!SignalSubsystem)
@@ -134,7 +141,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                         	
                              StateFrag.StateTimer = 0.f;
                              continue;
-                        }
+                        }*/
                   }
              }
              // 4. Ansonsten: Aktuelles Bewegungsziel beibehalten (wird von MovementProcessor verfolgt)

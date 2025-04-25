@@ -37,7 +37,7 @@ void UDeathStateProcessor::ConfigureQueries()
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = Context.GetWorld(); 
-    UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor::Execute!"));
+    // UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor::Execute!"));
     
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
@@ -64,7 +64,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // 3. Effekte beim ersten Eintritt in Dead State auslösen (Beispiel)
             if (StateFrag.StateTimer <= DeltaTime) // Nur im ersten Frame dieses Zustands
             {
-                UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!SIGNEL TO START DEATH!!!!!!!!"));
+                // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!SIGNEL TO START DEATH!!!!!!!!"));
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                  if (!SignalSubsystem)
                  {

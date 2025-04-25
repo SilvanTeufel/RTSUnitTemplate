@@ -83,7 +83,7 @@ void UDetectionProcessor::ConfigureQueries()
 
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
+    //UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
 // Check if we have any signals buffered for the detection signal name
     TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
     if (!SignaledEntitiesPtr || SignaledEntitiesPtr->IsEmpty())
@@ -113,7 +113,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
-        UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -205,14 +205,14 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 // If it wasn't processed OR if it was processed but failed the viability check (e.g., > LoseSightRadiusSq)
                 if (!SignaledEntitiesProcessedThisTick.Contains(CurrentTarget.TargetEntity))
                 {
-                    UE_LOG(LogTemp, Log, TEXT("Target wasn't in the signals list OR was dead/invalid - definitely lost!!!!"));
+                    //UE_LOG(LogTemp, Log, TEXT("Target wasn't in the signals list OR was dead/invalid - definitely lost!!!!"));
                     // Target wasn't in the signals list OR was dead/invalid - definitely lost.
                     // bCurrentTargetStillViable is already false.
                     // UE_LOG(LogMass, Verbose, TEXT("Entity %s lost target %s (not signaled/invalid)."), *CurrentEntity.ToString(), *CurrentTarget.TargetEntity.ToString());
                 }
                  else
                  {
-                     UE_LOG(LogTemp, Log, TEXT("Target *was* signaled and valid, but failed the viability check (distance/LoS)"));
+                     //UE_LOG(LogTemp, Log, TEXT("Target *was* signaled and valid, but failed the viability check (distance/LoS)"));
                      // Target *was* signaled and valid, but failed the viability check (distance/LoS)
                      // bCurrentTargetStillViable is already false.
                      // UE_LOG(LogMass, Verbose, TEXT("Entity %s lost target %s (out of range/LoS)."), *CurrentEntity.ToString(), *CurrentTarget.TargetEntity.ToString());
@@ -223,7 +223,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // --- Final Update Target Fragment Logic ---
             if (bFoundValidTargetThisRun)
             {
-                UE_LOG(LogTemp, Log, TEXT("Found a new best target this run. Prioritize it."));
+                //UE_LOG(LogTemp, Log, TEXT("Found a new best target this run. Prioritize it."));
                 // Found a new best target this run. Prioritize it.
                 CurrentTarget.TargetEntity = BestTargetEntity;
                 CurrentTarget.LastKnownLocation = BestTargetLocation;
@@ -231,14 +231,14 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
             else if (bHadValidTargetPreviously && bCurrentTargetStillViable)
             {
-                UE_LOG(LogTemp, Log, TEXT("No *new* target found, but the *previous* one is still viable. Keep it."));
+                //UE_LOG(LogTemp, Log, TEXT("No *new* target found, but the *previous* one is still viable. Keep it."));
                 // No *new* target found, but the *previous* one is still viable. Keep it.
                 CurrentTarget.LastKnownLocation = CurrentTargetLatestLocation; // Update location
                 CurrentTarget.bHasValidTarget = true;
             }
             else
             {
-                UE_LOG(LogTemp, Log, TEXT("No new target found AND (no previous target OR previous target is no longer viable). Clear target."));
+                //UE_LOG(LogTemp, Log, TEXT("No new target found AND (no previous target OR previous target is no longer viable). Clear target."));
                 // No new target found AND (no previous target OR previous target is no longer viable). Clear target.
                 if (CurrentTarget.bHasValidTarget) // Log only if we had one before
                 {
@@ -252,7 +252,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // --- Tag Management (using final state) ---
              if (CurrentTarget.bHasValidTarget)
              {
-                    UE_LOG(LogTemp, Log, TEXT("Detection TO CHASE!!!!!!!"));
+                    //UE_LOG(LogTemp, Log, TEXT("Detection TO CHASE!!!!!!!"));
 
                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                        if (!SignalSubsystem) continue;
@@ -260,14 +260,17 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                        SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
                        SignalSubsystem->SignalEntity(UnitSignals::Chase, CurrentEntity);
              }
-             else
+
+            /*else
              {
+
+                 UE_LOG(LogTemp, Log, TEXT("Detection TO RUN!!!!!!!"));
                  UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                  if (!SignalSubsystem) continue;
                         
                  SignalSubsystem->SignalEntity(UnitSignals::Run, CurrentEntity);
                  
-             }
+             }*/
 
         } // End loop through detector entities in chunk
     }); // End ForEachEntityChunk

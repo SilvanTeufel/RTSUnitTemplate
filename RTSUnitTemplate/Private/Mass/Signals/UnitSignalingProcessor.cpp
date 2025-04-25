@@ -48,7 +48,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
     if (!SignalSubsystem)
     {
-        UE_LOG(LogMass, Error, TEXT("%s: MassSignalSubsystem is missing."), *GetName());
         return;
     }
 

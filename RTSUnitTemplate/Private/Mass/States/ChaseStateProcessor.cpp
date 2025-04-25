@@ -44,7 +44,7 @@ void UChaseStateProcessor::ConfigureQueries()
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
+    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
 
     UWorld* World = Context.GetWorld(); // World für MoveTarget holen
 
@@ -58,7 +58,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
-        UE_LOG(LogTemp, Log, TEXT("Chase EntityCount:! %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("Chase EntityCount:! %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -69,7 +69,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
          
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
             // 1. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
@@ -104,7 +104,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 Entity);
 
                 StopMovement(MoveTarget, World);
-                UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
+                // UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
                 StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
             }
@@ -113,19 +113,4 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
         }
     });
-}
-
-void UChaseStateProcessor::StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
-{
-    // Sicherheitscheck für World Pointer
-    if (!World)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
-        return;
-    }
-
-    // Modifiziere das übergebene Fragment direkt
-    MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
-    MoveTarget.DesiredSpeed.Set(0.f);
-    // Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
 }

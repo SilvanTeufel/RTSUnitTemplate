@@ -72,6 +72,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float LoseSightRadius = 2500.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "DespawnTime", Keywords = "RTSUnitTemplate DespawnTime"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float DespawnTime = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float IsAttackedDuration = 0.3f;
 };
