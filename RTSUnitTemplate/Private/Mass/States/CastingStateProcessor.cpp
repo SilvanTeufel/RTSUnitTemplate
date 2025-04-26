@@ -83,9 +83,6 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 // In einen Standardzustand zurückwechseln (z.B. Idle)
                 // Alternativ: Basierend auf Target Anwesenheit zu Chase wechseln?
                 SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-
-                // Timer für nächsten Zustand zurücksetzen
-                StateFrag.StateTimer = 0.f;
                 // Zustand wird vom UnitStateProcessor (Signal Handler) geändert.
             }
             // Ansonsten: Bleibe im Casting Zustand.

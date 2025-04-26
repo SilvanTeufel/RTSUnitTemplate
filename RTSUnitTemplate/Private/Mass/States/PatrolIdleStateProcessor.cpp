@@ -23,9 +23,11 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly); // Idle-Zeiten lesen
+    EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite); // Idle-Zeiten lesen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Velocity auf 0
-
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     
@@ -36,6 +38,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 {
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
+
+    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
     
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
@@ -43,9 +47,10 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
+        auto PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-            TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); 
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
         const float CurrentWorldTime = Context.GetWorld()->GetTimeSeconds();
 
@@ -56,9 +61,11 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         	
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
-            const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+            FMassPatrolFragment& PatrolFrag = PatrolList[i];
             FMassVelocityFragment& Velocity = VelocityList[i];
-
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            const FMassCombatStatsFragment& Stats = StatsList[i];
+            
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // 1. Bewegung stoppen
@@ -75,38 +82,44 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                    SignalSubsystem->SignalEntity(
                    UnitSignals::Chase,
                    Entity);
-                 StateFrag.StateTimer = 0.f;
-                 IdleEndTimes.Remove(Entity); // Eintrag entfernen
                  continue;
              }
 
-             // 3. Idle-Timer prüfen
-             if (StateFrag.StateTimer == 0.f) // Erster Tick in diesem Zustand
-             {
-                 // Berechne zufällige Idle-Dauer und speichere Endzeit
-                 float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
-                 IdleEndTimes.FindOrAdd(Entity) = CurrentWorldTime + IdleDuration;
-             }
+    
+             float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
+   
 
              StateFrag.StateTimer += DeltaTime; // Timer hochzählen (obwohl wir Endzeit prüfen)
-
+            UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer! %f"), StateFrag.StateTimer);
+            UE_LOG(LogTemp, Log, TEXT("IdleDuration! %f"), IdleDuration);
              // Finde die gespeicherte Endzeit
-             float* EndTimePtr = IdleEndTimes.Find(Entity);
-             if (EndTimePtr && CurrentWorldTime >= *EndTimePtr)
+             if (StateFrag.StateTimer >= IdleDuration)
              {
-                 // Idle-Zeit abgelaufen -> Wechsle zurück zu PatrolRandom
-                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                    if (!SignalSubsystem)
-                    {
-                         continue; // Handle missing subsystem
-                    }
-                    SignalSubsystem->SignalEntity(
-                    UnitSignals::PatrolRandom,
-                    Entity);
+
+                 float Roll = FMath::FRand() * 100.0f;
+
+                 UE_LOG(LogTemp, Log, TEXT("Roll! %f"), Roll);
+                    UE_LOG(LogTemp, Log, TEXT("PatrolFrag.IdleChance! %f"), PatrolFrag.IdleChance);
+                 if (Roll > PatrolFrag.IdleChance)
+                 {
+                        UE_LOG(LogTemp, Log, TEXT("SWITCH TO PATROL RANDOM!!"));
+                        SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, Stats.RunSpeed);
+                     
+                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                         if (!SignalSubsystem)
+                         {
+                              continue; // Handle missing subsystem
+                         }
+                         SignalSubsystem->SignalEntity(
+                         UnitSignals::PatrolRandom,
+                         Entity);
+                      continue;
+                 }else
+                 {
+                      StateFrag.StateTimer = 0.f;
+                      continue;
+                 }
                  
-                 StateFrag.StateTimer = 0.f;
-                 IdleEndTimes.Remove(Entity); // Eintrag entfernen
-                 continue;
              }
 
              // 4. Sonst: In PatrolIdle bleiben

@@ -71,12 +71,6 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
                 // Zum Pause-Zustand wechseln
                 SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-
-                // Timer für den nächsten Zustand (Pause) zurücksetzen
-                // Der PauseStateProcessor wird diesen Timer dann verwenden.
-                StateFrag.StateTimer = 0.f;
-                // Da der Zustand gewechselt wird, brauchen wir hier nichts weiter zu tun
-                // Die Tags werden vom UnitStateProcessor (Signal Handler) geändert.
             }
             // Ansonsten: Bleibe im IsAttacked Zustand. Keine weitere Aktion nötig.
         }

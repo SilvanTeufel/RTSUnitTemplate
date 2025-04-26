@@ -82,7 +82,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 Entity);
                 
                 UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-                StateFrag.StateTimer = 0.f;
                 continue;
             }
 
@@ -113,9 +112,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      SignalSubsystem->SignalEntity(
                      UnitSignals::Attack,
                      Entity);
-                    
-                     StateFrag.StateTimer = 0.f; // Reset Timer für Attack-Dauer
-                     // Hier könnte ein Signal gesendet werden "StartAttackAnimation"
                 }
                 else
                 {
@@ -127,8 +123,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      SignalSubsystem->SignalEntity(
                      UnitSignals::Chase,
                      Entity);
-                     // Nicht mehr in Reichweite -> Wechsle zurück zu Chase
-                     StateFrag.StateTimer = 0.f;
                 }
                 continue; // Zustand gewechselt
             }

@@ -6,6 +6,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "MassNavigationTypes.h"
+#include "NavigationSystem.h" // Für GetRandomReachablePointInRadius
 #include "Core/UnitData.h"
 #include "UnitMassTag.generated.h"
 
@@ -249,6 +250,9 @@ struct FMassPatrolFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolRadius = 500.f;
 
+	UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
+	float IdleChance = 70.f;
+	
     /** Minimale/Maximale Idle-Zeit bei zufälliger Patrouille. */
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolMinIdleTime = 2.0f;
@@ -256,6 +260,7 @@ struct FMassPatrolFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolMaxIdleTime = 5.0f;
 
+	
     // Hier könnte auch eine Referenz auf eine FMassEntityHandle Liste mit Waypoint-Entities stehen
     // oder eine TArray<FVector> mit Positionen, je nachdem wie du Waypoints verwaltest.
 };
@@ -295,4 +300,38 @@ inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 	MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
 	MoveTarget.DesiredSpeed.Set(0.f);
 	// Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
+}
+
+inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
+{
+	FVector BaseWaypointLocation = PatrolFrag.TargetWaypointLocation; // Muss korrekt gesetzt sein!
+	if (BaseWaypointLocation == FVector::ZeroVector)
+	{
+		// Fallback oder Fehlerbehandlung, wenn keine Basisposition bekannt ist
+		MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Anhalten
+		MoveTarget.DesiredSpeed.Set(0.f);
+		UE_LOG(LogTemp, Warning, TEXT("SetNewRandomPatrolTarget: BaseWaypointLocation is Zero!"));
+		return;
+	}
+
+	FNavLocation RandomPoint;
+	bool bSuccess = false;
+	int Attempts = 0;
+	constexpr int MaxAttempts = 5;
+
+	while (!bSuccess && Attempts < MaxAttempts)
+	{
+		// Finde zufälligen Punkt im Radius um den Basis-Wegpunkt
+		bSuccess = NavSys->GetRandomReachablePointInRadius(BaseWaypointLocation, PatrolFrag.RandomPatrolRadius, RandomPoint);
+		Attempts++;
+	}
+
+	if (bSuccess)
+	{
+		UE_LOG(LogTemp, Log, TEXT("SetNewRandomPatrolTarget: New Target %s"), *RandomPoint.Location.ToString());
+
+		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);
+		//PatrolFrag.TargetWaypointLocation = RandomPoint.Location; // Speichere das neue Ziel
+	}
+	
 }

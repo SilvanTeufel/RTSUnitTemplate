@@ -98,7 +98,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 if (!SignalSubsystem) continue;
                     
                 SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-                StateFrag.StateTimer = 0.f;
                 continue;
             }
 
@@ -136,7 +135,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                       SignalSubsystem->SignalEntity(
                       UnitSignals::Chase,
                       Entity);
-                    StateFrag.StateTimer = 0.f;
                     continue;
                 }
             }else
@@ -151,7 +149,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 Entity);
                 // Angriff beendet -> Wechsle zu Pause
                 StateFrag.HasAttacked = false;
-                StateFrag.StateTimer = 0.0f; // Timer für Pause zurücksetzen
                 continue;
             }
 

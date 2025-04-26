@@ -26,5 +26,4 @@ protected:
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 private:
 	FMassEntityQuery EntityQuery;
-	TMap<FMassEntityHandle, float> IdleEndTimes; // Speichert, wann die Idle-Zeit endet
 };

@@ -81,7 +81,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  SignalSubsystem->SignalEntity(
                  UnitSignals::Run,
                  Entity);
-                StateFrag.StateTimer = 0.f; // Reset Timer
                 continue;
             }
 
@@ -104,8 +103,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 Entity);
 
                 StopMovement(MoveTarget, World);
-                // UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor:: SET TO PAUSE!!!!!!!!!!!!!!!!!!!!!!!")); 
-                StateFrag.StateTimer = 0.f; // Reset Timer für Pause/Attack
                 continue;
             }
          

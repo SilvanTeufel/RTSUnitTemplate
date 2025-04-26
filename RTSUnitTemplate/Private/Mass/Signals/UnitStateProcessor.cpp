@@ -183,8 +183,19 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         //UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
                         //       *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
 
+                    	
                         // --- Add new tag ---
-                        if (SignalName == UnitSignals::Idle) { EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity); }
+                    	if (SignalName == UnitSignals::Idle)
+                    	{
+                    		if (UnitBase->GetUnitState() == UnitData::PatrolRandom)
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                    			EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
+                    		}else
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+                    		}
+                    	}
                         else if (SignalName == UnitSignals::Chase)
                         {
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
@@ -196,8 +207,16 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
-                        else if (SignalName == UnitSignals::PatrolIdle) { EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity); }
-                        else if (SignalName == UnitSignals::PatrolRandom) { EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity); }
+                        else if (SignalName == UnitSignals::PatrolIdle)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+	                        EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
+                        }
+                        else if (SignalName == UnitSignals::PatrolRandom)
+                        {
+                        		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        		EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
+                        }
                         else if (SignalName == UnitSignals::Pause)
                         {
                         	EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
@@ -206,40 +225,52 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Run) { EntityManager.Defer().AddTag<FMassStateRunTag>(Entity); }
                         else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
                         else if (SignalName == UnitSignals::IsAttacked) { EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(Entity); }
-                        
-                        // --- Call Actor Function (Usually needs Game Thread too) ---
-                        // Assuming UnitData enum maps directly to SignalName logic
-                        if (SignalName == UnitSignals::Idle)
-                        {
-                        	
-                        	// --- Hole benötigte Daten für StopMovement HIER ---
-                        	/*
-                        	UWorld* World = UnitBase->GetWorld(); // Welt vom Actor holen
-							  FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
 
-							  // Prüfe, ob Daten gültig sind, bevor StopMovement aufgerufen wird
-							  if (World && MoveTargetPtr)
-							  {
-								  StopMovement(*MoveTargetPtr, World); // Pointer dereferenzieren!
-							  }
-							  else
-							  {
-								  //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
-									//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
-							  }
-                        	*/
-							  // --- Ende Daten holen & StopMovement ---
-                        	UnitBase->SetUnitState(UnitData::Idle);
-                        }
+                    	if (SignalName == UnitSignals::Idle)
+                    	{
+                    		// --- Hole benötigte Daten für StopMovement HIER ---
+                    		UWorld* MyWorld = UnitBase->GetWorld(); // Welt vom Actor holen
+                    		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
+
+                    		// Prüfe, ob Daten gültig sind, bevor StopMovement aufgerufen wird
+                    		if (World && MoveTargetPtr)
+                    		{
+                    			StopMovement(*MoveTargetPtr, MyWorld); // Pointer dereferenzieren!
+                    		}
+                    		else
+                    		{
+                    			//UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
+                    			//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
+                    		}
+                        	
+                    		// --- Ende Daten holen & StopMovement ---
+                    		if (UnitBase->GetUnitState() == UnitData::PatrolRandom)
+                    		{
+                    			UnitBase->SetUnitState(UnitData::PatrolIdle);
+                    		}else
+                    		{
+                    			UnitBase->SetUnitState(UnitData::Idle);
+                    		}
+                    	}
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
                         else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
-                        else if (SignalName == UnitSignals::PatrolIdle) { UnitBase->SetUnitState(UnitData::PatrolIdle); }
-                        else if (SignalName == UnitSignals::PatrolRandom) { UnitBase->SetUnitState(UnitData::PatrolRandom); }
+                        else if (SignalName == UnitSignals::PatrolIdle)
+                        {
+	                        UnitBase->SetUnitState(UnitData::PatrolIdle);
+                        }
+                        else if (SignalName == UnitSignals::PatrolRandom)
+                        {
+                        	UnitBase->SetUnitState(UnitData::PatrolRandom);
+                        }
                         else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
                         else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
                         else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
                         else if (SignalName == UnitSignals::IsAttacked) { UnitBase->SetUnitState(UnitData::IsAttacked); }
+
+
+                    	//FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+                    	//State->StateTimer = 0.f;
                     }
                     // ... rest of your else logs for invalid casts/actors ...
                 }
@@ -283,114 +314,24 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
              return;
         }
 
-        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+        const FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-        for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+        for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
         {
+        	
             // Check entity validity *on the game thread*
             if (!EntityManager.IsEntityValid(Entity)) 
             {
                 continue;
             }
-            
-            // Get fragments and actors *on the game thread*
-            FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-            if (ActorFragPtr)
-            {
-                AActor* Actor = ActorFragPtr->GetMutable(); 
-                if (IsValid(Actor)) 
-                {
-                    AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-                    if (UnitBase)
-                    {
-                        // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
-                        // --- Remove old tags ---
-                        // Note: Using EntityManager directly here, NOT a separate command buffer object usually.
-                        EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
-                        EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
-                    	
-                        //UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
-                        //       *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
+        	SwitchState(SignalName, Entity, EntityManager);
 
-                        // --- Add new tag ---
-                        if (SignalName == UnitSignals::Idle) { EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity); }
-                        else if (SignalName == UnitSignals::Chase)
-                        {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-	                        EntityManager.Defer().AddTag<FMassStateChaseTag>(Entity);
-                        }
-                        else if (SignalName == UnitSignals::Attack)
-                        {
-                        	EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
-	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
-                        }
-                        else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
-                        else if (SignalName == UnitSignals::PatrolIdle) { EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity); }
-                        else if (SignalName == UnitSignals::PatrolRandom) { EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity); }
-                        else if (SignalName == UnitSignals::Pause)
-                        {
-                        	EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
-                        	EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
-                        }
-                        else if (SignalName == UnitSignals::Run) { EntityManager.Defer().AddTag<FMassStateRunTag>(Entity); }
-                        else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
-                        else if (SignalName == UnitSignals::IsAttacked) { EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(Entity); }
-                        
-                        // --- Call Actor Function (Usually needs Game Thread too) ---
-                        // Assuming UnitData enum maps directly to SignalName logic
-                        if (SignalName == UnitSignals::Idle)
-                        {
-                        	
-                        	// --- Hole benötigte Daten für StopMovement HIER ---
-							  UWorld* World = UnitBase->GetWorld(); // Welt vom Actor holen
-							  FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
-
-							  // Prüfe, ob Daten gültig sind, bevor StopMovement aufgerufen wird
-							  if (World && MoveTargetPtr)
-							  {
-								  StopMovement(*MoveTargetPtr, World); // Pointer dereferenzieren!
-							  }
-							  else
-							  {
-								  //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
-									//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
-							  }
-                        	
-							  // --- Ende Daten holen & StopMovement ---
-                        	UnitBase->SetUnitState(UnitData::Idle);
-                        }
-                        else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
-                        else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
-                        else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
-                        else if (SignalName == UnitSignals::PatrolIdle) { UnitBase->SetUnitState(UnitData::PatrolIdle); }
-                        else if (SignalName == UnitSignals::PatrolRandom) { UnitBase->SetUnitState(UnitData::PatrolRandom); }
-                        else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
-                        else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
-                        else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
-                        else if (SignalName == UnitSignals::IsAttacked) { UnitBase->SetUnitState(UnitData::IsAttacked); }
-                    }
-                    // ... rest of your else logs for invalid casts/actors ...
-                }
-                 else
-                 {
-	                 //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber);
-                 }
-            }
-             else
-             {
-	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
-             }
+        	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+			State->StateTimer = 0.f;
         } // End For loop
     }); // End AsyncTask Lambda
 }
+
 void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// Gehe durch alle Entities, die mit dem Signal übergeben wurden
@@ -459,7 +400,8 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         {
             // Das MUTABLE Combat Stats Fragment holen
             FMassCombatStatsFragment* CombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
-            // Das Attribute Set holen (erneut auf Gültigkeit prüfen)
+        	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
+        	// Das Attribute Set holen (erneut auf Gültigkeit prüfen)
             // Ersetze 'Attributes', falls dein Member anders heißt
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
@@ -483,6 +425,20 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 				CombatStatsFrag->bUseProjectile = StrongUnitActor->UseProjectile; // Assuming UsesProjectile() on Attributes
 				CombatStatsFrag->CastTime = StrongUnitActor->CastTime;
 				CombatStatsFrag->IsInitialized = StrongUnitActor->IsInitialized;
+
+
+            	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
+            	{
+					// <<< REPLACE Properties with your actual variable names >>>
+					PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
+					//PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
+					//PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
+					PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
+					PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
+					PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
+					PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
+					PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
+				}
             }
         }
         else
@@ -561,11 +517,12 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
                      //UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState (GameThread): Set Entity %d:%d to IsAttacked state and stopped movement."), CapturedEntity.Index, CapturedEntity.SerialNumber);
                 }
 			}else if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom){
-
+				UE_LOG(LogTemp, Log, TEXT("Synchronize PatrolRandom"));
 				SwitchState(UnitSignals::PatrolRandom, CapturedEntity, EntityManager);
 
             }
             else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle){
+            	UE_LOG(LogTemp, Log, TEXT("Synchronize PatrolIdle"));
             	SwitchState(UnitSignals::PatrolIdle, CapturedEntity, EntityManager);
 			}
             // Hier könnten weitere else if Blöcke für andere UnitData States folgen...
@@ -721,8 +678,6 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         {
                         	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 							if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
-                        	
-                        	TargetAIStateFragment->StateTimer = 0.f;
                         }
                         else if(StrongTarget->GetUnitState() == UnitData::Casting)
                         {
@@ -841,11 +796,12 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         const FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
                         FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity); // Mutable for timer
                         // Attacker fragments (needed if target dies)
+                    	/*
                         FMassAITargetFragment* AttackerTargetFragMut = GTEntityManager.GetFragmentDataPtr<FMassAITargetFragment>(AttackerEntity); // Mutable for bHasValidTarget
                         FMassMoveTargetFragment* AttackerMoveTargetFrag = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(AttackerEntity); // Mutable via UpdateMoveTarget
                         const FMassAIStateFragment* AttackerAIStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity); // Const for StoredLocation
                         const FMassCombatStatsFragment* AttackerCombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerEntity); // Const for RunSpeed
-
+						*/
                         // Check if TargetStats fragment is valid before using it
                         if (!TargetStats)
                         {
@@ -870,7 +826,6 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                      {
                                          SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
                                      }
-                                     if (TargetAIStateFragment) TargetAIStateFragment->StateTimer = 0.f;
                                      // Let IsAttacked signal handler change Actor state
                                  }
                                  else if (CurrentTargetState == UnitData::Casting)

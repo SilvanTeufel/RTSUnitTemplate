@@ -27,6 +27,8 @@ protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	FMassEntityHandle MassEntityHandle;
 
 	// Caches the Entity Subsystem pointer
@@ -66,6 +68,8 @@ public:
 	const FVector SpawnLocation,
 	UWorld* World);
 
+	void CleanupMassEntity();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float SightRadius = 2000.f; 
 

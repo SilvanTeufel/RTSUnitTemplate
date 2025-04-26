@@ -134,7 +134,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
     	FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
-    	
+    
     	FMassAIStateFragment::StaticStruct(),
     	FMassAITargetFragment::StaticStruct(), 
     	FMassCombatStatsFragment::StaticStruct(), 
@@ -388,6 +388,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             PatrolFrag->RandomPatrolMinIdleTime = UnitOwner->NextWaypoint->PatrolCloseMinInterval;
             PatrolFrag->RandomPatrolMaxIdleTime = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
         	PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
+        	PatrolFrag->RandomPatrolRadius = (UnitOwner->NextWaypoint->PatrolCloseOffset.X+UnitOwner->NextWaypoint->PatrolCloseOffset.Y)/2.f;
+        	PatrolFrag->IdleChance = UnitOwner->NextWaypoint->PatrolCloseIdlePercentage;
         }
          else // Use default values
          {
@@ -416,75 +418,17 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
+	/*
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid())
 	{
 		return;
 	}
-/*
-	if (MassEntitySubsystemCache)
-	{
-		const FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetEntityManager();
-		if (const FMassRepresentationFragment* RepFrag = EntityManager.GetFragmentDataPtr<FMassRepresentationFragment>(MassEntityHandle))
-		{
-			if (RepFrag->StaticMeshDescHandle.IsValid())
-			{
-				UE_LOG(LogTemp, Log, TEXT("TickComponent: Valid StaticMeshDescHandle, Index: %d"), RepFrag->StaticMeshDescHandle.ToIndex());
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("TickComponent: Invalid StaticMeshDescHandle in Representation Fragment."));
-			}
-		}
-	}*/
+
+	*/
 }
-/*
-void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction); // <-- Call the base class tick function
-	
-	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid()) // Combine checks for clarity
-	{
-		return;
-	}
-	//UE_LOG(LogTemp, Log, TEXT("TickComponent!!!!"));
-	
-	if (MassEntitySubsystemCache) // No need to check IsValid() again here, already done above
-	{
-		// Get the EntityManager from the subsystem
-		const FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetEntityManager();
 
-		// Retrieve the transform fragment data for this entity using the EntityManager
-
-		if (const FTransformFragment* TransformFragment = EntityManager.GetFragmentDataPtr<FTransformFragment>(MassEntityHandle))
-		{
-
-			if (MyOwner)
-			{
-				const FVector CurrentLocation = MyOwner->GetActorLocation();
-				const FVector NewLocation = TransformFragment->GetTransform().GetLocation();
-				const float LocationDifferenceSqr = FVector::DistSquared(CurrentLocation, NewLocation);
-
-				// Only update if moved more than, say, 1 unit squared (adjust threshold)
-				if (LocationDifferenceSqr > 1.0f)
-				{
-					UE_LOG(LogTemp, Log, TEXT("NewLocation!!!! %s"), *NewLocation.ToString());
-					MyOwner->SetActorLocation(NewLocation);
-					
-					// Optionally update rotation only if needed/changed significantly too
-					// Optionally update rotation/scale as needed:
-					// Owner->SetActorRotation(TransformFragment->GetTransform().GetRotation());
-					// Owner->SetActorScale3D(TransformFragment->GetTransform().GetScale3D());
-
-					// Or set the whole transform at once (potentially more efficient)
-					// Owner->SetActorTransform(TransformFragment->GetTransform());
-				}
-			}
-		}
-	}
-	
-}*/
 
 // Example helper: Create and register a static mesh description, returning a handle.
 // (The actual function and signature may differ. Consult UE5.5 documentation for the correct API.)
@@ -629,4 +573,66 @@ void UMassActorBindingComponent::SpawnMassUnitIsm(
 	VelocityFrag.Value = FVector::ZeroVector;
 	DrawDebugSphere(World, SpawnLocation, 25.0f, 12, FColor::Green, false, 15.0f);
     UE_LOG(LogTemp, Log, TEXT("SpawnMassUnitISM: Created Entity %d with ISM representation."), NewEntityHandle.Index);
+}
+
+void UMassActorBindingComponent::CleanupMassEntity()
+{
+	AActor* Owner = GetOwner(); // Get owner for logging clarity
+
+	// Check if the entity handle we stored is valid
+	if (MassEntityHandle.IsValid())
+	{
+		UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::CleanupMassEntity: Cleaning up Entity %d for Actor %s."), MassEntityHandle.Index, *GetNameSafe(Owner));
+
+		// Also check if the Mass Entity Subsystem we cached is still accessible.
+		if (MassEntitySubsystemCache)
+		{
+			FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+
+			// Double check the entity is still considered valid by the EntityManager itself
+			if (EntityManager.IsEntityValid(MassEntityHandle))
+			{
+				// --- REMOVED SECTION: Attempting to modify FMassActorFragment directly ---
+				// It appears there's no standard public API to explicitly clear the Actor reference
+				// within the fragment before destruction. We will rely on DestroyEntity
+				// to handle the necessary cleanup within the Mass framework.
+				// --- END REMOVED SECTION ---
+
+				// Destroy the Mass entity. The Mass framework should handle unlinking
+				// the Actor reference stored in FMassActorFragment and associated subsystem maps.
+				EntityManager.DestroyEntity(MassEntityHandle);
+				UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::CleanupMassEntity: Destroyed Mass Entity %d for Actor %s"), MassEntityHandle.Index, *GetNameSafe(Owner));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("UMassActorBindingComponent::CleanupMassEntity: MassEntityHandle %d was valid locally, but not in EntityManager anymore. Actor: %s"), MassEntityHandle.Index, *GetNameSafe(Owner));
+			}
+		}
+		else
+		{
+			 UE_LOG(LogTemp, Warning, TEXT("UMassActorBindingComponent::CleanupMassEntity: MassEntitySubsystemCache was null during cleanup for Actor %s (Entity: %d). Could not explicitly destroy entity."), *GetNameSafe(Owner), MassEntityHandle.Index);
+		}
+
+		// Reset the handle in this component regardless of success/failure of subsystem access.
+		MassEntityHandle.Reset();
+	}
+	else
+	{
+		 // Optional Log: UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::CleanupMassEntity: No valid MassEntityHandle to clean up for Actor %s."), *GetNameSafe(Owner));
+	}
+}
+// --- END ADDED ---
+
+
+// --- MODIFIED: EndPlay implementation now calls the helper ---
+/** Called when the component is being destroyed. */
+void UMassActorBindingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::EndPlay called for Actor %s with Reason %d."), *GetNameSafe(GetOwner()), static_cast<int32>(EndPlayReason));
+
+    // Call our dedicated cleanup function
+    CleanupMassEntity();
+
+    // IMPORTANT: Call the base class implementation LAST.
+    Super::EndPlay(EndPlayReason);
 }

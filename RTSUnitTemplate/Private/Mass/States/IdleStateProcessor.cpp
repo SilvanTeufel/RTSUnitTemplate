@@ -77,8 +77,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                   SignalSubsystem->SignalEntity(
                   UnitSignals::Chase,
                   Entity);
-                
-                StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
                 continue;
             }
             
@@ -97,13 +95,9 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                   SignalSubsystem->SignalEntity(
                   UnitSignals::PatrolRandom,
                   Entity);
-                
-                 // === KORREKTUR HIER ===
-                StateFrag.StateTimer = 0.f; // Timer über State Fragment zurücksetzen
+
                 continue;
             }
-
-            // --- 5. Im Idle-Zustand bleiben ---
 
         } // End for each entity
     }); // End ForEachEntityChunk

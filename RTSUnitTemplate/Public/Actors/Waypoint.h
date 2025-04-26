@@ -60,7 +60,7 @@ public:
 	float RandomTime = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float PatrolCloseIdlePercentage = 40.0f;
+	float PatrolCloseIdlePercentage = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 0;

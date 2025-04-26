@@ -62,8 +62,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         // Get MUTABLE view for MoveTargetFragment
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
             
         //UE_LOG(LogTemp, Log, TEXT("UMain NumEntities: %d"), NumEntities);
 
@@ -89,7 +87,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 // If current entity is dead, potentially signal (might be redundant) and skip further processing for it
                 // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d is dead, skipping processing."), Entity.Index, Entity.SerialNumber);
                 if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::Dead, Entity);
-                StateFrag.StateTimer = 0.f;
                 continue; // Move to the next entity in the chunk
             }
 
