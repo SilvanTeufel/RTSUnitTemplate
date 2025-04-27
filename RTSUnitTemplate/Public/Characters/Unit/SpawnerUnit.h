@@ -82,6 +82,6 @@ public:
 
 
 	// The Mass Actor Binding Component
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	UMassActorBindingComponent* MassActorBindingComponent;
 };

@@ -20,6 +20,7 @@ UAttackStateProcessor::UAttackStateProcessor()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
+    bRequiresGameThreadExecution = false;
 }
 
 void UAttackStateProcessor::Initialize(UObject& Owner)
@@ -46,6 +47,134 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+struct FMassSignalPayload
+{
+    FMassEntityHandle TargetEntity;
+    FName SignalName; // Use FName for the signal identifier
+
+    // Constructor using FName
+    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+        : TargetEntity(InEntity), SignalName(InSignalName)
+    {}
+};
+
+void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // Ensure the member SignalSubsystem is valid (initialized in Initialize)
+    if (!SignalSubsystem)
+    {
+        // Log error or attempt reinitialization if appropriate
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference, DO NOT capture SignalSubsystem directly
+        [&PendingSignals](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Keep mutable if velocity modification is intended later
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+
+        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i]; // State modification stays here
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
+            const FMassCombatStatsFragment& Stats = StatsList[i];
+            const FTransform& Transform = TransformList[i].GetTransform();
+            FMassVelocityFragment& Velocity = VelocityList[i]; // Keep reference if velocity modification is intended later
+
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // --- Target Lost ---
+            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
+            {
+                // Queue signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::Run); // Adjust UnitSignals::Run based on payload struct
+                continue;
+            }
+
+            // --- Attack Cycle Timer ---
+            StateFrag.StateTimer += DeltaTime; // State modification stays here
+
+            if (StateFrag.StateTimer <= Stats.AttackDuration)
+            {
+                // --- Range Check ---
+                const float EffectiveAttackRange = Stats.AttackRange;
+                const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+                if (DistSq <= AttackRangeSq)
+                {
+                    // --- Melee Impact Check ---
+                    if (!Stats.bUseProjectile && !StateFrag.HasAttacked)
+                    {
+                        // Queue signal instead of sending directly
+                        PendingSignals.Emplace(Entity, UnitSignals::MeleeAttack); // Adjust UnitSignals::MeleeAttack
+                        StateFrag.HasAttacked = true; // State modification stays here
+                        // Note: We queue the signal but modify state immediately. This might
+                        // slightly change behavior if the signal was expected to trigger
+                        // something *before* HasAttacked was set. Usually okay.
+                    }
+                    // else if (Stats.bUseProjectile && !StateFrag.HasAttacked) { /* Handle projectile signal queuing */ }
+                }
+                else // --- Target moved out of range ---
+                {
+                     // Queue signal instead of sending directly
+                    PendingSignals.Emplace(Entity, UnitSignals::Chase); // Adjust UnitSignals::Chase
+                    continue;
+                }
+            }
+            else // --- Attack Duration Over ---
+            {
+                 // Queue signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::Pause); // Adjust UnitSignals::Pause
+                StateFrag.HasAttacked = false; // State modification stays here
+                continue;
+            }
+        }
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and move the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check Payload validity if needed (e.g., if SignalStruct could be null)
+                    if (!Payload.SignalName.IsNone()) // Or check based on your signal type
+                    {
+                       // Send signal safely from the Game Thread
+                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                       // Or use the appropriate SignalEntity overload based on your signal type
+                       // StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                       // StrongSignalSubsystem->SignalEntity(Payload.SignalID, Payload.TargetEntity);
+                    }
+                }
+            }
+            // else: Subsystem was destroyed before the task could run, signals are lost (usually acceptable)
+        });
+    }
+}
+
+/*
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     //UE_LOG(LogTemp, Log, TEXT("UAttackStateProcessor::Execute!"));
@@ -156,50 +285,4 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         }
     });
 }
-
-
-
-void UAttackStateProcessor::SpawnProjectileFromActor(
-    FMassEntityManager& EntityManager, // <--- EntityManager als Parameter
-    FMassExecutionContext& Context,
-    FMassEntityHandle AttackerEntity,
-    FMassEntityHandle TargetEntity,
-    AActor* AttackerActor) // AttackerActor kann non-const sein, wenn UnitBase->SpawnProjectile ihn nicht ändert
-{
-    AUnitBase* UnitBase = Cast<AUnitBase>(AttackerActor);
-    if (UnitBase && TargetEntity.IsSet())
-    {
-        // Hole Ziel-Actor Fragment über den übergebenen EntityManager
-        const FMassActorFragment* TargetActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(TargetEntity);
-
-        if (TargetActorFrag && TargetActorFrag->IsValid()) // Prüfe auch IsValid()
-        {
-            // === KORREKTUR HIER: TargetActor als const deklarieren ===
-            const AActor* TargetActor = TargetActorFrag->Get(); // Get() von const Fragment* liefert const AActor*
-
-            // Cast zu AUnitBase* ist technisch ein const_cast, aber oft notwendig/akzeptiert in UE,
-            // WENN SpawnProjectile den TargetUnitBase NICHT modifiziert.
-            // Wenn SpawnProjectile einen const AUnitBase* akzeptiert, wäre das sicherer.
-            AUnitBase* TargetUnitBase = const_cast<AUnitBase*>(Cast<AUnitBase>(TargetActor)); // const explizit entfernen!
-            if(TargetUnitBase)
-            {
-                UnitBase->SpawnProjectile(TargetUnitBase, UnitBase); // Funktioniert jetzt, aber umgeht const-Sicherheit
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Entity [%d] target actor for projectile [%s] was not AUnitBase!"), AttackerEntity.Index, *GetNameSafe(TargetActor));
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Entity [%d] target entity [%d] for projectile has no valid ActorFragment!"), AttackerEntity.Index, TargetEntity.Index);
-            // Fallback: Position verwenden?
-            // const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
-            // if(TargetTransformFrag) { UnitBase->SpawnProjectileAtLocation(TargetTransformFrag->GetTransform().GetLocation(), UnitBase); }
-        }
-    }
-    else if (!UnitBase)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Entity [%d] tried to spawn projectile but AttackerActor [%s] was not AUnitBase!"), AttackerEntity.Index, *GetNameSafe(AttackerActor));
-    }
-}
+*/

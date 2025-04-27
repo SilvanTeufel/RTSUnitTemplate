@@ -41,6 +41,24 @@ void UMassActorBindingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	// Cache subsystem here too if needed for Tick
+	//SetupMassOnUnit();
+
+	/*
+	if(MassEntitySubsystemCache )
+	{
+		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit"));
+		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+		
+		SpawnMassUnitIsm(
+		EntityManager,
+		UnitMassMesh,
+		MyOwner->GetActorLocation() + FVector(0, 0, 200.f) ,
+		World);
+	}*/
+}
+
+void UMassActorBindingComponent::SetupMassOnUnit()
+{
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
@@ -65,19 +83,6 @@ void UMassActorBindingComponent::BeginPlay()
 	{
 		return; // World might not be valid yet
 	}
-
-	/*
-	if(MassEntitySubsystemCache )
-	{
-		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit"));
-		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
-		
-		SpawnMassUnitIsm(
-		EntityManager,
-		UnitMassMesh,
-		MyOwner->GetActorLocation() + FVector(0, 0, 200.f) ,
-		World);
-	}*/
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
@@ -125,7 +130,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
 		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
 
-    	FMassMovementParameters::StaticStruct(), 
+    	//FMassMovementParameters::StaticStruct(), 
 		// Steering & Avoidance
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
 		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
@@ -390,6 +395,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
         	PatrolFrag->RandomPatrolRadius = (UnitOwner->NextWaypoint->PatrolCloseOffset.X+UnitOwner->NextWaypoint->PatrolCloseOffset.Y)/2.f;
         	PatrolFrag->IdleChance = UnitOwner->NextWaypoint->PatrolCloseIdlePercentage;
+        	PatrolFrag->bSetUnitsBackToPatrol = false;
+        	PatrolFrag->SetUnitsBackToPatrolTime = 3.f;
+      
         }
          else // Use default values
          {

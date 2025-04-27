@@ -36,6 +36,7 @@ namespace UnitSignals
 	const FName SetUnitToChase(TEXT("SetUnitToChase"));
 	const FName StartDead(TEXT("StartDead"));
 	const FName SyncUnitBase(TEXT("SyncAttributes"));
+	const FName IdlePatrolSwitcher(TEXT("IdlePatrolSwitcher"));
 }
 
 USTRUCT()

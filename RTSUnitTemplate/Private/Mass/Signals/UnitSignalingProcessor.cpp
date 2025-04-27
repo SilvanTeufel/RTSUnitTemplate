@@ -45,6 +45,20 @@ void UUnitSignalingProcessor::ConfigureQueries()
 
 void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        // Noch nicht Zeit, diesen Frame überspringen
+        return;
+    }
+
+    // --- Intervall erreicht, Logik ausführen ---
+
+    // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
+    TimeSinceLastRun -= ExecutionInterval;
     // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
     if (!SignalSubsystem)
     {

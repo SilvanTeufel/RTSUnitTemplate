@@ -20,6 +20,8 @@ struct FUnitNavigationPathFragment : public FMassFragment
 	UPROPERTY() // UPROPERTY needed for tracking changes/replication if necessary later
 	FVector PathTargetLocation = FVector::ZeroVector;
 
+	UPROPERTY() 
+	bool bIsPathfindingInProgress = false;
 	// Optional: Add timestamp for replanning if needed later
 	// UPROPERTY()
 	// float LastPathUpdateTime = 0.f;

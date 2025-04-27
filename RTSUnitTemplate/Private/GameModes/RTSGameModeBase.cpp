@@ -807,20 +807,14 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				
 				UnitBase->UnitState = SpawnParameter.State;
 				UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+				
 				UnitBase->SquadId = HighestSquadId;
 				if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
 				{
 					FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
 					UnitBase->SetActorLocation(NewLocation);
 				}
-
-				/*
-				if (UnitBase->EnableFog)
-				{
-					UnitBase->SetCharacterVisibility(false);
-					UnitBase->IsVisibileEnemy = false;
-				}
-				*/
+				
 				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
 		
@@ -837,7 +831,9 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				}
 			
 				UnitBase->InitializeAttributes();
-
+			
+				UnitBase->MassActorBindingComponent->SetupMassOnUnit();
+				
 				int32 Index;
 				
 				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);

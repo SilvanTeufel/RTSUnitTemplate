@@ -246,6 +246,11 @@ struct FMassPatrolFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "AI|Patrol")
     bool bPatrolRandomAroundWaypoint = false;
 
+	UPROPERTY(EditAnywhere, Category = "AI|Patrol")
+	bool bSetUnitsBackToPatrol = false;
+
+	UPROPERTY(EditAnywhere, Category = "AI|Patrol")
+	float SetUnitsBackToPatrolTime = 3.f;
     /** Radius für zufällige Patrouille um den Wegpunkt. */
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolRadius = 500.f;
@@ -310,7 +315,6 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 		// Fallback oder Fehlerbehandlung, wenn keine Basisposition bekannt ist
 		MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Anhalten
 		MoveTarget.DesiredSpeed.Set(0.f);
-		UE_LOG(LogTemp, Warning, TEXT("SetNewRandomPatrolTarget: BaseWaypointLocation is Zero!"));
 		return;
 	}
 
@@ -328,10 +332,7 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 
 	if (bSuccess)
 	{
-		UE_LOG(LogTemp, Log, TEXT("SetNewRandomPatrolTarget: New Target %s"), *RandomPoint.Location.ToString());
-
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);
-		//PatrolFrag.TargetWaypointLocation = RandomPoint.Location; // Speichere das neue Ziel
 	}
 	
 }

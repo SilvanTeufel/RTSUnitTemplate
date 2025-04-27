@@ -15,6 +15,7 @@ UPatrolIdleStateProcessor::UPatrolIdleStateProcessor()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
+    bRequiresGameThreadExecution = false;
 }
 
 void UPatrolIdleStateProcessor::ConfigureQueries()
@@ -34,12 +35,144 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+// Make sure this struct definition is accessible
+struct FMassSignalPayload
+{
+    FMassEntityHandle TargetEntity;
+    FName SignalName; // Use FName for the signal identifier
+
+    // Constructor using FName
+    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+        : TargetEntity(InEntity), SignalName(InSignalName)
+    {}
+};
+
 void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    // --- Throttling Check ---
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; // Skip execution this frame
+    }
+    // Interval reached, reset timer (subtracting is often better than setting to 0)
+    TimeSinceLastRun -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
+
+    // --- Get World and Signal Subsystem (only if interval was met) ---
+    UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World
+    if (!World) return;
+
+    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+    if (!LocalSignalSubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("UPatrolIdleStateProcessor: Could not get SignalSubsystem!"));
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, 
+        // Capture PendingSignals by reference.
+        // Do NOT capture LocalSignalSubsystem directly here.
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        auto PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>(); // Keep mutable if needed
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Mutable for stopping
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Keep mutable if needed
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        // const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // Not used in loop?
+        // const float CurrentWorldTime = ChunkContext.GetWorld()->GetTimeSeconds(); // Not used in loop?
+        // Using ExecutionInterval for timer might be more consistent if Execute might skip frames
+        const float TimerIncrement = ExecutionInterval; // Or Context.GetDeltaTimeSeconds() if preferred
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
+            FMassPatrolFragment& PatrolFrag = PatrolList[i]; // Keep reference if needed
+            FMassVelocityFragment& Velocity = VelocityList[i]; // Mutable for stopping
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Keep reference if needed
+            const FMassCombatStatsFragment& Stats = StatsList[i];
+
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // --- Stop Movement & Update Timer ---
+            Velocity.Value = FVector::ZeroVector; // Modification stays here
+            StateFrag.StateTimer += TimerIncrement; // Modification stays here
+
+            // --- Check for Valid Target ---
+            if (TargetFrag.bHasValidTarget)
+            {
+                 // Queue Chase signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::Chase);
+                // Note: Don't continue here if you might want IdlePatrolSwitcher below?
+                // Logic seems to imply either Chase OR IdlePatrolSwitcher.
+                // If Chase is found, we typically wouldn't also signal IdlePatrolSwitcher.
+                continue; // Exit loop for this entity as we are switching to Chase
+            }
+            else // --- No Valid Target ---
+            {
+                 // Queue IdlePatrolSwitcher signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::IdlePatrolSwitcher);
+                // Continue processing other entities in the chunk
+            }
+        }
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and move the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check if the FName is valid before sending
+                    if (!Payload.SignalName.IsNone())
+                    {
+                       // Send signal safely from the Game Thread using FName
+                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+}
+
+/*
+void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        // Noch nicht Zeit, diesen Frame überspringen
+        return;
+    }
+
+    // --- Intervall erreicht, Logik ausführen ---
+
+    // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
 
-    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+
     
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&](FMassExecutionContext& ChunkContext)
@@ -56,9 +189,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-
-            UE_LOG(LogTemp, Log, TEXT("PatrolIdle EntityCount:! %d"), NumEntities);
-        	
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             FMassPatrolFragment& PatrolFrag = PatrolList[i];
@@ -70,7 +200,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
             // 1. Bewegung stoppen
             Velocity.Value = FVector::ZeroVector;
-
+            StateFrag.StateTimer += ExecutionInterval;
             // 2. Ziel gefunden? -> Zu Chase wechseln
              if (TargetFrag.bHasValidTarget)
              {
@@ -83,51 +213,17 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                    UnitSignals::Chase,
                    Entity);
                  continue;
-             }
-
-    
-             float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
-   
-
-             StateFrag.StateTimer += DeltaTime; // Timer hochzählen (obwohl wir Endzeit prüfen)
-            UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer! %f"), StateFrag.StateTimer);
-            UE_LOG(LogTemp, Log, TEXT("IdleDuration! %f"), IdleDuration);
-             // Finde die gespeicherte Endzeit
-             if (StateFrag.StateTimer >= IdleDuration)
+             }else
              {
-
-                 float Roll = FMath::FRand() * 100.0f;
-
-                 UE_LOG(LogTemp, Log, TEXT("Roll! %f"), Roll);
-                    UE_LOG(LogTemp, Log, TEXT("PatrolFrag.IdleChance! %f"), PatrolFrag.IdleChance);
-                 if (Roll > PatrolFrag.IdleChance)
+                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                 if (!SignalSubsystem)
                  {
-                        UE_LOG(LogTemp, Log, TEXT("SWITCH TO PATROL RANDOM!!"));
-                        SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, Stats.RunSpeed);
-                     
-                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                         if (!SignalSubsystem)
-                         {
-                              continue; // Handle missing subsystem
-                         }
-                         SignalSubsystem->SignalEntity(
-                         UnitSignals::PatrolRandom,
-                         Entity);
-                      continue;
-                 }else
-                 {
-                      StateFrag.StateTimer = 0.f;
-                      continue;
+                      continue; // Handle missing subsystem
                  }
-                 
+                 SignalSubsystem->SignalEntity(
+                 UnitSignals::IdlePatrolSwitcher,
+                 Entity);
              }
-
-             // 4. Sonst: In PatrolIdle bleiben
         }
     });
-
-    // Optional: Aufräumen der Map für Entitäten, die nicht mehr existieren (seltener nötig)
-    // TArray<FMassEntityHandle> StaleEntities;
-    // for(auto const& [Entity, Time] : IdleEndTimes) { if(!EntityManager.IsEntityValid(Entity)) StaleEntities.Add(Entity); }
-    // for(const auto& Stale : StaleEntities) { IdleEndTimes.Remove(Stale); }
-}
+}*/

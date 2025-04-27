@@ -41,7 +41,13 @@ private:
 	// Handler function for the signal (must match delegate signature)
 
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-	
+
+	UFUNCTION()
+	void IdlePatrolSwitcher(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void ForceSetPatrolRandomTarget(FMassEntityHandle& Entity);
+
 	UFUNCTION()
 	void ChangeUnitState(
 	  FName SignalName,
@@ -81,7 +87,7 @@ private:
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
 	FDelegateHandle StartDeadSignalDelegateHandle;
-
+	FDelegateHandle IdlePatrolSwitcherDelegateHandle;
 
 	// Cached subsystem pointers
 	UPROPERTY(Transient)

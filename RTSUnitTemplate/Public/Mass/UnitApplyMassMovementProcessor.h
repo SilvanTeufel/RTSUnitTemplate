@@ -22,4 +22,5 @@ protected:
 
 private:
 	FMassEntityQuery EntityQuery;
+
 };

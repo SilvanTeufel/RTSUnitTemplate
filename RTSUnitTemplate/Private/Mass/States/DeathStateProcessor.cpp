@@ -27,13 +27,114 @@ void UDeathStateProcessor::ConfigureQueries()
     
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Anhalten
-
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     // Optional: Fragment, um zu sehen, ob Effekte schon abgespielt wurden
     // EntityQuery.AddRequirement<FDeathEffectStateFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+struct FMassSignalPayload
+{
+    FMassEntityHandle TargetEntity;
+    FName SignalName; // Use FName for the signal identifier
+
+    // Constructor using FName
+    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+        : TargetEntity(InEntity), SignalName(InSignalName)
+    {}
+};
+
+void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // --- Get World and Signal Subsystem once ---
+    UWorld* World = Context.GetWorld(); // Use Context consistently
+    if (!World) return;
+
+    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+    if (!LocalSignalSubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("UDeathStateProcessor: Could not get SignalSubsystem!"));
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference.
+        // Do NOT capture LocalSignalSubsystem directly here.
+        [&PendingSignals](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Mutable for stopping
+        const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
+            FMassVelocityFragment& Velocity = VelocityList[i]; // Mutable for stopping
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            const FMassAgentCharacteristicsFragment AgentFrag = AgentFragList[i];
+            // --- Stop Movement ---
+            Velocity.Value = FVector::ZeroVector; // Modification stays here
+
+            // --- Update Timer ---
+            const float PrevTimer = StateFrag.StateTimer; // Store previous timer value
+            StateFrag.StateTimer += DeltaTime; // Modification stays here
+
+            // --- Trigger Effects on First Frame in State ---
+            // Check if timer *was* zero or very small before this frame's DeltaTime was added
+            if (PrevTimer <= KINDA_SMALL_NUMBER) // Or PrevTimer == 0.0f if guaranteed
+            {
+                // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!! QUEUEING SIGNAL TO START DEATH!!!!!!!!"));
+                // Queue StartDead signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::StartDead);
+            }
+
+            // --- Despawn Check ---
+            // Ensure DespawnTime is accessible (e.g., member variable 'this->DespawnTime')
+            if (StateFrag.StateTimer >= AgentFrag.DespawnTime)
+            {
+              // --- Defer Entity Destruction (Stays Here) ---
+              //ChunkContext.Defer().DestroyEntity(Entity);
+              // ----------------------------------------------
+              // UE_LOG(LogTemp, Log, TEXT("Destroying dead Entity [%d] (no valid actor)"), Entity.Index);
+            }
+        }
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and move the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check if the FName is valid before sending
+                    if (!Payload.SignalName.IsNone())
+                    {
+                       // Send signal safely from the Game Thread using FName
+                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+}
+
+/*
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = Context.GetWorld(); 
@@ -86,3 +187,5 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         }
     });
 }
+
+*/

@@ -48,6 +48,21 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries()
 
 void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	/*
+	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+	// 2. Prüfen, ob das Intervall erreicht wurde
+	if (TimeSinceLastRun < ExecutionInterval)
+	{
+		// Noch nicht Zeit, diesen Frame überspringen
+		return;
+	}
+
+	// --- Intervall erreicht, Logik ausführen ---
+
+	// 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
+	TimeSinceLastRun -= ExecutionInterval;
+	*/
     //UE_LOG(LogTemp, Warning, TEXT("UUnitApplyMassMovementProcessor!!!!!!! EXECUTE!!!!"));
     // Clamp max delta time
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());

@@ -37,9 +37,119 @@ void UIdleStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+struct FMassSignalPayload
+{
+    FMassEntityHandle TargetEntity;
+    FName SignalName; // Use FName for the signal identifier
+
+    // Constructor using FName
+    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+        : TargetEntity(InEntity), SignalName(InSignalName)
+    {}
+};
+
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    // UE_LOG(LogTemp, Log, TEXT("UIdleStateProcessor::Execute!"));
+    // --- Get World and Signal Subsystem once ---
+    const UWorld* World = EntityManager.GetWorld(); // Use EntityManager consistently
+    if (!World) return;
+
+    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+    if (!LocalSignalSubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("UIdleStateProcessor: Could not get SignalSubsystem!"));
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference. Capture World & EntityManager if needed by inner logic.
+        // Do NOT capture LocalSignalSubsystem directly here.
+        [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
+
+        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
+            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+
+            // --- Check for Valid Target ---
+            bool bCanAttack = true; // Replace with your actual flag from StatsFrag or elsewhere
+            if (TargetFrag.bHasValidTarget && bCanAttack)
+            {
+                // Queue Chase signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::Chase);
+                // Reset timer or other state if needed upon leaving Idle
+                // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
+                continue; // Switch state, process next entity
+            }
+
+            // --- Update Timer (Only if no target found/chasing) ---
+            StateFrag.StateTimer += DeltaTime; // Modification stays here
+
+            // --- Check for Returning to Patrol ---
+            bool bHasPatrolRoute = PatrolFrag.CurrentWaypointIndex != INDEX_NONE;
+            bool bIsOnPlattform = false; // Replace with your actual flag
+
+            // Check member variables bSetUnitsBackToPatrol and SetUnitsBackToPatrolTime exist on 'this' processor
+            if (!bIsOnPlattform && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
+            {
+                // Queue PatrolRandom signal instead of sending directly
+                PendingSignals.Emplace(Entity, UnitSignals::PatrolRandom);
+
+                // Reset timer or other state if needed upon leaving Idle
+                // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
+                continue; // Switch state, process next entity
+            }
+
+            // --- Else: Stay Idle ---
+
+        } // End Entity Loop
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and move the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check if the FName is valid before sending
+                    if (!Payload.SignalName.IsNone())
+                    {
+                       // Send signal safely from the Game Thread using FName
+                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+}
+
+/*
+void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
     const UWorld* World = EntityManager.GetWorld();
     if (!World) return;
     
@@ -67,7 +177,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
             
-            if (TargetFrag.bHasValidTarget && bCanAttack /* && Bedingungen */)
+            if (TargetFrag.bHasValidTarget && bCanAttack)
             {
                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                   if (!SignalSubsystem)
@@ -101,4 +211,4 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
         } // End for each entity
     }); // End ForEachEntityChunk
-}
+}*/

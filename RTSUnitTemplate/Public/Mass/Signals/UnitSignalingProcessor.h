@@ -26,8 +26,13 @@ protected:
 	// Static name for the signal type for consistency
 	static const FName UnitPresenceSignalName;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float ExecutionInterval = 0.1f;
+	
 private:
 	FMassEntityQuery EntityQuery;
+
+	float TimeSinceLastRun = 0.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;

@@ -48,6 +48,7 @@ private:
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"     // FTransformFragment
+#include "MassEntitySubsystem.h"
 #include "MassMovementFragments.h"  // FMassVelocityFragment, FMassMoveTargetFragment
 #include "MassNavigationFragments.h" // FUnitNavigationPathFragment (Assumes this exists from previous step)
 #include "UnitNavigationFragments.h"
@@ -72,18 +73,27 @@ protected:
 
     // Execute is called during the processing phase and applies the logic on each entity chunk.
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+    virtual void Initialize(UObject& Owner) override; // Falls du es überschreibst
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float AccumulatedTime = 0.0f;
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    float ExecutionInterval = 0.1f;
+
+   // void RequestPathfindingAsync(FMassEntityHandle Entity, const FVector& StartLocation, const FVector& EndLocation, ANavigationData* NavData, TSharedPtr<const FNavigationQueryFilter> QueryFilter); // Verwende TSharedPtr für Filter
+    void RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation);
+
+    void ResetPathfindingFlag(FMassEntityHandle Entity);
 private:
-
-    // Query to select entities with the required movement and navigation components.
     FMassEntityQuery EntityQuery;
+
+    float TimeSinceLastRun = 0.0f;
+	
 
     // Add Acceptance Radius if not using the one from MoveTarget
     UPROPERTY(EditDefaultsOnly, Category = "Movement")
     float PathWaypointAcceptanceRadius = 100.f; // Example value, adjust as needed
 
+    UPROPERTY(Transient)
+    TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
     // Optional: Store NavData pointer if performance is critical
     // TWeakObjectPtr<ANavigationData> CachedNavData = nullptr;
 };

@@ -27,7 +27,145 @@ void UMainStateProcessor::ConfigureQueries()
 
 	EntityQuery.RegisterWithProcessor(*this);
 }
+struct FMassSignalPayload
+{
+    FMassEntityHandle TargetEntity;
+    FName SignalName; // Use FName for the signal identifier
 
+    // Constructor using FName
+    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+        : TargetEntity(InEntity), SignalName(InSignalName)
+    {}
+};
+
+void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // --- Throttling Check ---
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; // Skip execution this frame
+    }
+    // Interval reached, reset timer
+    TimeSinceLastRun -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
+
+    // --- Get World and Signal Subsystem (only if interval was met) ---
+    UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World consistently
+    if (!World) return;
+
+    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+    if (!LocalSignalSubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("UMainStateProcessor: Could not get SignalSubsystem!"));
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference. Capture World & EntityManager for inner logic.
+        // Do NOT capture LocalSignalSubsystem directly here.
+        [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>(); // Mutable needed
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable needed
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
+            FMassAITargetFragment& TargetFrag = TargetList[i]; // Mutable ref needed
+            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
+
+            // --- Queue Sync Signal ---
+            // Always queue this signal if the processor runs for the entity
+            PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
+
+            // --- 1. Check CURRENT entity's health ---
+            if (StatsFrag.Health <= 0.f)
+            {
+                // Queue Dead signal
+                PendingSignals.Emplace(Entity, UnitSignals::Dead);
+                continue; // Skip further checks for this dead entity
+            }
+
+            // --- 2. Check TARGET entity's health ---
+            if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
+            {
+                const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
+
+                // EntityManager access is generally safe within Mass Processors
+                if (EntityManager.IsEntityValid(TargetEntity))
+                {
+                    const FMassCombatStatsFragment* TargetStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
+
+                    if (TargetStatsPtr && TargetStatsPtr->Health <= 0.f) // Target is dead
+                    {
+                        // Queue Run signal for the CURRENT entity
+                        PendingSignals.Emplace(Entity, UnitSignals::Run);
+
+                        // --- Direct Fragment/Context Modifications Stay Here ---
+                        TargetFrag.bHasValidTarget = false; // Modify fragment directly
+                        // Optionally TargetFrag.Clear();
+                        ChunkContext.Defer().AddTag<FMassStateDetectTag>(Entity); // Use context directly
+                        UpdateMoveTarget(MoveTargetFrag, StateFrag.StoredLocation, StatsFrag.RunSpeed, World); // Modify fragment directly
+                        // -------------------------------------------------------
+
+                        // Since we switched state to Run, continue to next entity
+                        continue;
+                    }
+                    // else { // Target is alive and valid, do nothing in this block }
+                }
+                else // Target Entity Handle is invalid
+                {
+                     // --- Direct Fragment Modification Stays Here ---
+                    TargetFrag.bHasValidTarget = false; // Modify fragment directly
+                     // Optionally TargetFrag.Clear();
+                    // -----------------------------------------------
+                    // No signal needed here? Maybe signal Run? Depends on desired behavior.
+                    // PendingSignals.Emplace(Entity, UnitSignals::Run);
+                }
+            } // End if target is set
+
+            // --- Potentially other checks for this entity ---
+
+        } // End Entity Loop
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and move the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check if the FName is valid before sending
+                    if (!Payload.SignalName.IsNone())
+                    {
+                       // Send signal safely from the Game Thread using FName
+                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+}
+
+/*
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 
@@ -68,8 +206,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i); // This is the current ("Attacker") entity
-
-            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+            
             // --- Get Fragments for the CURRENT entity ---
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassAITargetFragment& TargetFrag = TargetList[i]; // Mutable now
@@ -85,7 +222,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             if (StatsFrag.Health <= 0.f)
             {
                 // If current entity is dead, potentially signal (might be redundant) and skip further processing for it
-                // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d is dead, skipping processing."), Entity.Index, Entity.SerialNumber);
+                //UE_LOG(LogTemp, Error, TEXT("Entity %d:%d is dead, skipping processing."), Entity.Index, Entity.SerialNumber);
                 if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::Dead, Entity);
                 continue; // Move to the next entity in the chunk
             }
@@ -101,15 +238,9 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 {
                     // Attempt to get the target's health from its CombatStats fragment
                     const FMassCombatStatsFragment* TargetStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
-
-                    UE_LOG(LogTemp, Error, TEXT("Entity %d:%d: Checking target %d:%d health: %.2f"),
-                    Entity.Index, Entity.SerialNumber, TargetEntity.Index, TargetEntity.SerialNumber, TargetStatsPtr->Health);
                     // Check if the target HAS combat stats AND if health is <= 0
                     if (TargetStatsPtr && TargetStatsPtr->Health <= 0.f)
                     {
-                        UE_LOG(LogTemp, Error, TEXT("Entity %d:%d found target %d:%d is dead. Clearing target & signaling Run."),
-                            Entity.Index, Entity.SerialNumber, TargetEntity.Index, TargetEntity.SerialNumber);
-
                         // Signal the CURRENT entity (Attacker) to Run
                         if (SignalSubsystem)
                         {
@@ -131,12 +262,10 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 else // TargetFrag.TargetEntity is no longer a valid entity handle
                 {
                     // If the stored target entity is invalid, clear the target fragment state
-                    UE_LOG(LogTemp, Log, TEXT("Entity %d:%d stored target entity %d:%d is invalid. Clearing target."),
-                           Entity.Index, Entity.SerialNumber, TargetEntity.Index, TargetEntity.SerialNumber);
                     TargetFrag.bHasValidTarget = false;
                 }
             } // End if(TargetFrag.bHasValidTarget)
 
         } // End for each entity
     }); // End ForEachEntityChunk
-}
+}*/
