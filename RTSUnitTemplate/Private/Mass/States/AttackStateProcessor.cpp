@@ -47,17 +47,6 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-struct FMassSignalPayload
-{
-    FMassEntityHandle TargetEntity;
-    FName SignalName; // Use FName for the signal identifier
-
-    // Constructor using FName
-    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
-        : TargetEntity(InEntity), SignalName(InSignalName)
-    {}
-};
-
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // Ensure the member SignalSubsystem is valid (initialized in Initialize)

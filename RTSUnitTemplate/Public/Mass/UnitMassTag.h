@@ -60,6 +60,17 @@ struct FUnitStateFragment : public FMassFragment
 	
 };
 
+
+struct FMassSignalPayload
+{
+	FMassEntityHandle TargetEntity;
+	FName SignalName; // Use FName for the signal identifier
+
+	// Constructor using FName
+	FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
+		: TargetEntity(InEntity), SignalName(InSignalName)
+	{}
+};
 //----------------------------------------------------------------------//
 //  AI State Fragment
 //----------------------------------------------------------------------//

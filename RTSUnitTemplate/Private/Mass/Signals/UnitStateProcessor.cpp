@@ -65,6 +65,9 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     	StartDeadSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartDead)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleStartDead));
 
+    	EndDeadSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleEndDead));
+    	
     	IdlePatrolSwitcherDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::IdlePatrolSwitcher)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, IdlePatrolSwitcher));
     }
@@ -128,6 +131,14 @@ void UUnitStateProcessor::BeginDestroy()
 		StartDeadSignalDelegateHandle.Reset();
 	}
 
+	if (SignalSubsystem && EndDeadSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead)
+		.Remove(EndDeadSignalDelegateHandle);
+            
+		EndDeadSignalDelegateHandle.Reset();
+	}
+	
 	if (SignalSubsystem && IdlePatrolSwitcherDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::IdlePatrolSwitcher)
@@ -458,6 +469,29 @@ void UUnitStateProcessor::ForceSetPatrolRandomTarget(FMassEntityHandle& Entity)
     }); // Ende AsyncTask Lambda
 }
 
+bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEntityHandle Entity, const UScriptStruct* TagType)
+{
+	if (!EntityManager.IsEntityValid(Entity)) // Optional: Check entity validity first
+	{
+		return false;
+	}
+
+	// 1. Get the entity's archetype handle (use Unsafe if you know the entity is valid and built)
+	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
+	// Or safer: const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
+
+	if (!ArchetypeHandle.IsValid())
+	{
+		return false; // Should not happen for a valid, built entity, but good practice
+	}
+
+	// 2. Get the composition descriptor for the archetype
+	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+
+	// 3. Check if the tag is present in the composition's tag bitset
+	return Composition.Tags.Contains(*TagType);
+}
+
 void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     // **Keep initial checks outside AsyncTask if possible and thread-safe**
@@ -500,7 +534,9 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
         	SwitchState(SignalName, Entity, EntityManager);
 
         	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-			State->StateTimer = 0.f;
+       
+        	if (!DoesEntityHaveTag(EntityManager,Entity, FMassStateDeadTag::StaticStruct()))
+        		State->StateTimer = 0.f;
         } // End For loop
     }); // End AsyncTask Lambda
 }
@@ -1047,12 +1083,6 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
         return;
     }
 
-    // **Capture necessary data for the lambda**
-    // Capture 'this' to access EntitySubsystem inside the lambda.
-    // Capture SignalName by value.
-    // Capture Entities by value (TArray copy) to ensure lifetime if the original goes out of scope.
-    // Alternatively, capture by reference if you are certain the original TArray will live long enough,
-    // but copying is safer for async tasks unless performance is critical.
     TArray<FMassEntityHandle> EntitiesCopy = Entities; 
 
     AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
@@ -1086,14 +1116,13 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
-                    	// TODO: Feuere DeadVFX und DeadSound über den Actor
-                    		UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
-						  UnitBase->HideHealthWidget(); // Aus deinem Code
-						  UnitBase->KillLoadedUnits();
-						  UnitBase->CanActivateAbilities = false;
-						  UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+                    	UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
+                    	UnitBase->HideHealthWidget(); // Aus deinem Code
+                    	UnitBase->KillLoadedUnits();
+                    	UnitBase->CanActivateAbilities = false;
+                    	UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
                     	
-							ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+                    	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 						
 
 							if(RTSGameMode)
@@ -1101,20 +1130,61 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
 								RTSGameMode->AllUnits.Remove(UnitBase);
 							}
 	
-							UnitBase->SpawnPickupsArray();
+                    	UnitBase->SpawnPickupsArray();
+                    	
+                    }
+                }
+            }
+        } // End For loop
+    }); // End AsyncTask Lambda
+}
 
+void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+    // **Keep initial checks outside AsyncTask if possible and thread-safe**
+    if (!EntitySubsystem)
+    {
+        // Log error - This check itself is generally safe
+        return;
+    }
+
+    TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+
+    AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    {
+        // **Code inside this lambda now runs on the Game Thread**
+
+        // Re-check EntitySubsystem just in case? Usually fine if 'this' is valid.
+        if (!EntitySubsystem) 
+        {
+             return;
+        }
+
+        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+        {
+            // Check entity validity *on the game thread*
+            if (!EntityManager.IsEntityValid(Entity)) 
+            {
+                continue;
+            }
+            
+            // Get fragments and actors *on the game thread*
+            FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+        	if (ActorFragPtr)
+            {
+                AActor* Actor = ActorFragPtr->GetMutable(); 
+                if (IsValid(Actor)) 
+                {
+                    AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+                    if (UnitBase)
+                    {
                     		if (UnitBase->DestroyAfterDeath)
                     		{
-								FTimerHandle DestroyTimerHandle;
-								GetWorld()->GetTimerManager().SetTimer(
-									DestroyTimerHandle,
-									[UnitBase]() { UnitBase->Destroy(true, false); },
-									CharFragPtr->DespawnTime+1.0f, // Delay duration in seconds (change this to your desired delay)
-									false // This is a one-time timer, so it's not looping
-								);
+                    			UnitBase->Destroy(true, false);
 							}
                     }
-                    // ... rest of your else logs for invalid casts/actors ...
                 }
             }
         } // End For loop

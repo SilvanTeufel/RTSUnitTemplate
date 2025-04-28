@@ -87,6 +87,7 @@ private:
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
 	FDelegateHandle StartDeadSignalDelegateHandle;
+	FDelegateHandle EndDeadSignalDelegateHandle;
 	FDelegateHandle IdlePatrolSwitcherDelegateHandle;
 
 	// Cached subsystem pointers
@@ -120,5 +121,12 @@ private:
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
+
+	UFUNCTION()
+	void HandleEndDead(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
 	
 };

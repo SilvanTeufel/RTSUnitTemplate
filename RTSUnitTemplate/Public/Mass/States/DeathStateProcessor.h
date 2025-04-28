@@ -25,7 +25,5 @@ protected:
 private:
 	
 	FMassEntityQuery EntityQuery;
-
-	UPROPERTY(EditDefaultsOnly, Category = "AI")
-	float DespawnTime = 15.0f; // Zeit bis zum Verschwinden
+	
 };

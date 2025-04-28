@@ -34,17 +34,6 @@ void UIsAttackedStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
-struct FMassSignalPayload
-{
-	FMassEntityHandle TargetEntity;
-	FName SignalName; // Use FName for the signal identifier
-
-	// Constructor using FName
-	FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
-		: TargetEntity(InEntity), SignalName(InSignalName)
-	{}
-};
-
 void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UIsAttackedStateProcessor_Execute); // Performance-Messung (optional)

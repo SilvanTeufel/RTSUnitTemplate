@@ -34,19 +34,9 @@ void UDeathStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-struct FMassSignalPayload
-{
-    FMassEntityHandle TargetEntity;
-    FName SignalName; // Use FName for the signal identifier
-
-    // Constructor using FName
-    FMassSignalPayload(FMassEntityHandle InEntity, FName InSignalName)
-        : TargetEntity(InEntity), SignalName(InSignalName)
-    {}
-};
-
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    
     // --- Get World and Signal Subsystem once ---
     UWorld* World = Context.GetWorld(); // Use Context consistently
     if (!World) return;
@@ -88,24 +78,19 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // --- Update Timer ---
             const float PrevTimer = StateFrag.StateTimer; // Store previous timer value
             StateFrag.StateTimer += DeltaTime; // Modification stays here
-
-            // --- Trigger Effects on First Frame in State ---
-            // Check if timer *was* zero or very small before this frame's DeltaTime was added
+ 
             if (PrevTimer <= KINDA_SMALL_NUMBER) // Or PrevTimer == 0.0f if guaranteed
             {
-                // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!! QUEUEING SIGNAL TO START DEATH!!!!!!!!"));
-                // Queue StartDead signal instead of sending directly
                 PendingSignals.Emplace(Entity, UnitSignals::StartDead);
             }
 
             // --- Despawn Check ---
             // Ensure DespawnTime is accessible (e.g., member variable 'this->DespawnTime')
-            if (StateFrag.StateTimer >= AgentFrag.DespawnTime)
+            if (StateFrag.StateTimer >= AgentFrag.DespawnTime+1.f)
             {
-              // --- Defer Entity Destruction (Stays Here) ---
-              //ChunkContext.Defer().DestroyEntity(Entity);
-              // ----------------------------------------------
-              // UE_LOG(LogTemp, Log, TEXT("Destroying dead Entity [%d] (no valid actor)"), Entity.Index);
+                PendingSignals.Emplace(Entity, UnitSignals::EndDead);
+                  // --- Defer Entity Destruction (Stays Here) ---
+                 // ChunkContext.Defer().DestroyEntity(Entity);
             }
         }
     }); // End ForEachEntityChunk
@@ -132,6 +117,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
         });
     }
+    
 }
 
 /*

@@ -57,16 +57,6 @@ protected:
 private:
     FMassEntityQuery EntityQuery;
     
-    // Hilfsfunktion für Projektil via ActorFragment
-    void SpawnProjectileFromActor(FMassEntityManager& EntityManager, // <--- EntityManager als Parameter
-    FMassExecutionContext& Context,
-    FMassEntityHandle AttackerEntity,
-    FMassEntityHandle TargetEntity,
-    AActor* AttackerActo);
-
-    // Verhindert mehrfaches Auslösen des Schadens/Projektils pro Attack-State pro Tick
-    //TSet<FMassEntityHandle> EntitiesThatAttackedThisTick;
-    
     // Cached Subsystem Pointer
     UPROPERTY(Transient)
     TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
