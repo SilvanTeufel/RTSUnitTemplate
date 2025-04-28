@@ -608,7 +608,7 @@ void UMassActorBindingComponent::CleanupMassEntity()
 
 				// Destroy the Mass entity. The Mass framework should handle unlinking
 				// the Actor reference stored in FMassActorFragment and associated subsystem maps.
-				EntityManager.DestroyEntity(MassEntityHandle);
+				EntityManager.Defer().DestroyEntity(MassEntityHandle);
 				UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::CleanupMassEntity: Destroyed Mass Entity %d for Actor %s"), MassEntityHandle.Index, *GetNameSafe(Owner));
 			}
 			else
