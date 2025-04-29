@@ -38,6 +38,15 @@ namespace UnitSignals
 	const FName EndDead(TEXT("EndDead"));
 	const FName SyncUnitBase(TEXT("SyncAttributes"));
 	const FName IdlePatrolSwitcher(TEXT("IdlePatrolSwitcher"));
+	// Worker Signals
+	const FName GoToBase(TEXT("GoToBase"));
+	const FName GoToBuild(TEXT("GoToBuild"));
+	const FName Build(TEXT("Build"));
+	const FName GoToResourceExtraction(TEXT("GoToResourceExtraction"));
+	const FName ResourceExtraction(TEXT("ResourceExtraction"));
+	const FName ReachedBase(TEXT("ReachedBase"));
+	const FName StartBuildAction(TEXT("StartBuildAction"));
+	const FName SpawnBuildingRequest(TEXT("SpawnBuildingRequest"));
 }
 
 USTRUCT()

@@ -341,7 +341,7 @@ void AWorkerUnitControllerBase::GoToResourceExtraction(AUnitBase* UnitBase, floa
 	// Check Distance between Worker and Base
 	if (EnableDistanceCheck && DistanceToBase <= ResourceAreaArrivalDistance)
 	{
-		Worker->ResourcePlace->HandleResourceExtractionArea(Worker, UnitBase);
+		Worker->ResourcePlace->HandleResourceExtractionArea(UnitBase);
 		return;
 	}
 	// Check if Base is allready in Range /////////////////////////////

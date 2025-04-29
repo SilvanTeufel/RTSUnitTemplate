@@ -214,7 +214,7 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 	
     if (isResourceExtractionArea && isValidStateForExtraction && Worker->GetUnitState() != UnitData::GoToBuild)
     {
-        HandleResourceExtractionArea(Worker, UnitBase);
+        HandleResourceExtractionArea(UnitBase);
     }
     else if (Type == WorkAreaData::Base && ResourceGameMode && Worker->GetUnitState() != UnitData::GoToBuild)
     {
@@ -226,7 +226,7 @@ void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
     }
 }
 
-void AWorkArea::HandleResourceExtractionArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase)
+void AWorkArea::HandleResourceExtractionArea(AUnitBase* UnitBase)
 {
 
 		if (this != UnitBase->ResourcePlace) return;

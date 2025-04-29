@@ -39,6 +39,106 @@ void UCastingStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
+
+void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
+    // UE_LOG(LogTemp, Log, TEXT("UCastingStateProcessor::Execute"));
+
+    // Get World and Signal Subsystem once before the loop
+    UWorld* World = EntityManager.GetWorld(); // Use EntityManager to get World
+    if (!World) return;
+
+    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+    if (!LocalSignalSubsystem)
+    {
+        //UE_LOG(LogTemp, Error, TEXT("UCastingStateProcessor: Could not get SignalSubsystem!"));
+        return;
+    }
+    // Make a weak pointer copy for safe capture in the async task
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(SomeExpectedNumber); // Optional optimization
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference. Do NOT capture LocalSignalSubsystem directly.
+        [&PendingSignals](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        if (NumEntities == 0) return; // Skip empty chunks
+
+        // Get required fragment views
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Assuming mutable is needed to potentially stop velocity
+
+        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            FMassAIStateFragment& StateFrag = StateList[i];
+            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            FMassVelocityFragment& Velocity = VelocityList[i];
+
+            // 1. (Optional) Stop movement while casting. Uncomment if needed.
+            //    This modification stays here as it directly affects fragment data.
+            // Velocity.Value = FVector::ZeroVector;
+
+            // 2. Rotation is handled elsewhere (ULookAtProcessor)
+
+            // 3. Increment cast timer. This modification stays here.
+            StateFrag.StateTimer += DeltaTime;
+
+            // 4. Check if cast time is finished
+            if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
+            {
+                // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Queuing Signal %s."), Entity.Index, Entity.SerialNumber, *UnitSignals::Run.ToString());
+
+                // Queue the signal instead of sending it directly
+                PendingSignals.Emplace(Entity, UnitSignals::Run); // Use your actual signal FName
+
+                // Reset timer or other state if needed now that casting is done
+                // StateFrag.StateTimer = 0.0f; // Example reset (optional)
+                // Continue to next entity, state change happens via signal later
+                continue;
+            }
+
+            // --- Still Casting ---
+            // No state change needed this frame.
+        }
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        // Capture the weak subsystem pointer and MOVE the pending signals list
+        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        {
+            // This lambda runs on the Game Thread
+
+            // Check if the subsystem is still valid on the Game Thread
+            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            {
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    // Check if the FName is valid before sending (good practice)
+                    if (!Payload.SignalName.IsNone())
+                    {
+                        // Send signal safely from the Game Thread
+                        StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
+            }
+            // else: Subsystem was destroyed before this task ran, signals are lost (usually acceptable)
+        });
+    }
+}
+
+/*
 void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
   QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
@@ -89,3 +189,4 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         }
     });
 }
+*/

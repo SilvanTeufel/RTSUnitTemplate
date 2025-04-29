@@ -76,6 +76,12 @@ private:
 		UnitSignals::Pause,
 		UnitSignals::Run,
 		UnitSignals::Casting,
+		UnitSignals::IsAttacked,
+		UnitSignals::GoToBase,
+		UnitSignals::GoToBuild,
+		UnitSignals::Build,
+		UnitSignals::GoToResourceExtraction,
+		UnitSignals::ResourceExtraction,
 	};
 	
 	// Delegate handle for unregistering
@@ -90,6 +96,10 @@ private:
 	FDelegateHandle EndDeadSignalDelegateHandle;
 	FDelegateHandle IdlePatrolSwitcherDelegateHandle;
 
+	FDelegateHandle ReachedBaseDelegateHandle;
+	FDelegateHandle StartBuildActionDelegateHandle;
+	FDelegateHandle SpawnBuildingRequestDelegateHandle;
+	
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -128,5 +138,28 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
-	
+	UFUNCTION()
+	void HandleResourceExtractionArea(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void HandleReachedBase(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void HandleStartBuildAction(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void HandleSpawnBuildingRequest(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
 };

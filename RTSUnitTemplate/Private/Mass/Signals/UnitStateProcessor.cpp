@@ -70,6 +70,16 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     	
     	IdlePatrolSwitcherDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::IdlePatrolSwitcher)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, IdlePatrolSwitcher));
+
+    	ReachedBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleReachedBase));
+
+    	StartBuildActionDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartBuildAction)
+		.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleStartBuildAction));
+
+    	SpawnBuildingRequestDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
+		.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSpawnBuildingRequest));
+    	
     }
 }
 
@@ -147,8 +157,30 @@ void UUnitStateProcessor::BeginDestroy()
 		IdlePatrolSwitcherDelegateHandle.Reset();
 	}
 
+	if (SignalSubsystem && ReachedBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase)
+		.Remove(ReachedBaseDelegateHandle);
+            
+		ReachedBaseDelegateHandle.Reset();
+	}
 
-
+	if (SignalSubsystem && StartBuildActionDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartBuildAction)
+		.Remove(StartBuildActionDelegateHandle);
+            
+		StartBuildActionDelegateHandle.Reset();
+	}
+	
+	if (SignalSubsystem && SpawnBuildingRequestDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
+		.Remove(SpawnBuildingRequestDelegateHandle);
+            
+		SpawnBuildingRequestDelegateHandle.Reset();
+	}
+	
     SignalSubsystem = nullptr; // Null out pointers if needed
     EntitySubsystem = nullptr;
     // --- End Cleanup ---
@@ -196,10 +228,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                         EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
                     	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
-                    	
-                        //UE_LOG(LogTemp, Log, TEXT("Setting Unit %s (Entity %d:%d) state to %s via Signal."), 
-                        //       *UnitBase->GetName(), Entity.Index, Entity.SerialNumber, *SignalName.ToString()); // Use SignalName in log
 
+                    	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
+                    	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
+                    	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
+                    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
                     	
                         // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
@@ -245,7 +279,23 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                         	EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(Entity);
+                        }else if (SignalName == UnitSignals::GoToBase)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
+                        }else if (SignalName == UnitSignals::GoToBuild)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
+                        }else if (SignalName == UnitSignals::Build)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
+                        }else if (SignalName == UnitSignals::GoToResourceExtraction)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
+                        }else if (SignalName == UnitSignals::ResourceExtraction)
+                        {
+                        	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
                         }
+
 
                     	if (SignalName == UnitSignals::Idle)
                     	{
@@ -277,19 +327,17 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
                         else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
-                        else if (SignalName == UnitSignals::PatrolIdle)
-                        {
-	                        UnitBase->SetUnitState(UnitData::PatrolIdle);
-                        }
-                        else if (SignalName == UnitSignals::PatrolRandom)
-                        {
-                        	UnitBase->SetUnitState(UnitData::PatrolRandom);
-                        }
+                        else if (SignalName == UnitSignals::PatrolIdle){ UnitBase->SetUnitState(UnitData::PatrolIdle); }
+                        else if (SignalName == UnitSignals::PatrolRandom){ UnitBase->SetUnitState(UnitData::PatrolRandom); }
                         else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
                         else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
                         else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
                         else if (SignalName == UnitSignals::IsAttacked) { UnitBase->SetUnitState(UnitData::IsAttacked); }
-
+                        else if (SignalName == UnitSignals::GoToBase){ UnitBase->SetUnitState(UnitData::GoToBase); }
+                    	else if (SignalName == UnitSignals::GoToBuild ){ UnitBase->SetUnitState(UnitData::GoToBuild); }
+                    	else if (SignalName == UnitSignals::Build){ UnitBase->SetUnitState(UnitData::Build); }
+                    	else if (SignalName == UnitSignals::GoToResourceExtraction){ UnitBase->SetUnitState(UnitData::GoToResourceExtraction); }
+                    	else if (SignalName == UnitSignals::ResourceExtraction) { UnitBase->SetUnitState(UnitData::ResourceExtraction); }
 
                     	//FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
                     	//State->StateTimer = 0.f;
@@ -1189,4 +1237,192 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
             }
         } // End For loop
     }); // End AsyncTask Lambda
+}
+
+void UUnitStateProcessor::HandleResourceExtractionArea(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	// **Keep initial checks outside AsyncTask if possible and thread-safe**
+	if (!EntitySubsystem)
+	{
+		// Log error - This check itself is generally safe
+		return;
+	}
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+
+	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+	{
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+		{
+			// Check entity validity *on the game thread*
+			if (!EntityManager.IsEntityValid(Entity)) 
+			{
+				continue;
+			}
+			// 4. Call the target method. This is now safe because:
+			//    - We are on the Game Thread.
+			//    - We have validated Worker and Worker->ResourcePlace pointers.
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			if (ActorFragPtr)
+			{
+				AActor* Actor = ActorFragPtr->GetMutable(); 
+				if (IsValid(Actor))
+				{
+					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+					if (UnitBase && IsValid(UnitBase->ResourcePlace))
+					{
+						UnitBase->ResourcePlace->HandleResourceExtractionArea(UnitBase);
+					}
+				}
+			}
+		}
+    }); 
+}
+
+void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	// **Keep initial checks outside AsyncTask if possible and thread-safe**
+	if (!EntitySubsystem)
+	{
+		// Log error - This check itself is generally safe
+		return;
+	}
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+
+	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+	{
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+		{
+			// Check entity validity *on the game thread*
+			if (!EntityManager.IsEntityValid(Entity)) 
+			{
+				continue;
+			}
+			// 4. Call the target method. This is now safe because:
+			//    - We are on the Game Thread.
+			//    - We have validated Worker and Worker->ResourcePlace pointers.
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			if (ActorFragPtr)
+			{
+				AActor* Actor = ActorFragPtr->GetMutable(); 
+				if (IsValid(Actor))
+				{
+					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+					if (UnitBase && IsValid(UnitBase->ResourcePlace))
+					{
+						UnitBase->ResourcePlace->HandleResourceExtractionArea(UnitBase);
+					}
+				}
+			}
+		}
+	}); 
+}
+
+void UUnitStateProcessor::HandleStartBuildAction(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	// **Keep initial checks outside AsyncTask if possible and thread-safe**
+	if (!EntitySubsystem)
+	{
+		// Log error - This check itself is generally safe
+		return;
+	}
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+
+	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+	{
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+		{
+			// Check entity validity *on the game thread*
+			if (!EntityManager.IsEntityValid(Entity)) 
+			{
+				continue;
+			}
+			// 4. Call the target method. This is now safe because:
+			//    - We are on the Game Thread.
+			//    - We have validated Worker and Worker->ResourcePlace pointers.
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			if (ActorFragPtr)
+			{
+				AActor* Actor = ActorFragPtr->GetMutable(); 
+				if (IsValid(Actor))
+				{
+					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+					if (UnitBase )
+					{
+			
+					}
+				}
+			}
+		}
+	}); 
+}
+
+void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	// **Keep initial checks outside AsyncTask if possible and thread-safe**
+    	if (!EntitySubsystem)
+    	{
+    		// Log error - This check itself is generally safe
+    		return;
+    	}
+    
+    	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+    
+    	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    	{
+    		if (!EntitySubsystem) 
+    		{
+    			 return;
+    		}
+    
+    		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    
+    		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+    		{
+    			// Check entity validity *on the game thread*
+    			if (!EntityManager.IsEntityValid(Entity)) 
+    			{
+    				continue;
+    			}
+    			// 4. Call the target method. This is now safe because:
+    			//    - We are on the Game Thread.
+    			//    - We have validated Worker and Worker->ResourcePlace pointers.
+    			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+    			if (ActorFragPtr)
+    			{
+    				AActor* Actor = ActorFragPtr->GetMutable(); 
+    				if (IsValid(Actor))
+    				{
+    					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+    					if (UnitBase )
+    					{
+    			
+    					}
+    				}
+    			}
+    		}
+    	}); 
 }

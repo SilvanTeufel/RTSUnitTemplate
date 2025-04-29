@@ -14,10 +14,12 @@ class RTSUNITTEMPLATE_API UGoToBuildStateProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
 
-	UGoToBuildStateProcessor();
 public:
+	UGoToBuildStateProcessor();
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+
 private:
 	FMassEntityQuery EntityQuery;
+	// No configuration properties needed here now.
 };
