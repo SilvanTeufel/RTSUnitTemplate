@@ -84,7 +84,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
                 // Queue signal instead of sending directly
-                PendingSignals.Emplace(Entity, UnitSignals::Run);
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
 
                 // UpdateMoveTarget stays here as it modifies fragment data directly
                 UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
@@ -152,104 +152,3 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         });
     }
 }
-/*
-void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    // UE_LOG(LogTemp, Log, TEXT("UPauseStateProcessor::Execute!"));
-    UWorld* World = EntityManager.GetWorld();
-    if (!World) return;
-    
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [&](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-            
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-
-            
-        // UE_LOG(LogTemp, Log, TEXT("Pause EntityCount:! %d"), NumEntities);
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            FMassAIStateFragment& StateFrag = StateList[i];
-            const FMassAITargetFragment& TargetFrag = TargetList[i];
-            const FMassCombatStatsFragment& Stats = StatsList[i];
-            const FTransform& Transform = TransformList[i].GetTransform();
-            FMassVelocityFragment& Velocity = VelocityList[i];
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-            
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
-            // 1. Sicherstellen, dass Einheit steht
-            //Velocity.Value = FVector::ZeroVector;
-
-             // 2. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
-            {
-                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                if (!SignalSubsystem)
-                {
-                     continue; // Handle missing subsystem
-                }
-                SignalSubsystem->SignalEntity(
-                UnitSignals::Run,
-                Entity);
-                
-                UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-                continue;
-            }
-
-            // 3. Timer für Pause-Dauer prüfen
-            StateFrag.StateTimer += DeltaTime;
-            if (StateFrag.StateTimer >= Stats.PauseDuration) // AttackPauseDuration muss im StatsFragment sein
-            {
-                // Pause vorbei, prüfe ob Angriff möglich ist
-                const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius;
-                const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
-
-                if (DistSq <= AttackRangeSq)
-                {
-                    if (Stats.bUseProjectile)
-                    {
-                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                        if (!SignalSubsystem) continue;
-                    
-                        SignalSubsystem->SignalEntity(UnitSignals::RangedAttack, Entity);
-                    }
-                    
-                    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                     if (!SignalSubsystem)
-                     {
-                          continue; // Handle missing subsystem
-                     }
-                     SignalSubsystem->SignalEntity(
-                     UnitSignals::Attack,
-                     Entity);
-                }
-                else
-                {
-                    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                     if (!SignalSubsystem)
-                     {
-                          continue; // Handle missing subsystem
-                     }
-                     SignalSubsystem->SignalEntity(
-                     UnitSignals::Chase,
-                     Entity);
-                }
-                continue; // Zustand gewechselt
-            }
-
-            // 4. In Pause bleiben, optional Rotation zum Ziel implementieren
-            // (Besser in separatem LookAtProcessor)
-        }
-    });
-}
-
-*/

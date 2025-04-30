@@ -1,5 +1,4 @@
-﻿// MyUnitFragments.h
-#pragma once
+﻿#pragma once
 
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"

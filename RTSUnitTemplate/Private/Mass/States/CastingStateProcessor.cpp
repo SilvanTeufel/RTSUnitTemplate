@@ -92,14 +92,14 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             // 3. Increment cast timer. This modification stays here.
             StateFrag.StateTimer += DeltaTime;
 
+            PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // 4. Check if cast time is finished
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
                 // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Queuing Signal %s."), Entity.Index, Entity.SerialNumber, *UnitSignals::Run.ToString());
 
                 // Queue the signal instead of sending it directly
-                PendingSignals.Emplace(Entity, UnitSignals::Run); // Use your actual signal FName
-
+                PendingSignals.Emplace(Entity, UnitSignals::EndCast); // Use your actual signal FName
                 // Reset timer or other state if needed now that casting is done
                 // StateFrag.StateTimer = 0.0f; // Example reset (optional)
                 // Continue to next entity, state change happens via signal later
@@ -137,56 +137,3 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         });
     }
 }
-
-/*
-void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-  QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
-    // UE_LOG(LogTemp, Log, TEXT("UCastingStateProcessor::Execute"));
-
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-    if (!SignalSubsystem) return;
-
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, SignalSubsystem](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            FMassAIStateFragment& StateFrag = StateList[i];
-            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-            FMassVelocityFragment& Velocity = VelocityList[i];
-
-            // 1. Bewegung stoppen
-            //Velocity.Value = FVector::ZeroVector;
-
-            // 2. Rotation wird vom ULookAtProcessor gehandhabt (falls für Casting konfiguriert)
-
-            // 3. Timer hochzählen
-            StateFrag.StateTimer += DeltaTime;
-
-            // 4. Prüfen, ob Cast-Zeit abgelaufen ist
-            // Annahme: CastTime ist ein Member von FMassCombatStatsFragment
-            if (StateFrag.StateTimer > StatsFrag.CastTime)
-            {
-                // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Signaling CastComplete and Idle."), Entity.Index, Entity.SerialNumber);
-                // In einen Standardzustand zurückwechseln (z.B. Idle)
-                // Alternativ: Basierend auf Target Anwesenheit zu Chase wechseln?
-                SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-                // Zustand wird vom UnitStateProcessor (Signal Handler) geändert.
-            }
-            // Ansonsten: Bleibe im Casting Zustand.
-        }
-    });
-}
-*/

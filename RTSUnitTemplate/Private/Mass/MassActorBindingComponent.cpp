@@ -135,6 +135,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
 		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
 
+    	FMassGhostLocationFragment::StaticStruct(),
+    	FMassNavigationEdgesFragment::StaticStruct(),
+    	FMassStandingAvoidanceParameters::StaticStruct(),
+    	FMassMovingAvoidanceParameters::StaticStruct(),
+    	FMassMovementParameters::StaticStruct(),
+  
 		// Your Custom Logic
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
     	FMassPatrolFragment::StaticStruct(), 
@@ -380,7 +386,15 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
              UE_LOG(LogTemp, Log, TEXT("Entity %s: Using default Agent Characteristics."), *EntityHandle.DebugGetDescription());
         }
     }
-
+	if (FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+	{
+		if (UnitOwner) // Use data from Actor if available
+		{
+			StateFragment->StateTimer = UnitOwner->UnitControlTimer;
+			
+		}
+	}
+	
     // 3. Patrol Fragment
     if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
     {

@@ -83,7 +83,7 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 //UE_LOG(LogTemp, Log, TEXT("Entity %d:%d IsAttacked duration ended. Signaling Run."), Entity.Index, Entity.SerialNumber);
 
                 // Queue Run signal instead of sending directly
-                PendingSignals.Emplace(Entity, UnitSignals::Run);
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
 
                 // Reset timer or other state if needed upon leaving IsAttacked
                 // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
@@ -118,48 +118,3 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         });
     }
 }
-
-/*
-void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-	QUICK_SCOPE_CYCLE_COUNTER(STAT_UIsAttackedStateProcessor_Execute); // Performance-Messung (optional)
-    // UE_LOG(LogTemp, Log, TEXT("UIsAttackedStateProcessor::Execute"));
-
-    UWorld* World = GetWorld(); // Welt holen (ist in UObject verfügbar)
-    if (!World) return;
-
-    UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-    if (!SignalSubsystem) return;
-
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, SignalSubsystem](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
-
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            FMassAIStateFragment& StateFrag = StateList[i];
-            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-
-            // Timer hochzählen
-            StateFrag.StateTimer += DeltaTime;
-
-            // Prüfen, ob die Dauer überschritten wurde
-            // Annahme: IsAttackedDuration ist ein Member von FMassCombatStatsFragment
-            if (StateFrag.StateTimer > StatsFrag.IsAttackedDuration)
-            {
-                //UE_LOG(LogTemp, Log, TEXT("Entity %d:%d IsAttacked duration ended. Signaling Pause."), Entity.Index, Entity.SerialNumber);
-
-                // Zum Pause-Zustand wechseln
-                SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-            }
-            // Ansonsten: Bleibe im IsAttacked Zustand. Keine weitere Aktion nötig.
-        }
-    });
-}
-*/

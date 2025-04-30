@@ -88,7 +88,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
             {
                 // Queue signal instead of sending directly
-                PendingSignals.Emplace(Entity, UnitSignals::Run);
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 // Potentially clear MoveTarget here too if needed when losing target
                 // StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
                 continue;
@@ -140,75 +140,3 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         });
     }
 }
-
-/*
-void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor::Execute!")); // Log entry
-
-    UWorld* World = Context.GetWorld(); // World für MoveTarget holen
-
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [&](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-
-        //UE_LOG(LogTemp, Log, TEXT("Chase EntityCount:! %d"), NumEntities);
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            FMassAIStateFragment& StateFrag = StateList[i];
-            const FMassAITargetFragment& TargetFrag = TargetList[i];
-            const FTransform& Transform = TransformList[i].GetTransform();
-            const FMassCombatStatsFragment& Stats = StatsList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-         
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
-            // 1. Ziel verloren oder ungültig? -> Zurück zu Idle (oder vorherigem Zustand)
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
-            {
-                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                 if (!SignalSubsystem)
-                 {
-                      continue; // Handle missing subsystem
-                 }
-                 SignalSubsystem->SignalEntity(
-                 UnitSignals::Run,
-                 Entity);
-                continue;
-            }
-
-            // 2. Distanz zum Ziel prüfen
-            // Annahme: AgentRadius enthält relevante Größe des Ziels und der eigenen Einheit
-            const float EffectiveAttackRange = Stats.AttackRange; // + Stats.AgentRadius; // Vereinfacht
-            const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-            const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
-
-            // 3. In Angriffsreichweite?
-            if (DistSq <= AttackRangeSq)
-            {
-                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                if (!SignalSubsystem)
-                {
-                     continue; // Handle missing subsystem
-                }
-                SignalSubsystem->SignalEntity(
-                UnitSignals::Pause,
-                Entity);
-
-                StopMovement(MoveTarget, World);
-                continue;
-            }
-         
-            // 4. Außer Reichweite -> Weiter verfolgen
-            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
-        }
-    });
-}
-*/

@@ -38,6 +38,11 @@ namespace UnitSignals
 	const FName EndDead(TEXT("EndDead"));
 	const FName SyncUnitBase(TEXT("SyncAttributes"));
 	const FName IdlePatrolSwitcher(TEXT("IdlePatrolSwitcher"));
+
+	const FName SetUnitStatePlaceholder(TEXT("IdlePatrolSwitcher"));
+	
+	const FName SyncCastTime(TEXT("SyncCastTime"));
+	const FName EndCast(TEXT("EndCast"));
 	// Worker Signals
 	const FName GoToBase(TEXT("GoToBase"));
 	const FName GoToBuild(TEXT("GoToBuild"));

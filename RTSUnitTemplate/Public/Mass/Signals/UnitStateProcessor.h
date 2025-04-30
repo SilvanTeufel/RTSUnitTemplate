@@ -83,7 +83,8 @@ private:
 		UnitSignals::GoToResourceExtraction,
 		UnitSignals::ResourceExtraction,
 	};
-	
+
+	FName PlaceholderSignal = UnitSignals::Idle;
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
 	
@@ -96,6 +97,11 @@ private:
 	FDelegateHandle EndDeadSignalDelegateHandle;
 	FDelegateHandle IdlePatrolSwitcherDelegateHandle;
 
+	FDelegateHandle UnitStatePlaceholderDelegateHandle;
+	
+	FDelegateHandle SyncCastTimeDelegateHandle;
+	FDelegateHandle EndCastDelegateHandle;
+	
 	FDelegateHandle ReachedBaseDelegateHandle;
 	FDelegateHandle StartBuildActionDelegateHandle;
 	FDelegateHandle SpawnBuildingRequestDelegateHandle;
@@ -162,4 +168,21 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	UFUNCTION()
+	void SyncCastTime(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void EndCast(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void SetToUnitStatePlaceholder(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
 };

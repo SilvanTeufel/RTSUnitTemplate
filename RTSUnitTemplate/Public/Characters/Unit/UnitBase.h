@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Navigation/CrowdAgentInterface.h"
 #include "Navigation/CrowdFollowingComponent.h"
-#include "WorkingUnitBase.h"
+#include "MassUnitBase.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
@@ -17,7 +17,7 @@
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
+class RTSUNITTEMPLATE_API AUnitBase : public AMassUnitBase
 {
 	GENERATED_BODY()
 
@@ -194,9 +194,6 @@ public:
 
 // related to Animations  //////////////////////////////////////////
 public:
-
-	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitControlTimer", Keywords = "RTSUnitTemplate UnitControlTimer"), Category = RTSUnitTemplate)
-	float UnitControlTimer = 0.0f; // This Timer is used in UnitControllerBase Statemachine
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitToChase", Keywords = "RTSUnitTemplate UnitToChase"), Category = RTSUnitTemplate)
 	AUnitBase* UnitToChase;

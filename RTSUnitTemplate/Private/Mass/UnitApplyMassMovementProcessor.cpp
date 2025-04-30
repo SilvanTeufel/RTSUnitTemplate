@@ -17,6 +17,8 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor()
 
 	//ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
 	//ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
+	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
+	ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 	bAutoRegisterWithProcessingPhases = true;
 }
@@ -48,23 +50,6 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries()
 
 void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	/*
-	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-
-	// 2. Prüfen, ob das Intervall erreicht wurde
-	if (TimeSinceLastRun < ExecutionInterval)
-	{
-		// Noch nicht Zeit, diesen Frame überspringen
-		return;
-	}
-
-	// --- Intervall erreicht, Logik ausführen ---
-
-	// 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
-	TimeSinceLastRun -= ExecutionInterval;
-	*/
-    //UE_LOG(LogTemp, Warning, TEXT("UUnitApplyMassMovementProcessor!!!!!!! EXECUTE!!!!"));
-    // Clamp max delta time
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
     if (DeltaTime <= 0.0f) // Avoid division by zero or no-op
     {
@@ -93,6 +78,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 
             // --- Core Movement Logic ---
             const FVector DesiredVelocity = Steering.DesiredVelocity;
+        	const FVector AvoidanceForce = Force.Value; 
             const float MaxSpeed = MovementParams.MaxSpeed; // Get parameters
             const float Acceleration = MovementParams.MaxAcceleration;
 
@@ -104,7 +90,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
 
             // Calculate change in velocity applying acceleration and external forces
-            FVector VelocityDelta = (AccelInput + Force.Value) * DeltaTime * 4.f;
+            FVector VelocityDelta = (AccelInput + AvoidanceForce) * DeltaTime * 4.f;
 
             // Store previous velocity for logging if needed
             FVector PrevVelocity = Velocity.Value;
@@ -114,6 +100,23 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 
             // Clamp final speed
             Velocity.Value = Velocity.Value.GetClampedToMaxSize(MaxSpeed);
+
+
+        	// Log inputs and outputs for the selected entity
+				 UE_LOG(LogTemp, Log, TEXT("Entity [%d] ApplyMovement: DesiredVel=%s | AvoidForce=%s | AccelInput=%s | VelocityDelta=%s | FinalVel=%s"),
+					 Context.GetEntity(EntityIndex).Index,
+					 *DesiredVelocity.ToString(),
+					 *AvoidanceForce.ToString(), // Log the force coming FROM avoidance
+					 *AccelInput.ToString(),
+					 *VelocityDelta.ToString(),
+					 *Velocity.Value.ToString());
+
+				 // Optional: Log only if AvoidanceForce is significant
+				 if (!AvoidanceForce.IsNearlyZero(0.1f))
+				 {
+					 UE_LOG(LogTemp, Warning, TEXT("Entity [%d] ApplyMovement: SIGNIFICANT AvoidanceForce Detected: %s"),
+						 Context.GetEntity(EntityIndex).Index, *AvoidanceForce.ToString());
+				 }
         	
             // --- Apply final velocity to position ---
             FVector CurrentLocation = CurrentTransform.GetLocation();
