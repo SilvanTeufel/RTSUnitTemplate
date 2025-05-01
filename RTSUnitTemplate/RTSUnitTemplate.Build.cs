@@ -14,7 +14,7 @@ public class RTSUnitTemplate : ModuleRules
 		
 		// Mass dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSpawner", "MassMovement", "MassNavigation", "MassCommon", "MassActors", "MassSignals", "MassRepresentation", "MassReplication", "MassAIReplication", "MassAIBehavior", "NavigationSystem", "StructUtils", "MassLOD", "ZoneGraph",
-			"ZoneGraphAnnotations"  });
+			"ZoneGraphAnnotations", "MassGameplayDebug"  });
 		
 		// Gameplay Ability System
 		PublicDependencyModuleNames.AddRange(new string[] { "NetCore", "GameplayAbilities", "GameplayTags", "GameplayTasks"});

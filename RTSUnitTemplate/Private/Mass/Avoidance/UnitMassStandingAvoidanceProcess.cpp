@@ -41,6 +41,8 @@ void UUnitMassStandingAvoidanceProcess::ConfigureQueries()
 	DebugLogQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // To log actual location
 	DebugLogQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly); // To check action state
 
+	DebugLogQuery.AddConstSharedRequirement<FMassStandingAvoidanceParameters>(EMassFragmentPresence::All);
+
 	// Add any tags needed to ensure we query the same entities as the base processor
 	DebugLogQuery.AddTagRequirement<FMassMediumLODTag>(EMassFragmentPresence::None);
  	DebugLogQuery.AddTagRequirement<FMassLowLODTag>(EMassFragmentPresence::None);

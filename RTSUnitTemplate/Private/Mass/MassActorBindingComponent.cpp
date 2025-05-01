@@ -140,12 +140,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
     	FMassStandingAvoidanceParameters::StaticStruct(),
     	FMassMovingAvoidanceParameters::StaticStruct(),
     	FMassMovementParameters::StaticStruct(),
-  
 		// Your Custom Logic
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
     	FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
     
+    	
     	FMassAIStateFragment::StaticStruct(),
     	FMassAITargetFragment::StaticStruct(), 
     	FMassCombatStatsFragment::StaticStruct(), 
@@ -216,17 +216,36 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
 	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
 
-	// 3. Avoidance Parameters (Using default values initially)
+	// 3. Avoidance Parameters (Now explicitly initialized)
 	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
-	// You can modify defaults here if needed: MovingAvoidanceParamsInstance.PredictiveAvoidanceTime = 1.5f;
-	FConstSharedStruct MovingAvoidanceParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated()); // Use GetValidated if it exists
+	// Core detection radius
+	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
+	// Separation tuning
+	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = 75.f;   // How close they can get before repelling
+	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= 50.f;   // Wall‐avoidance distance
+	// Predictive avoidance tuning
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = 75.f;   // Look-ahead distance in cm
+	// (you can also tweak stiffness if desired)
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
+	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
+	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
+	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
+
+	// Validate and create the shared fragment
+	FConstSharedStruct MovingAvoidanceParamSharedFragment =
+		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
 	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
 
+	// Standing avoidance (if you also use standing avoidance)
 	FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
-	// You can modify defaults here if needed
-	FConstSharedStruct StandingAvoidanceParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated()); // Use GetValidated if it exists
+	StandingAvoidanceParamsInstance.GhostObstacleDetectionDistance = 300.f;
+	StandingAvoidanceParamsInstance.GhostSeparationDistance       = 20.f;
+	StandingAvoidanceParamsInstance.GhostSeparationStiffness      = 200.f;
+	// … any other Ghost* fields you want to override …
+	FConstSharedStruct StandingAvoidanceParamSharedFragment =
+		EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
 	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
-
 	// ***** --- ADD THIS LINE --- *****
 	SharedValues.Sort(); // Sort the internal lists before passing to CreateEntity
 	// ***** --- END ADDED LINE --- *****
@@ -239,12 +258,34 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
         return FMassEntityHandle();
     }
 	
-	// 3. Initialize Entity Fragments using the Owner Actor's state
-
 	// 3a. Initialize Transform Fragment
 	FTransformFragment& TransformFrag = EntityManager.GetFragmentDataChecked<FTransformFragment>(NewEntityHandle);
 	TransformFrag.SetTransform(Owner->GetActorTransform()); // Use owner's current transform
 
+	
+	// After you’ve created the entity and set up its FMassAvoidanceColliderFragment:
+	FMassAvoidanceColliderFragment& ColliderFrag =
+		EntityManager.GetFragmentDataChecked<FMassAvoidanceColliderFragment>(NewEntityHandle);
+
+	// Build a simple AABB around your collider (for a circle you can do):
+	const FVector Location = TransformFrag.GetTransform().GetLocation();
+	const float Radius   = ColliderFrag.GetCircleCollider().Radius;
+	const FVector Extent = FVector(Radius, Radius, Radius);
+	const FBox   MyBounds  = FBox(Location - Extent, Location + Extent);
+
+	// Create the obstacle‐item
+	FMassNavigationObstacleItem Item;
+	Item.Entity    = NewEntityHandle;
+	Item.ItemFlags = EMassNavigationObstacleFlags::HasColliderData;
+
+	// Insert into the grid
+	UMassNavigationSubsystem* NavSys = World->GetSubsystem<UMassNavigationSubsystem>();
+	if (NavSys)
+	{
+		NavSys->GetObstacleGridMutable().Add(Item, MyBounds);  // THierarchicalHashGrid2D::Add :contentReference[oaicite:2]{index=2}
+	}
+	// 3. Initialize Entity Fragments using the Owner Actor's state
+	
 	// 3b. Initialize Velocity Fragment
 	FMassVelocityFragment& VelocityFrag = EntityManager.GetFragmentDataChecked<FMassVelocityFragment>(NewEntityHandle);
 	VelocityFrag.Value = Owner->GetVelocity(); // Initialize with the owner Actor's current velocity
@@ -260,14 +301,13 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	// --- INITIALIZE NEWLY ADDED FRAGMENTS ---
 
 	//FMassMovementParameters& MoveParameters = EntityManager.GetFragmentDataChecked<FMassMovementParameters>(NewEntityHandle);
-
 	
-
 
 	// 3d. Initialize Actor Fragment ** THIS ESTABLISHES THE LINK **
 	FMassActorFragment& ActorFrag = EntityManager.GetFragmentDataChecked<FMassActorFragment>(NewEntityHandle);
 	ActorFrag.SetAndUpdateHandleMap(NewEntityHandle, Owner, false);
 	// 3e. Initialize Representation Fragments (Set sensible defaults)
+
 	FMassRepresentationFragment& RepFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationFragment>(NewEntityHandle);
 	// If the Actor already exists in the level and is managed externally (not by Mass spawning pools)
 
@@ -275,7 +315,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	FMassRepresentationLODFragment& RepLODFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationLODFragment>(NewEntityHandle);
 	RepLODFrag.LOD = EMassLOD::High; // Start visible, representation processor will adjust
 	RepLODFrag.PrevLOD = EMassLOD::Max; // Indicate it wasn't visible before
-
+	
 
 	if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(NewEntityHandle))
 	{
@@ -285,7 +325,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	
 	if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(NewEntityHandle))
 	{
-		*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(35.f)); // Set shape AND radius
+		*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(350.f)); // Set shape AND radius
 		//UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *NewEntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
 	}
 
