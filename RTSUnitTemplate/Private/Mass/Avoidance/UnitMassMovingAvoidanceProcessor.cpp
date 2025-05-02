@@ -20,7 +20,7 @@ UUnitMassMovingAvoidanceProcessor::UUnitMassMovingAvoidanceProcessor()
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Avoidance;
 	ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Tasks); // Make sure it's after intent calculation
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
-	bAutoRegisterWithProcessingPhases = true;
+	bAutoRegisterWithProcessingPhases = false;
 }
 
 void UUnitMassMovingAvoidanceProcessor::ConfigureQueries()
@@ -57,6 +57,7 @@ void UUnitMassMovingAvoidanceProcessor::ConfigureQueries()
 
 void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
 	// --- Logging BEFORE Super::Execute using DebugLogQuery ---
 	DebugLogQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture 'this' is not strictly needed anymore as we get NavSys from Context
@@ -158,5 +159,6 @@ void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManage
 			// #endif // WITH_MASSGAMEPLAY_DEBUG // Keep commented for testing
 		}
 	});
+	
 }
 

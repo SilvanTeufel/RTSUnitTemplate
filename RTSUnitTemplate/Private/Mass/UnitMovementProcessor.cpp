@@ -50,6 +50,9 @@ void UUnitMovementProcessor::ConfigureQueries()
     EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
     EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
 
+    EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
@@ -178,8 +181,8 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 Steering.DesiredVelocity = MoveDir * DesiredSpeed;
             }
 
-            UE_LOG(LogTemp, Log, TEXT("Entity [%d] MovementIntent: DesiredVelocity = %s"),
-              Entity.Index, *Steering.DesiredVelocity.ToString());
+            //UE_LOG(LogTemp, Log, TEXT("Entity [%d] MovementIntent: DesiredVelocity = %s"),
+              //Entity.Index, *Steering.DesiredVelocity.ToString());
             // If MoveDir is zero (e.g., exactly at CurrentTargetPoint), DesiredVelocity remains ZeroVector
         } // End loop through entities
     }); // End ForEachEntityChunk

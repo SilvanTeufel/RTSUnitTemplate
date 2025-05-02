@@ -58,28 +58,28 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	float ResourceExtractionTime = 2.0f;
 
 	/** How close the worker needs to get to the resource node before signaling arrival. */
-	UPROPERTY(EditAnywhere, Category = "Worker")
-	float ResourceArrivalDistance = 100.0f; // Default arrival distance
+	//UPROPERTY(EditAnywhere, Category = "Worker")
+	//float ResourceArrivalDistance = 100.0f; // Default arrival distance
 
-	UPROPERTY(EditAnywhere, Category = "Worker")
-	float BuildAreaArrivalDistance = 150.0f;
+	//UPROPERTY(EditAnywhere, Category = "Worker")
+	//float BuildAreaArrivalDistance = 150.0f;
 
 	// Target info for GoToBuild state, populated externally (e.g., by signal handler)
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BuildAreaPosition = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
-	float BuildAreaRadius = 0.0f;
+	//UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	//float BuildAreaRadius = 0.0f;
 	
 	// Base related fields (ADDED/UPDATED)
-	UPROPERTY(EditAnywhere, Category = "Worker")
-	float BaseArrivalDistance = 100.0f; // Arrival distance specifically for the Base
+	//UPROPERTY(EditAnywhere, Category = "Worker")
+	//float BaseArrivalDistance = 100.0f; // Arrival distance specifically for the Base
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BasePosition = FVector::ZeroVector; // Populated by external logic
 
-	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
-	float BaseRadius = 50.0f; // Default? Populated by external logic
+	//UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	//float BaseRadius = 50.0f; // Default? Populated by external logic
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool BuildingAvailable = false;

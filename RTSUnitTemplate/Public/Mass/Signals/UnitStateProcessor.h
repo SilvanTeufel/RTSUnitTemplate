@@ -10,6 +10,7 @@
 #include "MassEntityTypes.h" // For FMassEntityHandle
 #include "UObject/ObjectMacros.h" // Required for UFUNCTION
 #include "Containers/ArrayView.h" // Ensure TConstArrayView/TArrayView is available
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Delegates/Delegate.h" // <-- Explicitly include this header
 #include "UnitStateProcessor.generated.h"
 
@@ -168,6 +169,12 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+		AExtendedControllerBase* ControllerBase;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
+								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint);
 	UFUNCTION()
 	void SyncCastTime(
 		FName SignalName,

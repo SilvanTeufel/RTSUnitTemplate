@@ -25,7 +25,7 @@ UUnitMassStandingAvoidanceProcess::UUnitMassStandingAvoidanceProcess()
 	// ExecutionOrder.ExecuteAfter.Add(UUnitMassMovingAvoidanceProcessor::StaticClass()->GetFName());
 
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
-	bAutoRegisterWithProcessingPhases = true;
+	bAutoRegisterWithProcessingPhases = false;
 }
 
 void UUnitMassStandingAvoidanceProcess::ConfigureQueries()

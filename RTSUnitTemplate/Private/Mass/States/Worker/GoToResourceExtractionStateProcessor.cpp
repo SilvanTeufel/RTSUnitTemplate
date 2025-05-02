@@ -37,6 +37,8 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries()
 
 void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+    UE_LOG(LogTemp, Warning, TEXT("!!!!UGoToResourceExtractionStateProcessor!!!"));
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
 
     UWorld* World = Context.GetWorld(); // Get World via Context
@@ -61,6 +63,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
+        UE_LOG(LogTemp, Warning, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -83,9 +87,10 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             const float CurrentLocationZ = Transform.GetLocation().Z; // Preserve Z for comparison/movement
             const FVector TargetLocation = FVector(AiTargetFrag.LastKnownLocation.X, AiTargetFrag.LastKnownLocation.Y, CurrentLocationZ); // Move towards target XY at current Z
             const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetLocation);
-            const float ArrivalDistSq = FMath::Square(WorkerStatsFrag.ResourceArrivalDistance);
+            //const float ArrivalDistSq = FMath::Square(WorkerStatsFrag.ResourceArrivalDistance);
 
             // --- 3. Handle Arrival ---
+            /*
             if (DistSq <= ArrivalDistSq)
             {
                 // Arrived at the resource node area.
@@ -98,7 +103,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 StopMovement(MoveTarget, World);
 
                 continue; // Move to next entity
-            }
+            }*/
 
             // --- 4. Update Movement (If Not Arrived) ---
             // Continue moving towards the target resource node location.

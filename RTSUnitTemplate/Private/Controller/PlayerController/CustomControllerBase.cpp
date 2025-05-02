@@ -191,11 +191,11 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
 	if (AttackToggled)
 	{
-		UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
+		//UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
 		EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
 	}else
 	{
-		UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
+		//UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
 		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(InEntity);
 		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
 		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
@@ -204,14 +204,15 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
+	/*
 	if (MoveTargetFragmentPtr) // Check ptr again just in case
 	{
 		UE_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget for Entity %s: Action triggered. CurrentAction is now: %s"),
 			   *InEntity.DebugGetDescription(),
 			   *UEnum::GetValueAsString(MoveTargetFragmentPtr->GetCurrentAction()));
 	}
-	
-    UE_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget: Updated move target for entity %s"), *InEntity.DebugGetDescription());
+	*/
+    //E_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget: Updated move target for entity %s"), *InEntity.DebugGetDescription());
 }
 
 void ACustomControllerBase::RightClickPressedMass()
@@ -268,7 +269,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
 			FMassEntityHandle MassEntityHandle =  SelectedUnits[i]->MassActorBindingComponent->GetMassEntityHandle();
 			
-			UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Speed : %f"), Speed);
+			//UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Speed : %f"), Speed);
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("This is a Building!!"));

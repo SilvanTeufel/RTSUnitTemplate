@@ -41,7 +41,7 @@ bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
 
     // Add the tag
     EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
-    UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to add tag '%s' to entity %s."), *GetName(), *TagToAdd->GetName(), *EntityHandle.DebugGetDescription());
+    //UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to add tag '%s' to entity %s."), *GetName(), *TagToAdd->GetName(), *EntityHandle.DebugGetDescription());
 
     // AddTagToEntity doesn't return success/failure, but we assume it worked if we got this far.
     // If you need strict confirmation, you'd check HasTag afterwards, but that adds overhead.
@@ -74,7 +74,7 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 
     // Remove the tag
     EntityManager->RemoveTagFromEntity(EntityHandle, TagToRemove);
-    UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to remove tag '%s' from entity %s."), *GetName(), *TagToRemove->GetName(), *EntityHandle.DebugGetDescription());
+    //UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to remove tag '%s' from entity %s."), *GetName(), *TagToRemove->GetName(), *EntityHandle.DebugGetDescription());
 
     // Like AddTag, RemoveTag doesn't return status. Assume success if code reached here.
     return true;

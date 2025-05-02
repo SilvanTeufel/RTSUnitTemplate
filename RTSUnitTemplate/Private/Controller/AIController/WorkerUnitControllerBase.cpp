@@ -19,7 +19,7 @@
 void AWorkerUnitControllerBase::Tick(float DeltaSeconds)
 {
 	//Super::Tick(DeltaSeconds);
-	WorkingUnitControlStateMachine(DeltaSeconds);
+	//WorkingUnitControlStateMachine(DeltaSeconds);
 }
 
 void AWorkerUnitControllerBase::WorkingUnitControlStateMachine(float DeltaSeconds)

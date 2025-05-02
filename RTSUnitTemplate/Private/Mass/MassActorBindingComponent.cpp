@@ -129,7 +129,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
 		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
 		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
-
     	//FMassMovementParameters::StaticStruct(), 
 		// Steering & Avoidance
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
@@ -150,7 +149,8 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
     	FMassAITargetFragment::StaticStruct(), 
     	FMassCombatStatsFragment::StaticStruct(), 
     	FMassAgentCharacteristicsFragment::StaticStruct(), 
-    	
+
+    	FMassWorkerStatsFragment::StaticStruct(),
 		// Actor Representation & Sync
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
@@ -476,6 +476,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
        *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(CalculatedAgentRadius));
        UE_LOG(LogTemp, Log, TEXT("Entity %s: Set Avoidance Radius = %.2f"), *EntityHandle.DebugGetDescription(), AvoidanceFrag->GetCircleCollider().Radius);
     }
+	
 }
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

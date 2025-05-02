@@ -25,7 +25,7 @@ void UBuildStateProcessor::ConfigureQueries()
 {
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Update StateTimer
     // Read-only fragments needed by the external system handling SpawnBuildingRequest signal:
-    EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly); // For BuildAreaPosition
+    EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite); // For BuildAreaPosition
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // For TeamID
 
     // State Tag
@@ -53,7 +53,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         // The query ensures they are present for the system handling the SpawnBuildingRequest signal.
 
         const int32 NumEntities = Context.GetNumEntities();
-
+            UE_LOG(LogTemp, Warning, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& AIState = AIStateList[i];
@@ -61,7 +61,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
             // --- Pre-check ---
             // Basic validation of essential build parameter. More robust validation assumed external.
-            if (!WorkerStats.BuildingAvailable) // Check if TSubclassOf is set
+            if (WorkerStats.BuildingAvailable) // Check if Building is allready set
             {
                 UE_LOG(LogTemp, Warning, TEXT("Entity %d: BuildStateProcessor: Invalid BuildingClass. Queuing GoToResourceExtraction signal."), Entity.Index);
                 PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction); // Use appropriate fallback signal FName
@@ -81,6 +81,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  PendingSignals.Emplace(Entity, UnitSignals::StartBuildAction); // Signal for animation/effects
             }
 
+            PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- Completion Check ---
             if (AIState.StateTimer >= WorkerStats.BuildTime)
             {

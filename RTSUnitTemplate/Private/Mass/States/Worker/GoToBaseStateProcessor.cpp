@@ -63,6 +63,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
         const int32 NumEntities = Context.GetNumEntities();
 
+        UE_LOG(LogTemp, Warning, TEXT("GoToBase NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -78,8 +79,8 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // --- Pre-checks (Fragment Data Validation) ---
             // Get target info from WorkerStats fragment
             const FVector TargetPosition = WorkerStats.BasePosition;
-            const float TargetRadius = WorkerStats.BaseRadius;
-
+            //const float TargetRadius = WorkerStats.BaseRadius;
+            UE_LOG(LogTemp, Warning, TEXT("TargetPosition: %s"), *TargetPosition.ToString());
             // Basic validation: Ensure target position was set (more robust checks assumed external)
             if (TargetPosition.IsNearlyZero())
             {
@@ -90,12 +91,13 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             }
 
             // --- 1. Arrival Check ---
-            const float BaseArrivalDistance = WorkerStats.BaseArrivalDistance; // Get from Worker stats
+            //const float BaseArrivalDistance = WorkerStats.BaseArrivalDistance; // Get from Worker stats
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), TargetPosition);
-            const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
+            //const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
 
+            /*
             if (DistanceToTargetEdge <= BaseArrivalDistance)
             {
                 UE_LOG(LogTemp, Log, TEXT("Entity %d: GoToBaseStateProcessor: Arrived at Base location. Queuing signal '%s'."), Entity.Index, *UnitSignals::ReachedBase.ToString());
@@ -104,9 +106,11 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 StopMovement(MoveTarget, World);
                 continue;
             }
+            */
 
             // --- 2. Movement Logic ---
             const float TargetSpeed = CombatStats.RunSpeed; // Get speed from Combat stats
+            UE_LOG(LogTemp, Warning, TEXT("TargetSpeed: %f"), TargetSpeed);
             // Use the externally provided helper function
             UpdateMoveTarget(MoveTarget, TargetPosition, TargetSpeed, World);
 

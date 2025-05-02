@@ -4,6 +4,7 @@
 #include "Mass/Signals/UnitStateProcessor.h"
 
 // Source: UnitStateProcessor.cpp
+#include "AIController.h"
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
@@ -14,6 +15,8 @@
 #include "Widgets/UnitBaseHealthBar.h"
 #include "MassExecutionContext.h" 
 #include "MassNavigationFragments.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
 
 UUnitStateProcessor::UUnitStateProcessor()
@@ -334,6 +337,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
+                        	UE_LOG(LogTemp, Log, TEXT("!!!!!!SignalName!!!!! GO TO RESOURCE EXTRACTION"));
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
@@ -702,6 +706,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             // Das MUTABLE Combat Stats Fragment holen
             FMassCombatStatsFragment* CombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
         	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
+			FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
         	// Das Attribute Set holen (erneut auf Gültigkeit prüfen)
             // Ersetze 'Attributes', falls dein Member anders heißt
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
@@ -740,6 +745,24 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 					PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
 					PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
 				}
+
+            	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
+            	{
+            		if (StrongUnitActor->Base)
+            		WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
+            		//WorkerStats->BaseRadius // Get Radius from StrongUnitActor->Base
+            		//WorkerStats->BaseArrivalDistance = 50.f;
+            		//WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
+            		if (StrongUnitActor->BuildArea)
+            		{
+            			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
+            			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
+						//WorkerStats->BuildAreaRadius = // Get Radius from StrongUnitActor->BuildArea
+						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
+            		}
+            		//WorkerStats->ResourceArrivalDistance = 50.f;
+            		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
+            	}
             }
         }
         else
@@ -794,7 +817,8 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
             return;
         }
         FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
-
+    	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
+       
         // Actor- und Entity-Validität erneut im GameThread prüfen
         if (StrongUnitActor && GTEntityManager.IsEntityValid(CapturedEntity))
         {
@@ -823,6 +847,21 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
             }
             else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle){
             	SwitchState(UnitSignals::PatrolIdle, CapturedEntity, EntityManager);
+			}
+            else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase){
+            	SwitchState(UnitSignals::GoToBase, CapturedEntity, EntityManager);
+            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction){
+            	SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, EntityManager);
+            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild){
+			   SwitchState(UnitSignals::GoToBuild, CapturedEntity, EntityManager);
+            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build){
+            	if (!DoesEntityHaveTag(EntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct()))
+            		State->StateTimer = 0.f;
+            	SwitchState(UnitSignals::Build, CapturedEntity, EntityManager);
+            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction){
+            	if (!DoesEntityHaveTag(EntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct()))
+            		State->StateTimer = 0.f;
+			   SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, EntityManager);
 			}
         }
     }); // Ende AsyncTask Lambda
@@ -1463,13 +1502,207 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
     					if (UnitBase )
     					{
-    			
+    						if(!UnitBase->BuildArea->Building)
+    						{
+								FUnitSpawnParameter SpawnParameter;
+								SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
+								SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
+								SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
+								SpawnParameter.UnitMinRange = FVector(0.f);
+								SpawnParameter.UnitMaxRange = FVector(0.f);
+								SpawnParameter.ServerMeshRotation = UnitBase->BuildArea->ServerMeshRotationBuilding;
+								SpawnParameter.State = UnitData::Idle;
+								SpawnParameter.StatePlaceholder = UnitData::Idle;
+								SpawnParameter.Material = nullptr;
+								//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
+
+								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
+								if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
+								{
+									UnitBase->BuildArea->RemoveAreaFromGroup();
+									UnitBase->BuildArea->Destroy(false, true);
+									UnitBase->BuildArea = nullptr;
+								}
+
+    							if(!ControllerBase)
+    							{
+									ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
+								}
+
+								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
+
+								if (NewUnit && ControllerBase)
+								{
+									NewUnit->IsMyTeam = true;
+									NewUnit->SpawnFogOfWarManager(ControllerBase);
+									UnitBase->FinishedBuild();
+								}
+		
+			
+								if(NewUnit)
+								{
+									ABuildingBase* Building = Cast<ABuildingBase>(NewUnit);
+									if (Building && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
+										Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+
+									if (Building && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
+										UnitBase->BuildArea->Building = Building;
+								}
+							}
     					}
     				}
     			}
     		}
     	}); 
 }
+
+AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
+    FUnitSpawnParameter SpawnParameter,
+    FVector Location,
+    AUnitBase* UnitToChase,
+    int TeamId,
+    AWaypoint* Waypoint)
+{
+    // 1) Transformation mit (vorläufigem) Spawn-Ort
+    FTransform EnemyTransform;
+    EnemyTransform.SetLocation(
+        FVector(Location.X + SpawnParameter.UnitOffset.X,
+                Location.Y + SpawnParameter.UnitOffset.Y,
+                Location.Z + SpawnParameter.UnitOffset.Z)
+    );
+
+    // 2) Deferrten Actor-Spawn starten
+    AUnitBase* UnitBase = Cast<AUnitBase>(
+        UGameplayStatics::BeginDeferredActorSpawnFromClass(
+            this,
+            SpawnParameter.UnitBaseClass,
+            EnemyTransform,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+        )
+    );
+
+    if (!UnitBase)
+    {
+        return nullptr;
+    }
+	
+    // 3) (Optional) AI-Controller spawnen und zuweisen
+    if (SpawnParameter.UnitControllerBaseClass)
+    {
+        AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(
+            SpawnParameter.UnitControllerBaseClass, 
+            FTransform()
+        );
+        if (!UnitController) 
+        {
+            return nullptr;
+        }
+        UnitController->Possess(UnitBase);
+    }
+
+    // --------------------------------------------
+    // 4) Hier folgt nun der Part mit dem LineTrace
+    // --------------------------------------------
+
+    // Wir versuchen, das Mesh zu holen (falls vorhanden),
+    // um dessen Bounds und Höhe zu bestimmen
+    USkeletalMeshComponent* MeshComponent = UnitBase->GetMesh();
+    if (MeshComponent)
+    {
+        // Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
+        FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
+        float HalfHeight = MeshBounds.BoxExtent.Z;
+
+        // Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
+        FVector TraceStart = Location + FVector(0.f, 0.f, 100.f);
+        FVector TraceEnd   = Location - FVector(0.f, 0.f, 100.f);
+
+        FHitResult HitResult;
+        FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
+        TraceParams.bTraceComplex = true;
+        TraceParams.AddIgnoredActor(UnitBase);
+    	
+    	if (ControllerBase)
+    		TraceParams.AddIgnoredActor(ControllerBase->GetPawn());
+
+        bool bHit = GetWorld()->LineTraceSingleByChannel(
+            HitResult,
+            TraceStart,
+            TraceEnd,
+            ECC_Visibility,
+            TraceParams
+        );
+
+        if (bHit)
+        {
+            // Wenn wir etwas treffen (z.B. Boden),
+            // setzen wir den Z-Wert so, dass die Unterseite des Meshes
+            // auf der Boden-Kollisionsstelle aufsitzt.
+            // -> ImpactPoint.Z plus "halbe Mesh-Höhe"
+            Location.Z = HitResult.ImpactPoint.Z + HalfHeight;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SpawnSingleUnit: Kein Boden getroffen, verwende Standard-Z"));
+        }
+
+        // Aktualisiere EnemyTransform mit dem angepassten Z-Wert
+        EnemyTransform.SetLocation(Location);
+    }
+	
+	if (TeamId)
+	{
+		UnitBase->TeamId = TeamId;
+	}
+	
+    // --------------------------------------------
+    // 5) Jetzt wird der Actor final in die Welt gesetzt
+    // --------------------------------------------
+    UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
+
+
+    // 6) Ab hier folgt dein bisheriger Setup-Code
+    if (UnitBase->UnitToChase)
+    {
+        UnitBase->UnitToChase = UnitToChase;
+        UnitBase->SetUnitState(UnitData::Chase);
+    }
+
+    if (TeamId)
+    {
+        UnitBase->TeamId = TeamId;
+    }
+
+    UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+    UnitBase->OnRep_MeshAssetPath();
+    UnitBase->OnRep_MeshMaterialPath();
+
+    UnitBase->SetReplicateMovement(true);
+	UnitBase->SetReplicates(true);
+    //UnitBase->GetMesh()->SetIsReplicated(true);
+
+    // Meshrotation-Server
+    UnitBase->SetMeshRotationServer();
+
+    UnitBase->UnitState = SpawnParameter.State;
+    UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+
+    // Attribute & GameMode-Handling
+    UnitBase->InitializeAttributes();
+    AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+    if (!GameMode)
+    {
+        UnitBase->SetUEPathfinding = true;
+        UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+        return nullptr;
+    }
+
+    GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
+	UnitBase->ScheduleDelayedNavigationUpdate();
+    return UnitBase;
+}
+
+
 
 void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
@@ -1514,12 +1747,12 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					{
 						
     					UnitBase->UnitControlTimer = StateFrag->StateTimer;
-						UE_LOG(LogTemp, Error,
+						/*UE_LOG(LogTemp, Error,
 												 TEXT("SyncCastTime: [%s] (EntityHandle=%u) UnitControlTimer set to %.3f"),
 												 *UnitBase->GetName(),
 												 Entity.Index,             // or Entity.HashValue depending on your handle impl
 												 StateFrag->StateTimer
-											 );
+											 );*/
 					}
 				}
 			}

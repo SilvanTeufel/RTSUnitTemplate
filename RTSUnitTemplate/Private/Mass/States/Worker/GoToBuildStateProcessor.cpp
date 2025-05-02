@@ -82,10 +82,10 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // No AUnitBase or ABuildArea access here.
 
             // --- 1. Arrival Check ---
-            const float BuildAreaArrivalDistance = WorkerStats.BuildAreaArrivalDistance;
+            //const float BuildAreaArrivalDistance = WorkerStats.BuildAreaArrivalDistance;
             // Get target info from WorkerStats fragment
             const FVector BuildAreaPosition = WorkerStats.BuildAreaPosition;
-            const float BuildAreaRadius = WorkerStats.BuildAreaRadius;
+            //const float BuildAreaRadius = WorkerStats.BuildAreaRadius;
 
             // Basic validation of data from fragment (more robust checks should be external)
             if (BuildAreaPosition.IsNearlyZero()) // Example basic check
@@ -98,10 +98,11 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             }
 
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), BuildAreaPosition);
-            const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
+            //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
 
+            /*
             if (DistanceToTargetEdge <= BuildAreaArrivalDistance)
             {
                 UE_LOG(LogTemp, Log, TEXT("Entity %d: GoToBuildStateProcessor: Arrived at target location. Queuing signal '%s'."), Entity.Index, *UnitSignals::Build.ToString());
@@ -110,6 +111,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 StopMovement(MoveTarget, World);
                 continue;
             }
+            */
 
             // --- 2. Movement Logic ---
             const float TargetSpeed = Stats.RunSpeed;

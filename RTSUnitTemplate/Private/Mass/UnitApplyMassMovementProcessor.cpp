@@ -37,7 +37,10 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries()
 	EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
 	EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
 	EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
-	
+
+	EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
+	EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
+	EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 	// Tag requirements
 	EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< ADDED BACK
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
@@ -101,7 +104,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             // Clamp final speed
             Velocity.Value = Velocity.Value.GetClampedToMaxSize(MaxSpeed);
 
-
+        	/*
         	// Log inputs and outputs for the selected entity
 				 UE_LOG(LogTemp, Log, TEXT("Entity [%d] ApplyMovement: DesiredVel=%s | AvoidForce=%s | AccelInput=%s | VelocityDelta=%s | FinalVel=%s"),
 					 Context.GetEntity(EntityIndex).Index,
@@ -117,7 +120,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 					 UE_LOG(LogTemp, Warning, TEXT("Entity [%d] ApplyMovement: SIGNIFICANT AvoidanceForce Detected: %s"),
 						 Context.GetEntity(EntityIndex).Index, *AvoidanceForce.ToString());
 				 }
-        	
+        	*/
             // --- Apply final velocity to position ---
             FVector CurrentLocation = CurrentTransform.GetLocation();
             FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
