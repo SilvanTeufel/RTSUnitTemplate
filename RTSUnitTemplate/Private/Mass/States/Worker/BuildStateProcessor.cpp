@@ -34,6 +34,12 @@ void UBuildStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UBuildStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaSeconds = Context.GetDeltaTimeSeconds();
@@ -64,7 +70,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (WorkerStats.BuildingAvailable) // Check if Building is allready set
             {
                 UE_LOG(LogTemp, Warning, TEXT("Entity %d: BuildStateProcessor: Invalid BuildingClass. Queuing GoToResourceExtraction signal."), Entity.Index);
-                PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction); // Use appropriate fallback signal FName
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                 // Signal handler should remove the Build tag.
                 continue; // Skip this entity
             }
@@ -74,12 +80,13 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Signal Start Build Action (once near beginning) ---
             // Use a small threshold to signal once after entering the state
+            /*
             constexpr float StartActionThreshold = 0.05f;
             if (PreviousStateTimer < StartActionThreshold && AIState.StateTimer >= StartActionThreshold)
             {
                  UE_LOG(LogTemp, Log, TEXT("Entity %d: BuildStateProcessor: Queuing signal '%s'."), Entity.Index, *UnitSignals::StartBuildAction.ToString());
                  PendingSignals.Emplace(Entity, UnitSignals::StartBuildAction); // Signal for animation/effects
-            }
+            }*/
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- Completion Check ---
@@ -89,7 +96,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 Entity.Index, *UnitSignals::SpawnBuildingRequest.ToString(), *UnitSignals::GoToResourceExtraction.ToString());
                 
                 PendingSignals.Emplace(Entity, UnitSignals::SpawnBuildingRequest);
-                PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction);
+                //PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction);
                 continue; // Skip to next entity in chunk
             }
 
@@ -99,7 +106,6 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
         if (SignalSubsystem)
         {
             TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;

@@ -37,6 +37,12 @@ void UGoToBaseStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UGoToBaseStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaSeconds = Context.GetDeltaTimeSeconds();
@@ -78,13 +84,13 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
             // --- Pre-checks (Fragment Data Validation) ---
             // Get target info from WorkerStats fragment
-            const FVector TargetPosition = WorkerStats.BasePosition;
+            //const FVector TargetPosition = WorkerStats.BasePosition;
             //const float TargetRadius = WorkerStats.BaseRadius;
-            UE_LOG(LogTemp, Warning, TEXT("TargetPosition: %s"), *TargetPosition.ToString());
+            UE_LOG(LogTemp, Warning, TEXT("WorkerStats.BasePosition: %s"), *WorkerStats.BasePosition.ToString());
             // Basic validation: Ensure target position was set (more robust checks assumed external)
-            if (TargetPosition.IsNearlyZero())
+            if (!WorkerStats.BaseAvailable)
             {
-                 UE_LOG(LogTemp, Warning, TEXT("Entity %d: GoToBaseStateProcessor: Invalid BasePosition in WorkerStats. Queuing Idle signal."), Entity.Index);
+                 UE_LOG(LogTemp, Warning, TEXT("NO BASE GO TO IDLE!!!!!!"));
                  PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate fallback signal FName
                  StopMovement(MoveTarget, World);
                  continue;
@@ -92,27 +98,28 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
             // --- 1. Arrival Check ---
             //const float BaseArrivalDistance = WorkerStats.BaseArrivalDistance; // Get from Worker stats
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), TargetPosition);
+            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
             //const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
 
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
-
-            /*
-            if (DistanceToTargetEdge <= BaseArrivalDistance)
+            //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
+            PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
+   
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
             {
+                AIState.StateTimer = 0.f;
                 UE_LOG(LogTemp, Log, TEXT("Entity %d: GoToBaseStateProcessor: Arrived at Base location. Queuing signal '%s'."), Entity.Index, *UnitSignals::ReachedBase.ToString());
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
                 StopMovement(MoveTarget, World);
                 continue;
             }
-            */
+            
 
             // --- 2. Movement Logic ---
             const float TargetSpeed = CombatStats.RunSpeed; // Get speed from Combat stats
             UE_LOG(LogTemp, Warning, TEXT("TargetSpeed: %f"), TargetSpeed);
             // Use the externally provided helper function
-            UpdateMoveTarget(MoveTarget, TargetPosition, TargetSpeed, World);
+            UpdateMoveTarget(MoveTarget,  WorkerStats.BasePosition, TargetSpeed, World);
 
         } // End loop through entities
     }); // End ForEachEntityChunk
@@ -120,7 +127,6 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
         if (SignalSubsystem)
         {
             TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;

@@ -40,6 +40,12 @@ void UGoToBuildStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UGoToBuildStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaSeconds = Context.GetDeltaTimeSeconds();
@@ -50,7 +56,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         UE_LOG(LogTemp, Error, TEXT("UGoToBuildStateProcessor: Cannot execute without a valid UWorld."));
         return;
     }
-
+    
     // Use the engine/Mass provided FMassSignalPayload struct
     TArray<FMassSignalPayload> PendingSignals;
 
@@ -88,11 +94,10 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             //const float BuildAreaRadius = WorkerStats.BuildAreaRadius;
 
             // Basic validation of data from fragment (more robust checks should be external)
-            if (BuildAreaPosition.IsNearlyZero()) // Example basic check
+            if (WorkerStats.BuildingAvailable) // Example basic check
             {
-                 UE_LOG(LogTemp, Warning, TEXT("Entity %d: GoToBuildStateProcessor: Invalid BuildAreaPosition in WorkerStats. Queuing Idle signal."), Entity.Index);
-                 // Use FMassSignalPayload constructor
-                 PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate fallback signal FName
+                UE_LOG(LogTemp, Warning, TEXT("There is a Building, go to Placeholder!"));
+                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                  StopMovement(MoveTarget, World);
                  continue;
             }
@@ -124,7 +129,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
     // --- Schedule Game Thread Task to Send Queued Signals (Same as before) ---
     if (!PendingSignals.IsEmpty())
     {
-        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+      
         if (SignalSubsystem)
         {
             TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;

@@ -88,8 +88,11 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     	ReachedBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleReachedBase));
 
-    	StartBuildActionDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartBuildAction)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleStartBuildAction));
+    	GetResourceDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetResource)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleGetResource));
+    	
+    	StartBuildActionDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetClosestBase)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleGetClosestBaseArea));
 
     	SpawnBuildingRequestDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSpawnBuildingRequest));
@@ -205,9 +208,17 @@ void UUnitStateProcessor::BeginDestroy()
 		ReachedBaseDelegateHandle.Reset();
 	}
 
+	if (SignalSubsystem && GetResourceDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetResource)
+		.Remove(GetResourceDelegateHandle);
+            
+		GetResourceDelegateHandle.Reset();
+	}
+	
 	if (SignalSubsystem && StartBuildActionDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartBuildAction)
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetClosestBase)
 		.Remove(StartBuildActionDelegateHandle);
             
 		StartBuildActionDelegateHandle.Reset();
@@ -278,15 +289,32 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		if (UnitBase->GetUnitState() == UnitData::PatrolRandom || UnitBase->GetUnitState() == UnitData::PatrolIdle)
+                    		UE_LOG(LogTemp, Warning, TEXT("SIGNAL IS IDLE!!!"));
+                    		if (UnitBase->GetUnitState() == UnitData::GoToBase)
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
+                    		}
+                    		else if (UnitBase->GetUnitState() == UnitData::GoToResourceExtraction)
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    		}else if (UnitBase->GetUnitState() == UnitData::ResourceExtraction)
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
+                    		}
+                    		else if (UnitBase->GetUnitState() == UnitData::GoToBuild)
+                    		{
+                    			EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
+                    		}
+                    		else if (UnitBase->GetUnitState() == UnitData::PatrolRandom || UnitBase->GetUnitState() == UnitData::PatrolIdle)
                     		{
                     			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                     			EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                     		}else
                     		{
                     			EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+                    			PlaceholderSignal = UnitSignals::Idle;
                     		}
-                    		PlaceholderSignal = UnitSignals::Idle;
+         
                     	}
                         else if (SignalName == UnitSignals::Chase)
                         {
@@ -329,6 +357,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
                         	PlaceholderSignal = UnitSignals::GoToBase;
+                        	UE_LOG(LogTemp, Error, TEXT("!!!!!!PlaceholderSignal to GoToBase!!!"));
                         }else if (SignalName == UnitSignals::GoToBuild)
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
@@ -338,6 +367,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
                         	UE_LOG(LogTemp, Log, TEXT("!!!!!!SignalName!!!!! GO TO RESOURCE EXTRACTION"));
+                        	PlaceholderSignal = UnitSignals::GoToResourceExtraction;
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
@@ -363,7 +393,13 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     		}
                         	
                     		// --- Ende Daten holen & StopMovement ---
-                    		if (UnitBase->GetUnitState() == UnitData::PatrolRandom || UnitBase->GetUnitState() == UnitData::PatrolIdle)
+                    		if (UnitBase->GetUnitState() == UnitData::GoToResourceExtraction ||
+                    			UnitBase->GetUnitState() == UnitData::ResourceExtraction ||
+								UnitBase->GetUnitState() == UnitData::GoToBuild ||
+								UnitBase->GetUnitState() == UnitData::GoToBase)
+                    		{
+                    			
+                    		}else if (UnitBase->GetUnitState() == UnitData::PatrolRandom || UnitBase->GetUnitState() == UnitData::PatrolIdle)
                     		{
                     			ForceSetPatrolRandomTarget(Entity);
                     			UnitBase->SetUnitState(UnitData::PatrolRandom);
@@ -627,6 +663,9 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
             {
                 continue;
             }
+        	
+        	UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState: %s"), *SignalName.ToString());
+    					
         	SwitchState(SignalName, Entity, EntityManager);
 
         	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
@@ -748,8 +787,19 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
             	{
+            		WorkerStats->BaseAvailable = StrongUnitActor->Base? true: false;
             		if (StrongUnitActor->Base)
-            		WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
+            		{
+            			WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
+            			// 2) get bounding box extents
+						FVector Origin, BoxExtent;
+						//    ‘true’ means include attached children (e.g. mesh, collision components, etc.)
+						StrongUnitActor->Base->GetActorBounds(/*bOnlyCollidingComponents=*/ true, Origin, BoxExtent);
+
+						// 3) convert extents to a radius
+						//    BoxExtent is half the box-size in each axis; using its length gives a sphere that fully contains the box.
+						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+10.f;
+            		}
             		//WorkerStats->BaseRadius // Get Radius from StrongUnitActor->Base
             		//WorkerStats->BaseArrivalDistance = 50.f;
             		//WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
@@ -759,6 +809,12 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
 						//WorkerStats->BuildAreaRadius = // Get Radius from StrongUnitActor->BuildArea
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
+            		}
+
+            		WorkerStats->ResourceAvailable = StrongUnitActor->ResourcePlace? true : false;
+            		if (StrongUnitActor->ResourcePlace)
+            		{
+            			WorkerStats->ResourcePosition = StrongUnitActor->ResourcePlace->GetActorLocation();
             		}
             		//WorkerStats->ResourceArrivalDistance = 50.f;
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
@@ -1322,8 +1378,9 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
     }); // End AsyncTask Lambda
 }
 
-void UUnitStateProcessor::HandleResourceExtractionArea(FName SignalName, TArray<FMassEntityHandle>& Entities)
+void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
+	UE_LOG(LogTemp, Log, TEXT("HandleGetResource!!!!"));
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
 	{
@@ -1342,7 +1399,7 @@ void UUnitStateProcessor::HandleResourceExtractionArea(FName SignalName, TArray<
 
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
 		{
 			// Check entity validity *on the game thread*
 			if (!EntityManager.IsEntityValid(Entity)) 
@@ -1361,7 +1418,11 @@ void UUnitStateProcessor::HandleResourceExtractionArea(FName SignalName, TArray<
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase && IsValid(UnitBase->ResourcePlace))
 					{
-						UnitBase->ResourcePlace->HandleResourceExtractionArea(UnitBase);
+						SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						UnitBase->UnitControlTimer = 0;
+						UnitBase->SetUEPathfinding = true;
+						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
+						UE_LOG(LogTemp, Log, TEXT("HandleGetResource FINISHED!!!!"));
 					}
 				}
 			}
@@ -1371,6 +1432,7 @@ void UUnitStateProcessor::HandleResourceExtractionArea(FName SignalName, TArray<
 
 void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
+	UE_LOG(LogTemp, Warning, TEXT("HandleReachedBase!"));
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
 	{
@@ -1406,9 +1468,22 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase && IsValid(UnitBase->ResourcePlace))
+					if (UnitBase && UnitBase->IsWorker && IsValid(UnitBase->ResourcePlace))
 					{
-						UnitBase->ResourcePlace->HandleResourceExtractionArea(UnitBase);
+						if (!ResourceGameMode)
+							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+						bool CanAffordConstruction = false;
+
+						if(UnitBase->BuildArea && UnitBase->BuildArea->IsPaid)
+							CanAffordConstruction = true;
+						else	
+							CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+						
+						if (ResourceGameMode)
+							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
+
+						UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!HandeledBaseArea!!!"));
 					}
 				}
 			}
@@ -1416,7 +1491,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 	}); 
 }
 
-void UUnitStateProcessor::HandleStartBuildAction(FName SignalName, TArray<FMassEntityHandle>& Entities)
+void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
@@ -1455,7 +1530,10 @@ void UUnitStateProcessor::HandleStartBuildAction(FName SignalName, TArray<FMassE
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase )
 					{
-			
+						if (!ResourceGameMode)
+							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+						UnitBase->Base = ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
 					}
 				}
 			}
@@ -1483,7 +1561,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     
     		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
-    		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+    		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
     		{
     			// Check entity validity *on the game thread*
     			if (!EntityManager.IsEntityValid(Entity)) 
@@ -1500,7 +1578,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     				if (IsValid(Actor))
     				{
     					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-    					if (UnitBase )
+    					if (UnitBase && UnitBase->BuildArea)
     					{
     						if(!UnitBase->BuildArea->Building)
     						{
@@ -1550,6 +1628,9 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								}
 							}
     					}
+
+    					UE_LOG(LogTemp, Warning, TEXT("PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
+    					SwitchState(PlaceholderSignal, Entity, EntityManager);
     				}
     			}
     		}
@@ -1703,6 +1784,101 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 }
 
 
+void UUnitStateProcessor::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
+{
+
+
+	if (!WRClass) return;
+	
+	FTransform Transform;
+
+	Transform.SetLocation(Location);
+	Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
+
+		
+	const auto MyWorkResource = Cast<AWorkResource>
+						(UGameplayStatics::BeginDeferredActorSpawnFromClass
+						(this, WRClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+	
+	if (MyWorkResource != nullptr)
+	{
+
+		if (!ActorToLockOn || !ActorToLockOn->ResourcePlace || !ActorToLockOn->ResourcePlace->Mesh)
+		{
+			return;
+		}
+		
+			if(ActorToLockOn->WorkResource) ActorToLockOn->WorkResource->Destroy(true);
+		
+	
+			//MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
+			MyWorkResource->IsAttached = true;
+			MyWorkResource->ResourceType = ResourceType;
+			
+			UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);
+			
+			ActorToLockOn->WorkResource = MyWorkResource;
+
+			
+			ActorToLockOn->ResourcePlace->AvailableResourceAmount = ActorToLockOn->ResourcePlace->AvailableResourceAmount - ActorToLockOn->WorkResource->Amount;
+
+			if (ActorToLockOn->ResourcePlace->AvailableResourceAmount == 0.f)
+			{
+				ActorToLockOn->ResourcePlace->Destroy(true);
+				ActorToLockOn->ResourcePlace = nullptr;
+			}else
+			{
+				// Retrieve the available and maximum resource amounts
+				float Available = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
+				float MaxAvailable = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
+
+				// Default scale if MaxAvailable is zero
+				float NewScale = 0.4f;
+
+				if (!FMath::IsNearlyZero(MaxAvailable))
+				{
+					// Compute the ratio and clamp it between 0.0 and 1.0 for safety
+					float Ratio = FMath::Clamp(Available / MaxAvailable, 0.0f, 1.0f);
+
+					// Linear interpolation: scale will be 0.4 when Ratio is 0 and 1.0 when Ratio is 1
+					NewScale = 0.4f + Ratio * (1.0f - 0.4f);
+				}
+			
+				// Set the mesh's uniform scale using the computed linear scale
+				ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
+			}
+
+	
+			/// Attach Socket with Delay //////////////
+			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, false);
+			FName SocketName = FName("ResourceSocket");
+			
+			auto AttachWorkResource = [MyWorkResource, ActorToLockOn, AttachmentRules, SocketName]()
+			{
+				if (ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
+				{
+					MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), AttachmentRules, SocketName);
+					MyWorkResource->IsAttached = true;
+					// Now attempt to set the actor's relative location after attachment
+					MyWorkResource->SetActorRelativeLocation(MyWorkResource->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
+				}
+			};
+
+			AttachWorkResource();
+		
+	}
+	
+}
+
+void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
+{
+	if (WorkResource != nullptr)
+	{
+		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		WorkResource->Destroy();
+		WorkResource = nullptr;
+	}
+}
 
 void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
@@ -1807,6 +1983,9 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						}
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
+
+						UE_LOG(LogTemp, Warning, TEXT("EndCast PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
+    					
 						SwitchState(PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -1858,10 +2037,12 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
+						UE_LOG(LogTemp, Warning, TEXT("SetToUnitStatePlaceholder PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
+    					
 						SwitchState(PlaceholderSignal, Entity, EntityManager);
 					}
 				}
 			}
 		}
-	}); 
+	});
 }

@@ -35,6 +35,12 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UGoToResourceExtractionStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 
@@ -44,10 +50,9 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     UWorld* World = Context.GetWorld(); // Get World via Context
     if (!World) return;
 
-    UMassSignalSubsystem* LocalSignalSubsystem = Context.GetMutableSubsystem<UMassSignalSubsystem>();
-    if (!LocalSignalSubsystem) return;
+    if (!SignalSubsystem) return;
 
-    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
@@ -75,18 +80,19 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
             // --- 1. Check Target Validity ---
-            if (!AiTargetFrag.bHasValidTarget || !AiTargetFrag.TargetEntity.IsSet())
+            if (!WorkerStatsFrag.ResourceAvailable)
             {
+                UE_LOG(LogTemp, Warning, TEXT("No Resource, go to Placeholder!"));
                 // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate signal
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate signal
                 StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
 
             // --- 2. Distance Check for Arrival ---
-            const float CurrentLocationZ = Transform.GetLocation().Z; // Preserve Z for comparison/movement
-            const FVector TargetLocation = FVector(AiTargetFrag.LastKnownLocation.X, AiTargetFrag.LastKnownLocation.Y, CurrentLocationZ); // Move towards target XY at current Z
-            const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetLocation);
+            //const float CurrentLocationZ = Transform.GetLocation().Z; // Preserve Z for comparison/movement
+            // const FVector TargetLocation = WorkerStatsFrag.ResourcePosition; // Move towards target XY at current Z
+            //const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetLocation);
             //const float ArrivalDistSq = FMath::Square(WorkerStatsFrag.ResourceArrivalDistance);
 
             // --- 3. Handle Arrival ---
@@ -107,7 +113,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
             // --- 4. Update Movement (If Not Arrived) ---
             // Continue moving towards the target resource node location.
-            UpdateMoveTarget(MoveTarget, TargetLocation, CombatStatsFrag.RunSpeed, World);
+            UE_LOG(LogTemp, Warning, TEXT(" WorkerStatsFrag.ResourcePosition! %s"),  *WorkerStatsFrag.ResourcePosition.ToString());
+            UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStatsFrag.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 

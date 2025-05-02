@@ -12,6 +12,7 @@
 #include "Containers/ArrayView.h" // Ensure TConstArrayView/TArrayView is available
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Delegates/Delegate.h" // <-- Explicitly include this header
+#include "GameModes/ResourceGameMode.h"
 #include "UnitStateProcessor.generated.h"
 
 // Forward declarations
@@ -104,6 +105,7 @@ private:
 	FDelegateHandle EndCastDelegateHandle;
 	
 	FDelegateHandle ReachedBaseDelegateHandle;
+	FDelegateHandle GetResourceDelegateHandle;
 	FDelegateHandle StartBuildActionDelegateHandle;
 	FDelegateHandle SpawnBuildingRequestDelegateHandle;
 	
@@ -114,7 +116,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMassEntitySubsystem> EntitySubsystem; // Needed to get fragments
 
-
+	UPROPERTY()
+	AResourceGameMode* ResourceGameMode;
+	
 	UFUNCTION()
 	void UnitMeeleAttack(
 	  FName SignalName,
@@ -146,7 +150,7 @@ private:
 	);
 
 	UFUNCTION()
-	void HandleResourceExtractionArea(
+	void HandleGetResource(
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
@@ -158,7 +162,7 @@ private:
 	);
 
 	UFUNCTION()
-	void HandleStartBuildAction(
+	void HandleGetClosestBaseArea(
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
@@ -173,8 +177,17 @@ private:
 		AExtendedControllerBase* ControllerBase;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
+		AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
 								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint);
+
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn);
+
+		
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void DespawnWorkResource(AWorkResource* WorkResource);
+	
 	UFUNCTION()
 	void SyncCastTime(
 		FName SignalName,

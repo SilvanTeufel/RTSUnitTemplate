@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassSignalSubsystem.h"
 #include "GoToBuildStateProcessor.generated.h"
 
 /**
@@ -17,9 +18,12 @@ class RTSUNITTEMPLATE_API UGoToBuildStateProcessor : public UMassProcessor
 public:
 	UGoToBuildStateProcessor();
 	virtual void ConfigureQueries() override;
+	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 private:
 	FMassEntityQuery EntityQuery;
 	// No configuration properties needed here now.
+	UPROPERTY(Transient)
+	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };

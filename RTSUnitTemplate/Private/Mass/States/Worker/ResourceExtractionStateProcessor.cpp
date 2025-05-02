@@ -43,17 +43,21 @@ void UResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UResourceExtractionStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UResourceExtractionStateProcessor_Execute);
 
     UWorld* World = EntityManager.GetWorld(); // Get World via EntityManager
     if (!World) return;
-
-    UMassSignalSubsystem* LocalSignalSubsystem = Context.GetMutableSubsystem<UMassSignalSubsystem>(); // Get Subsystem via Context
-    if (!LocalSignalSubsystem) return;
-
-    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
+    
+    if (!SignalSubsystem) return;
+    
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager)); // Optional pre-allocation
 
@@ -78,6 +82,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             const FMassAITargetFragment& AiTargetFrag = AiTargetList[i]; // Get the AI Target fragment
             FMassVelocityFragment& Velocity = VelocityList[i];
 
+            /*
             // --- 1. Check if the resource target is still valid (using FMassAITargetFragment) ---
             if (!AiTargetFrag.bHasValidTarget) // Check the flag from the AI Target fragment
             {
@@ -87,7 +92,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                  StateFrag.StateTimer = 0.f; // Reset timer as the task failed/stopped
                  Velocity.Value = FVector::ZeroVector; // Ensure velocity is zeroed if we exit early
                  continue; // Move to next entity
-            }
+            }*/
 
             // --- 2. Stop Movement ---
             // Ensure the worker isn't moving while extracting
@@ -96,18 +101,22 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             // --- 3. Increment Extraction Timer ---
             StateFrag.StateTimer += DeltaTime;
 
+            PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- 4. Check if Extraction Time Elapsed ---
+            UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer %f."), StateFrag.StateTimer);
+            UE_LOG(LogTemp, Log, TEXT("WorkerStatsFrag.ResourceExtractionTime %f."), WorkerStatsFrag.ResourceExtractionTime);
             if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime)
             {
+                StateFrag.StateTimer = 0.f;
                 // Extraction complete!
                 // UE_LOG(LogTemp, Log, TEXT("Entity %d: Resource extraction complete. Queuing Signal %s."), Entity.Index, *UnitSignals::GoToBase.ToString());
 
                 // Queue signal to transition to the next state (e.g., returning to base)
                 // The handler for this signal should manage spawning the carried resource.
-                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use your actual signal name
+                PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
 
                 // Reset the timer. The new state's processor might use it differently.
-                StateFrag.StateTimer = 0.f;
+                //StateFrag.StateTimer = 0.f;
 
                 // NOTE: Spawning the resource is NOT done here. It's deferred to the
                 // signal handler or the processor for the 'GoToBase' state.
@@ -124,19 +133,23 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        if (SignalSubsystem)
         {
-            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
             {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
                 {
-                    if (!Payload.SignalName.IsNone())
+                    for (const FMassSignalPayload& Payload : SignalsToSend)
                     {
-                        // UE_LOG(LogTemp, Verbose, TEXT("Signaling Entity %d:%d with %s from ResourceExtractionProcessor"), Payload.TargetEntity.Index, Payload.TargetEntity.SerialNumber, *Payload.SignalName.ToString());
-                        StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        if (!Payload.SignalName.IsNone())
+                        {
+                            // UE_LOG(LogTemp, Verbose, TEXT("Signaling Entity %d:%d with %s from ResourceExtractionProcessor"), Payload.TargetEntity.Index, Payload.TargetEntity.SerialNumber, *Payload.SignalName.ToString());
+                            StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }

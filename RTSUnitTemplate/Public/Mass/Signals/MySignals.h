@@ -49,8 +49,9 @@ namespace UnitSignals
 	const FName Build(TEXT("Build"));
 	const FName GoToResourceExtraction(TEXT("GoToResourceExtraction"));
 	const FName ResourceExtraction(TEXT("ResourceExtraction"));
+	const FName GetResource(TEXT("GetResource"));
 	const FName ReachedBase(TEXT("ReachedBase"));
-	const FName StartBuildAction(TEXT("StartBuildAction"));
+	const FName GetClosestBase(TEXT("StartBuildAction"));
 	const FName SpawnBuildingRequest(TEXT("SpawnBuildingRequest"));
 }
 
@@ -134,7 +135,13 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
         if (Composition.Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
         if (Composition.Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
 
-        // --- Add checks for any other custom tags you use ---
+    	if (Composition.Tags.Contains<FMassStateGoToBaseTag>())         { PresentTags += TEXT(" GoToBase"); bFoundTags = true; }
+    	if (Composition.Tags.Contains<FMassStateGoToBuildTag>()){ PresentTags += TEXT(" GoToBuild"); bFoundTags = true; }
+    	if (Composition.Tags.Contains<FMassStateGoToResourceExtractionTag>())         { PresentTags += TEXT(" GoToResourceExtraction"); bFoundTags = true; }
+    	if (Composition.Tags.Contains<FMassStateBuildTag>()){ PresentTags += TEXT(" Build"); bFoundTags = true; }
+    	if (Composition.Tags.Contains<FMassStateResourceExtractionTag>()){ PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
+
+    	// --- Add checks for any other custom tags you use ---
         // if (Composition.Tags.Contains<FMyCustomTag>()) { PresentTags += TEXT(" MyCustom"); bFoundTags = true; }
 
 

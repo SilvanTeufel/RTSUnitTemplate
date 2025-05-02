@@ -78,14 +78,26 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BasePosition = FVector::ZeroVector; // Populated by external logic
 
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	bool BaseAvailable = false;
+
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	float BaseArrivalDistance = 300.f;
 	//UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	//float BaseRadius = 50.0f; // Default? Populated by external logic
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool BuildingAvailable = false;
-
+	
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	float BuildTime = 5.f;
+
+	
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	FVector ResourcePosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	bool ResourceAvailable = false;
 };
 
 USTRUCT()

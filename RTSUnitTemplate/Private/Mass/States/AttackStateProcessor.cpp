@@ -55,9 +55,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         // Log error or attempt reinitialization if appropriate
         return;
     }
-    // Make a weak pointer copy for safe capture in the async task
-    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-
 
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
@@ -139,26 +136,30 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        // Capture the weak subsystem pointer and move the pending signals list
-        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        if (SignalSubsystem)
         {
-            // Check if the subsystem is still valid on the Game Thread
-            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            // Capture the weak subsystem pointer and move the pending signals list
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
             {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
+                // Check if the subsystem is still valid on the Game Thread
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
                 {
-                    // Check Payload validity if needed (e.g., if SignalStruct could be null)
-                    if (!Payload.SignalName.IsNone()) // Or check based on your signal type
+                    for (const FMassSignalPayload& Payload : SignalsToSend)
                     {
-                       // Send signal safely from the Game Thread
-                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                       // Or use the appropriate SignalEntity overload based on your signal type
-                       // StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                       // StrongSignalSubsystem->SignalEntity(Payload.SignalID, Payload.TargetEntity);
+                        // Check Payload validity if needed (e.g., if SignalStruct could be null)
+                        if (!Payload.SignalName.IsNone()) // Or check based on your signal type
+                        {
+                           // Send signal safely from the Game Thread
+                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                           // Or use the appropriate SignalEntity overload based on your signal type
+                           // StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                           // StrongSignalSubsystem->SignalEntity(Payload.SignalID, Payload.TargetEntity);
+                        }
                     }
                 }
-            }
-            // else: Subsystem was destroyed before the task could run, signals are lost (usually acceptable)
-        });
+                // else: Subsystem was destroyed before the task could run, signals are lost (usually acceptable)
+            });
+        }
     }
 }

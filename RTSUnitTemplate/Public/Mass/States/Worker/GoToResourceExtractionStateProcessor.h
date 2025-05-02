@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"         // Required for FMassEntityQuery
+#include "MassSignalSubsystem.h"
 #include "GoToResourceExtractionStateProcessor.generated.h"
 
 // Forward declaration
@@ -24,11 +25,12 @@ public:
 
 protected:
 	virtual void ConfigureQueries() override;
+	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 private:
 	FMassEntityQuery EntityQuery;
 
-	// Helper function pointer if needed, or include the header where UpdateMoveTarget/StopMovement are defined
-	// (Assuming they are globally accessible or part of a utility class)
+	UPROPERTY(Transient)
+	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };
