@@ -85,45 +85,34 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
             // Increment state timer
             AIState.StateTimer += DeltaSeconds;
-
-            // --- Pre-checks REMOVED (Validation assumed external) ---
-            // No AUnitBase or ABuildArea access here.
-
-            // --- 1. Arrival Check ---
-            //const float BuildAreaArrivalDistance = WorkerStats.BuildAreaArrivalDistance;
-            // Get target info from WorkerStats fragment
-            const FVector BuildAreaPosition = WorkerStats.BuildAreaPosition;
-            //const float BuildAreaRadius = WorkerStats.BuildAreaRadius;
-
+            
+    
             // Basic validation of data from fragment (more robust checks should be external)
             if (WorkerStats.BuildingAvailable) // Example basic check
             {
-                UE_LOG(LogTemp, Warning, TEXT("There is a Building, go to Placeholder!"));
                  PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                  StopMovement(MoveTarget, World);
                  continue;
             }
 
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), BuildAreaPosition);
+            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
             //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
-
-            /*
-            if (DistanceToTargetEdge <= BuildAreaArrivalDistance)
+        
+            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
             {
-                UE_LOG(LogTemp, Log, TEXT("Entity %d: GoToBuildStateProcessor: Arrived at target location. Queuing signal '%s'."), Entity.Index, *UnitSignals::Build.ToString());
-                // Use FMassSignalPayload constructor
-                PendingSignals.Emplace(Entity, UnitSignals::Build);
+                AIState.StateTimer = 0.f;
+                // Queue signal for reaching the base
+                PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
                 StopMovement(MoveTarget, World);
                 continue;
             }
-            */
-
+            
             // --- 2. Movement Logic ---
             const float TargetSpeed = Stats.RunSpeed;
             // Use the externally provided helper function
-            UpdateMoveTarget(MoveTarget, BuildAreaPosition, TargetSpeed, World);
+            UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, TargetSpeed, World);
 
         } // End loop through entities
     }); // End ForEachEntityChunk

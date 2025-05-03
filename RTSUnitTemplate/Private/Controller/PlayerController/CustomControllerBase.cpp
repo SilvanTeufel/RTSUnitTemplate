@@ -135,7 +135,7 @@ void ACustomControllerBase::AgentInit_Implementation()
 }
 
 
-void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
+void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
 {
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -197,11 +197,24 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget(UObject* WorldContextObject
 	{
 		//UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
 		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(InEntity);
-		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
-		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
-		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(InEntity);
 	}
 
+	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(InEntity); 
+	EntityManager.Defer().RemoveTag<FMassStateRunTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(InEntity);
+
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(InEntity);
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
 	/*
@@ -279,21 +292,24 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 	
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
-				SelectedUnits[i]->SetUnitState(UnitData::Run);
+				//SelectedUnits[i]->SetUnitState(UnitData::Run);
+				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
-				SelectedUnits[i]->SetUnitState(UnitData::Run);
+				//SelectedUnits[i]->SetUnitState(UnitData::Run);
+				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
 			}
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
-				SelectedUnits[i]->SetUnitState(UnitData::Run);
+				//SelectedUnits[i]->SetUnitState(UnitData::Run);
+				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
 			}
 		}
@@ -431,6 +447,14 @@ void ACustomControllerBase::LeftClickPressedMass()
 	
 }
 
+void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerformanceUnit* Unit, bool bVisible)
+{
+	if (IsValid(Unit))
+	{
+		Unit->SetClientVisibility(bVisible);
+	}
+}
+
 void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location)
 {
 	if (Unit && Unit->UnitState != UnitData::Dead) {
@@ -491,7 +515,8 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	SetUnitState_Replication(Unit,1);
 	CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, Location, Speed, 40.f);
 
-	Unit->SetUnitState(UnitData::Run);
+	//Unit->SetUnitState(UnitData::Run);
+	//SetUnitState_Multi(Unit, 1);
 	//MoveToLocationUEPathFinding(Unit, Location);
 }
 

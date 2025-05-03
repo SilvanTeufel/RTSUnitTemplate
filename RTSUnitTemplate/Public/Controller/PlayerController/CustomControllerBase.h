@@ -45,7 +45,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void AgentInit();
 
-	
+	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed = 300.0f, float AcceptanceRadius = 50.0f);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -63,4 +63,8 @@ public:
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location);
+
+
+	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
+	void Server_ReportUnitVisibility(APerformanceUnit* Unit, bool bVisible);
 };

@@ -46,6 +46,8 @@ void APerformanceUnit::Tick(float DeltaTime)
 	
 	CheckHealthBarVisibility();
 	CheckTimerVisibility();
+
+	UpdateClientVisibility();
 	
 }
 
@@ -77,6 +79,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
+	DOREPLIFETIME(APerformanceUnit, bClientIsVisible);
 }
 
 void APerformanceUnit::BeginPlay()
@@ -569,6 +572,48 @@ void APerformanceUnit::CheckTimerVisibility()
 		else
 		{
 			TimerWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+bool APerformanceUnit::IsNetVisible() const
+{
+	// Server’s own visibility logic:
+	const bool ServerVis = ComputeLocalVisibility();
+
+	// OR in the last‐reported client result:
+	return ServerVis || bClientIsVisible;
+}
+void APerformanceUnit::SetClientVisibility(bool bVisible)
+{
+	bClientIsVisible = bVisible;
+}
+
+
+
+bool APerformanceUnit::ComputeLocalVisibility() const
+{
+	return IsOnViewport
+		&& ( !EnableFog
+		   || IsVisibleEnemy
+		   || IsMyTeam );
+}
+
+void APerformanceUnit::UpdateClientVisibility()
+{
+	// UE_LOG(LogTemp, Log, TEXT("!!!!Trying UpdateClientVisibility!!!"));
+	// Only run this on the *owning* client, never on the server:
+
+
+	if (!HasAuthority()) // only on client
+	{
+		const bool bNew = ComputeLocalVisibility();
+		if (bNew != bClientIsVisible)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController()))
+			{
+				PC->Server_ReportUnitVisibility(this, bNew);
+			}
 		}
 	}
 }

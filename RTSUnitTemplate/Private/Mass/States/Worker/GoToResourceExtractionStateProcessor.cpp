@@ -30,6 +30,7 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);    // Read RunSpeed
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);   // Read ResourceArrivalDistance
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);    // Write new move target / stop movement
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // Might read velocity to see if stuck? Optional.
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -43,20 +44,20 @@ void UGoToResourceExtractionStateProcessor::Initialize(UObject& Owner)
 
 void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-
-    UE_LOG(LogTemp, Warning, TEXT("!!!!UGoToResourceExtractionStateProcessor!!!"));
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
 
     UWorld* World = Context.GetWorld(); // Get World via Context
     if (!World) return;
 
     if (!SignalSubsystem) return;
+
+    const float DeltaSeconds = Context.GetDeltaTimeSeconds();
     
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture World for helper functions
-        [&PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [DeltaSeconds, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -66,53 +67,40 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
-        UE_LOG(LogTemp, Warning, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
-            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FMassAITargetFragment& AiTargetFrag = TargetList[i];
+            FMassAIStateFragment& AIState = AIStateList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassCombatStatsFragment& CombatStatsFrag = CombatStatsList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
+            AIState.StateTimer += DeltaSeconds;
             // --- 1. Check Target Validity ---
             if (!WorkerStatsFrag.ResourceAvailable)
             {
-                UE_LOG(LogTemp, Warning, TEXT("No Resource, go to Placeholder!"));
                 // Target is lost or invalid. Signal to go idle or find a new task.
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate signal
                 StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
 
-            // --- 2. Distance Check for Arrival ---
-            //const float CurrentLocationZ = Transform.GetLocation().Z; // Preserve Z for comparison/movement
-            // const FVector TargetLocation = WorkerStatsFrag.ResourcePosition; // Move towards target XY at current Z
-            //const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetLocation);
-            //const float ArrivalDistSq = FMath::Square(WorkerStatsFrag.ResourceArrivalDistance);
-
-            // --- 3. Handle Arrival ---
-            /*
-            if (DistSq <= ArrivalDistSq)
+            const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
+            
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
             {
-                // Arrived at the resource node area.
-                // UE_LOG(LogTemp, Log, TEXT("Entity %d: Arrived at resource extraction area. Queuing Signal %s."), Entity.Index, *UnitSignals::HandleResourceExtractionArea.ToString());
-
-                // Queue the signal for the next phase (actual extraction)
-                PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction);
-
-                // Stop movement now that we've arrived.
+                AIState.StateTimer = 0.f;
+                // Queue signal for reaching the base
+                PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
                 StopMovement(MoveTarget, World);
-
-                continue; // Move to next entity
-            }*/
-
+                continue;
+            }
             // --- 4. Update Movement (If Not Arrived) ---
             // Continue moving towards the target resource node location.
-            UE_LOG(LogTemp, Warning, TEXT(" WorkerStatsFrag.ResourcePosition! %s"),  *WorkerStatsFrag.ResourcePosition.ToString());
             UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStatsFrag.RunSpeed, World);
         }
     }); // End ForEachEntityChunk

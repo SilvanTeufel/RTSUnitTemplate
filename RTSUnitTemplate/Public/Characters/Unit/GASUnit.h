@@ -152,10 +152,9 @@ protected:
 	// Function called when an ability is activated
 	void OnAbilityActivated(UGameplayAbility* ActivatedAbility);
 
-	// Setup delegates for ability system
-	void SetupAbilitySystemDelegates();
-
 public:
+
+	void SetupAbilitySystemDelegates();
 	// Reference to the activated ability instance
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	UGameplayAbilityBase* ActivatedAbilityInstance;

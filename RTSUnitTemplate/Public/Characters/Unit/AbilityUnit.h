@@ -33,6 +33,9 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 
 	virtual void LevelUp_Implementation() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	bool IsWorker = false;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 200.f);

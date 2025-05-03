@@ -103,8 +103,6 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- 4. Check if Extraction Time Elapsed ---
-            UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer %f."), StateFrag.StateTimer);
-            UE_LOG(LogTemp, Log, TEXT("WorkerStatsFrag.ResourceExtractionTime %f."), WorkerStatsFrag.ResourceExtractionTime);
             if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime)
             {
                 StateFrag.StateTimer = 0.f;

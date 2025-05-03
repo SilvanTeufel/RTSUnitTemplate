@@ -215,4 +215,22 @@ public:
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	APlayerController* OwningPlayerController;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsNetVisible() const;
+
+	// Server RPC for the client to report its own visibility
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetClientVisibility(bool bVisible);
+
+protected:
+	
+	UPROPERTY(VisibleAnywhere, Replicated, Category = RTSUnitTemplate)
+	bool bClientIsVisible = false;
+
+	// Renamed to reflect that it *updates* (and/or computes) the client‐side flag:
+	void UpdateClientVisibility();
+
+	// Pure compute helper if you ever need the raw bool:
+	bool ComputeLocalVisibility() const;
 };

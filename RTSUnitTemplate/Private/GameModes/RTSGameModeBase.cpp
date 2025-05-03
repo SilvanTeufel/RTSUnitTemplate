@@ -817,13 +817,14 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				
 				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
-		
+				/*
 				APlayerController* MyPC = GetWorld()->GetFirstPlayerController();
 				if (MyPC)
 				{
 					UnitBase->SpawnFogOfWarManagerTeamIndependent(MyPC);
 				}
-
+				*/
+				
 				
 				if(SpawnParameter.Attributes)
 				{

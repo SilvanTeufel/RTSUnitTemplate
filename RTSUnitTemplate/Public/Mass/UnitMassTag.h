@@ -68,6 +68,8 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BuildAreaPosition = FVector::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	float BuildAreaArrivalDistance = 300.f;
 	//UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	//float BuildAreaRadius = 0.0f;
 	
@@ -98,6 +100,9 @@ struct FMassWorkerStatsFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool ResourceAvailable = false;
+
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	float ResourceArrivalDistance = 300.f;
 };
 
 USTRUCT()

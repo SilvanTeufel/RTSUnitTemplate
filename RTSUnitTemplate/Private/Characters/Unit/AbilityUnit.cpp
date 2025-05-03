@@ -269,7 +269,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	} 
 
 	  // THIS IS NOT SAVE FOR MASS
-	if (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build)
+	if (IsWorker && (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build))
 	{
 		// Ensure CapsuleComponent is valid
 		if (GetCapsuleComponent())
@@ -281,7 +281,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("SetUnitState: GetCapsuleComponent() returned nullptr when setting to Overlap."));
 		}
-	}else
+	}else if (IsWorker)
 	{	
 		if (!GetWorld())
 		{

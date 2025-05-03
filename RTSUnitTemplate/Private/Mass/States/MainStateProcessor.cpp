@@ -76,7 +76,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
-            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             // --- Queue Sync Signal ---
             // Always queue this signal if the processor runs for the entity
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);

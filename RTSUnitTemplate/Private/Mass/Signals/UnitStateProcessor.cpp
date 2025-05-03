@@ -289,7 +289,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		UE_LOG(LogTemp, Warning, TEXT("SIGNAL IS IDLE!!!"));
                     		if (UnitBase->GetUnitState() == UnitData::GoToBase)
                     		{
                     			EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
@@ -357,7 +356,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
                         	PlaceholderSignal = UnitSignals::GoToBase;
-                        	UE_LOG(LogTemp, Error, TEXT("!!!!!!PlaceholderSignal to GoToBase!!!"));
                         }else if (SignalName == UnitSignals::GoToBuild)
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
@@ -366,7 +364,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
-                        	UE_LOG(LogTemp, Log, TEXT("!!!!!!SignalName!!!!! GO TO RESOURCE EXTRACTION"));
                         	PlaceholderSignal = UnitSignals::GoToResourceExtraction;
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         }else if (SignalName == UnitSignals::ResourceExtraction)
@@ -663,8 +660,6 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
             {
                 continue;
             }
-        	
-        	UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState: %s"), *SignalName.ToString());
     					
         	SwitchState(SignalName, Entity, EntityManager);
 
@@ -791,32 +786,31 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		if (StrongUnitActor->Base)
             		{
             			WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
-            			// 2) get bounding box extents
 						FVector Origin, BoxExtent;
-						//    ‘true’ means include attached children (e.g. mesh, collision components, etc.)
-						StrongUnitActor->Base->GetActorBounds(/*bOnlyCollidingComponents=*/ true, Origin, BoxExtent);
-
-						// 3) convert extents to a radius
-						//    BoxExtent is half the box-size in each axis; using its length gives a sphere that fully contains the box.
+            			
+						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
 						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+10.f;
             		}
-            		//WorkerStats->BaseRadius // Get Radius from StrongUnitActor->Base
-            		//WorkerStats->BaseArrivalDistance = 50.f;
-            		//WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
+
             		if (StrongUnitActor->BuildArea)
             		{
+            			FVector Origin, BoxExtent;
+						StrongUnitActor->BuildArea->GetActorBounds( false, Origin, BoxExtent);
+
+            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+10.f;
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
-						//WorkerStats->BuildAreaRadius = // Get Radius from StrongUnitActor->BuildArea
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
             		}
 
             		WorkerStats->ResourceAvailable = StrongUnitActor->ResourcePlace? true : false;
             		if (StrongUnitActor->ResourcePlace)
             		{
+            			FVector Origin, BoxExtent;
+						StrongUnitActor->ResourcePlace->GetActorBounds(false, Origin, BoxExtent);
+            			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+10.f;
             			WorkerStats->ResourcePosition = StrongUnitActor->ResourcePlace->GetActorLocation();
             		}
-            		//WorkerStats->ResourceArrivalDistance = 50.f;
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             	}
             }
@@ -1380,7 +1374,6 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
 
 void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Log, TEXT("HandleGetResource!!!!"));
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
 	{
@@ -1422,7 +1415,6 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 						UnitBase->UnitControlTimer = 0;
 						UnitBase->SetUEPathfinding = true;
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
-						UE_LOG(LogTemp, Log, TEXT("HandleGetResource FINISHED!!!!"));
 					}
 				}
 			}
@@ -1432,7 +1424,6 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 
 void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Warning, TEXT("HandleReachedBase!"));
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
 	{
@@ -1483,7 +1474,6 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
-						UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!HandeledBaseArea!!!"));
 					}
 				}
 			}
@@ -1629,7 +1619,6 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 							}
     					}
 
-    					UE_LOG(LogTemp, Warning, TEXT("PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
     					SwitchState(PlaceholderSignal, Entity, EntityManager);
     				}
     			}
@@ -1984,8 +1973,6 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
 
-						UE_LOG(LogTemp, Warning, TEXT("EndCast PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
-    					
 						SwitchState(PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2037,8 +2024,6 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						UE_LOG(LogTemp, Warning, TEXT("SetToUnitStatePlaceholder PlaceholderSignal is: %s"), *PlaceholderSignal.ToString());
-    					
 						SwitchState(PlaceholderSignal, Entity, EntityManager);
 					}
 				}

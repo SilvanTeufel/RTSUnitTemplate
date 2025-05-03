@@ -350,6 +350,11 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
     if (UnitOwner)
     {
+    	UnitOwner->AbilitySystemComponent->InitAbilityActorInfo(UnitOwner, UnitOwner);
+    	UnitOwner->InitializeAttributes();
+    	UnitOwner->GiveAbilities();
+    	UnitOwner->SetupAbilitySystemDelegates();
+    	
         UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
     }
     else

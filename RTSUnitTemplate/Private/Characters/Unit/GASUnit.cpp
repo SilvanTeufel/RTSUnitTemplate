@@ -55,6 +55,7 @@ UAbilitySystemComponent* AGASUnit::GetAbilitySystemComponent() const
 
 void AGASUnit::InitializeAttributes()
 {
+	UE_LOG(LogTemp, Log, TEXT("AGASUnit::InitializeAttributes() called on %s"), *GetName());
 	if(AbilitySystemComponent && DefaultAttributeEffect)
 	{
 		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
@@ -106,10 +107,8 @@ void AGASUnit::PossessedBy(AController* NewController)
 
 	// Not sure if both is this
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
-
 	InitializeAttributes();
 	GiveAbilities();
-
 	SetupAbilitySystemDelegates();
 }
 

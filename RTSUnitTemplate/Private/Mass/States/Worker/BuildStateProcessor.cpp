@@ -60,7 +60,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         // The query ensures they are present for the system handling the SpawnBuildingRequest signal.
 
         const int32 NumEntities = Context.GetNumEntities();
-            UE_LOG(LogTemp, Warning, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& AIState = AIStateList[i];
@@ -70,7 +70,6 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // Basic validation of essential build parameter. More robust validation assumed external.
             if (WorkerStats.BuildingAvailable) // Check if Building is allready set
             {
-                UE_LOG(LogTemp, Warning, TEXT("Entity %d: BuildStateProcessor: Invalid BuildingClass. Queuing GoToResourceExtraction signal."), Entity.Index);
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                 // Signal handler should remove the Build tag.
                 continue; // Skip this entity
@@ -79,23 +78,11 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const float PreviousStateTimer = AIState.StateTimer;
             AIState.StateTimer += DeltaSeconds;
 
-            // --- Signal Start Build Action (once near beginning) ---
-            // Use a small threshold to signal once after entering the state
-            /*
-            constexpr float StartActionThreshold = 0.05f;
-            if (PreviousStateTimer < StartActionThreshold && AIState.StateTimer >= StartActionThreshold)
-            {
-                 UE_LOG(LogTemp, Log, TEXT("Entity %d: BuildStateProcessor: Queuing signal '%s'."), Entity.Index, *UnitSignals::StartBuildAction.ToString());
-                 PendingSignals.Emplace(Entity, UnitSignals::StartBuildAction); // Signal for animation/effects
-            }*/
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- Completion Check ---
             if (AIState.StateTimer >= WorkerStats.BuildTime)
             {
-                UE_LOG(LogTemp, Log, TEXT("Entity %d: BuildStateProcessor: Build complete. Queuing '%s' and '%s' signals."),
-                Entity.Index, *UnitSignals::SpawnBuildingRequest.ToString(), *UnitSignals::GoToResourceExtraction.ToString());
-                
                 PendingSignals.Emplace(Entity, UnitSignals::SpawnBuildingRequest);
                 //PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction);
                 continue; // Skip to next entity in chunk

@@ -130,12 +130,12 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             if (!IsValid(UnitBase)) continue;
 
             // --- Visibility Check ---
-            bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog || UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
-            if (!UnitIsVisible && AccumulatedTimeB <= 0.5f)
+            //bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog || UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
+            if (!UnitBase->IsNetVisible() && AccumulatedTimeB <= 0.5f)
             {
                 continue; // Skip update calculation for this non-visible, recently updated actor
             }
-            if (UnitIsVisible || AccumulatedTimeB > 0.5f)
+            if (UnitBase->IsNetVisible() || AccumulatedTimeB > 0.5f)
             {
                  bResetVisibilityTimer = true; // Mark that we potentially need to reset the timer
             }

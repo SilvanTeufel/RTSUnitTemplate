@@ -36,7 +36,7 @@ void UDetectionProcessor::Initialize(UObject& Owner)
             // Bind our handler function
             SignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange)
                                       .AddUObject(this, &UDetectionProcessor::HandleUnitPresenceSignal);
-            UE_LOG(LogMass, Log, TEXT("UDetectionProcessor bound to signal '%s'"), *UnitSignals::UnitInDetectionRange.ToString());
+            //UE_LOG(LogMass, Log, TEXT("UDetectionProcessor bound to signal '%s'"), *UnitSignals::UnitInDetectionRange.ToString());
         }
     }
 }
@@ -260,17 +260,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                        SignalSubsystem->SignalEntity(UnitSignals::SetUnitToChase, CurrentEntity);
                        SignalSubsystem->SignalEntity(UnitSignals::Chase, CurrentEntity);
              }
-
-            /*else
-             {
-
-                 UE_LOG(LogTemp, Log, TEXT("Detection TO RUN!!!!!!!"));
-                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                 if (!SignalSubsystem) continue;
-                        
-                 SignalSubsystem->SignalEntity(UnitSignals::Run, CurrentEntity);
-                 
-             }*/
 
         } // End loop through detector entities in chunk
     }); // End ForEachEntityChunk
