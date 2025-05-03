@@ -85,4 +85,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float IsAttackedDuration = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float AvoidanceDistance = 75.f;
+	
 };

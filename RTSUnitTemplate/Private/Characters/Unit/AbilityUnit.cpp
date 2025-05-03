@@ -268,7 +268,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		IsDead();
 	} 
 
-	/*  // THIS IS NOT SAVE FOR MASS
+	  // THIS IS NOT SAVE FOR MASS
 	if (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build)
 	{
 		// Ensure CapsuleComponent is valid
@@ -289,8 +289,9 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 			return;
 		}
 
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 		// Define a member variable for the timer handle if needed
-		
+		/*
 		// Create a delegate that safely captures a weak reference to 'this'
 		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([WeakThis = TWeakObjectPtr<AAbilityUnit>(this)]()
 		{
@@ -321,9 +322,9 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 				5.0f,  // Delay in seconds
 				false  // One-shot
 			);
-		}
+		}*/
 		
-	}*/
+	}
 	
 	UnitState = NewUnitState;
 }

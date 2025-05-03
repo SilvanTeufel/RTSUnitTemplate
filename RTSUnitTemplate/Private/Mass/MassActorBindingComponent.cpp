@@ -221,11 +221,11 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	// Core detection radius
 	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
 	// Separation tuning
-	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = 75.f;   // How close they can get before repelling
-	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= 50.f;   // Wall‐avoidance distance
+	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance;  //75.f // How close they can get before repelling
+	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= AvoidanceDistance;   // Wall‐avoidance distance
 	// Predictive avoidance tuning
 	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
-	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = 75.f;   // Look-ahead distance in cm
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
 	// (you can also tweak stiffness if desired)
 	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
 	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
