@@ -56,6 +56,8 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         UE_LOG(LogTemp, Error, TEXT("UGoToBuildStateProcessor: Cannot execute without a valid UWorld."));
         return;
     }
+
+    if (!SignalSubsystem) return;
     
     // Use the engine/Mass provided FMassSignalPayload struct
     TArray<FMassSignalPayload> PendingSignals;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassCommonTypes.h"
+#include "MassSignalSubsystem.h"
 #include "IdleStateProcessor.generated.h"
 
 // Forward declare Fragments and Tags used
@@ -27,6 +28,7 @@ public:
 
 protected:
 	virtual void ConfigureQueries() override;
+	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 private:
@@ -39,4 +41,7 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	float SetUnitsBackToPatrolTime = 3.f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };

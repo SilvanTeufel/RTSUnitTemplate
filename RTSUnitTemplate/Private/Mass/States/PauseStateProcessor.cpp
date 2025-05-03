@@ -35,20 +35,20 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UPauseStateProcessor::Initialize(UObject& Owner)
+{
+    Super::Initialize(Owner);
+    SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // Get World and Signal Subsystem once
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager to get World
     if (!World) return;
 
-    UMassSignalSubsystem* LocalSignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-    if (!LocalSignalSubsystem)
-    {
-        //UE_LOG(LogTemp, Error, TEXT("UPauseStateProcessor: Could not get SignalSubsystem!"));
-        return;
-    }
+    if (!SignalSubsystem) return;
     // Make a weak pointer copy for safe capture in the async task
-    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = LocalSignalSubsystem;
 
 
     // --- List for Game Thread Signal Updates ---
@@ -133,22 +133,26 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        // Capture the weak subsystem pointer and move the pending signals list
-        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        if (SignalSubsystem)
         {
-            // Check if the subsystem is still valid on the Game Thread
-            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            // Capture the weak subsystem pointer and move the pending signals list
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
             {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
+                // Check if the subsystem is still valid on the Game Thread
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
                 {
-                    // Check if the FName is valid before sending
-                    if (!Payload.SignalName.IsNone())
+                    for (const FMassSignalPayload& Payload : SignalsToSend)
                     {
-                       // Send signal safely from the Game Thread using FName
-                       StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        // Check if the FName is valid before sending
+                        if (!Payload.SignalName.IsNone())
+                        {
+                           // Send signal safely from the Game Thread using FName
+                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }

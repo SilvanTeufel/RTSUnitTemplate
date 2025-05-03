@@ -54,6 +54,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         return;
     }
 
+    if (!SignalSubsystem) return;
     // Use FMassSignalPayload
     TArray<FMassSignalPayload> PendingSignals;
 

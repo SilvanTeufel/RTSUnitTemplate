@@ -51,8 +51,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     if (!World) return;
 
     if (!SignalSubsystem) return;
-
-    TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+    
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
@@ -122,18 +121,22 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
     {
-        AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+        if (SignalSubsystem)
         {
-            if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
             {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
                 {
-                    if (!Payload.SignalName.IsNone())
+                    for (const FMassSignalPayload& Payload : SignalsToSend)
                     {
-                        StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        if (!Payload.SignalName.IsNone())
+                        {
+                            StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }

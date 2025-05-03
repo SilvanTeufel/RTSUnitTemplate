@@ -50,11 +50,7 @@ void UAttackStateProcessor::ConfigureQueries()
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // Ensure the member SignalSubsystem is valid (initialized in Initialize)
-    if (!SignalSubsystem)
-    {
-        // Log error or attempt reinitialization if appropriate
-        return;
-    }
+    if (!SignalSubsystem) return;
 
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;

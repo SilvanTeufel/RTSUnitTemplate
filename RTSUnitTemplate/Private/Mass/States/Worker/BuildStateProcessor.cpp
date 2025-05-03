@@ -47,6 +47,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     if (!World) { return; } // Early exit if world is invalid
 
+    if (!SignalSubsystem) return;
     // Use FMassSignalPayload (defined by Mass framework)
     TArray<FMassSignalPayload> PendingSignals;
 

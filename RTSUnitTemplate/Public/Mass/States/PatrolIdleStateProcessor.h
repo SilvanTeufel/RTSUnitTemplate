@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassSignalSubsystem.h"
 #include "PatrolIdleStateProcessor.generated.h"
 
 // Forward Decls...
@@ -23,6 +24,7 @@ public:
 	UPatrolIdleStateProcessor();
 protected:
 	virtual void ConfigureQueries() override;
+	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
@@ -32,4 +34,7 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };

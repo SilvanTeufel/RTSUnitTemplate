@@ -29,6 +29,12 @@ void URunStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
+void URunStateProcessor::Initialize(UObject& Owner)
+{
+	Super::Initialize(Owner);
+	SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+}
+
 void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassSignalSubsystem.h"
 #include "CastingStateProcessor.generated.h"
 
 /**
@@ -17,7 +18,11 @@ class RTSUNITTEMPLATE_API UCastingStateProcessor : public UMassProcessor
 	UCastingStateProcessor();
 public:
 	virtual void ConfigureQueries() override;
+	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 private:
 	FMassEntityQuery EntityQuery;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };
