@@ -45,6 +45,12 @@ void UIdleStateProcessor::Initialize(UObject& Owner)
 
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
     // --- Get World and Signal Subsystem once ---
     const UWorld* World = EntityManager.GetWorld(); // Use EntityManager consistently
     if (!World) return;
@@ -58,15 +64,13 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Capture World & EntityManager if needed by inner logic.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -88,7 +92,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
 
             // --- Update Timer (Only if no target found/chasing) ---
-            StateFrag.StateTimer += DeltaTime; // Modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
             // --- Check for Returning to Patrol ---
             bool bHasPatrolRoute = PatrolFrag.CurrentWaypointIndex != INDEX_NONE;

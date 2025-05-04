@@ -42,7 +42,12 @@ void UDeathStateProcessor::Initialize(UObject& Owner)
 
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
     // --- Get World and Signal Subsystem once ---
     UWorld* World = Context.GetWorld(); // Use Context consistently
     if (!World) return;
@@ -56,13 +61,12 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [&PendingSignals](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Mutable for stopping
         const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -75,7 +79,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Update Timer ---
             const float PrevTimer = StateFrag.StateTimer; // Store previous timer value
-            StateFrag.StateTimer += DeltaTime; // Modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
  
             if (PrevTimer <= KINDA_SMALL_NUMBER) // Or PrevTimer == 0.0f if guaranteed
             {

@@ -149,7 +149,32 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             const FQuat CurrentActorRotation = Actor->GetActorQuat();       // Potential thread-safety issue
 
             FVector FinalLocation = MassTransform.GetLocation();
-            FinalLocation.Z = CurrentActorLocation.Z; // Keep original Z
+
+            // Z LOCATION ADAPTATION
+            float CapsuleHalfHeight = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+            
+            FCollisionQueryParams Params;
+            Params.AddIgnoredActor(UnitBase); // always ignore self
+
+            FCollisionObjectQueryParams ObjectParams;
+            ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+
+            // 2) In your sync processor, trace:
+            FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, CurrentActorLocation.Z + 500.0f);
+            FVector TraceEnd   = TraceStart - FVector(0,0,1000.0f);
+
+            FHitResult Hit;
+            if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+            {
+                FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+            }
+            else
+            {
+                FinalLocation.Z = CurrentActorLocation.Z;
+            }
+
+            
+            //FinalLocation.Z = CurrentActorLocation.Z; // Keep original Z
 
             FQuat TargetRotation = CurrentActorRotation;
             const FVector MoveDirection = FinalLocation - CurrentActorLocation;

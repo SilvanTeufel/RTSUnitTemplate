@@ -50,6 +50,12 @@ void UChaseStateProcessor::Initialize(UObject& Owner)
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
     // Get World and Signal Subsystem once
     UWorld* World = Context.GetWorld(); // Use Context to get World
     if (!World) return;
@@ -63,7 +69,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Capture World for helper functions.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [&PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates

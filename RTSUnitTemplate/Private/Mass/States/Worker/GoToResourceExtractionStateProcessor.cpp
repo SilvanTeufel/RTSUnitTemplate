@@ -46,18 +46,25 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
 
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UWorld* World = Context.GetWorld(); // Get World via Context
     if (!World) return;
 
     if (!SignalSubsystem) return;
 
-    const float DeltaSeconds = Context.GetDeltaTimeSeconds();
+
     
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture World for helper functions
-        [DeltaSeconds, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -79,19 +86,19 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
-            AIState.StateTimer += DeltaSeconds;
+            AIState.StateTimer += ExecutionInterval;
             // --- 1. Check Target Validity ---
             if (!WorkerStatsFrag.ResourceAvailable)
             {
                 // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate signal
+                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
                 StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
 
             const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && AIState.StateTimer >= ExecutionInterval*3.f)
             {
                 AIState.StateTimer = 0.f;
                 // Queue signal for reaching the base

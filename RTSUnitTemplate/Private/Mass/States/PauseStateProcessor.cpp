@@ -43,6 +43,12 @@ void UPauseStateProcessor::Initialize(UObject& Owner)
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
     // Get World and Signal Subsystem once
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager to get World
     if (!World) return;
@@ -58,7 +64,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Capture World for UpdateMoveTarget.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [&PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -66,9 +72,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Keep mutable if needed
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for UpdateMoveTarget
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -92,7 +96,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
 
             // --- Pause Timer ---
-            StateFrag.StateTimer += DeltaTime; // State modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // State modification stays here
             if (StateFrag.StateTimer >= Stats.PauseDuration)
             {
                 // --- Pause Over, Decide Next State ---

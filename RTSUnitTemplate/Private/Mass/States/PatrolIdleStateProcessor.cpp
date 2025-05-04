@@ -47,10 +47,9 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
-        return; // Skip execution this frame
+        return; 
     }
-    // Interval reached, reset timer (subtracting is often better than setting to 0)
-    TimeSinceLastRun -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
+    TimeSinceLastRun -= ExecutionInterval;
 
     // --- Get World and Signal Subsystem (only if interval was met) ---
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World
@@ -77,8 +76,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         // const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // Not used in loop?
         // const float CurrentWorldTime = ChunkContext.GetWorld()->GetTimeSeconds(); // Not used in loop?
         // Using ExecutionInterval for timer might be more consistent if Execute might skip frames
-        const float TimerIncrement = ExecutionInterval; // Or Context.GetDeltaTimeSeconds() if preferred
-
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update
@@ -92,7 +89,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
             // --- Stop Movement & Update Timer ---
             Velocity.Value = FVector::ZeroVector; // Modification stays here
-            StateFrag.StateTimer += TimerIncrement; // Modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
             // --- Check for Valid Target ---
             if (TargetFrag.bHasValidTarget)

@@ -34,7 +34,6 @@ void UGoToBuildStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly); // Contains target pos/radius now
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);       // For speed
-
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::All);
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -48,7 +47,13 @@ void UGoToBuildStateProcessor::Initialize(UObject& Owner)
 
 void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float DeltaSeconds = Context.GetDeltaTimeSeconds();
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UWorld* World = EntityManager.GetWorld();
 
     if (!World)
@@ -63,7 +68,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, DeltaSeconds, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
@@ -84,11 +89,11 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             const FMassCombatStatsFragment& Stats = StatsList[i];
 
             // Increment state timer
-            AIState.StateTimer += DeltaSeconds;
+            AIState.StateTimer += ExecutionInterval;
             
     
             // Basic validation of data from fragment (more robust checks should be external)
-            if (WorkerStats.BuildingAvailable) // Example basic check
+            if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
                  PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                  StopMovement(MoveTarget, World);
@@ -100,7 +105,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
         
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
+            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && AIState.StateTimer >= ExecutionInterval*3.f)
             {
                 AIState.StateTimer = 0.f;
                 // Queue signal for reaching the base

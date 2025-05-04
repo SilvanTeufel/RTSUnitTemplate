@@ -21,8 +21,13 @@ public:
 	virtual void Initialize(UObject& Owner) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float ExecutionInterval = 0.1f;
+	
 private:
 	FMassEntityQuery EntityQuery;
+
+	float TimeSinceLastRun = 0.0f;
 	// No configuration properties needed here now.
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;

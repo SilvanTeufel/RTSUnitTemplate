@@ -89,6 +89,9 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	//float BaseRadius = 50.0f; // Default? Populated by external logic
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	bool BuildingAreaAvailable = false;
+	
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool BuildingAvailable = false;
 	
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)

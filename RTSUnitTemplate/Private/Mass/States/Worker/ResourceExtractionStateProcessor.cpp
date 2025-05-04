@@ -35,7 +35,7 @@ void UResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);   // Read ResourceExtractionTime
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);      // Read target validity (bHasValidTarget) and target entity handle if needed
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);     // Write Velocity to stop movement
-
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     // Ensure all entities processed by this will have these fragments.
     // Consider adding EMassFragmentPresence::All checks if necessary,
     // though processors usually run *after* state setup ensures fragments exist.
@@ -52,7 +52,14 @@ void UResourceExtractionStateProcessor::Initialize(UObject& Owner)
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UResourceExtractionStateProcessor_Execute);
-
+    
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UWorld* World = EntityManager.GetWorld(); // Get World via EntityManager
     if (!World) return;
     
@@ -62,7 +69,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
     // PendingSignals.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager)); // Optional pre-allocation
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [&PendingSignals](FMassExecutionContext& ChunkContext)
+        [this, World, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -71,8 +78,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const auto AiTargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>(); // Using FMassAITargetFragment
         const auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // Get DeltaTime from Context
+        const auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -81,44 +87,28 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
             const FMassAITargetFragment& AiTargetFrag = AiTargetList[i]; // Get the AI Target fragment
             FMassVelocityFragment& Velocity = VelocityList[i];
-
-            /*
-            // --- 1. Check if the resource target is still valid (using FMassAITargetFragment) ---
-            if (!AiTargetFrag.bHasValidTarget) // Check the flag from the AI Target fragment
-            {
-                 // Target lost or became invalid while extracting.
-                 // Queue signal to go Idle or find a new task/resource node.
-                 PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use your actual signal for this case
-                 StateFrag.StateTimer = 0.f; // Reset timer as the task failed/stopped
-                 Velocity.Value = FVector::ZeroVector; // Ensure velocity is zeroed if we exit early
-                 continue; // Move to next entity
-            }*/
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
             // --- 2. Stop Movement ---
             // Ensure the worker isn't moving while extracting
             Velocity.Value = FVector::ZeroVector;
 
+            if (!WorkerStatsFrag.ResourceAvailable)
+            {
+                // Target is lost or invalid. Signal to go idle or find a new task.
+                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
+                StopMovement(MoveTarget, World); // Stop current movement
+                continue;
+            }
+            
             // --- 3. Increment Extraction Timer ---
-            StateFrag.StateTimer += DeltaTime;
-
+            StateFrag.StateTimer += ExecutionInterval;
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- 4. Check if Extraction Time Elapsed ---
             if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime)
             {
                 StateFrag.StateTimer = 0.f;
-                // Extraction complete!
-                // UE_LOG(LogTemp, Log, TEXT("Entity %d: Resource extraction complete. Queuing Signal %s."), Entity.Index, *UnitSignals::GoToBase.ToString());
-
-                // Queue signal to transition to the next state (e.g., returning to base)
-                // The handler for this signal should manage spawning the carried resource.
                 PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
-
-                // Reset the timer. The new state's processor might use it differently.
-                //StateFrag.StateTimer = 0.f;
-
-                // NOTE: Spawning the resource is NOT done here. It's deferred to the
-                // signal handler or the processor for the 'GoToBase' state.
-
                 continue; // Move to next entity
             }
 

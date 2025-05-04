@@ -49,7 +49,13 @@ void UCastingStateProcessor::Initialize(UObject& Owner)
 void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
-    // UE_LOG(LogTemp, Log, TEXT("UCastingStateProcessor::Execute"));
+	
+	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+	if (TimeSinceLastRun < ExecutionInterval)
+	{
+		return; 
+	}
+	TimeSinceLastRun -= ExecutionInterval;
 
     // Get World and Signal Subsystem once before the loop
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager to get World
@@ -64,7 +70,7 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Do NOT capture LocalSignalSubsystem directly.
-        [&PendingSignals](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return; // Skip empty chunks
@@ -72,9 +78,7 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         // Get required fragment views
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Assuming mutable is needed to potentially stop velocity
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -83,14 +87,8 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassVelocityFragment& Velocity = VelocityList[i];
 
-            // 1. (Optional) Stop movement while casting. Uncomment if needed.
-            //    This modification stays here as it directly affects fragment data.
-            // Velocity.Value = FVector::ZeroVector;
-
-            // 2. Rotation is handled elsewhere (ULookAtProcessor)
-
             // 3. Increment cast timer. This modification stays here.
-            StateFrag.StateTimer += DeltaTime;
+            StateFrag.StateTimer += ExecutionInterval;
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // 4. Check if cast time is finished

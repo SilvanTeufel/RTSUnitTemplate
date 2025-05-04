@@ -792,6 +792,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+10.f;
             		}
 
+            		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
             		if (StrongUnitActor->BuildArea)
             		{
             			FVector Origin, BoxExtent;
@@ -804,6 +805,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		}
 
             		WorkerStats->ResourceAvailable = StrongUnitActor->ResourcePlace? true : false;
+					if (StrongUnitActor->ResourcePlace && StrongUnitActor->ResourcePlace->AvailableResourceAmount <= 0.f)
+					{
+						WorkerStats->ResourceAvailable = false;
+					}
+            		
             		if (StrongUnitActor->ResourcePlace)
             		{
             			FVector Origin, BoxExtent;

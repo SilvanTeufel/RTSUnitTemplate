@@ -44,6 +44,13 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_UIsAttackedStateProcessor_Execute); // Performance-Messung (optional)
 
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     // --- Get World and Signal Subsystem once ---
     UWorld* World = GetWorld(); // Assumes processor inherits from UObject or similar providing GetWorld()
     if (!World) return;
@@ -59,13 +66,11 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [&PendingSignals](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -74,7 +79,7 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
 
             // --- Update Timer ---
-            StateFrag.StateTimer += DeltaTime; // Modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
             // --- Check if duration exceeded ---
             // Assumes IsAttackedDuration is a member of FMassCombatStatsFragment

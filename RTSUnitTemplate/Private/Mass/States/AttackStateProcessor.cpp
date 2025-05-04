@@ -49,6 +49,12 @@ void UAttackStateProcessor::ConfigureQueries()
 
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
     // Ensure the member SignalSubsystem is valid (initialized in Initialize)
     if (!SignalSubsystem) return;
 
@@ -58,7 +64,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference, DO NOT capture SignalSubsystem directly
-        [&PendingSignals](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -66,8 +72,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Keep mutable if velocity modification is intended later
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-
-        const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -88,7 +92,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             }
 
             // --- Attack Cycle Timer ---
-            StateFrag.StateTimer += DeltaTime; // State modification stays here
+            StateFrag.StateTimer += ExecutionInterval; // State modification stays here
 
             if (StateFrag.StateTimer <= Stats.AttackDuration)
             {

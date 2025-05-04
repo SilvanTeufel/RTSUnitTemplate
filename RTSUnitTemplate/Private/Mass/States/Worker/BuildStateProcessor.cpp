@@ -42,7 +42,13 @@ void UBuildStateProcessor::Initialize(UObject& Owner)
 
 void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float DeltaSeconds = Context.GetDeltaTimeSeconds();
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     const UWorld* World = EntityManager.GetWorld();
 
     if (!World) { return; } // Early exit if world is invalid
@@ -52,7 +58,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, DeltaSeconds, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
         const TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
@@ -76,7 +82,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
 
             const float PreviousStateTimer = AIState.StateTimer;
-            AIState.StateTimer += DeltaSeconds;
+            AIState.StateTimer += ExecutionInterval;
 
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);

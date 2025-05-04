@@ -181,8 +181,6 @@ void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
-
-		
 		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 		SetupTimerWidget();
 

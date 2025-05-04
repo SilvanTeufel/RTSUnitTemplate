@@ -28,6 +28,7 @@
 #include "MassEntitySubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -356,6 +357,13 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	UnitOwner->SetupAbilitySystemDelegates();
     	
         UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
+
+    	if (UnitOwner->GetCharacterMovement())
+    	{
+    		// Make sure the CharacterMovementComponent still ticks even if unpossessed
+    		UnitOwner->GetCharacterMovement()->SetComponentTickEnabled(true);
+    		UnitOwner->GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+    	}
     }
     else
     {

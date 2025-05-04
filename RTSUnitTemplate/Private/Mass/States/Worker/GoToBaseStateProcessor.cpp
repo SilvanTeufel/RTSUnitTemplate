@@ -45,7 +45,13 @@ void UGoToBaseStateProcessor::Initialize(UObject& Owner)
 
 void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float DeltaSeconds = Context.GetDeltaTimeSeconds();
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    
     UWorld* World = EntityManager.GetWorld();
 
     if (!World)
@@ -59,7 +65,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, DeltaSeconds, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
@@ -80,7 +86,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             FMassAIStateFragment& AIState = AIStateList[i];
 
             // Increment state timer
-            AIState.StateTimer += DeltaSeconds;
+            AIState.StateTimer += ExecutionInterval;
 
             // --- Pre-checks (Fragment Data Validation) ---
             // Get target info from WorkerStats fragment
@@ -102,7 +108,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
             PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
    
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && AIState.StateTimer >= DeltaSeconds*10.f)
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && AIState.StateTimer >= ExecutionInterval*10.f)
             {
                 AIState.StateTimer = 0.f;
                 // Queue signal for reaching the base
