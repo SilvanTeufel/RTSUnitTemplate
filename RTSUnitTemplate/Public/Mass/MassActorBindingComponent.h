@@ -44,8 +44,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetupMassOnUnit();
-	//UPROPERTY()
-	// UMassEntityConfigAsset* UnitEntityConfig;
+
+	UFUNCTION(BlueprintCallable)
+	void SetupMassOnBuilding();
 	
 	UPROPERTY() 
 	AActor* MyOwner;
@@ -59,12 +60,17 @@ public:
 	TObjectPtr<UMassEntityConfigAsset> EntityConfig;
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
-
+	
+	FMassEntityHandle CreateAndLinkBuildingToMassEntity();
 
 	// Helpers to build archetype and shared values
 	bool BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
 									   FMassArchetypeSharedFragmentValues& OutSharedValues);
 
+	bool BuildArchetypeAndSharedValuesForBuilding(FMassArchetypeHandle& OutArchetype,
+								   FMassArchetypeSharedFragmentValues& OutSharedValues);
+
+	
 	// Initialization routines, called by processor
 	void InitTransform(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);
 	void InitMovementFragments(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);

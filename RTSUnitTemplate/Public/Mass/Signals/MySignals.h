@@ -142,7 +142,7 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
     	if (Composition.Tags.Contains<FMassStateBuildTag>()){ PresentTags += TEXT(" Build"); bFoundTags = true; }
     	if (Composition.Tags.Contains<FMassStateResourceExtractionTag>()){ PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
 
-    	if (Composition.Tags.Contains<FNeedsActorBindingInitTag>()){ PresentTags += TEXT(" ActorBindingInit"); bFoundTags = true; }
+    	//if (Composition.Tags.Contains<FNeedsActorBindingInitTag>()){ PresentTags += TEXT(" ActorBindingInit"); bFoundTags = true; }
     	
     	// --- Add checks for any other custom tags you use ---
         // if (Composition.Tags.Contains<FMyCustomTag>()) { PresentTags += TEXT(" MyCustom"); bFoundTags = true; }

@@ -176,7 +176,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
     	
-        FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
+        //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
 
     FMassArchetypeCreationParams Params;
@@ -304,6 +304,205 @@ void UMassActorBindingComponent::InitStats(FMassEntityManager& EntityManager,
 }
 
 
+void UMassActorBindingComponent::SetupMassOnBuilding()
+{
+	UWorld* World = GetWorld();
+	MyOwner = GetOwner();
+	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+	UE_LOG(LogTemp, Log, TEXT("BeginPlay MassUnit TeamId %d"), UnitBase->TeamId);
+	if(!MassEntitySubsystemCache)
+	{
+		if(World)
+		{
+			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+		}
+	}
+
+	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
+	{
+		
+		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit %d"), UnitBase->TeamId);
+		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
+	}
+
+
+	if (!World)
+	{
+		return; // World might not be valid yet
+	}
+}
+
+
+
+FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity()
+{
+	if (MassEntityHandle.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
+		return MassEntityHandle;
+	}
+	if (!MassEntitySubsystemCache)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MassEntitySubsystem not found"));
+		return {};
+	}
+
+	FMassArchetypeHandle Archetype;
+	FMassArchetypeSharedFragmentValues SharedValues;
+	if (!BuildArchetypeAndSharedValuesForBuilding(Archetype, SharedValues))
+	{
+		return {};
+	}
+	
+	// 1) Reserve a handle (always allowed during processing)
+	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+	
+	//FMassEntityHandle Reserved = EM.ReserveEntity();
+	//EM.BuildEntity(Reserved, Archetype, SharedValues);
+	//MassEntityHandle = Reserved;
+
+	FMassEntityHandle Entity = EM.CreateEntity(Archetype, SharedValues);
+	MassEntityHandle       = Entity;
+	
+	
+	InitTransform(EM, MassEntityHandle);
+	//InitMovementFragments(EM, MassEntityHandle);
+	InitAIFragments(EM, MassEntityHandle);
+	InitRepresentation(EM, MassEntityHandle);
+	//FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
+	//ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
+	
+	return MassEntityHandle;
+}
+
+
+bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassArchetypeHandle& OutArchetype,
+                                                               FMassArchetypeSharedFragmentValues& OutSharedValues)
+{
+    AActor* Owner = GetOwner();
+    if (!Owner) return false;
+
+    UWorld* World = Owner->GetWorld();
+    if (!World) return false;
+
+    FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+
+    TArray<const UScriptStruct*> FragmentsAndTags = {
+        // Fragments & tags as before, plus a one-shot init tag
+    	// Core Movement & State
+    	FTransformFragment::StaticStruct(),
+		//FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
+		//FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
+		//FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
+		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
+		//FMassMovementParameters::StaticStruct(), 
+		// Steering & Avoidance
+		//FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
+		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
+
+		FMassGhostLocationFragment::StaticStruct(),
+		//FMassNavigationEdgesFragment::StaticStruct(),
+		//FMassStandingAvoidanceParameters::StaticStruct(),
+		//FMassMovingAvoidanceParameters::StaticStruct(),
+		//FMassMovementParameters::StaticStruct(),
+		// Your Custom Logic
+		FUnitMassTag::StaticStruct(),                   // Your custom tag
+		FMassPatrolFragment::StaticStruct(), 
+		//FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
+    
+    	
+		FMassAIStateFragment::StaticStruct(),
+		FMassAITargetFragment::StaticStruct(), 
+		FMassCombatStatsFragment::StaticStruct(), 
+		FMassAgentCharacteristicsFragment::StaticStruct(), 
+
+		//FMassWorkerStatsFragment::StaticStruct(),
+		// Actor Representation & Sync
+		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
+		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
+		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
+    	
+        //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
+    };
+
+    FMassArchetypeCreationParams Params;
+	Params.ChunkMemorySize=0;
+	Params.DebugName=FName("UMassActorBindingComponent");
+
+    OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
+    if (!OutArchetype.IsValid()) return false;
+
+
+	//FMassMovementParameters MovementParamsInstance;
+	//MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
+	//MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
+	//MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
+	//MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
+	//MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
+	
+	//FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
+
+	// Package the shared fragments
+	FMassArchetypeSharedFragmentValues SharedValues;
+	//SharedValues.AddConstSharedFragment(MovementParamSharedFragment);
+	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
+
+	// 2. Steering Parameters (Using default values initially)
+	//FMassMovingSteeringParameters MovingSteeringParamsInstance;
+	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
+	//MovingSteeringParamsInstance.ReactionTime = 0.0f; // Faster reaction (Default 0.3) // 0.05f;
+	//MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
+
+	//FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
+	//SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
+
+/*
+	FMassStandingSteeringParameters StandingSteeringParamsInstance;
+	// You can modify defaults here if needed
+	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
+	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
+
+	// 3. Avoidance Parameters (Now explicitly initialized)
+	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
+	// Core detection radius
+	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
+	// Separation tuning
+	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance;  //75.f // How close they can get before repelling
+	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= AvoidanceDistance;   // Wall‐avoidance distance
+	// Predictive avoidance tuning
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
+	// (you can also tweak stiffness if desired)
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
+	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
+	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
+	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
+	
+	// Validate and create the shared fragment
+	FConstSharedStruct MovingAvoidanceParamSharedFragment =
+		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
+	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
+	*/
+	// Standing avoidance (if you also use standing avoidance)
+	//FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
+	//StandingAvoidanceParamsInstance.GhostObstacleDetectionDistance = 300.f;
+	//StandingAvoidanceParamsInstance.GhostSeparationDistance       = 20.f;
+	//StandingAvoidanceParamsInstance.GhostSeparationStiffness      = 200.f;
+	// … any other Ghost* fields you want to override …
+	/*
+	FConstSharedStruct StandingAvoidanceParamSharedFragment =
+	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
+	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
+	// ***** --- ADD THIS LINE --- *****
+	// ***** --- END ADDED LINE --- *****
+	*/
+	
+    SharedValues.Sort();
+
+	OutSharedValues = SharedValues;
+
+    return true;
+}
 /*
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {

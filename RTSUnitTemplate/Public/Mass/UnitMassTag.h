@@ -47,7 +47,7 @@ USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
 // --- Hilfs-Tags ---
 USTRUCT() struct FMassHasTargetTag : public FMassTag { GENERATED_BODY() }; // Wenn bHasValidTarget true ist
 USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY() }; // Von Movement gesetzt
-USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
+//USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
 
 
 USTRUCT()

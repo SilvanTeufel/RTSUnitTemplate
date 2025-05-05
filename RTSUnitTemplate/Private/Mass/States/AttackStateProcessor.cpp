@@ -37,7 +37,6 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
@@ -70,7 +69,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Keep mutable if velocity modification is intended later
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -79,8 +77,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
-            FMassVelocityFragment& Velocity = VelocityList[i]; // Keep reference if velocity modification is intended later
-
+            
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---

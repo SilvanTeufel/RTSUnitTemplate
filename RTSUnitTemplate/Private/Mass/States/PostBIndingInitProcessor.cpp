@@ -19,7 +19,6 @@ UPostBindingInitProcessor::UPostBindingInitProcessor()
 void UPostBindingInitProcessor::ConfigureQueries()
 {
     // Only match entities that still have the one-shot init tag:
-    EntityQuery.AddTagRequirement<FNeedsActorBindingInitTag>(EMassFragmentPresence::All);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     // …and any others you need in InitAIFragments, etc…
     EntityQuery.RegisterWithProcessor(*this);

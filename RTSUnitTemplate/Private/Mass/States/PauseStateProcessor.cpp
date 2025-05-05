@@ -26,7 +26,6 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer lesen/schreiben, Zustand ändern
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly); // Ziel lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Sicherstellen, dass Velocity 0 ist
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     
@@ -70,7 +69,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Keep mutable if needed
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
@@ -80,7 +78,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
-            FMassVelocityFragment& Velocity = VelocityList[i]; // Keep reference if needed
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
 

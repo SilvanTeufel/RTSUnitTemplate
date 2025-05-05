@@ -24,11 +24,6 @@ void UCastingStateProcessor::ConfigureQueries()
 	// Benötigte Fragmente:
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);     // Timer lesen/schreiben
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);   // CastTime lesen
-	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);     // Geschwindigkeit auf 0 setzen
-
-	// Optionale Fragmente (falls benötigt, z.B. für Actor-Interaktion oder komplexere Logik)
-	// EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-	// EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 
 	// Schließe tote Entities aus
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
@@ -78,14 +73,12 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         // Get required fragment views
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-            FMassVelocityFragment& Velocity = VelocityList[i];
 
             // 3. Increment cast timer. This modification stays here.
             StateFrag.StateTimer += ExecutionInterval;

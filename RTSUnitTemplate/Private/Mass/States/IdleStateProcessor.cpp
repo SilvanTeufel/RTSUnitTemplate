@@ -26,7 +26,6 @@ void UIdleStateProcessor::ConfigureQueries()
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::All);
 
     // Benötigte Fragmente:
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly);
