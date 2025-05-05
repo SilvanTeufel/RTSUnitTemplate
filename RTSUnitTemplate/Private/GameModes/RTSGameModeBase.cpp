@@ -626,7 +626,6 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 	if(SpawnParameter.UnitControllerBaseClass)
 	{
 		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!AIController) return nullptr;
 		AIController->Possess(UnitBase);
 	}
 	
@@ -755,11 +754,12 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 
 			
 
-			AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+			if (SpawnParameter.UnitControllerBaseClass)
+			{
+				AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
+				ControllerBase->Possess(UnitBase);
+			}
 
-			if(!ControllerBase) return;
-
-			ControllerBase->Possess(UnitBase);
 			
 			if (UnitBase != nullptr)
 			{

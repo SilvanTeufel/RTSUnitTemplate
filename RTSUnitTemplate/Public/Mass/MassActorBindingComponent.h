@@ -10,6 +10,7 @@
 #include "Mass/UnitMassTag.h"
 // Add near the top of UMassActorBindingComponent.h or .cpp
 #include "MassEntityConfigAsset.h"
+#include "MassCommandBuffer.h"
 #include "MassEntityUtils.h" // For CreateEntityFromConfig helper
 #include "MassActorBindingComponent.generated.h"
 
@@ -59,6 +60,20 @@ public:
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 
+
+	// Helpers to build archetype and shared values
+	bool BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
+									   FMassArchetypeSharedFragmentValues& OutSharedValues);
+
+	// Initialization routines, called by processor
+	void InitTransform(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);
+	void InitMovementFragments(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);
+	void InitAIFragments(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);
+	void InitRepresentation(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle);
+	void InitStats(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle, AActor* OwnerActor);
+
+
+	
 	void InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle, AActor* OwnerActor); // <<< ADD THIS
 
 	// Getter for the handle

@@ -86,6 +86,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         const TArrayView<FUnitNavigationPathFragment> PathList = ChunkContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
         const TArrayView<FMassSteeringFragment> SteeringList = ChunkContext.GetMutableFragmentView<FMassSteeringFragment>();
 
+        //UE_LOG(LogTemp, Log, TEXT("MovementProcessor::Execute started NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

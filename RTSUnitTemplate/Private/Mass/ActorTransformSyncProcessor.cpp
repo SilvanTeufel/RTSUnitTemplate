@@ -107,7 +107,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     // Reserve some memory based on expected number of updates per tick if known
     // PendingActorUpdates.Reserve(ExpectedUpdates);
-
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingActorUpdates by reference to fill it
         [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
@@ -118,6 +117,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
+        //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute started NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             AActor* Actor = ActorFragments[i].GetMutable();
@@ -157,7 +157,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             Params.AddIgnoredActor(UnitBase); // always ignore self
 
             FCollisionObjectQueryParams ObjectParams;
-            ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+            ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic); // ECC_GameTraceChannel1 // ECC_WorldStatic
 
             // 2) In your sync processor, trace:
             FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, CurrentActorLocation.Z + 500.0f);
@@ -166,11 +166,16 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             FHitResult Hit;
             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
             {
-                FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+                AActor* HitActor = Hit.GetActor();
+                float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
+                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass())) // && DeltaZ <= CapsuleHalfHeight
+                {
+                    FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+                }
             }
             else
             {
-                FinalLocation.Z = CurrentActorLocation.Z;
+                //FinalLocation.Z = CurrentActorLocation.Z;
             }
 
             

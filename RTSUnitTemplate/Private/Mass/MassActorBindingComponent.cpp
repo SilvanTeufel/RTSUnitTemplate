@@ -22,6 +22,7 @@
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
 #include "GameFramework/Actor.h"
 #include "Mass/UnitNavigationFragments.h"
+#include "MassCommands.h"  
 #include "MassEntityTemplateRegistry.h" 
 #include "Steering/MassSteeringFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
@@ -86,15 +87,227 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	}
 }
 
+
+
+FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
+{
+	if (MassEntityHandle.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
+		return MassEntityHandle;
+	}
+	if (!MassEntitySubsystemCache)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MassEntitySubsystem not found"));
+		return {};
+	}
+
+	FMassArchetypeHandle Archetype;
+	FMassArchetypeSharedFragmentValues SharedValues;
+	if (!BuildArchetypeAndSharedValues(Archetype, SharedValues))
+	{
+		return {};
+	}
+	
+	// 1) Reserve a handle (always allowed during processing)
+	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+	
+	//FMassEntityHandle Reserved = EM.ReserveEntity();
+	//EM.BuildEntity(Reserved, Archetype, SharedValues);
+	//MassEntityHandle = Reserved;
+
+	FMassEntityHandle Entity = EM.CreateEntity(Archetype, SharedValues);
+	MassEntityHandle       = Entity;
+	
+	
+	InitTransform(EM, MassEntityHandle);
+	InitMovementFragments(EM, MassEntityHandle);
+	InitAIFragments(EM, MassEntityHandle);
+	InitRepresentation(EM, MassEntityHandle);
+	//FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
+	//ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
+	
+	return MassEntityHandle;
+}
+
+bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
+                                                               FMassArchetypeSharedFragmentValues& OutSharedValues)
+{
+    AActor* Owner = GetOwner();
+    if (!Owner) return false;
+
+    UWorld* World = Owner->GetWorld();
+    if (!World) return false;
+
+    FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+
+    TArray<const UScriptStruct*> FragmentsAndTags = {
+        // Fragments & tags as before, plus a one-shot init tag
+    	// Core Movement & State
+    	FTransformFragment::StaticStruct(),
+		FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
+		FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
+		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
+		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
+		//FMassMovementParameters::StaticStruct(), 
+		// Steering & Avoidance
+		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
+		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
+
+		FMassGhostLocationFragment::StaticStruct(),
+		FMassNavigationEdgesFragment::StaticStruct(),
+		FMassStandingAvoidanceParameters::StaticStruct(),
+		FMassMovingAvoidanceParameters::StaticStruct(),
+		FMassMovementParameters::StaticStruct(),
+		// Your Custom Logic
+		FUnitMassTag::StaticStruct(),                   // Your custom tag
+		FMassPatrolFragment::StaticStruct(), 
+		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
+    
+    	
+		FMassAIStateFragment::StaticStruct(),
+		FMassAITargetFragment::StaticStruct(), 
+		FMassCombatStatsFragment::StaticStruct(), 
+		FMassAgentCharacteristicsFragment::StaticStruct(), 
+
+		FMassWorkerStatsFragment::StaticStruct(),
+		// Actor Representation & Sync
+		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
+		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
+		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
+    	
+        FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
+    };
+
+    FMassArchetypeCreationParams Params;
+	Params.ChunkMemorySize=0;
+	Params.DebugName=FName("UMassActorBindingComponent");
+
+    OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
+    if (!OutArchetype.IsValid()) return false;
+
+// --- Define and Package Shared Fragment Values ---
+	FMassMovementParameters MovementParamsInstance;
+	MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
+	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
+	MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
+	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
+	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
+	// Ensure values are validated if needed (or use MovementParamsInstance.GetValidated())
+	// FMassMovementParameters ValidatedParams = MovementParamsInstance.GetValidated();
+
+	// Get the const shared fragment handle for this specific set of parameter values
+	FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
+
+	// Package the shared fragments
+	FMassArchetypeSharedFragmentValues SharedValues;
+	SharedValues.AddConstSharedFragment(MovementParamSharedFragment);
+	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
+
+	// 2. Steering Parameters (Using default values initially)
+	FMassMovingSteeringParameters MovingSteeringParamsInstance;
+	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
+	MovingSteeringParamsInstance.ReactionTime = 0.0f; // Faster reaction (Default 0.3) // 0.05f;
+	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
+
+	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
+	SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
+
+	FMassStandingSteeringParameters StandingSteeringParamsInstance;
+	// You can modify defaults here if needed
+	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
+	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
+
+	// 3. Avoidance Parameters (Now explicitly initialized)
+	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
+	// Core detection radius
+	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
+	// Separation tuning
+	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance;  //75.f // How close they can get before repelling
+	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= AvoidanceDistance;   // Wall‐avoidance distance
+	// Predictive avoidance tuning
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
+	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
+	// (you can also tweak stiffness if desired)
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
+	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
+	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
+	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
+
+	// Validate and create the shared fragment
+	FConstSharedStruct MovingAvoidanceParamSharedFragment =
+		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
+	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
+
+	// Standing avoidance (if you also use standing avoidance)
+	FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
+	StandingAvoidanceParamsInstance.GhostObstacleDetectionDistance = 300.f;
+	StandingAvoidanceParamsInstance.GhostSeparationDistance       = 20.f;
+	StandingAvoidanceParamsInstance.GhostSeparationStiffness      = 200.f;
+	// … any other Ghost* fields you want to override …
+	FConstSharedStruct StandingAvoidanceParamSharedFragment =
+	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
+	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
+	// ***** --- ADD THIS LINE --- *****
+	// ***** --- END ADDED LINE --- *****
+
+	
+    SharedValues.Sort();
+
+	OutSharedValues = SharedValues;
+
+    return true;
+}
+
+void UMassActorBindingComponent::InitTransform(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle)
+{
+    FTransformFragment& Frag = EntityManager.GetFragmentDataChecked<FTransformFragment>(Handle);
+    Frag.SetTransform(GetOwner()->GetActorTransform());
+}
+
+void UMassActorBindingComponent::InitMovementFragments(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle)
+{
+    // Velocity
+    FMassVelocityFragment& Vel = EntityManager.GetFragmentDataChecked<FMassVelocityFragment>(Handle);
+    Vel.Value = GetOwner()->GetVelocity();
+
+    // MoveTarget
+    FMassMoveTargetFragment& MT = EntityManager.GetFragmentDataChecked<FMassMoveTargetFragment>(Handle);
+    MT.Center = GetOwner()->GetActorLocation();
+    MT.DistanceToGoal = 0.f;
+    MT.DesiredSpeed.Set(0.f);
+    MT.IntentAtGoal = EMassMovementAction::Stand;
+    MT.Forward = GetOwner()->GetActorForwardVector();
+}
+
+void UMassActorBindingComponent::InitAIFragments(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle)
+{
+    // Stats, characteristics, patrol, etc.
+    InitStats(EntityManager, Handle, GetOwner());
+}
+
+void UMassActorBindingComponent::InitRepresentation(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle)
+{
+    FMassActorFragment& ActorFrag = EntityManager.GetFragmentDataChecked<FMassActorFragment>(Handle);
+    ActorFrag.SetAndUpdateHandleMap(Handle, GetOwner(), false);
+
+    FMassRepresentationLODFragment& LODFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationLODFragment>(Handle);
+    LODFrag.LOD = EMassLOD::High;
+    LODFrag.PrevLOD = EMassLOD::Max;
+}
+
+void UMassActorBindingComponent::InitStats(FMassEntityManager& EntityManager,
+                                         const FMassEntityHandle& Handle,
+                                         AActor* OwnerActor)
+{
+	InitializeMassEntityStatsFromOwner(EntityManager, Handle, OwnerActor); // <<< CALL THE NEW FUNCTION
+}
+
+
+/*
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
     // Prevent creating multiple entities for the same component
-	/*
-	if (!EntityConfig) // Check if the EntityConfig is assigned
-	{
-		UE_LOG(LogTemp, Error, TEXT("UMassActorBindingComponent: EntityConfig is not set on Actor %s!"), *GetOwner()->GetName());
-		return FMassEntityHandle();
-	}*/
 
     if (MassEntityHandle.IsValid())
     {
@@ -340,7 +553,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 
     return MassEntityHandle;
 }
-
+*/
 void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager,
 	FMassEntityHandle EntityHandle, AActor* OwnerActor)
 {
@@ -357,13 +570,13 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	UnitOwner->SetupAbilitySystemDelegates();
     	
         UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
-
+		/*
     	if (UnitOwner->GetCharacterMovement())
     	{
     		// Make sure the CharacterMovementComponent still ticks even if unpossessed
     		UnitOwner->GetCharacterMovement()->SetComponentTickEnabled(true);
     		UnitOwner->GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
-    	}
+    	} */
     }
     else
     {

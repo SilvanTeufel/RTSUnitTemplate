@@ -42,7 +42,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries()
 	EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 	// Tag requirements
-	EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< ADDED BACK
+	//EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< Only Moves on Screen
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
 	// Shared fragment requirement
@@ -72,6 +72,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
         const TArrayView<FMassVelocityFragment> VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
 
         // --- Process each entity ---
+    	//UE_LOG(LogTemp, Log, TEXT("UUnitApplyMassMovementProcessor::Execute started NumEntities: %d"), NumEntities);
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
             FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
