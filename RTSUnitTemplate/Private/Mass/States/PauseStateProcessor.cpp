@@ -30,6 +30,8 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -82,9 +84,10 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
 
             // --- Target Lost ---
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
+            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
 
                 // UpdateMoveTarget stays here as it modifies fragment data directly
@@ -94,9 +97,10 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Pause Timer ---
             StateFrag.StateTimer += ExecutionInterval; // State modification stays here
-            if (StateFrag.StateTimer >= Stats.PauseDuration)
+            if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)
             {
                 // --- Pause Over, Decide Next State ---
+                StateFrag.SwitchingState = true;
                 const float EffectiveAttackRange = Stats.AttackRange;
                 const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);

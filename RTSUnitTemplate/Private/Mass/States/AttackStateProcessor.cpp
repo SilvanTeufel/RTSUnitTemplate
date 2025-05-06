@@ -81,9 +81,9 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
+            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
-                // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct
                 continue;
             }
@@ -119,8 +119,9 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     continue;
                 }
             }
-            else // --- Attack Duration Over ---
+            else if (!StateFrag.SwitchingState) // --- Attack Duration Over ---
             {
+                StateFrag.SwitchingState = true;
                  // Queue signal instead of sending directly
                 PendingSignals.Emplace(Entity, UnitSignals::Pause); // Adjust UnitSignals::Pause
                 StateFrag.HasAttacked = false; // State modification stays here

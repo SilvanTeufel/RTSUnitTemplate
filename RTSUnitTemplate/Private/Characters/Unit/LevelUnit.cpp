@@ -19,11 +19,11 @@ void ALevelUnit::Tick(float DeltaTime)
 		{
 			Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 			Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
-		}
+		
 		//RegenerationTimer = 0.f;
 
 		if(AutoLeveling && HasAuthority()) AutoLevelUp();
-
+		}
 		//UE_LOG(LogTemp, Log, TEXT("ALevelUnit LevelData.CharacterLevel: %d"), LevelData.CharacterLevel);
 	}
 	

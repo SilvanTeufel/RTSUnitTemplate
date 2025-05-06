@@ -88,6 +88,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for StopMovement
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
+            UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -97,9 +98,10 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
             const FTransformFragment& TransformFrag = TransformList[i];
 
             // --- 1. Check for sighted enemy ---
-            if (TargetFrag.bHasValidTarget)
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
 
                 StateFrag.StateTimer = 0.f; // Reset timer immediately (modifies fragment)
@@ -117,8 +119,9 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 const float AcceptanceRadiusSq = FMath::Square(AcceptanceRadius);
                 const float DistSq = FVector::DistSquared(CurrentLocation, CurrentDestination);
 
-                if (DistSq <= AcceptanceRadiusSq) // --- Destination Reached ---
+                if (DistSq <= AcceptanceRadiusSq && !StateFrag.SwitchingState) // --- Destination Reached ---
                 {
+                    StateFrag.SwitchingState = true;
                     // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::PatrolIdle);
 

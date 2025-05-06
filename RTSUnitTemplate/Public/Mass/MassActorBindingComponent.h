@@ -36,6 +36,12 @@ protected:
 	UPROPERTY() // Don't save this pointer
 	UMassEntitySubsystem* MassEntitySubsystemCache;
 
+	UPROPERTY()
+	bool bNeedsMassUnitSetup = false;
+
+
+	UPROPERTY()
+	bool bNeedsMassBuildingSetup = false;
 public:
 
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }

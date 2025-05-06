@@ -212,10 +212,8 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 			// Cast to AGASUnit to make sure it's of the correct type
 			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
 			// Check if the unit is valid and has the same TeamId as the camera
-
 			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea) // && !Unit->BuildArea
 			{
-		
 				float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
 				// Check if this unit is closer than the currently tracked closest unit
 				if (DistanceSquared < ClosestDistanceSquared)

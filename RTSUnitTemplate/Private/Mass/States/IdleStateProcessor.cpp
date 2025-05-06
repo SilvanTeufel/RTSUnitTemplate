@@ -33,6 +33,12 @@ void UIdleStateProcessor::ConfigureQueries()
     // Timer ist jetzt Teil von FMassAIStateFragment
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // ReadWrite für State und Timer
 
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -81,9 +87,10 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             // --- Check for Valid Target ---
             bool bCanAttack = true; // Replace with your actual flag from StatsFrag or elsewhere
-            if (TargetFrag.bHasValidTarget && bCanAttack)
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
-                // Queue Chase signal instead of sending directly
+                // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 // Reset timer or other state if needed upon leaving Idle
                 // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed

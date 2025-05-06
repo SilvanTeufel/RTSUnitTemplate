@@ -147,10 +147,13 @@ struct FMassAIStateFragment : public FMassFragment
 	bool HasAttacked = false;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	FMassTag PlaceholderTag;
-
+	FName PlaceholderSignal = NAME_None;
+	
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FVector StoredLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool SwitchingState = false;
 };
 
 //----------------------------------------------------------------------//
@@ -401,6 +404,7 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 		Attempts++;
 	}
 
+	UE_LOG(LogTemp, Log, TEXT("RandomPoint.Location: %s"), *RandomPoint.Location.ToString());
 	if (bSuccess)
 	{
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);

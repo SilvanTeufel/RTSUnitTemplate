@@ -93,8 +93,9 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             //const FVector TargetPosition = WorkerStats.BasePosition;
             //const float TargetRadius = WorkerStats.BaseRadius;
             // Basic validation: Ensure target position was set (more robust checks assumed external)
-            if (!WorkerStats.BaseAvailable && AIState.StateTimer >= 5.f)
+            if (!WorkerStats.BaseAvailable && AIState.StateTimer >= 5.f && !AIState.SwitchingState)
             {
+                 AIState.SwitchingState = true;
                  PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate fallback signal FName
                  StopMovement(MoveTarget, World);
                  continue;
@@ -108,9 +109,10 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
             PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
    
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && AIState.StateTimer >= ExecutionInterval*10.f)
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.StateTimer = 0.f;
+                AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
                 StopMovement(MoveTarget, World);

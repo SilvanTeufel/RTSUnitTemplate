@@ -31,6 +31,8 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -61,6 +63,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
+    
     EntityQuery.ForEachEntityChunk(EntityManager, Context, 
         // Capture PendingSignals by reference.
         // Do NOT capture LocalSignalSubsystem directly here.
@@ -76,6 +79,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         // const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // Not used in loop?
         // const float CurrentWorldTime = ChunkContext.GetWorld()->GetTimeSeconds(); // Not used in loop?
         // Using ExecutionInterval for timer might be more consistent if Execute might skip frames
+            UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update
@@ -92,20 +96,31 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
             // --- Check for Valid Target ---
-            if (TargetFrag.bHasValidTarget)
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
                  // Queue Chase signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 // Note: Don't continue here if you might want IdlePatrolSwitcher below?
                 // Logic seems to imply either Chase OR IdlePatrolSwitcher.
                 // If Chase is found, we typically wouldn't also signal IdlePatrolSwitcher.
                 continue; // Exit loop for this entity as we are switching to Chase
             }
-            else // --- No Valid Target ---
+
+            
+            float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
+        	
+            if (StateFrag.StateTimer >= IdleDuration)
             {
-                 // Queue IdlePatrolSwitcher signal instead of sending directly
-                PendingSignals.Emplace(Entity, UnitSignals::IdlePatrolSwitcher);
-                // Continue processing other entities in the chunk
+                float Roll = FMath::FRand() * 100.0f;
+            	
+                if (Roll > PatrolFrag.IdleChance)
+                {
+                    // Queue IdlePatrolSwitcher signal instead of sending directly
+                   PendingSignals.Emplace(Entity, UnitSignals::IdlePatrolSwitcher);
+                    StateFrag.StateTimer = 0.f;
+                   // Continue processing other entities in the chunk
+                }
             }
         }
     }); // End ForEachEntityChunk

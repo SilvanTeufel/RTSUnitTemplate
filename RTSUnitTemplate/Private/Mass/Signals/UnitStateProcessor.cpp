@@ -258,6 +258,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             
             // Get fragments and actors *on the game thread*
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+	
             if (ActorFragPtr)
             {
                 AActor* Actor = ActorFragPtr->GetMutable(); 
@@ -310,8 +312,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     			EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                     		}else
                     		{
+                    			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                     			EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
-                    			PlaceholderSignal = UnitSignals::Idle;
+                    			StateFragment->PlaceholderSignal = UnitSignals::Idle;
                     		}
          
                     	}
@@ -335,7 +338,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                         		EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
-                        		PlaceholderSignal = UnitSignals::PatrolRandom;
+                        		StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
                         }
                         else if (SignalName == UnitSignals::Pause)
                         {
@@ -345,7 +348,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Run)
                         {
 	                        EntityManager.Defer().AddTag<FMassStateRunTag>(Entity);
-                        	PlaceholderSignal = UnitSignals::Run;
+                        	StateFragment->PlaceholderSignal = UnitSignals::Run;
                         }
                         else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
                         else if (SignalName == UnitSignals::IsAttacked)
@@ -355,7 +358,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }else if (SignalName == UnitSignals::GoToBase)
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
-                        	PlaceholderSignal = UnitSignals::GoToBase;
+                        	StateFragment->PlaceholderSignal = UnitSignals::GoToBase;
                         }else if (SignalName == UnitSignals::GoToBuild)
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
@@ -364,7 +367,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
-                        	PlaceholderSignal = UnitSignals::GoToResourceExtraction;
+                        	StateFragment->PlaceholderSignal = UnitSignals::GoToResourceExtraction;
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
@@ -434,6 +437,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
              {
 	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
              }
+
+	StateFragment->SwitchingState = false;
 }
 
 void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntityHandle>& Entities)
@@ -471,11 +476,7 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
             }
 
             // --- Hole benötigte Fragmente für DIESE Entity ---
-            // Beachte: Verwende GetFragmentDataPtr, da die Entity möglicherweise nicht mehr im Idle-Zustand ist,
-            // wenn der Task läuft, aber wir die Entscheidung basierend auf dem Zustand *vor* dem Task treffen.
-            // Wenn die Logik nur laufen soll, WENN die Entity *immer noch* Idle ist, müsstest du das Tag hier prüfen.
             FMassAIStateFragment* StateFragPtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-            // Annahme: SetNewRandomPatrolTarget modifiziert PatrolFrag und MoveTarget, daher mutable.
             FMassPatrolFragment* PatrolFragPtr = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(Entity);
             FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
             const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
@@ -491,45 +492,10 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
             FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
             FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
-
-            // --- Deine ursprüngliche Logik, jetzt sicher im Game Thread ---
-
-            // WICHTIG: Die Bedeutung von StateFrag.StateTimer muss klar sein.
-            // Wenn dieser Timer *nur* im IdleStateProcessor hochgezählt wird, könnte er hier 0 sein,
-            // falls der Zustand gerade erst gewechselt wurde. Die Logik funktioniert nur, wenn
-            // dieser Timer die *tatsächlich im Idle-Zustand verbrachte Zeit* widerspiegelt.
-            // Annahme: Der Timer enthält die bisherige Idle-Zeit.
-
-            float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
         	
-            if (StateFrag.StateTimer >= IdleDuration)
-            {
-                float Roll = FMath::FRand() * 100.0f;
-            	
-                if (Roll > PatrolFrag.IdleChance)
-                {
-                    // Rufe die NavSys-abhängige Funktion sicher hier auf
                     SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
-
-                    // Signalisiere den Zustandswechsel
                     SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
-
-                    // Setze den Timer für den *neuen* Zustand zurück.
-                    // Achtung: Wenn SetNewRandomPatrolTarget den StateTimer auch setzt, ist das hier redundant.
                     StateFrag.StateTimer = 0.f;
-
-                    // Zustand wurde gewechselt, weiter zur nächsten Entity
-                    continue;
-                }
-                else // Würfelwurf nicht geschafft -> Bleibe Idle
-                {
-                     // Setze den Timer zurück, um die Idle-Wartezeit erneut zu starten
-                     StateFrag.StateTimer = 0.f;
-                     continue;
-                }
-            }
-            // else: Idle-Zeit noch nicht abgelaufen, tue nichts in diesem Handler.
-
         } // Ende for each entity
     }); // Ende AsyncTask Lambda
 }
@@ -787,9 +753,9 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		{
             			WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
 						FVector Origin, BoxExtent;
-            			
+
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+10.f;
+						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+100.f;
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -798,7 +764,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			FVector Origin, BoxExtent;
 						StrongUnitActor->BuildArea->GetActorBounds( false, Origin, BoxExtent);
 
-            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+10.f;
+            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+50.f;
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
@@ -814,7 +780,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		{
             			FVector Origin, BoxExtent;
 						StrongUnitActor->ResourcePlace->GetActorBounds(false, Origin, BoxExtent);
-            			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+10.f;
+            			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+50.f;
             			WorkerStats->ResourcePosition = StrongUnitActor->ResourcePlace->GetActorLocation();
             		}
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
@@ -876,50 +842,54 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
        
         // Actor- und Entity-Validität erneut im GameThread prüfen
-        if (StrongUnitActor && GTEntityManager.IsEntityValid(CapturedEntity))
-        {
-            // Prüfe den Zustand des Actors
-            if (StrongUnitActor->GetUnitState() == UnitData::IsAttacked)
-            {
-                // Hole World und MoveTarget Fragment *innerhalb* des Tasks
-                UWorld* World = StrongUnitActor->GetWorld();
-                FMassMoveTargetFragment* MoveTargetPtr = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
+    	//if (!State->SwitchingState){
+    		//State->SwitchingState = true;
+	        /*if (StrongUnitActor && GTEntityManager.IsEntityValid(CapturedEntity))
+	        {
+		        // Prüfe den Zustand des Actors
+				if (StrongUnitActor->GetUnitState() == UnitData::IsAttacked && !DoesEntityHaveTag(EntityManager,CapturedEntity, FMassStateIsAttackedTag::StaticStruct()))
+				{
+					State->StateTimer = 0.f;
+					// Hole World und MoveTarget Fragment *innerhalb* des Tasks
+					UWorld* World = StrongUnitActor->GetWorld();
+					FMassMoveTargetFragment* MoveTargetPtr = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
 
-                // Prüfe, ob beide erfolgreich geholt wurden
-                if (World && MoveTargetPtr)
-                {
-                     // Verwende GTEntityManager für Defer-Aufrufe im GameThread
-                	
-                     GTEntityManager.Defer().AddTag<FMassStateIsAttackedTag>(CapturedEntity);
+					// Prüfe, ob beide erfolgreich geholt wurden
+					if (World && MoveTargetPtr)
+					{
+						 // Verwende GTEntityManager für Defer-Aufrufe im GameThread
 
-                     // Rufe StopMovement auf und DEREFERENZIERE den Pointer mit '*'
-                     StopMovement(*MoveTargetPtr, World); // Annahme: StopMovement erwartet FMassMoveTargetFragment&
+							GTEntityManager.Defer().AddTag<FMassStateDetectTag>(CapturedEntity);
+						 GTEntityManager.Defer().AddTag<FMassStateIsAttackedTag>(CapturedEntity);
+	               
+						 // Rufe StopMovement auf und DEREFERENZIERE den Pointer mit '*'
+						 StopMovement(*MoveTargetPtr, World); // Annahme: StopMovement erwartet FMassMoveTargetFragment&
 
-                     //UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState (GameThread): Set Entity %d:%d to IsAttacked state and stopped movement."), CapturedEntity.Index, CapturedEntity.SerialNumber);
-                }
-			}else if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom){
-				SwitchState(UnitSignals::PatrolRandom, CapturedEntity, EntityManager);
-
-            }
-            else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle){
-            	SwitchState(UnitSignals::PatrolIdle, CapturedEntity, EntityManager);
-			}
-            else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase){
-            	SwitchState(UnitSignals::GoToBase, CapturedEntity, EntityManager);
-            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction){
-            	SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, EntityManager);
-            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild){
-			   SwitchState(UnitSignals::GoToBuild, CapturedEntity, EntityManager);
-            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build){
-            	if (!DoesEntityHaveTag(EntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct()))
-            		State->StateTimer = 0.f;
-            	SwitchState(UnitSignals::Build, CapturedEntity, EntityManager);
-            }else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction){
-            	if (!DoesEntityHaveTag(EntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct()))
-            		State->StateTimer = 0.f;
-			   SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, EntityManager);
-			}
-        }
+						 //UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState (GameThread): Set Entity %d:%d to IsAttacked state and stopped movement."), CapturedEntity.Index, CapturedEntity.SerialNumber);
+					}
+					State->SwitchingState = false;
+				}else*/
+    			if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())){
+					SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
+				}
+				else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
+					SwitchState(UnitSignals::PatrolIdle, CapturedEntity, GTEntityManager);
+				}
+				else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
+				   SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
+						State->StateTimer = 0.f;
+					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
+					State->StateTimer = 0.f;
+				   SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
+				}
+			//}
+        //}
     }); // Ende AsyncTask Lambda
 }
 
@@ -1033,6 +1003,10 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         StrongAttacker->ServerMeeleImpactEvent();
                         StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
                         StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
+
+                    	TargetAIStateFragment->StateTimer = 0.f;
+                    	GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
+						GTEntityManager.Defer().AddTag<FMassStateIsAttackedTag>(TargetEntity);
                     	
                         if( StrongTarget->GetUnitState() != UnitData::Run && StrongTarget->GetUnitState() != UnitData::Pause && StrongTarget->GetUnitState() != UnitData::Attack)
                         {
@@ -1459,6 +1433,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 			//    - We are on the Game Thread.
 			//    - We have validated Worker and Worker->ResourcePlace pointers.
 			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 			if (ActorFragPtr)
 			{
 				AActor* Actor = ActorFragPtr->GetMutable(); 
@@ -1480,6 +1455,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
+						StateFrag->SwitchingState = false;
 					}
 				}
 			}
@@ -1518,6 +1494,7 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 			//    - We are on the Game Thread.
 			//    - We have validated Worker and Worker->ResourcePlace pointers.
 			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 			if (ActorFragPtr)
 			{
 				AActor* Actor = ActorFragPtr->GetMutable(); 
@@ -1530,6 +1507,7 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 						UnitBase->Base = ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
+						StateFrag->SwitchingState = false;
 					}
 				}
 			}
@@ -1568,6 +1546,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     			//    - We are on the Game Thread.
     			//    - We have validated Worker and Worker->ResourcePlace pointers.
     			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+    			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
     			if (ActorFragPtr)
     			{
     				AActor* Actor = ActorFragPtr->GetMutable(); 
@@ -1625,7 +1604,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 							}
     					}
 
-    					SwitchState(PlaceholderSignal, Entity, EntityManager);
+    					SwitchState(StateFragment->PlaceholderSignal, Entity, EntityManager);
     				}
     			}
     		}
@@ -1663,6 +1642,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     }
 	
     // 3) (Optional) AI-Controller spawnen und zuweisen
+	/*
     if (SpawnParameter.UnitControllerBaseClass)
     {
         AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(
@@ -1674,7 +1654,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
             return nullptr;
         }
         UnitController->Possess(UnitBase);
-    }
+    }*/
 
     // --------------------------------------------
     // 4) Hier folgt nun der Part mit dem LineTrace
@@ -1978,8 +1958,12 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						}
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
+						
+						if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(Actor))
+							UE_LOG(LogTemp, Log, TEXT("BUILDING PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 
-						SwitchState(PlaceholderSignal, Entity, EntityManager);
+						
+						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
 			}
@@ -2030,7 +2014,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						SwitchState(PlaceholderSignal, Entity, EntityManager);
+						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
 			}

@@ -63,8 +63,21 @@ void AMissile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Other
 				UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
 			
 			if(UnitToHit->GetUnitState() != UnitData::Run)
+			{
 				UnitToHit->SetUnitState( UnitData::IsAttacked );
-			
+				
+				UWorld* World = GetWorld();
+				
+				if (!World) return;
+		
+
+				UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+				if (!MassSubsystem) return;
+
+				FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+				FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
+				EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(MassEntityHandle);
+			}
 			Destroy(true, false);
 		}
 			

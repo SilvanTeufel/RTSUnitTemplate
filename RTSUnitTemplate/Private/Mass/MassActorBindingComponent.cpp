@@ -30,6 +30,7 @@
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Mass/Signals/MySignals.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -77,7 +78,7 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	{
 		
 		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit %d"), UnitBase->TeamId);
-		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
+		bNeedsMassUnitSetup = true;
 	}
 
 
@@ -91,6 +92,7 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
+	
 	if (MassEntityHandle.IsValid())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
@@ -102,32 +104,34 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		return {};
 	}
 
-	FMassArchetypeHandle Archetype;
-	FMassArchetypeSharedFragmentValues SharedValues;
-	if (!BuildArchetypeAndSharedValues(Archetype, SharedValues))
-	{
-		return {};
-	}
-	
-	// 1) Reserve a handle (always allowed during processing)
 	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+	FMassEntityHandle NewMassEntityHandle;
 	
-	//FMassEntityHandle Reserved = EM.ReserveEntity();
-	//EM.BuildEntity(Reserved, Archetype, SharedValues);
-	//MassEntityHandle = Reserved;
-
-	FMassEntityHandle Entity = EM.CreateEntity(Archetype, SharedValues);
-	MassEntityHandle       = Entity;
+	if (!EM.IsProcessing())
+	{
+		
+		FMassArchetypeHandle Archetype;
+		FMassArchetypeSharedFragmentValues SharedValues;
+		if (!BuildArchetypeAndSharedValues(Archetype, SharedValues))
+		{
+			return {};
+		}
+		
+        UE_LOG(LogTemp, Log, TEXT("Mass is NOT processing. Creating entity synchronously for %s."), *GetOwner()->GetName());
+      
+		NewMassEntityHandle = EM.CreateEntity(Archetype, SharedValues);
+		if (NewMassEntityHandle.IsValid())
+		{
+			// Perform synchronous initializations
+			InitTransform(EM, NewMassEntityHandle);
+			InitMovementFragments(EM, NewMassEntityHandle);
+			InitAIFragments(EM, NewMassEntityHandle);
+			InitRepresentation(EM, NewMassEntityHandle);
+			bNeedsMassUnitSetup = false;
+		}
+    }
 	
-	
-	InitTransform(EM, MassEntityHandle);
-	InitMovementFragments(EM, MassEntityHandle);
-	InitAIFragments(EM, MassEntityHandle);
-	InitRepresentation(EM, MassEntityHandle);
-	//FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
-	//ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
-	
-	return MassEntityHandle;
+	return NewMassEntityHandle;
 }
 
 bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
@@ -322,7 +326,7 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 	{
 		
 		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit %d"), UnitBase->TeamId);
-		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
+		bNeedsMassBuildingSetup = true;
 	}
 
 
@@ -347,32 +351,30 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 		return {};
 	}
 
-	FMassArchetypeHandle Archetype;
-	FMassArchetypeSharedFragmentValues SharedValues;
-	if (!BuildArchetypeAndSharedValuesForBuilding(Archetype, SharedValues))
+	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+	FMassEntityHandle NewMassEntityHandle;
+	
+	if (!EM.IsProcessing())
 	{
-		return {};
+		FMassArchetypeHandle Archetype;
+		FMassArchetypeSharedFragmentValues SharedValues;
+		if (!BuildArchetypeAndSharedValuesForBuilding(Archetype, SharedValues))
+		{
+			return {};
+		}
+
+		NewMassEntityHandle = EM.CreateEntity(Archetype, SharedValues);
+
+		if (NewMassEntityHandle.IsValid())
+		{
+			InitTransform(EM, NewMassEntityHandle);
+			InitAIFragments(EM, NewMassEntityHandle);
+			InitRepresentation(EM, NewMassEntityHandle);
+			bNeedsMassBuildingSetup = false;
+		}
 	}
 	
-	// 1) Reserve a handle (always allowed during processing)
-	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
-	
-	//FMassEntityHandle Reserved = EM.ReserveEntity();
-	//EM.BuildEntity(Reserved, Archetype, SharedValues);
-	//MassEntityHandle = Reserved;
-
-	FMassEntityHandle Entity = EM.CreateEntity(Archetype, SharedValues);
-	MassEntityHandle       = Entity;
-	
-	
-	InitTransform(EM, MassEntityHandle);
-	//InitMovementFragments(EM, MassEntityHandle);
-	InitAIFragments(EM, MassEntityHandle);
-	InitRepresentation(EM, MassEntityHandle);
-	//FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
-	//ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
-	
-	return MassEntityHandle;
+	return NewMassEntityHandle;
 }
 
 
@@ -856,7 +858,31 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		if (UnitOwner) // Use data from Actor if available
 		{
 			StateFragment->StateTimer = UnitOwner->UnitControlTimer;
+			TEnumAsByte<UnitData::EState> State = UnitOwner->GetUnitState();
 			
+			 // map every state to its FName signal
+        switch (State)
+        {
+        case UnitData::Idle:
+            StateFragment->PlaceholderSignal = UnitSignals::Idle;
+            break;
+        case UnitData::Run:
+            StateFragment->PlaceholderSignal = UnitSignals::Run;
+            break;
+        case UnitData::PatrolRandom:
+            StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
+            break;
+        case UnitData::PatrolIdle:
+            StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
+            break;
+        case UnitData::GoToBase:
+            StateFragment->PlaceholderSignal = UnitSignals::GoToBase;
+            break;
+        default:
+            // optionally handle unexpected or 'Dead' state
+            StateFragment->PlaceholderSignal = UnitSignals::Idle;
+            break;
+        }
 		}
 	}
 	
@@ -906,15 +932,19 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-	/*
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid())
+	//Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassUnitSetup)
 	{
-		return;
+		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
 	}
 
-	*/
+	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassBuildingSetup)
+	{
+		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
+	}
+
 }
 
 

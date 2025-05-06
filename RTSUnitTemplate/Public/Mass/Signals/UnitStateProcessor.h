@@ -85,8 +85,7 @@ private:
 		UnitSignals::GoToResourceExtraction,
 		UnitSignals::ResourceExtraction,
 	};
-
-	FName PlaceholderSignal = UnitSignals::Idle;
+	
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
 	

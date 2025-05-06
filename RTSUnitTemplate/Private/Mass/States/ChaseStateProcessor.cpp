@@ -37,6 +37,8 @@ void UChaseStateProcessor::ConfigureQueries()
 
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     // Optional: FMassActorFragment für Rotation oder Fähigkeits-Checks?
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -89,9 +91,12 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet())
+            StateFrag.StateTimer += ExecutionInterval;
+            
+            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState )
             {
                 // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 // Potentially clear MoveTarget here too if needed when losing target
                 // StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
@@ -104,9 +109,10 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---
-            if (DistSq <= AttackRangeSq)
+            if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
 
                 // StopMovement modifies fragment directly, keep it here

@@ -25,6 +25,8 @@ void UMainStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
 
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -67,7 +69,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable needed
-
+        //UE_LOG(LogTemp, Log, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -76,9 +78,11 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
+            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager);
             //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             // --- Queue Sync Signal ---
             // Always queue this signal if the processor runs for the entity
+            
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
             // --- 1. Check CURRENT entity's health ---

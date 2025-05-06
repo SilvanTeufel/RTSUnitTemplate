@@ -166,11 +166,15 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             FHitResult Hit;
             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
             {
+
                 AActor* HitActor = Hit.GetActor();
                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
-                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass())) // && DeltaZ <= CapsuleHalfHeight
+                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= CapsuleHalfHeight) // && DeltaZ <= CapsuleHalfHeight
                 {
                     FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+                }else
+                {
+                    //FinalLocation.Z = CurrentActorLocation.Z;
                 }
             }
             else

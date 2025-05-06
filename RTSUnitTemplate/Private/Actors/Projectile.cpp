@@ -468,6 +468,18 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 	{
 		UnitToHit->UnitControlTimer = 0.f;
 		UnitToHit->SetUnitState( UnitData::IsAttacked );
+
+		UWorld* World = GetWorld();
+				
+		if (!World) return;
+		
+
+		UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+		if (!MassSubsystem) return;
+
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
+		EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(MassEntityHandle);
 	}else if(UnitToHit->GetUnitState() == UnitData::Casting)
 	{
 		UnitToHit->UnitControlTimer -= UnitToHit->ReduceCastTime;
