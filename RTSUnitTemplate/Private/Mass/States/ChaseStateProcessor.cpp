@@ -38,7 +38,6 @@ void UChaseStateProcessor::ConfigureQueries()
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     // Optional: FMassActorFragment für Rotation oder Fähigkeits-Checks?
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -92,14 +91,17 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
-            
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState )
+
+            UE_LOG(LogTemp, Log, TEXT("Chase TargetFrag.bHasValidTarget: %d"), TargetFrag.bHasValidTarget);
+            // || !TargetFrag.TargetEntity.IsSet() &&
+            if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
             {
+                UE_LOG(LogTemp, Log, TEXT("Switch from Chase to Placeholder!!"));
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 // Potentially clear MoveTarget here too if needed when losing target
-                // StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
+                StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
                 continue;
             }
 

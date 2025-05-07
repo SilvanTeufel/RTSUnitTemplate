@@ -38,7 +38,8 @@ void UAttackStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
-
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None); // Exclude Chase too
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None); // Already excluded by other logic, but explicit
@@ -57,19 +58,21 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
     // Ensure the member SignalSubsystem is valid (initialized in Initialize)
     if (!SignalSubsystem) return;
 
+    UWorld* World = Context.GetWorld(); // Use Context to get World
+    if (!World) return;
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference, DO NOT capture SignalSubsystem directly
-        [this, &PendingSignals](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -77,7 +80,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
-            
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
+
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
@@ -85,48 +89,49 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             {
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct
+                StopMovement(MoveTarget, World);
                 continue;
             }
 
             // --- Attack Cycle Timer ---
             StateFrag.StateTimer += ExecutionInterval; // State modification stays here
-
-            if (StateFrag.StateTimer <= Stats.AttackDuration)
-            {
+            
                 // --- Range Check ---
-                const float EffectiveAttackRange = Stats.AttackRange;
-                const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
-
-                if (DistSq <= AttackRangeSq)
+                const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                UE_LOG(LogTemp, Log, TEXT("Stats.AttackRange: %f."), Stats.AttackRange);
+                UE_LOG(LogTemp, Log, TEXT("Dist %f."), Dist);
+                if (Dist <= Stats.AttackRange)
                 {
                     // --- Melee Impact Check ---
-                    if (!Stats.bUseProjectile && !StateFrag.HasAttacked)
+                    if (StateFrag.StateTimer <= Stats.AttackDuration)
                     {
-                        // Queue signal instead of sending directly
-                        PendingSignals.Emplace(Entity, UnitSignals::MeleeAttack); // Adjust UnitSignals::MeleeAttack
-                        StateFrag.HasAttacked = true; // State modification stays here
-                        // Note: We queue the signal but modify state immediately. This might
-                        // slightly change behavior if the signal was expected to trigger
-                        // something *before* HasAttacked was set. Usually okay.
+                        if (!Stats.bUseProjectile && !StateFrag.HasAttacked)
+                        {
+                            // Queue signal instead of sending directly
+                            PendingSignals.Emplace(Entity, UnitSignals::MeleeAttack); // Adjust UnitSignals::MeleeAttack
+                            StateFrag.HasAttacked = true; // State modification stays here
+                            // Note: We queue the signal but modify state immediately. This might
+                            // slightly change behavior if the signal was expected to trigger
+                            // something *before* HasAttacked was set. Usually okay.
+                        }
+                    }else if (!StateFrag.SwitchingState) // --- Attack Duration Over ---
+                    {
+                        StateFrag.SwitchingState = true;
+                         // Queue signal instead of sending directly
+                        PendingSignals.Emplace(Entity, UnitSignals::Pause); // Adjust UnitSignals::Pause
+                        StateFrag.HasAttacked = false; // State modification stays here
+                        continue;
                     }
                     // else if (Stats.bUseProjectile && !StateFrag.HasAttacked) { /* Handle projectile signal queuing */ }
                 }
-                else // --- Target moved out of range ---
+                else if (!StateFrag.SwitchingState)
                 {
+                    StateFrag.SwitchingState = true;
                      // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::Chase); // Adjust UnitSignals::Chase
                     continue;
                 }
-            }
-            else if (!StateFrag.SwitchingState) // --- Attack Duration Over ---
-            {
-                StateFrag.SwitchingState = true;
-                 // Queue signal instead of sending directly
-                PendingSignals.Emplace(Entity, UnitSignals::Pause); // Adjust UnitSignals::Pause
-                StateFrag.HasAttacked = false; // State modification stays here
-                continue;
-            }
+      
         }
     }); // End ForEachEntityChunk
 

@@ -25,8 +25,8 @@ void UMainStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
 
-    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -60,8 +60,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        // Capture PendingSignals by reference. Capture World & EntityManager for inner logic.
-        // Do NOT capture LocalSignalSubsystem directly here.
         [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -79,12 +77,15 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
             //UE::Mass::Debug::LogEntityTags(Entity, EntityManager);
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             // --- Queue Sync Signal ---
             // Always queue this signal if the processor runs for the entity
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
+            if (StateFrag.BirthTime == TNumericLimits<float>::Max())
+                PendingSignals.Emplace(Entity, UnitSignals::UnitSpawned);
+            
             // --- 1. Check CURRENT entity's health ---
             if (StatsFrag.Health <= 0.f)
             {
@@ -94,6 +95,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
 
             // --- 2. Check TARGET entity's health ---
+            /*
             if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
             {
                 const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
@@ -129,7 +131,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     // No signal needed here? Maybe signal Run? Depends on desired behavior.
                     // PendingSignals.Emplace(Entity, UnitSignals::Run);
                 }
-            } // End if target is set
+            }*/
+            // End if target is set
 
             // --- Potentially other checks for this entity ---
 

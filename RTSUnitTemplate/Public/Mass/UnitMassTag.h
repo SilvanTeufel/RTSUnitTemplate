@@ -154,6 +154,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool SwitchingState = false;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float BirthTime = TNumericLimits<float>::Max();
 };
 
 //----------------------------------------------------------------------//
@@ -176,9 +179,6 @@ struct FMassAITargetFragment : public FMassFragment
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasValidTarget = false;
 
-     /** Optional: Distanz zum aktuellen Ziel (im Quadrat), wird vom TargetAcquisitionProcessor berechnet, um wiederholte Berechnungen zu vermeiden. */
-     // UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-     // float DistanceToTargetSq = -1.f;
 };
 
 //----------------------------------------------------------------------//

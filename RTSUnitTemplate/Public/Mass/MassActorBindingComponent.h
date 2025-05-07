@@ -42,6 +42,7 @@ protected:
 
 	UPROPERTY()
 	bool bNeedsMassBuildingSetup = false;
+
 public:
 
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }

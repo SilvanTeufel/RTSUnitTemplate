@@ -82,6 +82,10 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             // --- Update Timer ---
             StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
+
+            UE_LOG(LogTemp, Warning, TEXT("StateFrag.StateTimer %.f"),  StateFrag.StateTimer);  
+            UE_LOG(LogTemp, Warning, TEXT("IsAttackedDuration %.f"), StatsFrag.IsAttackedDuration);  
+
             // --- Check if duration exceeded ---
             // Assumes IsAttackedDuration is a member of FMassCombatStatsFragment
             if (StateFrag.StateTimer > StatsFrag.IsAttackedDuration && !StateFrag.SwitchingState)

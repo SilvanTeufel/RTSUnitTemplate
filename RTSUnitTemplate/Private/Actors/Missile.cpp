@@ -2,7 +2,9 @@
 
 #include "Actors/Missile.h"
 
+#include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Mass/Signals/MySignals.h"
 
 // Sets default values
 AMissile::AMissile()
@@ -70,13 +72,12 @@ void AMissile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Other
 				
 				if (!World) return;
 		
+				UMassSignalSubsystem* SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(World);
 
-				UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-				if (!MassSubsystem) return;
-
-				FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+				if (!SignalSubsystem) return;
+				
 				FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
-				EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(MassEntityHandle);
+				SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, MassEntityHandle);
 			}
 			Destroy(true, false);
 		}

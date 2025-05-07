@@ -22,7 +22,7 @@ void URunStateProcessor::ConfigureQueries()
 	// Benötigte Fragmente:
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
-	
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	// Schließe tote Entities aus
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
@@ -37,5 +37,87 @@ void URunStateProcessor::Initialize(UObject& Owner)
 
 void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+ TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    // Get World and Signal Subsystem once
+    UWorld* World = Context.GetWorld(); // Use Context to get World
+    if (!World) return;
 
+    if (!SignalSubsystem) return;
+
+    // --- List for Game Thread Signal Updates ---
+    TArray<FMassSignalPayload> PendingSignals;
+    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        // Capture PendingSignals by reference. Capture World for helper functions.
+        // Do NOT capture LocalSignalSubsystem directly here.
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
+
+        UE_LOG(LogTemp, Log, TEXT("URunStateProcessor NumEntities: %d"), NumEntities);
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
+
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            
+            const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
+            const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+            const FVector FinalDestination = MoveTarget.Center;
+            const float AcceptanceRadius = MoveTarget.SlackRadius;
+            const float AcceptanceRadiusSq = FMath::Square(AcceptanceRadius);
+
+            StateFrag.StateTimer += ExecutionInterval;
+
+             // 1. Check if already at the final destination
+            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
+            {
+                // Queue signal instead of sending directly
+                StateFrag.SwitchingState = true;
+                PendingSignals.Emplace(Entity, UnitSignals::Idle);
+
+                // StopMovement modifies fragment directly, keep it here
+                //StopMovement(MoveTarget, World);
+                continue;
+            }
+            
+        }
+    }); // End ForEachEntityChunk
+
+
+    // --- Schedule Game Thread Task to Send Queued Signals ---
+    if (!PendingSignals.IsEmpty())
+    {
+        if (SignalSubsystem)
+        {
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            // Capture the weak subsystem pointer and move the pending signals list
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+            {
+                // Check if the subsystem is still valid on the Game Thread
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+                {
+                    for (const FMassSignalPayload& Payload : SignalsToSend)
+                    {
+                        // Check if the FName is valid before sending
+                        if (!Payload.SignalName.IsNone())
+                        {
+                           // Send signal safely from the Game Thread using FName
+                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                        }
+                    }
+                }
+            });
+        }
+    }
 }

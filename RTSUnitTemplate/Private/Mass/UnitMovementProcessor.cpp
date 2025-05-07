@@ -56,6 +56,7 @@ void UUnitMovementProcessor::ConfigureQueries()
 
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     // Add other tags like Dead/Rooted checks if necessary
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -114,11 +115,13 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 }
 
                 // Signal Idle only if not already Idle potentially
-                 UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                /*
+                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
                 if (SignalSubsystem)
                 {
                      SignalSubsystem->SignalEntity(UnitSignals::Idle, Entity); // Use your actual signal name
                 }
+                */
                 continue; // Stop processing movement for this entity
             }
 

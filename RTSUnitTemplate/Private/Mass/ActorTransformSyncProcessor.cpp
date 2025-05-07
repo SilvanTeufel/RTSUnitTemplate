@@ -49,6 +49,7 @@ void UActorTransformSyncProcessor::ConfigureQueries()
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     //EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // <-- HINZUGEFÜGT: Geschwindigkeit lesen für Rotation
     EntityQuery.RegisterWithProcessor(*this); // Important!
     // Shared fragment defining LOD distances, etc. Might not be strictly needed

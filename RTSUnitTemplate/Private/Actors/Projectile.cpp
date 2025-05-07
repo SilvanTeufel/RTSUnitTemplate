@@ -2,12 +2,15 @@
 
 
 #include "Actors/Projectile.h"
+
+#include "MassSignalSubsystem.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/AIController/UnitControllerBase.h"
+#include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
 
@@ -468,18 +471,18 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 	{
 		UnitToHit->UnitControlTimer = 0.f;
 		UnitToHit->SetUnitState( UnitData::IsAttacked );
-
+		
 		UWorld* World = GetWorld();
 				
 		if (!World) return;
 		
+		UMassSignalSubsystem* SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(World);
 
-		UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-		if (!MassSubsystem) return;
-
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		if (!SignalSubsystem) return;
+				
 		FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
-		EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(MassEntityHandle);
+		SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, MassEntityHandle);
+		
 	}else if(UnitToHit->GetUnitState() == UnitData::Casting)
 	{
 		UnitToHit->UnitControlTimer -= UnitToHit->ReduceCastTime;

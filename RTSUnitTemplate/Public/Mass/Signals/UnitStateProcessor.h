@@ -113,7 +113,7 @@ private:
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UMassEntitySubsystem> EntitySubsystem; // Needed to get fragments
+	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 
 	UPROPERTY()
 	AResourceGameMode* ResourceGameMode;

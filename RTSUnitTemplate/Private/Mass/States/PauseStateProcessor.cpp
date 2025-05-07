@@ -31,7 +31,6 @@ void UPauseStateProcessor::ConfigureQueries()
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -89,46 +88,45 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
-
+                StopMovement(MoveTarget, World);
                 // UpdateMoveTarget stays here as it modifies fragment data directly
-                UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
+                //UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
                 continue;
             }
 
             // --- Pause Timer ---
             StateFrag.StateTimer += ExecutionInterval; // State modification stays here
-            if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)
-            {
                 // --- Pause Over, Decide Next State ---
-                StateFrag.SwitchingState = true;
-                const float EffectiveAttackRange = Stats.AttackRange;
-                const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
-
-                if (DistSq <= AttackRangeSq) // --- In Range ---
+            const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                
+                if (Dist <= Stats.AttackRange) // --- In Range ---
                 {
-                    // Check for ranged attack *before* general attack signal if applicable
-                    if (Stats.bUseProjectile)
+                    if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)
                     {
-                         // Queue signal instead of sending directly
-                        PendingSignals.Emplace(Entity, UnitSignals::RangedAttack);
-                        // Note: If RangedAttack implies Attack state, maybe only send one?
-                        // If not, it will queue both RangedAttack and Attack signals below.
+                        StateFrag.SwitchingState = true;
+                        // Check for ranged attack *before* general attack signal if applicable
+                        if (Stats.bUseProjectile)
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("Fire Projectile!"));
+                             // Queue signal instead of sending directly
+                            PendingSignals.Emplace(Entity, UnitSignals::RangedAttack);
+                            // Note: If RangedAttack implies Attack state, maybe only send one?
+                            // If not, it will queue both RangedAttack and Attack signals below.
+                        }else
+                        {
+                            PendingSignals.Emplace(Entity, UnitSignals::Attack);
+                        }
                     }
-
-                    // Queue signal instead of sending directly
-                    PendingSignals.Emplace(Entity, UnitSignals::Attack);
                 }
-                else // --- Out Of Range ---
+                else if (!StateFrag.SwitchingState)
                 {
+                    StateFrag.SwitchingState = true;
                      // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 }
                 // Reset timer or other state if needed upon leaving Pause
                 // StateFrag.StateTimer = 0.0f; // Example reset
                 continue; // Zustand gewechselt
-            }
-
             // --- Still Paused ---
             // Velocity.Value = FVector::ZeroVector; // If needed, keep here
         }

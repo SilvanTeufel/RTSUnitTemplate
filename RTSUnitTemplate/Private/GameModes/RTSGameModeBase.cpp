@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "AIController.h"
+#include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
@@ -24,6 +25,7 @@
 #include "AI/Navigation/NavigationTypes.h" // Für FPathFindingResult
 
 #include "Engine/Engine.h"
+#include "Mass/Signals/MySignals.h"
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -848,7 +850,6 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->ScheduleDelayedNavigationUpdate();
 				
 				UnitSpawnDataSets.Add(UnitSpawnDataSet);
-				
 			}
 			
 		}

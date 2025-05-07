@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "MassEntitySubsystem.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
 #include "MassSignalTypes.h"
@@ -24,6 +25,7 @@ public:
 protected:
 	virtual void Initialize(UObject& Owner) override;
 	virtual void ConfigureQueries() override;
+	virtual void BeginDestroy() override;
 	// This is where you respond to the signal
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	/*virtual void SignalEntities(FMassEntityManager& EntityManager,
@@ -36,7 +38,7 @@ private:
 	UWorld* World;
 	
 	void HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities);
-
+	void HandleUnitSpawnedSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities);
 	
 	FMassEntityQuery EntityQuery;
 
@@ -48,9 +50,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
+	
 	// Handle for the bound delegate, used for unbinding (though standard unbinding might be tricky)
 	FDelegateHandle SignalDelegateHandle;
-
+	FDelegateHandle SpawnSignalDelegateHandle;
 	// Buffer to store entities received from the signal delegate between calls
 	// Key: Signal Name, Value: Array of Entities that signaled
 	TMap<FName, TArray<FMassEntityHandle>> ReceivedSignalsBuffer;

@@ -27,6 +27,7 @@
 #include "Steering/MassSteeringFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "MassEntitySubsystem.h"
+#include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -864,23 +865,40 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         switch (State)
         {
         case UnitData::Idle:
-            StateFragment->PlaceholderSignal = UnitSignals::Idle;
-            break;
+        	{
+        		StateFragment->PlaceholderSignal = UnitSignals::Idle;
+        		UnitOwner->UnitStatePlaceholder = UnitData::Idle;
+        	}
+        	break;
         case UnitData::Run:
-            StateFragment->PlaceholderSignal = UnitSignals::Run;
-            break;
+        	{
+        		StateFragment->PlaceholderSignal = UnitSignals::Run;
+        		UnitOwner->UnitStatePlaceholder = UnitData::Run;
+        	}
+        	break;
         case UnitData::PatrolRandom:
-            StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
-            break;
+        	{
+        		//StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
+        		//UnitOwner->UnitStatePlaceholder = UnitData::PatrolRandom;
+        	}
+        	break;
         case UnitData::PatrolIdle:
-            StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
-            break;
+        	{
+        		StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
+        		UnitOwner->UnitStatePlaceholder = UnitData::PatrolIdle;
+        	}
+        	break;
         case UnitData::GoToBase:
-            StateFragment->PlaceholderSignal = UnitSignals::GoToBase;
-            break;
+        	{
+        		StateFragment->PlaceholderSignal = UnitSignals::GoToBase;
+        		UnitOwner->UnitStatePlaceholder = UnitData::GoToBase;
+        	}
+        	break;
         default:
-            // optionally handle unexpected or 'Dead' state
-            StateFragment->PlaceholderSignal = UnitSignals::Idle;
+        	{
+        		StateFragment->PlaceholderSignal = UnitSignals::Idle;
+        		UnitOwner->UnitStatePlaceholder = UnitData::Idle;
+			}
             break;
         }
 		}
@@ -932,9 +950,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-
-	//Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
+		
 	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassUnitSetup)
 	{
 		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
