@@ -117,7 +117,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 if (Roll > PatrolFrag.IdleChance)
                 {
                     // Queue IdlePatrolSwitcher signal instead of sending directly
-                   PendingSignals.Emplace(Entity, UnitSignals::IdlePatrolSwitcher);
+                    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!IdlePatrolSwitcher!!!!!!!!!!"));
+                   PendingSignals.Emplace(Entity, UnitSignals::PISwitcher);
                     StateFrag.StateTimer = 0.f;
                    // Continue processing other entities in the chunk
                 }

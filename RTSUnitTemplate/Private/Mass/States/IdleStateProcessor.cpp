@@ -107,10 +107,12 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             bool bIsOnPlattform = false; // Replace with your actual flag
 
             // Check member variables bSetUnitsBackToPatrol and SetUnitsBackToPatrolTime exist on 'this' processor
-            if (!bIsOnPlattform && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
+            if (!bIsOnPlattform && !StateFrag.SwitchingState && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
             {
+                StateFrag.SwitchingState = true;
                 // Queue PatrolRandom signal instead of sending directly
-                //PendingSignals.Emplace(Entity, UnitSignals::PatrolRandom);
+                UE_LOG(LogTemp, Log, TEXT("SWITCH FROM IDLE TO PATROL RANDOM!"));
+                PendingSignals.Emplace(Entity, UnitSignals::PatrolRandom);
 
                 // Reset timer or other state if needed upon leaving Idle
                 // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed

@@ -71,7 +71,7 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     	EndDeadSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleEndDead));
     	
-    	IdlePatrolSwitcherDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::IdlePatrolSwitcher)
+    	IdlePatrolSwitcherDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, IdlePatrolSwitcher));
 
     	UnitStatePlaceholderDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder)
@@ -168,7 +168,7 @@ void UUnitStateProcessor::BeginDestroy()
 	
 	if (SignalSubsystem && IdlePatrolSwitcherDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::IdlePatrolSwitcher)
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher)
 		.Remove(IdlePatrolSwitcherDelegateHandle);
             
 		IdlePatrolSwitcherDelegateHandle.Reset();
@@ -255,7 +255,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             {
                 return;
             }
-            
+	UE_LOG(LogTemp, Error, TEXT("SwitchState Signal = %s"), *SignalName.ToString());
             // Get fragments and actors *on the game thread*
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
 			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
@@ -337,15 +337,18 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
-                        	//EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-	                        //EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
+                        	UE_LOG(LogTemp, Warning, TEXT("SET STATE TO PATROL IDLE!!!!!"))
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+	                        EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::PatrolRandom)
                         {
-                        	//EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-                        	//EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
-                        	//StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
-                        	//UnitBase->UnitStatePlaceholder = UnitData::PatrolRandom;
+                        	UE_LOG(LogTemp, Error, TEXT("PR SwitchState Signal = %s"), *SignalName.ToString());
+                        	UE_LOG(LogTemp, Warning, TEXT("SET STATE TO PATROL RANDOM!!!!!"))
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
+                        	StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
+                        	UnitBase->UnitStatePlaceholder = UnitData::PatrolRandom;
                         }
                         else if (SignalName == UnitSignals::Pause)
                         {
@@ -387,7 +390,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		
+
+                    		/*
                     		// --- Hole benötigte Daten für StopMovement HIER ---
                     		UWorld* MyWorld = UnitBase->GetWorld(); // Welt vom Actor holen
                     		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity); // Fragment holen
@@ -402,7 +406,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     			//UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Failed to get World (%d) or MoveTargetFragment (%d) for Entity %d:%d before calling StopMovement in Idle state."),
                     			//  World != nullptr, MoveTargetPtr != nullptr, Entity.Index, Entity.SerialNumber);
                     		}
-						
+								*/
                     		UnitBase->SetUnitState(UnitData::Idle);
                     		/*
                     		// --- Ende Daten holen & StopMovement ---
@@ -424,10 +428,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
                         else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
-                        else if (SignalName == UnitSignals::PatrolIdle){ //UnitBase->SetUnitState(UnitData::PatrolIdle);
-                        	}
-                        else if (SignalName == UnitSignals::PatrolRandom){ //UnitBase->SetUnitState(UnitData::PatrolRandom);
-                        	}
+                        else if (SignalName == UnitSignals::PatrolIdle){ UnitBase->SetUnitState(UnitData::PatrolIdle); }
+                        else if (SignalName == UnitSignals::PatrolRandom){ UnitBase->SetUnitState(UnitData::PatrolRandom); }
                         else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
                         else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
                         else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
@@ -509,6 +511,7 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
         	
                     SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
+        			UE_LOG(LogTemp, Log, TEXT("IDLE PATROL SWITCHER! GO TO PATROL RANDOM"));
                     SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
                     StateFrag.StateTimer = 0.f;
         } // Ende for each entity
@@ -641,7 +644,8 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
             {
                 continue;
             }
-    					
+
+        	UE_LOG(LogTemp, Error, TEXT("AA SwitchState Signal = %s"), *SignalName.ToString());
         	SwitchState(SignalName, Entity, EntityManager);
 
         	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
@@ -1176,6 +1180,8 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                  }
                              // --- End Actual Post-Attack Logic ---
                         } // End else block (TargetStats was valid)
+
+                    	
                     	SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                     } // End check Actors/Entities valid
                     else
@@ -1630,6 +1636,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 							}
     					}
 
+    					UE_LOG(LogTemp, Error, TEXT("B PlaceholderSignal = %s"), *StateFragment->PlaceholderSignal.ToString());
     					SwitchState(StateFragment->PlaceholderSignal, Entity, EntityManager);
     				}
     			}
@@ -1988,7 +1995,7 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(Actor))
 							UE_LOG(LogTemp, Log, TEXT("BUILDING PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 
-						
+						UE_LOG(LogTemp, Error, TEXT("C PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2040,6 +2047,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
+						UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}

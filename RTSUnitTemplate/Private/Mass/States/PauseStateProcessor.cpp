@@ -87,6 +87,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
+                UE_LOG(LogTemp, Log, TEXT("PauseSWITCH TO PLACEHOLDER!"));
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 StopMovement(MoveTarget, World);
                 // UpdateMoveTarget stays here as it modifies fragment data directly
