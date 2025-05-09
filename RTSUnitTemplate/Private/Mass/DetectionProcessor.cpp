@@ -87,8 +87,6 @@ void UDetectionProcessor::HandleUnitSpawnedSignal(
 {
     const float Now = World->GetTimeSeconds();
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleUnitSpawnedSignal: %d entities spawned at time %.3f"),
-         Entities.Num(), Now);
     if (!EntitySubsystem) { return; }
     
     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -101,7 +99,6 @@ void UDetectionProcessor::HandleUnitSpawnedSignal(
         
         if (StateFragment)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Setting BirthTime!"));
             StateFragment->BirthTime = Now;
         }
     }
@@ -117,7 +114,7 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
-    
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     // Optional: Nur für bestimmte Zustände laufen lassen?
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
     /*
@@ -174,7 +171,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); 
         //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -192,7 +189,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& DetectorStatsFrag = StatsList[i];
             const FMassAgentCharacteristicsFragment& DetectorCharFrag = CharList[i];
             const FVector DetectorLocation = DetectorTransform.GetLocation();
-          
+            FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i];
      
 
             FMassEntityHandle BestTargetEntity;
@@ -309,6 +306,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 {
                     DetectorTargetFrag.TargetEntity.Reset();
                     DetectorTargetFrag.bHasValidTarget = false;
+                    UpdateMoveTarget(MoveTargetFrag, StateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
                 }
                  // If it's the current target but outside lose radius, bCurrentTargetStillViable remains false
             }

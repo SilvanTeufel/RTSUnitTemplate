@@ -23,6 +23,7 @@ void URunStateProcessor::ConfigureQueries()
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 	// Schließe tote Entities aus
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
@@ -56,19 +57,20 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Capture World for helper functions.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
-
-        UE_LOG(LogTemp, Log, TEXT("URunStateProcessor NumEntities: %d"), NumEntities);
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
-
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
+            
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
@@ -79,6 +81,12 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
             StateFrag.StateTimer += ExecutionInterval;
 
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
+                TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                PendingSignals.Emplace(Entity, UnitSignals::Chase);
+            }
              // 1. Check if already at the final destination
             if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
             {

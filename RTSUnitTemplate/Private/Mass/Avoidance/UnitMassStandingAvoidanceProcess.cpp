@@ -108,15 +108,10 @@ void UUnitMassStandingAvoidanceProcess::Execute(FMassEntityManager& EntityManage
 			// Only log if the entity should actually be processed by standing avoidance logic
 			if (MoveTarget.GetCurrentAction() == EMassMovementAction::Stand && GhostList[i].IsValid(MoveTarget.GetCurrentActionID()))
             {
-				//#if WITH_MASSGAMEPLAY_DEBUG
-				//if (UE::Mass::Debug::IsDebuggingEntity(Entity))
-				//{
 					const FVector ResultGhostLocation = GhostList[i].Location;
 					const FVector ResultGhostVelocity = GhostList[i].Velocity;
 					UE_LOG(LogTemp, Log, TEXT("Entity [%d] POST-STANDING: ResultGhostLoc=%s | ResultGhostVel=%s"),
 						Entity.Index, *ResultGhostLocation.ToString(), *ResultGhostVelocity.ToString());
-				//}
-				//#endif // WITH_MASSGAMEPLAY_DEBUG
 			}
 		}
 	});

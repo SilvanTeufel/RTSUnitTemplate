@@ -132,7 +132,6 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                     {
                         if (!Payload.SignalName.IsNone())
                         {
-                            // UE_LOG(LogTemp, Verbose, TEXT("Signaling Entity %d:%d with %s from ResourceExtractionProcessor"), Payload.TargetEntity.Index, Payload.TargetEntity.SerialNumber, *Payload.SignalName.ToString());
                             StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
                         }
                     }

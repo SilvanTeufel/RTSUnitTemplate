@@ -89,7 +89,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             {
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct
-                StopMovement(MoveTarget, World);
                 continue;
             }
 
@@ -98,8 +97,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             
                 // --- Range Check ---
                 const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                UE_LOG(LogTemp, Log, TEXT("Stats.AttackRange: %f."), Stats.AttackRange);
-                UE_LOG(LogTemp, Log, TEXT("Dist %f."), Dist);
+
                 if (Dist <= Stats.AttackRange)
                 {
                     // --- Melee Impact Check ---
@@ -110,9 +108,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                             // Queue signal instead of sending directly
                             PendingSignals.Emplace(Entity, UnitSignals::MeleeAttack); // Adjust UnitSignals::MeleeAttack
                             StateFrag.HasAttacked = true; // State modification stays here
-                            // Note: We queue the signal but modify state immediately. This might
-                            // slightly change behavior if the signal was expected to trigger
-                            // something *before* HasAttacked was set. Usually okay.
                         }
                     }else if (!StateFrag.SwitchingState) // --- Attack Duration Over ---
                     {
@@ -122,7 +117,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                         StateFrag.HasAttacked = false; // State modification stays here
                         continue;
                     }
-                    // else if (Stats.bUseProjectile && !StateFrag.HasAttacked) { /* Handle projectile signal queuing */ }
                 }
                 else if (!StateFrag.SwitchingState)
                 {

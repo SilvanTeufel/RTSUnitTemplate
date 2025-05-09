@@ -76,10 +76,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Mutable for stopping
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Keep mutable if needed
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        // const float DeltaTime = ChunkContext.GetDeltaTimeSeconds(); // Not used in loop?
-        // const float CurrentWorldTime = ChunkContext.GetWorld()->GetTimeSeconds(); // Not used in loop?
-        // Using ExecutionInterval for timer might be more consistent if Execute might skip frames
-            UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
+
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update
@@ -98,12 +96,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             // --- Check for Valid Target ---
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
-                 // Queue Chase signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
-                // Note: Don't continue here if you might want IdlePatrolSwitcher below?
-                // Logic seems to imply either Chase OR IdlePatrolSwitcher.
-                // If Chase is found, we typically wouldn't also signal IdlePatrolSwitcher.
                 continue; // Exit loop for this entity as we are switching to Chase
             }
 
@@ -116,11 +110,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             	
                 if (Roll > PatrolFrag.IdleChance)
                 {
-                    // Queue IdlePatrolSwitcher signal instead of sending directly
-                    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!IdlePatrolSwitcher!!!!!!!!!!"));
                    PendingSignals.Emplace(Entity, UnitSignals::PISwitcher);
-                    StateFrag.StateTimer = 0.f;
-                   // Continue processing other entities in the chunk
+                   StateFrag.StateTimer = 0.f;
                 }
             }
         }

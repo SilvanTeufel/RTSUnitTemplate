@@ -54,11 +54,12 @@ void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AAct
 
 void ACustomControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
 {
-	if (Unit->TeamId == SelectableTeamId)
-	{
-		Unit->IsMyTeam = true;
-		Unit->SpawnFogOfWarManager(this);
-	}
+	if (IsValid(Unit))
+		if (Unit->TeamId == SelectableTeamId)
+		{
+			Unit->IsMyTeam = true;
+			Unit->SpawnFogOfWarManager(this);
+		}
 }
 
 void ACustomControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()

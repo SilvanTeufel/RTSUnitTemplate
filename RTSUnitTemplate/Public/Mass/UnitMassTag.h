@@ -2,6 +2,7 @@
 
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"
+#include "MassEntityManager.h"
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "MassNavigationTypes.h"
@@ -410,4 +411,27 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);
 	}
 	
+}
+
+inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEntityHandle Entity, const UScriptStruct* TagType)
+{
+	if (!EntityManager.IsEntityValid(Entity)) // Optional: Check entity validity first
+	{
+		return false;
+	}
+
+	// 1. Get the entity's archetype handle (use Unsafe if you know the entity is valid and built)
+	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
+	// Or safer: const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
+
+	if (!ArchetypeHandle.IsValid())
+	{
+		return false; // Should not happen for a valid, built entity, but good practice
+	}
+
+	// 2. Get the composition descriptor for the archetype
+	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+
+	// 3. Check if the tag is present in the composition's tag bitset
+	return Composition.Tags.Contains(*TagType);
 }

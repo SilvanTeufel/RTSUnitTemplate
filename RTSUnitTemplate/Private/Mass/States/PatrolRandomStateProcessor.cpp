@@ -88,7 +88,6 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for StopMovement
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
-            UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

@@ -87,9 +87,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
-                UE_LOG(LogTemp, Log, TEXT("PauseSWITCH TO PLACEHOLDER!"));
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
-                StopMovement(MoveTarget, World);
+                //StopMovement(MoveTarget, World);
                 // UpdateMoveTarget stays here as it modifies fragment data directly
                 //UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
                 continue;
@@ -108,7 +107,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         // Check for ranged attack *before* general attack signal if applicable
                         if (Stats.bUseProjectile)
                         {
-                            UE_LOG(LogTemp, Log, TEXT("Fire Projectile!"));
                              // Queue signal instead of sending directly
                             PendingSignals.Emplace(Entity, UnitSignals::RangedAttack);
                             // Note: If RangedAttack implies Attack state, maybe only send one?

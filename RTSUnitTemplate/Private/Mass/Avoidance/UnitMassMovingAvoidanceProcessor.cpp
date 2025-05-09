@@ -89,9 +89,6 @@ void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManage
 				const FVector CurrentDesiredVel = SteeringList[i].DesiredVelocity;
                 const FVector AgentLocation = TransformList[i].GetTransform().GetLocation();
 
-				UE_LOG(LogTemp, Log, TEXT("Entity [%d] PRE-MOVING-AVOIDANCE: Force=%s | Vel=%s | DesiredVel=%s"),
-					Entity.Index, *CurrentForce.ToString(), *CurrentVel.ToString(), *CurrentDesiredVel.ToString());
-
                 // --- Log Neighbor Check ---
                 if (NavSys) // Check if NavSys is valid before using it
                 {
@@ -116,12 +113,6 @@ void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManage
                         }
                     }
 
-                    UE_LOG(LogTemp, Log, TEXT("Entity [%d] PRE-AVOIDANCE Neighbor Check: Found %d potential neighbors within %.1f units."),
-                       Entity.Index, NeighborCount, SearchRadius);
-                }
-                else
-                {
-                     UE_LOG(LogTemp, Warning, TEXT("Entity [%d] PRE-AVOIDANCE Neighbor Check: NavigationSubsystem is NULL."), Entity.Index);
                 }
                 // --- End Log Neighbor Check ---
 			}
@@ -159,6 +150,7 @@ void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManage
 			// #endif // WITH_MASSGAMEPLAY_DEBUG // Keep commented for testing
 		}
 	});
+	
 	
 }
 

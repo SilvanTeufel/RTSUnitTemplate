@@ -106,23 +106,6 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             // Clamp final speed
             Velocity.Value = Velocity.Value.GetClampedToMaxSize(MaxSpeed);
 
-        	/*
-        	// Log inputs and outputs for the selected entity
-				 UE_LOG(LogTemp, Log, TEXT("Entity [%d] ApplyMovement: DesiredVel=%s | AvoidForce=%s | AccelInput=%s | VelocityDelta=%s | FinalVel=%s"),
-					 Context.GetEntity(EntityIndex).Index,
-					 *DesiredVelocity.ToString(),
-					 *AvoidanceForce.ToString(), // Log the force coming FROM avoidance
-					 *AccelInput.ToString(),
-					 *VelocityDelta.ToString(),
-					 *Velocity.Value.ToString());
-
-				 // Optional: Log only if AvoidanceForce is significant
-				 if (!AvoidanceForce.IsNearlyZero(0.1f))
-				 {
-					 UE_LOG(LogTemp, Warning, TEXT("Entity [%d] ApplyMovement: SIGNIFICANT AvoidanceForce Detected: %s"),
-						 Context.GetEntity(EntityIndex).Index, *AvoidanceForce.ToString());
-				 }
-        	*/
             // --- Apply final velocity to position ---
             FVector CurrentLocation = CurrentTransform.GetLocation();
             FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;

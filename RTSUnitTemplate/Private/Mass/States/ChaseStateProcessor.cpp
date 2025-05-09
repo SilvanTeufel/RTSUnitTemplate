@@ -92,16 +92,14 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
 
-            UE_LOG(LogTemp, Log, TEXT("Chase TargetFrag.bHasValidTarget: %d"), TargetFrag.bHasValidTarget);
             // || !TargetFrag.TargetEntity.IsSet() &&
             if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
             {
-                UE_LOG(LogTemp, Log, TEXT("Switch from Chase to Placeholder!!"));
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 // Potentially clear MoveTarget here too if needed when losing target
-                StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
+                //StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
                 continue;
             }
 
@@ -118,7 +116,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
 
                 // StopMovement modifies fragment directly, keep it here
-                StopMovement(MoveTarget, World);
+                //StopMovement(MoveTarget, World);
                 continue;
             }
 

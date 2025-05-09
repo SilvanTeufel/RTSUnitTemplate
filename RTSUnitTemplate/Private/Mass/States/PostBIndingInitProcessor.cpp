@@ -27,47 +27,5 @@ void UPostBindingInitProcessor::ConfigureQueries()
 void UPostBindingInitProcessor::Execute(FMassEntityManager& EntityManager,
                                         FMassExecutionContext& Context)
 {
-    /*
-     
-    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-    if (TimeSinceLastRun < ExecutionInterval)
-    {
-        return; // Skip this frame
-    }
-    TimeSinceLastRun = 0.0f; // Reset timer
 
-    UE_LOG(LogTemp, Log, TEXT("UPostBindingInitProcessor::Execute started"));
-    
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [&](FMassExecutionContext& SubCtx)
-    {
-        FMassCommandBuffer& CmdBuffer = SubCtx.Defer();
-        const TArrayView<const FMassEntityHandle> Handles = SubCtx.GetEntities();
-        TArrayView<FMassActorFragment> ActorFragments = Context.GetMutableFragmentView<FMassActorFragment>();
-        UE_LOG(LogTemp, Warning, TEXT("Handles.Num(): %d"), Handles.Num());
-        for (int32 i = 0; i < Handles.Num(); ++i)
-        {
-            FMassEntityHandle E = Handles[i];
-            
-            AActor* Actor = ActorFragments[i].GetMutable();
-            if (!Actor)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("NO ACTOR FOUND!!!"));
-                continue;
-            }
-
-            UMassActorBindingComponent* Comp = Actor->FindComponentByClass<UMassActorBindingComponent>();
-            if (Comp)
-            {
-                //Comp->InitTransform(EntityManager, E);
-                //Comp->InitMovementFragments(EntityManager, E);
-                //Comp->InitAIFragments(EntityManager, E);
-                //Comp->InitRepresentation(EntityManager, E);
-            }
-
-            CmdBuffer.RemoveTag<FNeedsActorBindingInitTag>(E);
-            UE::Mass::Debug::LogEntityTags(E, EntityManager);
-        }
-    });
-
-    */
 }

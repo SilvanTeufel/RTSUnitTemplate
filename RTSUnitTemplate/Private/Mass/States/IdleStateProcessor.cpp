@@ -88,14 +88,10 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // --- Check for Valid Target ---
             bool bCanAttack = true; // Replace with your actual flag from StatsFrag or elsewhere
 
-            UE_LOG(LogTemp, Log, TEXT("Idle TargetFrag.bHasValidTarget: %d"), TargetFrag.bHasValidTarget);
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
-                // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
-                // Reset timer or other state if needed upon leaving Idle
-                // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
                 continue; // Switch state, process next entity
             }
 
@@ -110,12 +106,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             if (!bIsOnPlattform && !StateFrag.SwitchingState && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
             {
                 StateFrag.SwitchingState = true;
-                // Queue PatrolRandom signal instead of sending directly
-                UE_LOG(LogTemp, Log, TEXT("SWITCH FROM IDLE TO PATROL RANDOM!"));
                 PendingSignals.Emplace(Entity, UnitSignals::PatrolRandom);
-
-                // Reset timer or other state if needed upon leaving Idle
-                // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
                 continue; // Switch state, process next entity
             }
 
