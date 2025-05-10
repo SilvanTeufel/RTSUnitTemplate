@@ -76,10 +76,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager);
+
             UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
-            // --- Queue Sync Signal ---
-            // Always queue this signal if the processor runs for the entity
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
@@ -93,49 +91,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 PendingSignals.Emplace(Entity, UnitSignals::Dead);
                 continue; // Skip further checks for this dead entity
             }
-
-            // --- 2. Check TARGET entity's health ---
-            /*
-            if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
-            {
-                const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
-
-                // EntityManager access is generally safe within Mass Processors
-                if (EntityManager.IsEntityValid(TargetEntity))
-                {
-                    const FMassCombatStatsFragment* TargetStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
-
-                    if (TargetStatsPtr && TargetStatsPtr->Health <= 0.f) // Target is dead
-                    {
-                        // Queue Run signal for the CURRENT entity
-                        PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
-
-                        // --- Direct Fragment/Context Modifications Stay Here ---
-                        TargetFrag.bHasValidTarget = false; // Modify fragment directly
-                        // Optionally TargetFrag.Clear();
-                        ChunkContext.Defer().AddTag<FMassStateDetectTag>(Entity); // Use context directly
-                        UpdateMoveTarget(MoveTargetFrag, StateFrag.StoredLocation, StatsFrag.RunSpeed, World); // Modify fragment directly
-                        // -------------------------------------------------------
-
-                        // Since we switched state to Run, continue to next entity
-                        continue;
-                    }
-                    // else { // Target is alive and valid, do nothing in this block }
-                }
-                else // Target Entity Handle is invalid
-                {
-                     // --- Direct Fragment Modification Stays Here ---
-                    TargetFrag.bHasValidTarget = false; // Modify fragment directly
-                     // Optionally TargetFrag.Clear();
-                    // -----------------------------------------------
-                    // No signal needed here? Maybe signal Run? Depends on desired behavior.
-                    // PendingSignals.Emplace(Entity, UnitSignals::Run);
-                }
-            }*/
-            // End if target is set
-
-            // --- Potentially other checks for this entity ---
-
         } // End Entity Loop
     }); // End ForEachEntityChunk
 

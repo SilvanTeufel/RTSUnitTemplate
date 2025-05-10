@@ -1029,25 +1029,22 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         // --- Perform Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
                         StrongAttacker->SetUnitState(UnitData::Attack);
-                        StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
-                        StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
+						bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
+						
+						if (bIsActivated) return;
+                    	bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
+                    	if (bIsActivated) return;
                         if (AttackerRange >= 600.f)
                         {
-                           StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
+                           bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
+                        	if (bIsActivated) return;
                         }
+
                     	
                         StrongAttacker->SpawnProjectile(StrongTarget, StrongAttacker);
-                        // --- End Core Actor Actions ---
-
-
-                        // --- >>> ADDED POST-ATTACK LOGIC <<< ---
-
-                        // --- Get Fragments Needed for Post-Attack Logic (INSIDE Game Thread Task) ---
-                        // Use const pointers where possible, mutable only if needed
+                    	
                         const FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
-                        FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity); // Mutable for timer
-
-                        // Check if TargetStats fragment is valid before using it
+                        FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity);
               
                     	if (TargetStats)
                         {

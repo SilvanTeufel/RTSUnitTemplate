@@ -55,7 +55,6 @@ UAbilitySystemComponent* AGASUnit::GetAbilitySystemComponent() const
 
 void AGASUnit::InitializeAttributes()
 {
-	UE_LOG(LogTemp, Log, TEXT("AGASUnit::InitializeAttributes() called on %s"), *GetName());
 	if(AbilitySystemComponent && DefaultAttributeEffect)
 	{
 		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
@@ -178,21 +177,21 @@ bool AGASUnit::GetToggleUnitDetection()
 }
 
 
-void AGASUnit::ActivateAbilityByInputID(
+bool AGASUnit::ActivateAbilityByInputID(
 	EGASAbilityInputID InputID,
 	const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray,
 	const FHitResult& HitResult)
 {
 	if (!AbilitySystemComponent)
 	{
-		return;
+		return false;
 	}
 
 	TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 
 	if (!AbilityToActivate)
 	{
-		return;
+		return false;
 	}
 	
 	UGameplayAbilityBase* Ability;
@@ -202,7 +201,7 @@ void AGASUnit::ActivateAbilityByInputID(
 		Ability = AbilityB;
 	else
 	{
-		return;
+		return false;
 	}
 	
 	if (ActivatedAbilityInstance)
@@ -220,6 +219,7 @@ void AGASUnit::ActivateAbilityByInputID(
 		{
 			FireMouseHitAbility(HitResult);
 		}
+		return false;
 	}
 	else
 	{
@@ -254,6 +254,7 @@ void AGASUnit::ActivateAbilityByInputID(
 				AbilityQueueSize++;
 			}
 		}
+		return bIsActivated;
 	}
 }
 

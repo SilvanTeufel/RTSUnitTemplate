@@ -405,7 +405,6 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 		Attempts++;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RandomPoint.Location: %s"), *RandomPoint.Location.ToString());
 	if (bSuccess)
 	{
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);

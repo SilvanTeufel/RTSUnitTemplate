@@ -33,7 +33,7 @@ void UIdleStateProcessor::ConfigureQueries()
     // Timer ist jetzt Teil von FMassAIStateFragment
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // ReadWrite für State und Timer
 
-
+    EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);

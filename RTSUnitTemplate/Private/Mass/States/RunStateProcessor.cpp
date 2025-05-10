@@ -25,6 +25,7 @@ void URunStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 	// Schließe tote Entities aus
+    EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
 	EntityQuery.RegisterWithProcessor(*this);

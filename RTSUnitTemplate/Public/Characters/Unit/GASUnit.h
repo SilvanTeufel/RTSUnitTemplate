@@ -117,7 +117,7 @@ public:
 	bool GetToggleUnitDetection();
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult = FHitResult());
+	bool ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult = FHitResult());
 
 	//UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	//void ServerActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);

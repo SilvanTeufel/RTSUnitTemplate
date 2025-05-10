@@ -514,7 +514,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	UnitOwner->InitializeAttributes();
     	UnitOwner->GiveAbilities();
     	UnitOwner->SetupAbilitySystemDelegates();
-    	
+    	UnitOwner->GetAbilitiesArrays();
+    	UnitOwner->AutoAbility();
         UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
 		/*
     	if (UnitOwner->GetCharacterMovement())

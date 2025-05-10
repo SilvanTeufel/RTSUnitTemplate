@@ -35,7 +35,8 @@ void UPatrolRandomStateProcessor::ConfigureQueries()
 	// ***** ADD THIS LINE *****
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite); // Request the patrol fragment
 	// ***** END ADDED LINE *****
-	
+
+    EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     // Optional: ActorFragment für komplexere Abfragen (z.B. GetWorld, NavSys)

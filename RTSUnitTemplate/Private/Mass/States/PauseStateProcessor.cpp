@@ -28,7 +28,8 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
-    
+
+    EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
     
@@ -54,16 +55,10 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     if (!World) return;
 
     if (!SignalSubsystem) return;
-    // Make a weak pointer copy for safe capture in the async task
 
-
-    // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        // Capture PendingSignals by reference. Capture World for UpdateMoveTarget.
-        // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -75,28 +70,22 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& StateFrag = StateList[i]; // State modification stays here
+            FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
-
-            // --- Target Lost ---
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
-                // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
-                //StopMovement(MoveTarget, World);
-                // UpdateMoveTarget stays here as it modifies fragment data directly
-                //UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
                 continue;
             }
+            
+            StateFrag.StateTimer += ExecutionInterval;
 
-            // --- Pause Timer ---
-            StateFrag.StateTimer += ExecutionInterval; // State modification stays here
-                // --- Pause Over, Decide Next State ---
             const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 
                 if (Dist <= Stats.AttackRange) // --- In Range ---
@@ -104,13 +93,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                     if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)
                     {
                         StateFrag.SwitchingState = true;
-                        // Check for ranged attack *before* general attack signal if applicable
                         if (Stats.bUseProjectile)
                         {
-                             // Queue signal instead of sending directly
                             PendingSignals.Emplace(Entity, UnitSignals::RangedAttack);
-                            // Note: If RangedAttack implies Attack state, maybe only send one?
-                            // If not, it will queue both RangedAttack and Attack signals below.
                         }else
                         {
                             PendingSignals.Emplace(Entity, UnitSignals::Attack);
@@ -123,11 +108,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                      // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 }
-                // Reset timer or other state if needed upon leaving Pause
-                // StateFrag.StateTimer = 0.0f; // Example reset
-                continue; // Zustand gewechselt
-            // --- Still Paused ---
-            // Velocity.Value = FVector::ZeroVector; // If needed, keep here
         }
     }); // End ForEachEntityChunk
 

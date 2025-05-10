@@ -62,14 +62,17 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(SomeExpectedNumber); // Optional optimization
-
+	
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture PendingSignals by reference. Do NOT capture LocalSignalSubsystem directly.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
+
+        	UE_LOG(LogTemp, Log, TEXT("Casting // NumEntities: %d"), NumEntities);
         if (NumEntities == 0) return; // Skip empty chunks
 
+        	
         // Get required fragment views
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
@@ -85,6 +88,8 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // 4. Check if cast time is finished
+
+        	UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer: (%f) // StatsFrag.CastTime: %f"), StateFrag.StateTimer, StatsFrag.CastTime);
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
                 // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Queuing Signal %s."), Entity.Index, Entity.SerialNumber, *UnitSignals::Run.ToString());

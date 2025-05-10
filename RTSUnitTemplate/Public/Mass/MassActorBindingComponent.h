@@ -49,10 +49,10 @@ public:
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	void SetupMassOnUnit();
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	void SetupMassOnBuilding();
 	
 	UPROPERTY() 
@@ -63,7 +63,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Mass ) 
 	UStaticMesh* UnitMassMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Mass)
 	TObjectPtr<UMassEntityConfigAsset> EntityConfig;
 	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
