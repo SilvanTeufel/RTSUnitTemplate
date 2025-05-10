@@ -434,3 +434,37 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 	// 3. Check if the tag is present in the composition's tag bitset
 	return Composition.Tags.Contains(*TagType);
 }
+
+template<typename FragmentType>
+bool DoesEntityHaveFragment(
+   const FMassEntityManager& EntityManager,
+   FMassEntityHandle         Entity)
+{
+	if (!EntityManager.IsEntityValid(Entity))
+	{
+		return false;
+	}
+
+	const FMassArchetypeHandle ArchetypeHandle =
+	   EntityManager.GetArchetypeForEntity(Entity); // Note: Consider if GetArchetypeForEntity (safer) is more appropriate if Entity might not be fully initialized.
+	if (!ArchetypeHandle.IsValid())
+	{
+		return false;
+	}
+
+	const FMassArchetypeCompositionDescriptor& Composition =
+	   EntityManager.GetArchetypeComposition(ArchetypeHandle);
+
+	// Get the UScriptStruct pointer for the FragmentType
+	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
+
+	// Ensure the struct pointer is valid before dereferencing
+	if (FragmentStruct)
+	{
+		// Dereference the pointer to pass a reference to Contains
+		return Composition.Fragments.Contains(*FragmentStruct);
+	}
+
+	// If StaticStruct() somehow returned nullptr, the fragment isn't valid or found.
+	return false;
+}

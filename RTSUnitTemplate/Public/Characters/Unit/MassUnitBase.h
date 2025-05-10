@@ -21,6 +21,9 @@ public:
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
+	UStaticMeshComponent* StaticMesh;
 	/**
 * Adds a specific Mass Tag to the entity associated with this Actor.
 * @param TagToAdd The script struct representing the tag type to add (e.g., FMassStateIdleTag::StaticStruct()).
@@ -48,4 +51,5 @@ public:
 	bool SyncTranslation();
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
+
 };

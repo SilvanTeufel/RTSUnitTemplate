@@ -33,7 +33,7 @@ void UUnitSignalingProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-
+    
     // Ensure it's one of our units (optional, but good practice)
     EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All); // Adjust tag if needed
 
@@ -76,8 +76,20 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
+            
             const FMassEntityHandle CurrentEntity = ChunkContext.GetEntity(i);
-
+            /*
+            if (!EntityManager.IsEntityValid(CurrentEntity)) continue;
+                
+            if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, CurrentEntity) ||
+                 !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, CurrentEntity) ||
+                 !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, CurrentEntity))
+            {
+              // skip any entity missing one of the required fragments
+              continue;
+            }
+            */
+            const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentEntity);
             // Create the signal data payload
             //FUnitPresenceSignal SignalData;
             //SignalData.SignalerEntity = CurrentEntity;
@@ -90,15 +102,18 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // The SignalSubsystem automatically handles spatial partitioning
             //SignalSubsystem->SignalEntity(UnitPresenceSignalName, CurrentEntity, SignalData);
 
-            if (!SignalSubsystem)
+            if (TargetStatsFrag->Health > 0.f)
             {
-                 continue; // Handle missing subsystem
-            }
+                if (!SignalSubsystem)
+                {
+                     continue; // Handle missing subsystem
+                }
             
-            SignalSubsystem->SignalEntityDeferred(
-            ChunkContext,
-            UnitSignals::UnitInDetectionRange,
-            CurrentEntity);
+                SignalSubsystem->SignalEntityDeferred(
+                ChunkContext,
+                UnitSignals::UnitInDetectionRange,
+                CurrentEntity);
+            }
         }
     });
 }

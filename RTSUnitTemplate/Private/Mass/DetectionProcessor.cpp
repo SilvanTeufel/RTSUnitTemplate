@@ -9,6 +9,7 @@
 #include "MassSignalTypes.h" 
 #include "MassStateTreeFragments.h"  // For FMassStateDeadTag
 #include "MassNavigationFragments.h" // For FMassAgentCharacteristicsFragment
+#include "Mass/Signals/UnitSignalingProcessor.h"
 
 
 UDetectionProcessor::UDetectionProcessor()
@@ -30,6 +31,7 @@ void UDetectionProcessor::Initialize(UObject& Owner)
         if (SignalSubsystem)
         {
             // Ensure previous handle is removed if Initialize is called multiple times (unlikely for processors, but safe)
+            
             if (SignalDelegateHandle.IsValid())
             {
                 SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange).Remove(SignalDelegateHandle);
@@ -138,6 +140,8 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+
+
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     //UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
@@ -204,16 +208,63 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 // Basic Filtering
                 if (PotentialTargetEntity == DetectorEntity) continue;
+                //if (!DetectorTargetFrag.TargetEntity.IsSet())  continue;
 
-                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTargetEntity);
+                if (!EntityManager.IsEntityValid(PotentialTargetEntity))
+                {
+                    SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity);
+                    continue;
+                }
+
+           
+                // *Guard each fragment* before dereferencing it
+                if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, PotentialTargetEntity) ||
+                    !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, PotentialTargetEntity) ||
+                    !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, PotentialTargetEntity))
+                {
+                  // skip any entity missing one of the required fragments
+                  SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity);
+                  continue;
+                }
+
                 const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(PotentialTargetEntity);
+                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTargetEntity);
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(PotentialTargetEntity);
+                
+              
 
+                /*
+                // Call the new helper function
+                 const FPotentialTargetFragments TargetFragments = TryGetTargetFragments(EntityManager, PotentialTargetEntity);
+
+                 if (!TargetFragments.bSuccessfullyFetchedAll)
+                 {
+                     UE_LOG(LogTemp, Warning, TEXT("UDetectionProcessor: Failed to fetch all required fragments for PotentialTargetEntity %s. Transform: %p, Stats: %p, Char: %p. Skipping."),
+                         *PotentialTargetEntity.DebugGetDescription(),
+                         static_cast<const void*>(TargetFragments.TransformFrag),
+                         static_cast<const void*>(TargetFragments.StatsFrag),
+                         static_cast<const void*>(TargetFragments.CharacteristicsFrag));
+                     continue; // Skip this entity
+                 }
+
+                 // If we get here, all fragments were fetched (pointers are non-null).
+                 // You can now safely dereference them using the struct members:
+                
+                 const FTransformFragment* TargetTransformFrag = TargetFragments.TransformFrag;
+                 const FMassCombatStatsFragment* TargetStatsFrag = TargetFragments.StatsFrag;
+                 const FMassAgentCharacteristicsFragment* TargetCharFrag = TargetFragments.CharacteristicsFrag;
+           
+           
+
+
+                
+
+                /*
                 if (!TargetTransformFrag || !TargetStatsFrag || !TargetCharFrag)
                 {
                      SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity); // Remove incomplete from processed set
                      continue; // Missing required components
-                }
+                }*/
                 // --- End Data Fetching ---
 
                 const FTransform& TargetTransform = TargetTransformFrag->GetTransform();

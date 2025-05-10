@@ -68,10 +68,8 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-
-        	UE_LOG(LogTemp, Log, TEXT("Casting // NumEntities: %d"), NumEntities);
+        	
         if (NumEntities == 0) return; // Skip empty chunks
-
         	
         // Get required fragment views
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
