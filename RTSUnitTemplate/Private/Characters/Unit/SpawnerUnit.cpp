@@ -20,7 +20,6 @@ void ASpawnerUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutL
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(ASpawnerUnit, TeamId);
 	DOREPLIFETIME(ASpawnerUnit, SquadId);
 	DOREPLIFETIME(ASpawnerUnit, CurrentDraggedAbilityIndicator);
 

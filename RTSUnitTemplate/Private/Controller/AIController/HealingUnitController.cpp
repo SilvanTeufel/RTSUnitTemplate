@@ -371,7 +371,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 		}
 	
 		const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, UnitBase->RunLocation);
-		UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+		//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 
 		const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 	
@@ -462,11 +462,11 @@ void AHealingUnitController::HealPatrol(AHealingUnit* UnitBase, float DeltaSecon
 		if(UnitBase->FollowPath)
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitBase->RunLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+			//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}else
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), WaypointLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+			//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}
 	}
 	else

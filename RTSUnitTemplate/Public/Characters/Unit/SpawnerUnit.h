@@ -5,9 +5,10 @@
 #include "CoreMinimal.h"
 //#include "PathSeekerBase.h"
 #include "Actors/AbilityIndicator.h"
-#include "GameFramework/Character.h"
+//#include "GameFramework/Character.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Actors/Pickup.h"
+#include "Characters/UnitActor.h"
 #include "Engine/World.h"
 #include "SpawnerUnit.generated.h"
 
@@ -32,7 +33,7 @@ struct FSpawnData : public FTableRowBase
 };
 
 UCLASS()
-class RTSUNITTEMPLATE_API ASpawnerUnit : public ACharacter
+class RTSUNITTEMPLATE_API ASpawnerUnit : public AUnitActor
 {
 	GENERATED_BODY()
 	
@@ -67,10 +68,7 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = Spawn)
 	bool IsSpawned = false;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int TeamId = 1;
-
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SquadId = 0;
 

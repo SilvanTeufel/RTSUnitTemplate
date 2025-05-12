@@ -299,7 +299,7 @@ void AWorkerUnitControllerBase::EvasionWorker(AUnitBase* UnitBase, FVector Colli
 	
 	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
 	const FVector RotatedDirection = FRotator(0.f,60.f,0.f).RotateVector(-1*ADirection);
-	UnitBase->AddMovementInput(RotatedDirection, UnitBase->Attributes->GetRunSpeedScale());
+	//UnitBase->AddMovementInput(RotatedDirection, UnitBase->Attributes->GetRunSpeedScale());
 
 	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
 
@@ -839,7 +839,7 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
         {
             return nullptr;
         }
-        UnitController->Possess(UnitBase);
+        //UnitController->Possess(UnitBase);
     }
 
     // --------------------------------------------

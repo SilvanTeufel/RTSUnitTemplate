@@ -24,12 +24,14 @@ void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AAbilityUnit, StoredUnitState);
 }
 
+/*
 void AAbilityUnit::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	GetAbilitiesArrays();
 	AutoAbility();
 }
+*/
 
 void AAbilityUnit::LevelUp_Implementation()
 {
@@ -92,8 +94,7 @@ void AAbilityUnit::StartAcceleratingTowardsDestination(const FVector& NewDestina
 	// Here we use LaunchCharacter to give the unit an instantaneous impulse.
 	// The impulse magnitude is based on the provided acceleration rate.
 	// The second and third parameters ensure our launch overrides any existing velocity in the XY and Z axes.
-	LaunchCharacter(Direction * NewAccelerationRate, true, false);
-
+	CapsuleComponent->AddImpulse(Direction * NewAccelerationRate, NAME_None, true);
 	// Optionally, if you need to use NewTargetVelocity at some point (for example, to set a maximum speed),
 	// you can consider blending that in based on your game design.
 }
@@ -113,7 +114,7 @@ void AAbilityUnit::Accelerate()
 		CurrentVelocity = FMath::VInterpTo(CurrentVelocity, TargetVelocity, GetWorld()->DeltaTimeSeconds, AccelerationRate);
 
 		// Launch character with the current velocity
-		LaunchCharacter(CurrentVelocity, true, true);
+		CapsuleComponent->AddImpulse(CurrentVelocity, NAME_None, true);
 	}
 	
 
@@ -155,7 +156,7 @@ void AAbilityUnit::AccelerateFrom()
 		CurrentVelocity = FMath::VInterpTo(CurrentVelocity, TargetVelocity, GetWorld()->DeltaTimeSeconds, AccelerationRate);
 
 		// Launch character with the current velocity
-		LaunchCharacter(CurrentVelocity, true, true);
+		CapsuleComponent->AddImpulse(CurrentVelocity, NAME_None, true);
 	}
 	
 

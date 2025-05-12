@@ -639,11 +639,11 @@ void AUnitControllerBase::Patrol(AUnitBase* UnitBase, float DeltaSeconds)
 		if(UnitBase->FollowPath)
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), UnitBase->RunLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+			//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}else
 		{
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), WaypointLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+			//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}
 	}
 	else
@@ -685,7 +685,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 	}
 	
 	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, UnitBase->RunLocation);
-	UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+	//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
@@ -1057,7 +1057,7 @@ void AUnitControllerBase::EvasionIdle(AUnitBase* UnitBase, FVector CollisionLoca
 	}
 	
 	const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitLocation, CollisionLocation);
-	UnitBase->AddMovementInput(-1*ADirection, UnitBase->Attributes->GetRunSpeedScale());
+	//UnitBase->AddMovementInput(-1*ADirection, UnitBase->Attributes->GetRunSpeedScale());
 
 	const float Distance = sqrt((UnitLocation.X-CollisionLocation.X)*(UnitLocation.X-CollisionLocation.X)+(UnitLocation.Y-CollisionLocation.Y)*(UnitLocation.Y-CollisionLocation.Y));
 
@@ -1163,7 +1163,7 @@ void AUnitControllerBase::PatrolUEPathfinding(AUnitBase* UnitBase, float DeltaSe
 			FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
 			WaypointLocation =  FVector(WaypointLocation.X, WaypointLocation.Y, UnitBase->FlyHeight);
 			const FVector ADirection = UKismetMathLibrary::GetDirectionUnitVector(UnitBase->GetActorLocation(), WaypointLocation);
-			UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
+			//UnitBase->AddMovementInput(ADirection, UnitBase->Attributes->GetRunSpeedScale());
 		}else
 		{
 			SetUEPathfinding(UnitBase, DeltaSeconds, UnitBase->NextWaypoint->GetActorLocation());
@@ -1379,7 +1379,7 @@ bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& Desti
 
 bool AUnitControllerBase::DirectMoveToLocation(AUnitBase* Unit, const FVector& DestinationLocation)
 {
-	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
+	if (!HasAuthority() || !Unit || !Unit->GetMovementComponent())
 	{
 		return false;
 	}
@@ -1412,7 +1412,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 	
 	
 	//UE_LOG(LogTemp, Warning, TEXT("MoveToLocationUEPathFinding!!!"));
-	if (!HasAuthority() || !Unit || !Unit->GetCharacterMovement())
+	if (!HasAuthority() || !Unit || !Unit->GetMovementComponent())
 	{
 		return false;
 	}
@@ -1462,7 +1462,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 	// Create navigation filter CORRECTED
 	FSharedConstNavQueryFilter Filter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
 	//FSharedNavQueryFilter Filter = UNavigationQueryFilter::GetQueryFilter(NavData, Unit);
-
+	/*
 	// Build pathfinding query
 	FPathFindingQuery Query(
 		*Unit,
@@ -1480,7 +1480,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 
 	// Start movement with avoidance
 	FPathFollowingRequestResult RequestID = MoveTo(MoveRequest, &NavPath);
-
+	
 
 	// Inside FPathFindingResult PathResult = NavSystem->FindPathSync(...)
 	if (!PathResult.IsSuccessful())
@@ -1496,7 +1496,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 		DirectMoveToLocation(Unit, DestinationLocation);
 		return false;
 	}
-
+	
 	if (NavPath.IsValid() && NavPath->IsPartial())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Path is partial. End location: %s"), 
@@ -1514,6 +1514,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFindingAvoidance(AUnitBase* Unit, 
 	
 	Unit->SetRunLocation(DestinationLocation);
 	Unit->UEPathfindingUsed = true;
+	*/
 	return true;
 }
 
@@ -1529,7 +1530,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 	}
 
 	// Check if the unit is valid and can move
-	if (!Unit || !Unit->GetCharacterMovement())
+	if (!Unit || !Unit->GetMovementComponent())
 	{
 		return false;
 	}
@@ -1586,7 +1587,7 @@ bool AUnitControllerBase::MoveToLocationUEPathFinding(AUnitBase* Unit, const FVe
 
 void AUnitControllerBase::StopMovementCommand(AUnitBase* Unit)
 {
-	if (!Unit || !Unit->GetCharacterMovement())
+	if (!Unit || !Unit->GetMovementComponent())
 	{
 		return;
 	}

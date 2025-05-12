@@ -54,7 +54,7 @@ void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AAct
 
 void ACustomControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
 {
-	if (IsValid(Unit))
+	//if (IsValid(Unit))
 		if (Unit->TeamId == SelectableTeamId)
 		{
 			Unit->IsMyTeam = true;
@@ -136,7 +136,7 @@ void ACustomControllerBase::AgentInit_Implementation()
 }
 
 
-void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
+void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
 {
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -154,15 +154,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-    if (!EntityManager.IsEntityValid(InEntity))
+	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
+	
+    if (!EntityManager.IsEntityValid(MassEntityHandle))
     {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *InEntity.DebugGetDescription());
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
     // --- Access the PER-ENTITY fragment ---
-    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
-	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(InEntity);
+    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 	
     if (!MoveTargetFragmentPtr || !AiStatePtr)
     {
@@ -173,7 +175,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         // MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
 
         // Alternatively, if it's an error that it's missing:
-        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *InEntity.DebugGetDescription());
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
@@ -188,34 +190,34 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     // If you need to trigger network replication or specific actions:
     MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
 
-	EntityManager.Defer().AddTag<FMassStateRunTag>(InEntity);
+	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 
 	if (AttackToggled)
 	{
 		//UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
-		EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
+		EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 	}else
 	{
 		//UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
-		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(InEntity);
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
 	}
 
-	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(InEntity); 
-	EntityManager.Defer().RemoveTag<FMassStateRunTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
+	EntityManager.Defer().RemoveTag<FMassStateRunTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
 
-	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
 	/*
@@ -281,7 +283,6 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			RunLocation = TraceRunLocation(RunLocation);
 
 			float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
-			FMassEntityHandle MassEntityHandle =  SelectedUnits[i]->MassActorBindingComponent->GetMassEntityHandle();
 			
 			//UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Speed : %f"), Speed);
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
@@ -292,7 +293,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
 	
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -300,7 +301,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -308,7 +309,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -511,10 +512,9 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	}
 
 	float Speed = Unit->Attributes->GetBaseRunSpeed();
-	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
 	SetUnitState_Replication(Unit,1);
-	CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, Location, Speed, 40.f);
+	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f);
 
 	//Unit->SetUnitState(UnitData::Run);
 	//SetUnitState_Multi(Unit, 1);

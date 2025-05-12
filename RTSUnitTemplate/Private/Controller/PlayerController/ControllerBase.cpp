@@ -404,7 +404,7 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 
 
 	// Enable avoidance on the movement component
-	UCharacterMovementComponent* MovementComp = Unit->GetCharacterMovement();
+	UPawnMovementComponent* MovementComp = Unit->GetMovementComponent();
 
 	if (!MovementComp)
 	{
@@ -412,14 +412,15 @@ void AControllerBase::MoveToLocationUEPathFinding_Implementation(AUnitBase* Unit
 	}
 
 	
-
+	/*
 	// Check if we have a valid AI controller for the unit
 	AAIController* AIController = Cast<AAIController>(Unit->GetController());
 	if (!AIController)
 	{
 		return;
 	}
-
+	*/
+	
 	// Check if we have a valid navigation system
 	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
 	if (!NavSystem)

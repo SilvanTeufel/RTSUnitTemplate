@@ -624,13 +624,13 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 
 		
-
+	/*
 	if(SpawnParameter.UnitControllerBaseClass)
 	{
 		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
 		AIController->Possess(UnitBase);
 	}
-	
+	*/
 	if (UnitBase != nullptr)
 	{
 		if(UnitBase->UnitToChase)
@@ -755,13 +755,13 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 
 			
-
+			/*
 			if (SpawnParameter.UnitControllerBaseClass)
 			{
 				AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
 				ControllerBase->Possess(UnitBase);
 			}
-
+			*/
 			
 			if (UnitBase != nullptr)
 			{

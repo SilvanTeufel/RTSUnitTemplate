@@ -46,7 +46,7 @@ public:
 	void AgentInit();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void CorrectSetUnitMoveTarget(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed = 300.0f, float AcceptanceRadius = 50.0f);
+	void CorrectSetUnitMoveTarget(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed = 300.0f, float AcceptanceRadius = 50.0f);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressedMass();

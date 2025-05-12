@@ -30,7 +30,7 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
-	virtual void PossessedBy(AController* NewController) override;
+	//virtual void PossessedBy(AController* NewController) override;
 
 	virtual void LevelUp_Implementation() override;
 

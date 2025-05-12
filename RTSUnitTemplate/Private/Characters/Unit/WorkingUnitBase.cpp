@@ -28,8 +28,8 @@ void AWorkingUnitBase::BeginPlay()
 
 	if (GameMode)
 	{
-		AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(GetController());
-		if (WorkerController)
+		//AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(GetController());
+		//if (WorkerController)
 		{
 			GameMode->AssignWorkAreasToWorker(this);
 		}

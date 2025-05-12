@@ -132,7 +132,43 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
 
+	UE_LOG(LogTemp, Error, TEXT("TRY SPAWN FOGMANAGER"));
+	// guard on world
+	UWorld* World = GetWorld();
+	if (!World) return;
 
+	// only if fog is enabled and we have a sphere component
+	if (!EnableFog || !SightSphere) return;
+
+	// don’t do this twice
+	if(bFogSphereSpawned) return;
+
+	// make sure the PC is one we care about (own team or neutral)
+	AControllerBase* ControllerBase = Cast<AControllerBase>(PC);
+	if (!ControllerBase) return;
+	const int32 PCTeam = ControllerBase->SelectableTeamId;
+	if (PCTeam != TeamId && PCTeam != 0) return;
+
+	UE_LOG(LogTemp, Error, TEXT("TRY SPAWN FOGMANAGER2"));
+	// configure the sphere
+	// configure the sphere
+	SightSphere->SetSphereRadius(SightRadius, /*bUpdateOverlaps=*/true);
+	SightSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	SightSphere->SetGenerateOverlapEvents(true);
+	// bind overlap events (if not already bound)
+	SightSphere->OnComponentBeginOverlap.AddUniqueDynamic(
+		 this, &AUnitActor::HandleBeginOverlapDetection);
+	SightSphere->OnComponentEndOverlap.AddUniqueDynamic(
+		this, &AUnitActor::HandleEndOverlapDetection);
+
+	// mark as spawned so we don’t re-enable on next call
+	bFogSphereSpawned = true;
+
+	UE_LOG(LogTemp, Error, TEXT("%s: Fog sphere enabled for PC team %d"), 
+		*GetName(), PCTeam);
+
+
+	/*
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -194,11 +230,12 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 						
 					}
 	}
-	
+	*/
 }
 
 void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC)
 {
+	/*
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -246,7 +283,8 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 						UE_LOG(LogTemp, Warning, TEXT("SpawnedFogManager! %d"), SpawnedFogManager->PlayerTeamId);
 						if (SpawnedFogManager)
 						{
-							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
+							SpawnedFogManager->AttachToComponent(FogManagerAttachPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+							//SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
 						}
 
 						for (TActorIterator<AFogOfWarCentralManager> It(GetWorld()); It; ++It)
@@ -256,7 +294,7 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 						}
 					}
 	}
-	
+	*/
 }
 
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)

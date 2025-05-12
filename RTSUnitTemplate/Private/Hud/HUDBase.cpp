@@ -118,6 +118,30 @@ void AHUDBase::DrawHUD()
 			
 			for (int32 i = 0; i < NewUnitBases.Num(); i++) {
 
+				AUnitBase* Unit = NewUnitBases[i];
+
+				// 1) Project the capsule-center to screen
+				FVector WorldLoc = Unit->GetCapsuleComponent()->GetComponentLocation();
+				FVector2D ScreenLoc;
+				APlayerController* PC = GetOwningPlayerController();
+				if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
+				{
+					continue; // can’t project → skip
+				}
+
+				// 2) Build min/max of your sel-rect
+				float MinX = FMath::Min(InitialSelectionPoint.X, CurrentSelectionPoint.X);
+				float MaxX = FMath::Max(InitialSelectionPoint.X, CurrentSelectionPoint.X);
+				float MinY = FMath::Min(InitialSelectionPoint.Y, CurrentSelectionPoint.Y);
+				float MaxY = FMath::Max(InitialSelectionPoint.Y, CurrentSelectionPoint.Y);
+
+				// 3) Reject if the capsule center is outside
+				if (ScreenLoc.X < MinX || ScreenLoc.X > MaxX ||
+					ScreenLoc.Y < MinY || ScreenLoc.Y > MaxY)
+				{
+					continue;
+				}
+				
 
 				const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(NewUnitBases[i]);
 			

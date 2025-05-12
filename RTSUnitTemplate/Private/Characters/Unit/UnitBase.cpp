@@ -28,7 +28,8 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = TickInterval; 
+	PrimaryActorTick.TickInterval = TickInterval;
+	/*
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
@@ -36,6 +37,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 600.0f, 0.0f);
 	GetCharacterMovement()->SetIsReplicated(true);
+	*/
 	
 	if (RootComponent == nullptr) {
 		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
@@ -70,6 +72,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
+	/*
 	// Example: Inside AUnitBase::AUnitBase() constructor
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	if (MoveComp)
@@ -80,7 +83,9 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 		MoveComp->AvoidanceConsiderationRadius = 100.0f; // How far to check for obstacles
 	}
 
-	SetCanAffectNavigationGeneration(true, true); // Enable dynamic NavMesh updates
+	SetCanAffectNavigationGeneration(true, true);
+	*/
+	// Enable dynamic NavMesh updates
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 
@@ -186,11 +191,10 @@ void AUnitBase::BeginPlay()
 
 
 		SpawnSelectedIcon();
-		GetCharacterMovement()->GravityScale = 1;
+	
 		
 		if(IsFlying)
 		{
-			GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 			FVector UnitLocation = GetActorLocation();
 			SetActorLocation(FVector(UnitLocation.X, UnitLocation.Y, FlyHeight));
 		}
@@ -242,14 +246,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
-
-
-	DOREPLIFETIME(AUnitBase, CanOnlyAttackGround);
-	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
-	DOREPLIFETIME(AUnitBase, CanDetectInvisible);
-	DOREPLIFETIME(AUnitBase, CanAttack);
-	DOREPLIFETIME(AUnitBase, IsInvisible);
-	DOREPLIFETIME(AUnitBase, IsFlying);
+	
 	DOREPLIFETIME(AUnitBase, FlyHeight)
 
 }
@@ -262,11 +259,6 @@ void AUnitBase::Tick(float DeltaTime)
 }
 
 // Called to bind functionality to input
-void AUnitBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-}
 
 void AUnitBase::OnRep_MeshAssetPath()
 {
@@ -357,13 +349,23 @@ void AUnitBase::SetRunLocation_Implementation(FVector Location)
 
 void AUnitBase::SetWalkSpeed_Implementation(float Speed)
 {
-	UCharacterMovementComponent* MovementPtr = GetCharacterMovement();
-	if(Speed == 0.f)
+	// Get the movement component (UFloatingPawnMovement)
+	UPawnMovementComponent* MovementPtr = GetMovementComponent();
+    
+	if (MovementPtr)
 	{
-		MovementPtr->StopMovementImmediately();
-	}else
-	{
-		MovementPtr->MaxWalkSpeed = Speed;
+		if (Speed == 0.f)
+		{
+			// Stop movement immediately
+			MovementPtr->StopMovementImmediately();
+		}
+		else
+		{
+			// For `UFloatingPawnMovement`, there's no MaxWalkSpeed, but you can adjust the velocity
+			FVector MyCurrentVelocity = MovementPtr->Velocity;
+			MyCurrentVelocity = MyCurrentVelocity.GetSafeNormal() * Speed;  // Adjust direction but keep current direction
+			MovementPtr->Velocity = MyCurrentVelocity;
+		}
 	}
 }
 
@@ -964,11 +966,12 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 	{
 		NavSys->UpdateActorInNavOctree(*this);
 	}
-	
+
+	/*
 	// Optional: Add delay if needed for physics stabilization
 	GetWorld()->GetTimerManager().SetTimerForNextTick([this](){
 		UpdateNavigationRelevance();
-	});
+	});*/
 
 }
 
@@ -981,7 +984,7 @@ void AUnitBase::UpdateUnitNavigation()
 	}
 
 	// Update navigation relevance immediately after navmesh update
-	UpdateNavigationRelevance();
+	//UpdateNavigationRelevance();
 	
 }
 

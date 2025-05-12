@@ -15,14 +15,13 @@ void ALevelUnit::Tick(float DeltaTime)
 	if(RegenerationTimer >= RegenerationDelayTime)
 	{
 
+		if (Attributes)
 		if(Attributes->GetHealth() > 0)
 		{
 			Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 			Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
-		
-		//RegenerationTimer = 0.f;
 
-		if(AutoLeveling && HasAuthority()) AutoLevelUp();
+			if(AutoLeveling && HasAuthority()) AutoLevelUp();
 		}
 		//UE_LOG(LogTemp, Log, TEXT("ALevelUnit LevelData.CharacterLevel: %d"), LevelData.CharacterLevel);
 	}

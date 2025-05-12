@@ -66,9 +66,20 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
 		// Instead of disabling avoidance entirely, adjust the avoidance group.
-		if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(UnitToLoad->GetMovementComponent()))
+		if (UPawnMovementComponent* MyMovementComponent = UnitToLoad->GetMovementComponent())
 		{
-			MovementComponent->SetMovementMode(EMovementMode::MOVE_Flying);
+			// Check if the movement component is valid
+			if (MyMovementComponent)
+			{
+				// Manually simulate "flying" behavior by allowing free movement in all directions
+				FVector MyCurrentVelocity = MyMovementComponent->Velocity;
+        
+				// Optionally modify the velocity or set a custom flying speed
+				// Example: set a specific flying speed
+				MyCurrentVelocity = MyCurrentVelocity.GetSafeNormal() * Attributes->GetRunSpeed();  // FlyingSpeed would be a defined float
+
+				MyMovementComponent->Velocity = MyCurrentVelocity;
+			}
 		}
 		UnitToLoad->SetCollisionAndVisibility(false);
 		UnitToLoad->SetActorLocation(VoidLocation);
@@ -144,9 +155,9 @@ void ATransportUnit::UnloadNextUnit()
 			//LoadedUnit->SetActorEnableCollision(true);
 			LoadedUnit->SetUnitState(UnitData::Idle);
 			// Reset the movement mode back to walking.
-			if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(LoadedUnit->GetMovementComponent()))
+			if (UCharacterMovementComponent* MyMovementComponent = Cast<UCharacterMovementComponent>(LoadedUnit->GetMovementComponent()))
 			{
-				MovementComponent->SetMovementMode(EMovementMode::MOVE_Walking);
+				MyMovementComponent->SetMovementMode(EMovementMode::MOVE_Walking);
 			}
 
 			// Re-enable visibility and mark as initialized.

@@ -46,9 +46,6 @@ public:
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
 	class UAbilitySystemComponentBase* AbilitySystemComponent;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category=RTSUnitTemplate, meta=(AllowPrivateAccess=true))
-	class UAttributeSetBase* Attributes;
 
 
 	// A queue to store "next" abilities if the current one can't be activated or is still running
@@ -100,9 +97,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	virtual void GiveAbilities();
 
-	virtual void PossessedBy(AController* NewController) override;
+	//virtual void PossessedBy(AController* NewController) override;
 	
-	virtual void OnRep_PlayerState() override;
+	virtual void OnRep_PlayerState(); // override;
 
 	UPROPERTY(ReplicatedUsing = OnRep_ToggleUnitDetection, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;

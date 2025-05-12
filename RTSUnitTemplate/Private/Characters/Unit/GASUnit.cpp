@@ -28,7 +28,6 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AGASUnit, AbilitySystemComponent);
-	DOREPLIFETIME(AGASUnit, Attributes);
 	DOREPLIFETIME(AGASUnit, ToggleUnitDetection); // Added for BUild
 	DOREPLIFETIME(AGASUnit, DefaultAttributeEffect);
 	DOREPLIFETIME(AGASUnit, DefaultAbilities);
@@ -100,6 +99,7 @@ void AGASUnit::GiveAbilities()
 	}
 }
 
+/*
 void AGASUnit::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -110,11 +110,11 @@ void AGASUnit::PossessedBy(AController* NewController)
 	GiveAbilities();
 	SetupAbilitySystemDelegates();
 }
-
+*/
 
 void AGASUnit::OnRep_PlayerState()
 {
-	Super::OnRep_PlayerState();
+	//Super::OnRep_PlayerState();
 
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 
