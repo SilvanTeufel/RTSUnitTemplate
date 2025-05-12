@@ -211,14 +211,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                                 {
                                     ISM->UpdateInstanceTransform(Update.InstanceIndex, Update.NewTransform, true, true, true);
                                 }
-                                /*
-                                if (IsValid(Unit->SpawnedFogManager))
-                                {
-                                    // 2) **also** update the FogManager actor to the same transform + offset
-                                    const FVector FogLoc = Update.NewTransform.GetLocation() + Unit->FogManagerPositionOffset;
-                                    const FQuat   FogRot = Update.NewTransform.GetRotation();
-                                    Unit->SpawnedFogManager->SetActorLocationAndRotation(FogLoc, FogRot, false, nullptr, ETeleportType::TeleportPhysics);
-                                }*/
                             }
                         }
                     }

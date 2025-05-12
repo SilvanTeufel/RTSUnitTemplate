@@ -131,7 +131,7 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
-
+	/*
 	UE_LOG(LogTemp, Error, TEXT("TRY SPAWN FOGMANAGER"));
 	// guard on world
 	UWorld* World = GetWorld();
@@ -152,7 +152,7 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 	UE_LOG(LogTemp, Error, TEXT("TRY SPAWN FOGMANAGER2"));
 	// configure the sphere
 	// configure the sphere
-	SightSphere->SetSphereRadius(SightRadius, /*bUpdateOverlaps=*/true);
+	SightSphere->SetSphereRadius(SightRadius, true);
 	SightSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	SightSphere->SetGenerateOverlapEvents(true);
 	// bind overlap events (if not already bound)
@@ -166,8 +166,8 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 
 	UE_LOG(LogTemp, Error, TEXT("%s: Fog sphere enabled for PC team %d"), 
 		*GetName(), PCTeam);
-
-
+	*/
+	
 	/*
 	UWorld* World = GetWorld();
 	if (!World)

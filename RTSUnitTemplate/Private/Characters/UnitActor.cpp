@@ -31,13 +31,6 @@ AUnitActor::AUnitActor(const FObjectInitializer& ObjectInitializer)
 	MovementComponent->UpdatedComponent = CapsuleComponent;
 	// Unit Logic (shared gameplay logic)
 
-	FogManagerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FogManagerMesh"));
-	FogManagerMesh->SetupAttachment(CapsuleComponent);
-	FogManagerMesh->SetRenderInMainPass(false);
-	FogManagerMesh->SetRenderInDepthPass(false);
-	FogManagerMesh->SetCastShadow(false);
-
-
 	SightSphere = CreateDefaultSubobject<USphereComponent>(TEXT("SightSphere"));
 	SightSphere->SetupAttachment(RootComponent);
 
@@ -164,15 +157,11 @@ void AUnitActor::HandleBeginOverlapDetection(
 	const FHitResult& SweepResult)
 {
 	
-	UE_LOG(LogTemp, Log, TEXT("%s: SphereBeginOverlap with %s (comp=%s)"),
-	*GetName(),
-	OtherActor ? *OtherActor->GetName() : TEXT("None"),
-	OtherComp ? *OtherComp->GetName() : TEXT("None")
-);
+	//UE_LOG(LogTemp, Log, TEXT("SphereBeginOverlap! "));
 	
     if (!OtherActor || !OtherActor->IsValidLowLevel() || !IsValid(OtherActor))
     {
-    	UE_LOG(LogTemp, Warning, TEXT("  -> Ignored invalid OtherActor"));
+    	///UE_LOG(LogTemp, Warning, TEXT("  -> Ignored invalid OtherActor"));
         return;
     }
     

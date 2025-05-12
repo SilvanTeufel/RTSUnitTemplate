@@ -204,4 +204,9 @@ private:
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
+
+
+	UFUNCTION()
+	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
+	
 };

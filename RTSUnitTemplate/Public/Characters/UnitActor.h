@@ -42,9 +42,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Unit")
 	UPawnMovementComponent* GetMovementComponent() const { return MovementComponent; }
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UStaticMeshComponent* FogManagerMesh;
-	
 	/** Whether this unit should use SkeletalMesh behavior (like a character) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
 	bool bUseSkeletalMovement = true;

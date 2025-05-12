@@ -1945,3 +1945,44 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 		}
 	});
 }
+
+
+
+void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+    
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    
+		for (FMassEntityHandle& Entity : Entities) // Iterate the captured copy
+		{
+			// Check entity validity *on the game thread*
+			if (!EntityManager.IsEntityValid(Entity)) 
+			{
+				continue;
+			}
+
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			if (ActorFragPtr)
+			{
+				AActor* Actor = ActorFragPtr->GetMutable(); 
+				if (IsValid(Actor))
+				{
+					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+					if (UnitBase )
+					{
+						// Check Signal Name
+						if (SignalName == UnitSignals::UnitEnterSight)
+							UnitBase->IsInvisible = true;
+						// Check Signal Name
+						if (SignalName == UnitSignals::UnitExitSight)
+							UnitBase->IsInvisible = false;
+					}
+				}
+			}
+		}
+	
+}

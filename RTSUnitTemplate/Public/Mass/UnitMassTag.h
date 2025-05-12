@@ -158,6 +158,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float BirthTime = TNumericLimits<float>::Max();
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	TSet<FMassEntityHandle> LastSeenTargets; 
 };
 
 //----------------------------------------------------------------------//
