@@ -61,7 +61,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ISM")
 	int32 InstanceIndex = INDEX_NONE;
 
-
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
+	APlayerController* OwningPlayerController;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
@@ -97,6 +99,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsVisibleEnemy = false;
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastSetEnemyVisibility(AUnitActor* DetectingActor, bool bVisible);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FogDeadVisibilityTime = 10.0f;
 	

@@ -189,9 +189,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	AFogOfWarManager* SpawnedFogManager;
 
-	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
-	APlayerController* OwningPlayerController;
-
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool IsNetVisible() const;
 

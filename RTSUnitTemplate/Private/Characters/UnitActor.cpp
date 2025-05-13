@@ -3,6 +3,7 @@
 
 #include "Characters/UnitActor.h"
 #include "AbilitySystemComponent.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Net/UnrealNetwork.h"
 
 // Sets default values
@@ -147,6 +148,19 @@ void AUnitActor::CreateISMInstance()
 	}
 }
 
+
+void AUnitActor::MulticastSetEnemyVisibility_Implementation(AUnitActor* DetectingActor, bool bVisible)
+{
+	
+	UWorld* World = GetWorld();
+	if (!World) return;  // Safety check
+	
+	APlayerController* PlayerController = World->GetFirstPlayerController();
+	if (!PlayerController || Cast<ACustomControllerBase>(PlayerController)->SelectableTeamId != DetectingActor->TeamId) return;
+
+
+	IsVisibleEnemy = bVisible;
+}
 
 void AUnitActor::HandleBeginOverlapDetection(
 	UPrimitiveComponent* OverlappedComponent,

@@ -1974,7 +1974,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 
 void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Error, TEXT("HandleSightSignals!!!"));
+		//UE_LOG(LogTemp, Error, TEXT("HandleSightSignals!!!"));
 		if (!EntitySubsystem) 
 		{
 			 return;
@@ -1982,35 +1982,34 @@ void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntit
     
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
-		for (FMassEntityHandle& Entity : Entities) // Iterate the captured copy
+		if (EntityManager.IsEntityValid(Entities[0]) && EntityManager.IsEntityValid(Entities[1]) ) // Iterate the captured copy
 		{
 			// Check entity validity *on the game thread*
-			if (!EntityManager.IsEntityValid(Entity)) 
-			{
-				continue;
-			}
 
-			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-			if (ActorFragPtr)
+			FMassActorFragment* TargetActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[0]);
+			FMassActorFragment* DetectorActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[1]);
+			if (TargetActorFragPtr)
 			{
-				AActor* Actor = ActorFragPtr->GetMutable(); 
-				if (IsValid(Actor))
+				AActor* TargetActor = TargetActorFragPtr->GetMutable();
+				AActor* DetectorActor = DetectorActorFragPtr->GetMutable(); 
+				if (IsValid(TargetActor))
 				{
-					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase )
+					AUnitBase* TargetUnitBase = Cast<AUnitBase>(TargetActor);
+					AUnitBase* DetectorUnitBase = Cast<AUnitBase>(DetectorActor);
+					if (TargetUnitBase )
 					{
 						// Check Signal Name
 						if (SignalName == UnitSignals::UnitEnterSight)
 						{
-							UE_LOG(LogTemp, Error, TEXT("Set Visible!!!"));
-							UnitBase->IsVisibleEnemy = true;
+							//UE_LOG(LogTemp, Error, TEXT("Set Visible!!!"));
+							TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase, true);
 						}
 						// Check Signal Name
 						
 						if (SignalName == UnitSignals::UnitExitSight)
 						{
-							UE_LOG(LogTemp, Error, TEXT("Set InVisible!!!"));
-							UnitBase->IsVisibleEnemy = false;
+							//UE_LOG(LogTemp, Error, TEXT("Set InVisible!!!"));
+							TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase,false);
 						}
 					}
 				}

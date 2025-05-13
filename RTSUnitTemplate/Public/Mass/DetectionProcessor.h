@@ -48,7 +48,7 @@ private:
 	// Timer, um diesen Prozessor nicht jeden Frame laufen zu lassen
 	// Besser über ProcessorGroup Konfiguration steuern! Dies ist nur ein Beispiel.
 	float TimeSinceLastRun = 0.0f;
-	const float DetectionInterval = 0.0f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
+	const float ExecutionInterval = 0.2f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;

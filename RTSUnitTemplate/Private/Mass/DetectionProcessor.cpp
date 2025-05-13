@@ -144,6 +144,15 @@ void UDetectionProcessor::ConfigureQueries()
 
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        // Noch nicht Zeit, diesen Frame überspringen
+        return;
+    }
     //UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
 // Check if we have any signals buffered for the detection signal name
     TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
@@ -188,6 +197,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 continue;  // this entity is not yet “1 second old”
             }
+
             
             const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
             const FTransform& DetectorTransform = TransformList[i].GetTransform();
@@ -196,8 +206,17 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAgentCharacteristicsFragment& DetectorCharFrag = CharList[i];
             const FVector DetectorLocation = DetectorTransform.GetLocation();
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i];
-     
 
+            /*
+            if (!DetectorTargetFrag.TargetEntity.IsSet() || !IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity))
+            {
+                // Target is gone; clear it out
+                DetectorTargetFrag.TargetEntity.Reset();
+                DetectorTargetFrag.bHasValidTarget = false;
+                // Optionally push a “lost target” signal or reset movement
+                continue;
+            }*/
+            
             FMassEntityHandle BestTargetEntity;
            
             FVector BestTargetLocation = FVector::ZeroVector;
@@ -205,57 +224,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             bool bCurrentTargetStillViable = false; // Is the *existing* target still valid?
             FVector CurrentTargetLatestLocation = FVector::ZeroVector;
             
-            /*
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD START ---
-            {
-                TSet<FMassEntityHandle> NewLastSeen;
-
-                // 1) First, gather all entities we *could* still consider seen:
-                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
-                {
-                    if (!EntityManager.IsEntityValid(T)) continue;
-                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
-                    if (!TF) continue;
-                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
-                    if (Dist <= DetectorStatsFrag.LoseSightRadius)
-                    {
-                        NewLastSeen.Add(T);
-                    }
-                }
-
-                // 2) Then, also add any *newly* seen inside SightRadius
-                for (const FMassEntityHandle& T : SignaledEntities)
-                {
-                    if (T == DetectorEntity) continue;
-                    if (!EntityManager.IsEntityValid(T)) continue;
-                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
-                    if (!TF) continue;
-                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
-                    if (Dist < DetectorStatsFrag.SightRadius)
-                    {
-                        if (!NewLastSeen.Contains(T))
-                        {
-                            // EnterSight
-                            PendingSignals.Emplace(T, UnitSignals::UnitEnterSight);
-                        }
-                        NewLastSeen.Add(T);
-                    }
-                }
-
-                // 3) Anyone in the *old* LastSeenTargets but not in our NewLastSeen set has now truly exited
-                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
-                {
-                    if (!NewLastSeen.Contains(T))
-                    {
-                        PendingSignals.Emplace(T, UnitSignals::UnitExitSight);
-                    }
-                }
-
-                // 4) Store for next tick
-                StateFrag.LastSeenTargets = MoveTemp(NewLastSeen);
-            }
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD END ---
-            */
             // --- Process ALL Buffered Signals (Manual Filtering) ---
             for (const FMassEntityHandle& PotentialTargetEntity : SignaledEntities)
             {
@@ -316,7 +284,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }
                 
                 // --- Check Current Target Viability Logic ---
-                if (DetectorTargetFrag.TargetEntity.IsSet()) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
+                if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
                 {
                     const FTransformFragment* CurrentTargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetectorTargetFrag.TargetEntity);
                     const FTransform& CurrentTargetDetectorTransform = CurrentTargetTransformFrag->GetTransform();
@@ -336,9 +304,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }
 
             } // End loop through signaled entities
-            
-
-
 
             // --- Final Update Target Fragment Logic ---
             if (bFoundValidTargetThisRun)
@@ -362,8 +327,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                // DetectorTargetFrag.bHasValidTarget = false;
             }
 
-
-            if (DetectorTargetFrag.TargetEntity.IsSet()) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
+            if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
             {
                 const FTransformFragment* CurrentTargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetectorTargetFrag.TargetEntity);
                 const FTransform& CurrentTargetDetectorTransform = CurrentTargetTransformFrag->GetTransform();
