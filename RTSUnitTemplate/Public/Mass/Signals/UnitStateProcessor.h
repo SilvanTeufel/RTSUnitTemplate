@@ -85,7 +85,11 @@ private:
 		UnitSignals::GoToResourceExtraction,
 		UnitSignals::ResourceExtraction,
 	};
-	
+
+	const TArray<FName> SightChangeSignals = {
+		UnitSignals::UnitEnterSight,
+		UnitSignals::UnitExitSight
+		};
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
 	
@@ -107,6 +111,8 @@ private:
 	FDelegateHandle GetResourceDelegateHandle;
 	FDelegateHandle StartBuildActionDelegateHandle;
 	FDelegateHandle SpawnBuildingRequestDelegateHandle;
+
+	TArray<FDelegateHandle> SightChangeRequestDelegateHandle;
 	
 	// Cached subsystem pointers
 	UPROPERTY(Transient)

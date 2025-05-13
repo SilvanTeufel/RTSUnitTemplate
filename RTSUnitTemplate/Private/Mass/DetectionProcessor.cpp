@@ -205,50 +205,57 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             bool bCurrentTargetStillViable = false; // Is the *existing* target still valid?
             FVector CurrentTargetLatestLocation = FVector::ZeroVector;
             
-
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD START --- ///////////////////////////////////////////////////////////////////////////////////////////
+            /*
+            // --- YOUR FOG-OF-WAR OVERLAP REBUILD START ---
             {
-                // 1) Collect who we see *this* tick
-                TSet<FMassEntityHandle> CurrentSeenTargets;
-                for (const FMassEntityHandle& PotentialTarget : SignaledEntities)
+                TSet<FMassEntityHandle> NewLastSeen;
+
+                // 1) First, gather all entities we *could* still consider seen:
+                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
                 {
-                    if (PotentialTarget == DetectorEntity) continue;
-                    if (!EntityManager.IsEntityValid(PotentialTarget)) continue;
-                    // distance check (reuse your code’s Dist calculation)
-                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTarget);
+                    if (!EntityManager.IsEntityValid(T)) continue;
+                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
                     if (!TF) continue;
-                    const float Dist = FVector::Dist(
-                        DetectorLocation,
-                        TF->GetTransform().GetLocation()
-                    );
+                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
+                    if (Dist <= DetectorStatsFrag.LoseSightRadius)
+                    {
+                        NewLastSeen.Add(T);
+                    }
+                }
+
+                // 2) Then, also add any *newly* seen inside SightRadius
+                for (const FMassEntityHandle& T : SignaledEntities)
+                {
+                    if (T == DetectorEntity) continue;
+                    if (!EntityManager.IsEntityValid(T)) continue;
+                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
+                    if (!TF) continue;
+                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
                     if (Dist < DetectorStatsFrag.SightRadius)
                     {
-                        CurrentSeenTargets.Add(PotentialTarget);
+                        if (!NewLastSeen.Contains(T))
+                        {
+                            // EnterSight
+                            PendingSignals.Emplace(T, UnitSignals::UnitEnterSight);
+                        }
+                        NewLastSeen.Add(T);
                     }
                 }
 
-                // 2) Fire “enter” signals for newly-seen
-                for (auto& T : CurrentSeenTargets)
+                // 3) Anyone in the *old* LastSeenTargets but not in our NewLastSeen set has now truly exited
+                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
                 {
-                    if (!StateFrag.LastSeenTargets.Contains(T))
-                    {
-                        PendingSignals.Emplace(T, UnitSignals::UnitEnterSight);
-                    }
-                }
-                // 3) Fire “exit” signals for no-longer-seen
-                for (auto& T : StateFrag.LastSeenTargets)
-                {
-                    if (!CurrentSeenTargets.Contains(T))
+                    if (!NewLastSeen.Contains(T))
                     {
                         PendingSignals.Emplace(T, UnitSignals::UnitExitSight);
                     }
                 }
-                // 4) Save for next tick
-                StateFrag.LastSeenTargets = MoveTemp(CurrentSeenTargets);
-            }
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD END --- ///////////////////////////////////////////////////////////////////////////////////////////
 
-            
+                // 4) Store for next tick
+                StateFrag.LastSeenTargets = MoveTemp(NewLastSeen);
+            }
+            // --- YOUR FOG-OF-WAR OVERLAP REBUILD END ---
+            */
             // --- Process ALL Buffered Signals (Manual Filtering) ---
             for (const FMassEntityHandle& PotentialTargetEntity : SignaledEntities)
             {

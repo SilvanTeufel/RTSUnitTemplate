@@ -53,6 +53,19 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
             // if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
         }
 
+    	for (const FName& SignalName : SightChangeSignals)
+    	{
+    		// Use AddUFunction since ChangeUnitState is a UFUNCTION
+    		FDelegateHandle NewHandle = SignalSubsystem->GetSignalDelegateByName(SignalName)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSightSignals));
+
+    		SightChangeRequestDelegateHandle.Add(NewHandle);
+    		// Optional: Store handles if you need precise unregistration later
+    		// if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
+    	}
+
+
+    	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
     	
@@ -116,6 +129,17 @@ void UUnitStateProcessor::BeginDestroy()
             StateChangeSignalDelegateHandle[i].Reset();
         }
     }
+
+	for (int i = 0; i < SightChangeRequestDelegateHandle.Num(); i++)
+	{
+		if (SignalSubsystem && SightChangeRequestDelegateHandle[i].IsValid()) // Check if subsystem and handle are valid
+		{
+			SignalSubsystem->GetSignalDelegateByName(SightChangeSignals[i])
+			.Remove(SightChangeRequestDelegateHandle[i]);
+            
+			SightChangeRequestDelegateHandle[i].Reset();
+		}
+	}
 	
 	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
@@ -1937,7 +1961,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
+						
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -1950,6 +1974,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 
 void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
+	UE_LOG(LogTemp, Error, TEXT("HandleSightSignals!!!"));
 		if (!EntitySubsystem) 
 		{
 			 return;
@@ -1976,10 +2001,17 @@ void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntit
 					{
 						// Check Signal Name
 						if (SignalName == UnitSignals::UnitEnterSight)
-							UnitBase->IsInvisible = true;
+						{
+							UE_LOG(LogTemp, Error, TEXT("Set Visible!!!"));
+							UnitBase->IsVisibleEnemy = true;
+						}
 						// Check Signal Name
+						
 						if (SignalName == UnitSignals::UnitExitSight)
-							UnitBase->IsInvisible = false;
+						{
+							UE_LOG(LogTemp, Error, TEXT("Set InVisible!!!"));
+							UnitBase->IsVisibleEnemy = false;
+						}
 					}
 				}
 			}
