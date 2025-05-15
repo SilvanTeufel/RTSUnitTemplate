@@ -22,8 +22,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
-	UStaticMeshComponent* StaticMesh;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
+	bool bUseSkeletalMovement = true;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	UInstancedStaticMeshComponent* ISMComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ISM")
+	int32 InstanceIndex = INDEX_NONE;
 	/**
 * Adds a specific Mass Tag to the entity associated with this Actor.
 * @param TagToAdd The script struct representing the tag type to add (e.g., FMassStateIdleTag::StaticStruct()).
@@ -51,5 +57,12 @@ public:
 	bool SyncTranslation();
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
+
+protected:
+	virtual void BeginPlay() override;
+	
+	virtual void OnConstruction(const FTransform& Transform) override;
+	
+	void InitializeUnitMode();
 
 };

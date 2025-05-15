@@ -223,6 +223,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetClientVisibility(bool bVisible);
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
+	
 protected:
 	
 	UPROPERTY(VisibleAnywhere, Replicated, Category = RTSUnitTemplate)

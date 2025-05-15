@@ -53,6 +53,17 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
             // if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
         }
 
+    	for (const FName& SignalName : SightChangeSignals)
+    	{
+    		// Use AddUFunction since ChangeUnitState is a UFUNCTION
+    		FDelegateHandle NewHandle = SignalSubsystem->GetSignalDelegateByName(SignalName)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSightSignals));
+
+    		SightChangeRequestDelegateHandle.Add(NewHandle);
+    		// Optional: Store handles if you need precise unregistration later
+    		// if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
+    	}
+    	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
     	
@@ -96,6 +107,9 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
 
     	SpawnBuildingRequestDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSpawnBuildingRequest));
+
+    	SpawnSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUnitSpawnedSignal));
     	
     }
 }
@@ -116,6 +130,17 @@ void UUnitStateProcessor::BeginDestroy()
             StateChangeSignalDelegateHandle[i].Reset();
         }
     }
+
+	for (int i = 0; i < SightChangeRequestDelegateHandle.Num(); i++)
+	{
+		if (SignalSubsystem && SightChangeRequestDelegateHandle[i].IsValid()) // Check if subsystem and handle are valid
+		{
+			SignalSubsystem->GetSignalDelegateByName(SightChangeSignals[i])
+			.Remove(SightChangeRequestDelegateHandle[i]);
+            
+			SightChangeRequestDelegateHandle[i].Reset();
+		}
+	}
 	
 	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
@@ -230,6 +255,14 @@ void UUnitStateProcessor::BeginDestroy()
 		.Remove(SpawnBuildingRequestDelegateHandle);
             
 		SpawnBuildingRequestDelegateHandle.Reset();
+	}
+
+	if (SignalSubsystem && SpawnSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
+		.Remove(SpawnSignalDelegateHandle);
+            
+		SpawnSignalDelegateHandle.Reset();
 	}
 	
     SignalSubsystem = nullptr; // Null out pointers if needed
@@ -1944,4 +1977,73 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 			}
 		}
 	});
+}
+
+
+void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem) 
+	{
+		return;
+	}
+    
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    
+	if (EntityManager.IsEntityValid(Entities[0]) && EntityManager.IsEntityValid(Entities[1]) ) // Iterate the captured copy
+	{
+		// Check entity validity *on the game thread*
+
+		FMassActorFragment* TargetActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[0]);
+		FMassActorFragment* DetectorActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[1]);
+		if (TargetActorFragPtr)
+		{
+			AActor* TargetActor = TargetActorFragPtr->GetMutable();
+			AActor* DetectorActor = DetectorActorFragPtr->GetMutable(); 
+			if (IsValid(TargetActor))
+			{
+				AUnitBase* TargetUnitBase = Cast<AUnitBase>(TargetActor);
+				AUnitBase* DetectorUnitBase = Cast<AUnitBase>(DetectorActor);
+				if (TargetUnitBase )
+				{
+					// Check Signal Name
+					if (SignalName == UnitSignals::UnitEnterSight)
+					{
+						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase, true);
+					}
+					// Check Signal Name
+						
+					if (SignalName == UnitSignals::UnitExitSight)
+					{
+						//UE_LOG(LogTemp, Error, TEXT("Set InVisible!!!"));
+						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase,false);
+					}
+				}
+			}
+		}
+	}
+	
+}
+
+
+void UUnitStateProcessor::HandleUnitSpawnedSignal(
+	FName SignalName,
+	TArray<FMassEntityHandle>& Entities)
+{
+	const float Now = World->GetTimeSeconds();
+
+	if (!EntitySubsystem) { return; }
+    
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	
+	for (FMassEntityHandle& E : Entities)
+	{
+		;
+		// Grab the *target* fragment on that entity and stamp it
+		FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
+        
+		if (StateFragment)
+		{
+			StateFragment->BirthTime = Now;
+		}
+	}
 }

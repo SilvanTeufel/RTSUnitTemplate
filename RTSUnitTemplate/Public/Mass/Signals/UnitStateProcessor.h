@@ -85,7 +85,12 @@ private:
 		UnitSignals::GoToResourceExtraction,
 		UnitSignals::ResourceExtraction,
 	};
-	
+
+
+	const TArray<FName> SightChangeSignals = {
+		UnitSignals::UnitEnterSight,
+		UnitSignals::UnitExitSight
+		};
 	// Delegate handle for unregistering
 	TArray<FDelegateHandle> StateChangeSignalDelegateHandle;
 	
@@ -107,7 +112,10 @@ private:
 	FDelegateHandle GetResourceDelegateHandle;
 	FDelegateHandle StartBuildActionDelegateHandle;
 	FDelegateHandle SpawnBuildingRequestDelegateHandle;
-	
+
+	TArray<FDelegateHandle> SightChangeRequestDelegateHandle;
+
+	FDelegateHandle SpawnSignalDelegateHandle;
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -204,4 +212,11 @@ private:
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
+
+
+	UFUNCTION()
+	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 };

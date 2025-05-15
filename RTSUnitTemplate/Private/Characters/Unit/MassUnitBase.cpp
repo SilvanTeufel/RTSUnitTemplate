@@ -12,6 +12,10 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	{
 		// Attach it to the root component (optional, depending on your needs)
 		MassActorBindingComponent->SetupAttachment(RootComponent);
+
+		ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
+		ISMComponent->SetupAttachment(RootComponent);
+		ISMComponent->SetVisibility(false);
 	}
 }
 
@@ -180,6 +184,43 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 
 	OutEntityManager = &EntitySubsystem->GetMutableEntityManager(); // Get mutable manager for modifications
 	return true;
+}
+
+void AMassUnitBase::BeginPlay()
+{
+	Super::BeginPlay();
+	InitializeUnitMode();
+}
+
+void AMassUnitBase::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// Only add once (or whenever mesh/flag changes)
+	if (!bUseSkeletalMovement 
+		&& ISMComponent 
+		&& ISMComponent->GetStaticMesh() 
+		&& InstanceIndex == INDEX_NONE)
+	{
+		// This is still early enough that the ISM data manager
+		// will allow an append from INDEX_NONE
+		ISMComponent->ClearInstances();
+		InstanceIndex = ISMComponent->AddInstance(Transform, /*bWorldSpace=*/true);
+	}
+}
+
+void AMassUnitBase::InitializeUnitMode()
+{
+	if (bUseSkeletalMovement)
+	{
+		GetMesh()->SetVisibility(true);
+		ISMComponent->SetVisibility(false);
+	}
+	else
+	{
+		GetMesh()->SetVisibility(false);
+		ISMComponent->SetVisibility(true);
+	}
 }
 
 bool AMassUnitBase::SyncTranslation()

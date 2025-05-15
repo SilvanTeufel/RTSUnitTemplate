@@ -121,6 +121,19 @@ struct FUnitStateFragment : public FMassFragment
 	
 };
 
+struct FMassSightSignalPayload
+{
+	FMassEntityHandle TargetEntity;
+	FMassEntityHandle DetectorEntity;
+	FName            SignalName;
+
+	// Constructor when you have both
+	FMassSightSignalPayload(FMassEntityHandle InTarget, FMassEntityHandle InSource, FName InSignal)
+		: TargetEntity(InTarget)
+		, DetectorEntity(InSource)
+		, SignalName(InSignal)
+	{}
+};
 
 struct FMassSignalPayload
 {
@@ -158,6 +171,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float BirthTime = TNumericLimits<float>::Max();
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	TSet<FMassEntityHandle> LastSeenTargets; 
 };
 
 //----------------------------------------------------------------------//
@@ -467,4 +483,13 @@ bool DoesEntityHaveFragment(
 
 	// If StaticStruct() somehow returned nullptr, the fragment isn't valid or found.
 	return false;
+}
+
+inline bool IsFullyValidTarget(FMassEntityManager& EM, FMassEntityHandle H)
+{
+	return H.IsSet()
+		&& EM.IsEntityValid(H)
+		&& DoesEntityHaveFragment<FTransformFragment>(EM,H)
+		&& DoesEntityHaveFragment<FMassCombatStatsFragment>(EM,H)
+		&& DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EM,H);
 }

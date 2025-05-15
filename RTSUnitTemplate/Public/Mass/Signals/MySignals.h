@@ -55,6 +55,10 @@ namespace UnitSignals
 	const FName ReachedBase(TEXT("ReachedBase"));
 	const FName GetClosestBase(TEXT("StartBuildAction"));
 	const FName SpawnBuildingRequest(TEXT("SpawnBuildingRequest"));
+
+	// FOG OF WAR
+	const FName UnitEnterSight(TEXT("UnitEnterSight"));
+	const FName UnitExitSight(TEXT("UnitExitSight"));
 }
 
 USTRUCT()

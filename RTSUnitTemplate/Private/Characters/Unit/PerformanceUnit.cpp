@@ -132,7 +132,7 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
 
-
+/*
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -194,7 +194,7 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 						
 					}
 	}
-	
+	*/
 }
 
 void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC)
@@ -589,6 +589,16 @@ void APerformanceUnit::SetClientVisibility(bool bVisible)
 	bClientIsVisible = bVisible;
 }
 
+void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;  // Safety check
+	
+	APlayerController* PlayerController = World->GetFirstPlayerController();
+	if (!PlayerController || Cast<ACustomControllerBase>(PlayerController)->SelectableTeamId != DetectingActor->TeamId) return;
+	
+	IsVisibleEnemy = bVisible;
+}
 
 
 bool APerformanceUnit::ComputeLocalVisibility() const

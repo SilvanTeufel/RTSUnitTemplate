@@ -40,15 +40,7 @@ void UDetectionProcessor::Initialize(UObject& Owner)
             SignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange)
                                       .AddUObject(this, &UDetectionProcessor::HandleUnitPresenceSignal);
             //UE_LOG(LogMass, Log, TEXT("UDetectionProcessor bound to signal '%s'"), *UnitSignals::UnitInDetectionRange.ToString());
-
-            if (SpawnSignalDelegateHandle.IsValid())
-            {
-                SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned).Remove(SpawnSignalDelegateHandle);
-            }
             
-            SpawnSignalDelegateHandle = SignalSubsystem
-                   ->GetSignalDelegateByName(UnitSignals::UnitSpawned)
-                   .AddUObject(this, &UDetectionProcessor::HandleUnitSpawnedSignal);
         }
     }
 }
@@ -63,14 +55,6 @@ void UDetectionProcessor::BeginDestroy()
         SignalDelegateHandle.Reset();
     }
 
-    if (SignalSubsystem && SpawnSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
-    {
-        SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
-        .Remove(SpawnSignalDelegateHandle);
-            
-        SpawnSignalDelegateHandle.Reset();
-    }
-
     Super::BeginDestroy();
 }
 
@@ -81,29 +65,6 @@ void UDetectionProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArray
     // This function might be called multiple times per frame if signals are dispatched in batches
     ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
     // UE_LOG(LogMass, Verbose, TEXT("HandleUnitPresenceSignal: Received %d entities for signal %s"), Entities.Num(), *SignalName.ToString());
-}
-
-void UDetectionProcessor::HandleUnitSpawnedSignal(
-    FName SignalName,
-    TConstArrayView<FMassEntityHandle> Entities)
-{
-    const float Now = World->GetTimeSeconds();
-
-    if (!EntitySubsystem) { return; }
-    
-    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-    
-    for (const FMassEntityHandle& E : Entities)
-    {
-       ;
-        // Grab the *target* fragment on that entity and stamp it
-        FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
-        
-        if (StateFragment)
-        {
-            StateFragment->BirthTime = Now;
-        }
-    }
 }
 
 void UDetectionProcessor::ConfigureQueries()
@@ -144,6 +105,15 @@ void UDetectionProcessor::ConfigureQueries()
 
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        // Noch nicht Zeit, diesen Frame überspringen
+        return;
+    }
     //UE_LOG(LogTemp, Log, TEXT("UDetectionProcessor!"));
 // Check if we have any signals buffered for the detection signal name
     TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
@@ -168,6 +138,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [&PendingSignals, &EntityManager, SignaledEntities, this](FMassExecutionContext& ChunkContext)
     {
+            
         const int32 NumEntities = ChunkContext.GetNumEntities();
 
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -177,7 +148,8 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); 
         //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
-
+       
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; 
@@ -186,6 +158,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 continue;  // this entity is not yet “1 second old”
             }
+
             
             const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
             const FTransform& DetectorTransform = TransformList[i].GetTransform();
@@ -194,15 +167,24 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAgentCharacteristicsFragment& DetectorCharFrag = CharList[i];
             const FVector DetectorLocation = DetectorTransform.GetLocation();
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i];
-     
 
+            /*
+            if (!DetectorTargetFrag.TargetEntity.IsSet() || !IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity))
+            {
+                // Target is gone; clear it out
+                DetectorTargetFrag.TargetEntity.Reset();
+                DetectorTargetFrag.bHasValidTarget = false;
+                // Optionally push a “lost target” signal or reset movement
+                continue;
+            }*/
+            
             FMassEntityHandle BestTargetEntity;
            
             FVector BestTargetLocation = FVector::ZeroVector;
             bool bFoundValidTargetThisRun = false; // Did we find *any* valid target in the signaled list?
             bool bCurrentTargetStillViable = false; // Is the *existing* target still valid?
             FVector CurrentTargetLatestLocation = FVector::ZeroVector;
-
+            
             // --- Process ALL Buffered Signals (Manual Filtering) ---
             for (const FMassEntityHandle& PotentialTargetEntity : SignaledEntities)
             {
@@ -230,41 +212,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(PotentialTargetEntity);
                 const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTargetEntity);
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(PotentialTargetEntity);
-                
-              
-
-                /*
-                // Call the new helper function
-                 const FPotentialTargetFragments TargetFragments = TryGetTargetFragments(EntityManager, PotentialTargetEntity);
-
-                 if (!TargetFragments.bSuccessfullyFetchedAll)
-                 {
-                     UE_LOG(LogTemp, Warning, TEXT("UDetectionProcessor: Failed to fetch all required fragments for PotentialTargetEntity %s. Transform: %p, Stats: %p, Char: %p. Skipping."),
-                         *PotentialTargetEntity.DebugGetDescription(),
-                         static_cast<const void*>(TargetFragments.TransformFrag),
-                         static_cast<const void*>(TargetFragments.StatsFrag),
-                         static_cast<const void*>(TargetFragments.CharacteristicsFrag));
-                     continue; // Skip this entity
-                 }
-
-                 // If we get here, all fragments were fetched (pointers are non-null).
-                 // You can now safely dereference them using the struct members:
-                
-                 const FTransformFragment* TargetTransformFrag = TargetFragments.TransformFrag;
-                 const FMassCombatStatsFragment* TargetStatsFrag = TargetFragments.StatsFrag;
-                 const FMassAgentCharacteristicsFragment* TargetCharFrag = TargetFragments.CharacteristicsFrag;
-           
-           
-
-
-                
-
-                /*
-                if (!TargetTransformFrag || !TargetStatsFrag || !TargetCharFrag)
-                {
-                     SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity); // Remove incomplete from processed set
-                     continue; // Missing required components
-                }*/
+    
                 // --- End Data Fetching ---
 
                 const FTransform& TargetTransform = TargetTransformFrag->GetTransform();
@@ -273,6 +221,8 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 const FMassAgentCharacteristicsFragment& TargetChars = *TargetCharFrag;
 
 
+
+                
                 //UE_LOG(LogTemp, Log, TEXT("AAAA"));
                 // --- Perform Checks ---
                 if (TargetStats.TeamId == DetectorStatsFrag.TeamId) continue;
@@ -283,12 +233,9 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 else if (DetectorCharFrag.bCanOnlyAttackFlying && !TargetChars.bIsFlying) bCanAttackTarget = false;
                 else if (TargetChars.bIsInvisible && !DetectorCharFrag.bCanDetectInvisible) bCanAttackTarget = false;
                 if (!bCanAttackTarget) continue;
-
-                //UE_LOG(LogTemp, Log, TEXT("BBBB"));
-                // MANUAL DISTANCE CHECK (Spatial Filtering)
-                const float Dist = FVector::Dist(DetectorLocation, TargetLocation);
-                //if (Dist > CurrentDetectorStats.SightRadius) continue; // Outside sight radius
                 
+                const float Dist = FVector::Dist(DetectorLocation, TargetLocation);
+
                 // --- Update Best Target Logic ---
                 if (Dist < DetectorStatsFrag.SightRadius && TargetStatsFrag->Health > 0)
                 {
@@ -298,7 +245,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }
                 
                 // --- Check Current Target Viability Logic ---
-                if (DetectorTargetFrag.TargetEntity.IsSet()) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
+                if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
                 {
                     const FTransformFragment* CurrentTargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetectorTargetFrag.TargetEntity);
                     const FTransform& CurrentTargetDetectorTransform = CurrentTargetTransformFrag->GetTransform();
@@ -318,9 +265,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }
 
             } // End loop through signaled entities
-            
-
-
 
             // --- Final Update Target Fragment Logic ---
             if (bFoundValidTargetThisRun)
@@ -344,8 +288,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                // DetectorTargetFrag.bHasValidTarget = false;
             }
 
-
-            if (DetectorTargetFrag.TargetEntity.IsSet()) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
+            if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
             {
                 const FTransformFragment* CurrentTargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetectorTargetFrag.TargetEntity);
                 const FTransform& CurrentTargetDetectorTransform = CurrentTargetTransformFrag->GetTransform();
