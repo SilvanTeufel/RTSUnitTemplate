@@ -613,8 +613,7 @@ void APerformanceUnit::UpdateClientVisibility()
 {
 	// UE_LOG(LogTemp, Log, TEXT("!!!!Trying UpdateClientVisibility!!!"));
 	// Only run this on the *owning* client, never on the server:
-
-
+	
 	if (!HasAuthority()) // only on client
 	{
 		const bool bNew = ComputeLocalVisibility();
