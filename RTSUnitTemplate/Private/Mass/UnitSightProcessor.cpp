@@ -85,9 +85,10 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
     TArray<FMassSightSignalPayload> PendingSignals;
 
+    TArray<FMassEntityHandle> FogEntities;
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture SignaledEntitiesPtr by value, SignaledEntities by const reference.
-        [&PendingSignals, &EntityManager, &SignaledEntities, SignaledEntitiesPtr, this](FMassExecutionContext& ChunkContext)
+        [&PendingSignals, &EntityManager, &FogEntities, &SignaledEntities, SignaledEntitiesPtr, this](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -95,7 +96,8 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
         const float Now = World->GetTimeSeconds();
-
+            
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // This is where LastSeenTargets (a TSet) lives
@@ -106,6 +108,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
             
             const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
+            FogEntities.Add(DetectorEntity);
             const FTransform& DetectorTransform = TransformList[i].GetTransform();
             const FMassCombatStatsFragment& DetectorStatsFrag = StatsList[i];
             const FVector DetectorLocation = DetectorTransform.GetLocation();
@@ -118,7 +121,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             const float LoseSightRadiusSq = FMath::Square(DetectorStatsFrag.LoseSightRadius);
             const float SightRadiusSq = FMath::Square(DetectorStatsFrag.SightRadius);
-
+            
             // 1. Process previously seen targets from StateFrag.LastSeenTargets (which is a TSet)
 
             //UE_LOG(LogTemp, Error, TEXT("BStateFrag.LastSeenTargets.Num(): %d"), StateFrag.LastSeenTargets.Num());
@@ -187,8 +190,17 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             StateFrag.LastSeenTargets = MoveTemp(NextFrameLastSeenSet); // Move TSet to TSet
             // --- REVISED FOG-OF-WAR LOGIC END ---
         }
-    });
 
+ 
+    });
+    
+    if (SignalSubsystem && FogEntities.Num() > 0)
+    {
+        SignalSubsystem->SignalEntities(UnitSignals::UpdateFogMask, FogEntities);
+    }else
+    {
+        UE_LOG(LogTemp, Error, TEXT("No Entities Found!"));
+    }
     // Dispatch signals
     if (!PendingSignals.IsEmpty())
     {

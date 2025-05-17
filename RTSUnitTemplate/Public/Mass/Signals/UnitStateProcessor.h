@@ -114,7 +114,8 @@ private:
 	FDelegateHandle SpawnBuildingRequestDelegateHandle;
 
 	TArray<FDelegateHandle> SightChangeRequestDelegateHandle;
-
+	FDelegateHandle FogParametersDelegateHandle;
+	
 	FDelegateHandle SpawnSignalDelegateHandle;
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
@@ -217,6 +218,9 @@ private:
 	UFUNCTION()
 	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
+	UFUNCTION()
+	void HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities);
+	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 };

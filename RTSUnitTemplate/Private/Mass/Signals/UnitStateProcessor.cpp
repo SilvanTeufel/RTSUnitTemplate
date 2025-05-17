@@ -5,6 +5,7 @@
 
 // Source: UnitStateProcessor.cpp
 #include "AIController.h"
+#include "CanvasTypes.h"
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
@@ -18,6 +19,14 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "Engine/CanvasRenderTarget2D.h"
+#include "Engine/Canvas.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "CanvasItem.h"
+#include "CanvasTypes.h"
+#include "Engine/World.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Engine/GameViewportClient.h"
 
 UUnitStateProcessor::UUnitStateProcessor()
 {
@@ -63,6 +72,9 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     		// Optional: Store handles if you need precise unregistration later
     		// if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
     	}
+    	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFogMask));
+
     	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
@@ -140,6 +152,14 @@ void UUnitStateProcessor::BeginDestroy()
             
 			SightChangeRequestDelegateHandle[i].Reset();
 		}
+	}
+	
+	if (SignalSubsystem && FogParametersDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
+		.Remove(FogParametersDelegateHandle);
+            
+		FogParametersDelegateHandle.Reset();
 	}
 	
 	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
@@ -2022,6 +2042,32 @@ void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntit
 		}
 	}
 	
+}
+
+
+void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem) return;
+	//UWorld* World = EntitySubsystem->GetWorld();
+	ARTSGameModeBase* GM = World ? Cast<ARTSGameModeBase>(World->GetAuthGameMode()) : nullptr;
+	if (!GM) return;
+
+	// 1) Collect unit positions
+	TArray<FVector> UnitPositions;
+	FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+	for (FMassEntityHandle E : Entities)
+	{
+		if (auto* TF = EM.GetFragmentDataPtr<FTransformFragment>(E))
+		{
+			UnitPositions.Add(TF->GetTransform().GetLocation());
+		}
+	}
+
+	// 2) Dispatch to GameThread and update texture
+	AsyncTask(ENamedThreads::GameThread, [GM, UnitPositions = MoveTemp(UnitPositions)]()
+	{
+		GM->UpdateFogMaskWithCircles(UnitPositions);
+	});
 }
 
 

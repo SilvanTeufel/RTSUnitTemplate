@@ -158,15 +158,40 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <ASpeakingUnit*> SpeakingUnits;
 
-	/*
-	// Getter for the movement manager
-	UFUNCTION(BlueprintCallable, Category = "Movement")
-	UUnitMovementManager* GetUnitMovementManager() const { return UnitMovementManager; }
+public:
+	// Expose to Blueprint if needed
+	//UPROPERTY(EditAnywhere, Category="Fog")
+	//UTexture2D* CircleTexture;
+	
+	// Positions collected each signal
+	TArray<FVector> PendingFogPositions;
 
-protected:
-	// The global movement manager instance
-	UPROPERTY()
-	UUnitMovementManager* UnitMovementManager;
+	TArray<FColor> FogPixels;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UTexture2D* FogMaskTexture;
 
-	*/
+	/** world‐space minimum bounds used to map X,Y → 0…1 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fog")
+	FVector2D FogMinBounds = FVector2D(-10000.f, -10000.f);
+
+	/** world‐space maximum bounds used to map X,Y → 0…1 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fog")
+	FVector2D FogMaxBounds = FVector2D( 10000.f,  10000.f);
+	
+	UFUNCTION()
+	void CreateStartMask();
+	
+	//UFUNCTION()
+	//void UpdateFogMaskTexture();
+
+	UFUNCTION()
+	void UpdateFogMaskWithCircles(const TArray<FVector>& UnitWorldPositions);
+
+	UFUNCTION(BlueprintCallable, Category="Fog")
+	void ApplyFogMaskMaterial(
+	UStaticMeshComponent* MeshComponent,
+	UMaterialInterface* BaseMaterial,
+	int32 MaterialIndex);
+	
 };
