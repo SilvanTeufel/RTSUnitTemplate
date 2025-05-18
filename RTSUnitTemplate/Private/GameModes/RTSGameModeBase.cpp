@@ -45,7 +45,7 @@ void ARTSGameModeBase::BeginPlay()
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
 
-	CreateStartMask();
+	//MulticastCreateStartMask();
 	//UnitMovementManager = UUnitMovementManager::GetInstance(GetWorld());
 }
 
@@ -971,7 +971,7 @@ FVector ARTSGameModeBase::CalcLocation(FVector Offset, FVector MinRange, FVector
 	return FVector(X, Y, Z);
 }
 
-void ARTSGameModeBase::CreateStartMask()
+void ARTSGameModeBase::MulticastCreateStartMask_Implementation()
 {
 	// 1) Create a transient CPU-updatable texture
 	const int32 TexSize = 1024;
@@ -988,6 +988,8 @@ void ARTSGameModeBase::CreateStartMask()
 	// Allocate CPU buffer
 	FogPixels.SetNumUninitialized(TexSize * TexSize);
 }
+
+
 /*
 void ARTSGameModeBase::UpdateFogMaskTexture()
 {
@@ -1035,7 +1037,7 @@ void ARTSGameModeBase::UpdateFogMaskTexture()
 }
 */
 
-void ARTSGameModeBase::UpdateFogMaskWithCircles(const TArray<FVector>& UnitWorldPositions)
+void ARTSGameModeBase::MulticastUpdateFogMaskWithCircles_Implementation(const TArray<FMassEntityHandle>& Entities)
 {
     const int32 TexSize = 1024;
     const int32 Radius  = 32; // circle radius in pixels
@@ -1046,6 +1048,34 @@ void ARTSGameModeBase::UpdateFogMaskWithCircles(const TArray<FVector>& UnitWorld
     {
         C = FColor::Black;
     }
+
+	TArray<FVector> UnitWorldPositions;
+
+	if (UWorld* World = GetWorld())
+	{
+		ACustomControllerBase* PlayerController = Cast<ACustomControllerBase>(World->GetFirstPlayerController());
+		if (!PlayerController) return;
+
+		UMassEntitySubsystem* EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(GetWorld());
+		if (!EntitySubsystem) return;
+		
+		FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+
+		for (const FMassEntityHandle& E : Entities)
+		{
+			const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
+			const FMassCombatStatsFragment* CF = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E); // Replace with your actual unit fragment
+
+			if (!TF || !CF) continue;
+
+			if (CF->TeamId == PlayerController->SelectableTeamId) // Your team check
+			{
+				UnitWorldPositions.Add(TF->GetTransform().GetLocation());
+			}
+		}
+	}
+
+	
 
     // 2) Stamp a filled white circle for each unit
     for (const FVector& WP : UnitWorldPositions)
@@ -1108,10 +1138,8 @@ void ARTSGameModeBase::UpdateFogMaskWithCircles(const TArray<FVector>& UnitWorld
 }
 
 
-void ARTSGameModeBase::ApplyFogMaskMaterial(
-	UStaticMeshComponent* MeshComponent,
-	UMaterialInterface* BaseMaterial,
-	int32 MaterialIndex)
+void ARTSGameModeBase::MulticastApplyFogMaskMaterial_Implementation(UStaticMeshComponent* MeshComponent,
+	UMaterialInterface* BaseMaterial, int32 MaterialIndex)
 {
 	if (!MeshComponent || !BaseMaterial || !FogMaskTexture)
 	{

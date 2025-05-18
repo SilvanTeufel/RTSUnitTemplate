@@ -24,6 +24,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "CanvasItem.h"
 #include "CanvasTypes.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/World.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/GameViewportClient.h"
@@ -2047,29 +2048,40 @@ void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntit
 
 void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	if (!EntitySubsystem) return;
-	//UWorld* World = EntitySubsystem->GetWorld();
-	ARTSGameModeBase* GM = World ? Cast<ARTSGameModeBase>(World->GetAuthGameMode()) : nullptr;
-	if (!GM) return;
+	if (!EntitySubsystem || !World) return;
 
-	// 1) Collect unit positions
-	TArray<FVector> UnitPositions;
-	FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
-	for (FMassEntityHandle E : Entities)
-	{
-		if (auto* TF = EM.GetFragmentDataPtr<FTransformFragment>(E))
-		{
-			UnitPositions.Add(TF->GetTransform().GetLocation());
-		}
-	}
+	APlayerController* PC = World->GetFirstPlayerController(); // Local controller
+	if (!PC) return;
 
-	// 2) Dispatch to GameThread and update texture
-	AsyncTask(ENamedThreads::GameThread, [GM, UnitPositions = MoveTemp(UnitPositions)]()
+	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+	if (!CustomPC) return;
+
+	// Must be run on GameThread to access UObjects
+	TArray<FMassEntityHandle> CopiedEntities = Entities;
+
+	AsyncTask(ENamedThreads::GameThread, [CustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
 	{
-		GM->UpdateFogMaskWithCircles(UnitPositions);
+		CustomPC->UpdateFogMaskWithCircles(CopiedEntities);
 	});
 }
+/*
+void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem) return;
+	if (!World) return;
 
+	ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+	if (!GM) return;
+
+	// 1. Call multicast from GameThread
+	TArray<FMassEntityHandle> CopiedEntities = Entities;
+
+	AsyncTask(ENamedThreads::GameThread, [GM, CopiedEntities = MoveTemp(CopiedEntities)]()
+	{
+		GM->MulticastUpdateFogMaskWithCircles(CopiedEntities);
+	});
+}
+*/
 
 void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,

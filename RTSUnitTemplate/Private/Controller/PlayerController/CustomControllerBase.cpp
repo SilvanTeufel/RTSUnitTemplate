@@ -3,6 +3,7 @@
 
 #include "Controller/PlayerController/CustomControllerBase.h"
 
+#include "EngineUtils.h"
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
@@ -12,6 +13,7 @@
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "Actors/FogActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 
@@ -136,7 +138,7 @@ void ACustomControllerBase::AgentInit_Implementation()
 }
 
 
-void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, FMassEntityHandle InEntity, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
+void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
 {
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -154,15 +156,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-    if (!EntityManager.IsEntityValid(InEntity))
+	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
+	
+    if (!EntityManager.IsEntityValid(MassEntityHandle))
     {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *InEntity.DebugGetDescription());
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
     // --- Access the PER-ENTITY fragment ---
-    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
-	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(InEntity);
+    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 	
     if (!MoveTargetFragmentPtr || !AiStatePtr)
     {
@@ -173,7 +177,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         // MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
 
         // Alternatively, if it's an error that it's missing:
-        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *InEntity.DebugGetDescription());
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
@@ -188,34 +192,34 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     // If you need to trigger network replication or specific actions:
     MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
 
-	EntityManager.Defer().AddTag<FMassStateRunTag>(InEntity);
+	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 
 	if (AttackToggled)
 	{
 		//UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
-		EntityManager.Defer().AddTag<FMassStateDetectTag>(InEntity);
+		EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 	}else
 	{
 		//UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
-		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(InEntity);
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
 	}
 
-	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(InEntity); 
-	EntityManager.Defer().RemoveTag<FMassStateRunTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
+	EntityManager.Defer().RemoveTag<FMassStateRunTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
 
-	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(InEntity);
-	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(InEntity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
 	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
 	/*
@@ -281,7 +285,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			RunLocation = TraceRunLocation(RunLocation);
 
 			float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
-			FMassEntityHandle MassEntityHandle =  SelectedUnits[i]->MassActorBindingComponent->GetMassEntityHandle();
+		
 			
 			//UE_LOG(LogTemp, Warning, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Speed : %f"), Speed);
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
@@ -292,7 +296,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
 	
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -300,7 +304,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -308,7 +312,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
+				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 				//SelectedUnits[i]->SetUnitState(UnitData::Run);
 				SetUnitState_Replication(SelectedUnits[i], 1);
 				PlayRunSound = true;
@@ -514,14 +518,158 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
 	SetUnitState_Replication(Unit,1);
-	CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, Location, Speed, 40.f);
+	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f);
 
 	//Unit->SetUnitState(UnitData::Run);
 	//SetUnitState_Multi(Unit, 1);
 	//MoveToLocationUEPathFinding(Unit, Location);
 }
 
-/*
-CorrectSetUnitMoveTarget(GetWorld(), MassEntityHandle, RunLocation, Speed, 40.f);
-SelectedUnits[i]->SetUnitState(UnitData::Run);
-*/
+void ACustomControllerBase::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
+{
+    FogMinBounds = Min;
+    FogMaxBounds = Max;
+}
+
+void ACustomControllerBase::BeginPlay()
+{
+	Super::BeginPlay();
+	if (IsLocalController())
+	{
+		InitFogMaskTexture();
+	}
+}
+
+void ACustomControllerBase::InitFogMaskTexture()
+{
+    FogMaskTexture = UTexture2D::CreateTransient(FogTexSize, FogTexSize, PF_B8G8R8A8);
+    check(FogMaskTexture);
+
+    FogMaskTexture->SRGB = false;
+    FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
+    FogMaskTexture->MipGenSettings = TMGS_NoMipmaps;
+    FogMaskTexture->AddToRoot();
+    FogMaskTexture->UpdateResource();
+
+    FogPixels.SetNumUninitialized(FogTexSize * FogTexSize);
+}
+
+void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	for (TActorIterator<AFogActor> It(World); It; ++It)
+	{
+		AFogActor* FogActor = *It;
+		UE_LOG(LogTemp, Warning, TEXT("FogActor->TeamId! %d"), FogActor->TeamId);
+		UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId! %d"), SelectableTeamId);
+		//if (FogActor && FogActor->TeamId == SelectableTeamId)
+		{
+			FogActor->Multicast_UpdateFogMaskWithCircles(Entities);
+			/*
+			if (HasAuthority())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("DO MULTICAST!"));
+				FogActor->Multicast_UpdateFogMaskWithCircles(Entities);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("DO Server_RequestFogUpdate!"));
+				FogActor->Server_RequestFogUpdate(Entities);
+			}
+			break;*/
+		}
+	}
+}
+
+void ACustomControllerBase::Server_RequestFogUpdate_Implementation(const TArray<FMassEntityHandle>& Entities)
+{
+	Multicast_UpdateFogMaskWithCircles(Entities);
+}
+
+void ACustomControllerBase::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<FMassEntityHandle>& Entities)
+{
+	// Now this logic runs on *every* client and server.
+	if (HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Server] UpdateFogMaskWithCircles called on controller %s"), *GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Client] UpdateFogMaskWithCircles called on controller %s"), *GetName());
+	}
+	
+    if (!FogMaskTexture) return;
+
+    for (FColor& C : FogPixels)
+        C = FColor::Black;
+
+    TArray<FVector> UnitWorldPositions;
+
+    if (UWorld* World = GetWorld())
+    {
+        UMassEntitySubsystem* EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(World);
+        if (!EntitySubsystem) return;
+
+        FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+
+        for (const FMassEntityHandle& E : Entities)
+        {
+            const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
+            const FMassCombatStatsFragment* CF = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+            if (!TF || !CF) continue;
+
+            if (CF->TeamId == SelectableTeamId) // Only your team's units
+            {
+                UnitWorldPositions.Add(TF->GetTransform().GetLocation());
+            }
+        }
+    }
+
+    // Write white circles for visible units
+    for (const FVector& WP : UnitWorldPositions)
+    {
+        float U = (WP.X - FogMinBounds.X) / (FogMaxBounds.X - FogMinBounds.X);
+        float V = (WP.Y - FogMinBounds.Y) / (FogMaxBounds.Y - FogMinBounds.Y);
+
+        float TexXf = U * FogTexSize;
+        float TexYf = V * FogTexSize; // flip Y
+
+        int32 CenterX = FMath::Clamp(FMath::RoundToInt(TexXf), 0, FogTexSize - 1);
+        int32 CenterY = FMath::Clamp(FMath::RoundToInt(TexYf), 0, FogTexSize - 1);
+
+        for (int32 dY = -CircleRadius; dY <= CircleRadius; ++dY)
+        {
+            int32 Y = CenterY + dY;
+            if (Y < 0 || Y >= FogTexSize) continue;
+
+            int32 HalfW = FMath::FloorToInt(FMath::Sqrt(FMath::Max(0.f, CircleRadius * CircleRadius - dY * dY)));
+            int32 MinX = FMath::Clamp(CenterX - HalfW, 0, FogTexSize - 1);
+            int32 MaxX = FMath::Clamp(CenterX + HalfW, 0, FogTexSize - 1);
+
+            FColor* Row = FogPixels.GetData() + Y * FogTexSize;
+            for (int32 X = MinX; X <= MaxX; ++X)
+            {
+                Row[X] = FColor::White;
+            }
+        }
+    }
+
+    // Upload to GPU
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
+    FogMaskTexture->UpdateTextureRegions(0, 1, Region, FogTexSize * sizeof(FColor), sizeof(FColor), (uint8*)FogPixels.GetData());
+}
+
+void ACustomControllerBase::ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex)
+{
+    if (!MeshComponent || !BaseMaterial || !FogMaskTexture) return;
+
+    MeshComponent->SetMaterial(MaterialIndex, BaseMaterial);
+
+    UMaterialInstanceDynamic* MID = MeshComponent->CreateDynamicMaterialInstance(MaterialIndex, BaseMaterial);
+    if (MID)
+    {
+        MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
+    }
+}

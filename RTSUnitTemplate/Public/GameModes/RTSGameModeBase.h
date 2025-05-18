@@ -179,17 +179,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fog")
 	FVector2D FogMaxBounds = FVector2D( 10000.f,  10000.f);
 	
-	UFUNCTION()
-	void CreateStartMask();
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastCreateStartMask();
 	
 	//UFUNCTION()
 	//void UpdateFogMaskTexture();
 
-	UFUNCTION()
-	void UpdateFogMaskWithCircles(const TArray<FVector>& UnitWorldPositions);
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastUpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
-	UFUNCTION(BlueprintCallable, Category="Fog")
-	void ApplyFogMaskMaterial(
+
+	UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category="Fog")
+	void MulticastApplyFogMaskMaterial(
 	UStaticMeshComponent* MeshComponent,
 	UMaterialInterface* BaseMaterial,
 	int32 MaterialIndex);
