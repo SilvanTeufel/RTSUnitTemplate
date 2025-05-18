@@ -157,42 +157,5 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <ASpeakingUnit*> SpeakingUnits;
-
-public:
-	// Expose to Blueprint if needed
-	//UPROPERTY(EditAnywhere, Category="Fog")
-	//UTexture2D* CircleTexture;
-	
-	// Positions collected each signal
-	TArray<FVector> PendingFogPositions;
-
-	TArray<FColor> FogPixels;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UTexture2D* FogMaskTexture;
-
-	/** world‐space minimum bounds used to map X,Y → 0…1 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fog")
-	FVector2D FogMinBounds = FVector2D(-10000.f, -10000.f);
-
-	/** world‐space maximum bounds used to map X,Y → 0…1 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fog")
-	FVector2D FogMaxBounds = FVector2D( 10000.f,  10000.f);
-	
-	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastCreateStartMask();
-	
-	//UFUNCTION()
-	//void UpdateFogMaskTexture();
-
-	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastUpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
-
-
-	UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category="Fog")
-	void MulticastApplyFogMaskMaterial(
-	UStaticMeshComponent* MeshComponent,
-	UMaterialInterface* BaseMaterial,
-	int32 MaterialIndex);
 	
 };

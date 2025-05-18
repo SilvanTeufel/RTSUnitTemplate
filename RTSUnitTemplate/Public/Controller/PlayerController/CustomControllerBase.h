@@ -67,39 +67,10 @@ public:
 
 	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
 	void Server_ReportUnitVisibility(APerformanceUnit* Unit, bool bVisible);
-
-public:
-	// === FOG SYSTEM ===
-	virtual void BeginPlay() override;
-	// Initializes Fog Texture
-	UFUNCTION(BlueprintCallable)
-	void InitFogMaskTexture();
-
+	
 	// Updates the Fog Mask using visible units
 	UFUNCTION()
 	void UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
-	UFUNCTION(Server, Reliable)
-	void Server_RequestFogUpdate(const TArray<FMassEntityHandle>& Entities);
 
-	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
-	
-	// Applies the dynamic material with FogMask to the mesh
-	void ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex);
-
-	// Set bounds (from GameMode, perhaps)
-	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
-
-protected:
-	UPROPERTY()
-	UTexture2D* FogMaskTexture;
-
-	TArray<FColor> FogPixels;
-
-	FVector2D FogMinBounds = FVector2D(-10000.f, -10000.f);
-	FVector2D FogMaxBounds = FVector2D( 10000.f,  10000.f);
-
-	const int32 FogTexSize = 1024;
-	const int32 CircleRadius = 32;
 };

@@ -17,6 +17,9 @@ AFogActor::AFogActor()
 
 	FogMesh->SetHiddenInGame(true);  // Hidden by default
 	FogMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
+	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
+	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 }
 
 void AFogActor::BeginPlay()
@@ -41,6 +44,11 @@ void AFogActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 
 void AFogActor::InitFogMaskTexture()
 {
+
+	FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
+	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
+	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
+	
 	FogMaskTexture = UTexture2D::CreateTransient(FogTexSize, FogTexSize, PF_B8G8R8A8);
 	check(FogMaskTexture);
 
@@ -91,86 +99,146 @@ void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 	FogMaxBounds = Max;
 }
 
-void AFogActor::Server_RequestFogUpdate_Implementation(const TArray<FMassEntityHandle>& Entities)
-{
-	Multicast_UpdateFogMaskWithCircles(Entities);
-}
-
 void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Multicast_UpdateFogMaskWithCircles_Implementation"));
-	UE_LOG(LogTemp, Warning, TEXT("%s: UpdateFogMaskWithCircles called on %s"),
-		HasAuthority() ? TEXT("[Server]") : TEXT("[Client]"),
-		*GetName());
+    if (!FogMaskTexture)
+        return;
 
-	if (!FogMaskTexture) return;
+    // Clear the fog mask to black
+    for (FColor& Pixel : FogPixels)
+    {
+        Pixel = FColor::Black;
+    }
 
-	for (FColor& C : FogPixels)
-		C = FColor::Black;
+    // Arrays to store unit positions and their corresponding sight radii (in pixels)
+    TArray<FVector> UnitWorldPositions;
+    TArray<int32> UnitPixelRadii;
 
-	TArray<FVector> UnitWorldPositions;
+    if (UWorld* World = GetWorld())
+    {
+        if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+        {
+            FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
 
-	if (UWorld* World = GetWorld())
-	{
-		UMassEntitySubsystem* EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(World);
-		if (!EntitySubsystem) return;
+            for (const FMassEntityHandle& E : Entities)
+            {
+                if (!EM.IsEntityValid(E))
+                    continue;
 
-		FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+                const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
+                FMassActorFragment*        AF = EM.GetFragmentDataPtr<FMassActorFragment>(E);
+                if (!TF || !AF)
+                    continue;
 
-		for (const FMassEntityHandle& E : Entities)
-		{
-			if (!EM.IsEntityValid(E)) continue;
-			
-			const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
-			FMassActorFragment* AF = EM.GetFragmentDataPtr<FMassActorFragment>(E);
-			if (!TF || !AF) continue;
+                AUnitBase* Unit = Cast<AUnitBase>(AF->GetMutable());
+                if (Unit && Unit->TeamId == TeamId)
+                {
+                    // Store world position
+                    FVector Loc = Unit->GetActorLocation();
+                    UnitWorldPositions.Add(Loc);
 
-			AUnitBase* Unit = Cast<AUnitBase>(AF->GetMutable());
-			if (Unit && Unit->TeamId == TeamId)  // Assuming you have GetTeamId()
-			{
-				UnitWorldPositions.Add(Unit->GetActorLocation());
-			}
-		}
-		/*
-		for (const FMassEntityHandle& E : Entities)
-		{
-			const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
-			const FMassCombatStatsFragment* CF = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
-			// Instead of Using CF do a Cast to UnitBase and do ->GetActorLocation to get the Location
-			if (!TF || !CF) continue;
+                    // Convert sight radius (world units) to texture-space pixels
+                    float WorldRadius = Unit->SightRadius;
+                    float Normalized = WorldRadius / (FogMaxBounds.X - FogMinBounds.X);
+                    int32 PixelRadius = FMath::RoundToInt(Normalized * FogTexSize);
+                    PixelRadius = FMath::Clamp(PixelRadius, 0, FogTexSize - 1)/1.5f;
 
-			if (CF->TeamId == TeamId)
-			{
-				UnitWorldPositions.Add(TF->GetTransform().GetLocation());
-			}
-		}*/
-	}
+                    UnitPixelRadii.Add(PixelRadius);
+                }
+            }
+        }
+    }
 
-	for (const FVector& WP : UnitWorldPositions)
-	{
-		float U = (WP.X - FogMinBounds.X) / (FogMaxBounds.X - FogMinBounds.X);
-		float V = (WP.Y - FogMinBounds.Y) / (FogMaxBounds.Y - FogMinBounds.Y);
+    // Draw a circle per unit based on its sight radius
+    for (int32 i = 0; i < UnitWorldPositions.Num(); ++i)
+    {
+        const FVector& WP = UnitWorldPositions[i];
+        int32 Radius = UnitPixelRadii[i];
 
-		int32 CenterX = FMath::Clamp(FMath::RoundToInt(U * FogTexSize), 0, FogTexSize - 1);
-		int32 CenterY = FMath::Clamp(FMath::RoundToInt(V * FogTexSize), 0, FogTexSize - 1);
+        // Normalize world position into UV
+        float U = (WP.X - FogMinBounds.X) / (FogMaxBounds.X - FogMinBounds.X);
+        float V = (WP.Y - FogMinBounds.Y) / (FogMaxBounds.Y - FogMinBounds.Y);
 
-		for (int32 dY = -CircleRadius; dY <= CircleRadius; ++dY)
-		{
-			int32 Y = CenterY + dY;
-			if (Y < 0 || Y >= FogTexSize) continue;
+        int32 CenterX = FMath::Clamp(FMath::RoundToInt(U * FogTexSize), 0, FogTexSize - 1);
+        int32 CenterY = FMath::Clamp(FMath::RoundToInt(V * FogTexSize), 0, FogTexSize - 1);
+    	
+    	// Innerer harter Radius + Dicke des Übergangs (in Pixeln)
+    	const int32 HardRadius      = Radius;
+    	const int32 FalloffPixels   = FMath::Max(1, Radius / 10);  // z.B. ein Drittel des Radius
 
-			int32 HalfW = FMath::FloorToInt(FMath::Sqrt(FMath::Max(0.f, CircleRadius * CircleRadius - dY * dY)));
-			int32 MinX = FMath::Clamp(CenterX - HalfW, 0, FogTexSize - 1);
-			int32 MaxX = FMath::Clamp(CenterX + HalfW, 0, FogTexSize - 1);
+    	// Precompute Squared Radii
+    	const float HardRadiusSq    = float(HardRadius * HardRadius);
+    	const float OuterRadiusSq   = float((HardRadius + FalloffPixels) * (HardRadius + FalloffPixels));
 
-			FColor* Row = FogPixels.GetData() + Y * FogTexSize;
-			for (int32 X = MinX; X <= MaxX; ++X)
-			{
-				Row[X] = FColor::White;
-			}
-		}
-	}
+    	for (int32 dY = - (HardRadius + FalloffPixels); dY <= HardRadius + FalloffPixels; ++dY)
+    	{
+    		const int32 Y = CenterY + dY;
+    		if (Y < 0 || Y >= FogTexSize) 
+    			continue;
 
-	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
-	FogMaskTexture->UpdateTextureRegions(0, 1, Region, FogTexSize * sizeof(FColor), sizeof(FColor), (uint8*)FogPixels.GetData());
+    		// Berechne maximale X-Ausdehnung in der erweiterten Zone
+    		int32 MaxDX = HardRadius + FalloffPixels;
+    		int32 MinX  = FMath::Clamp(CenterX - MaxDX, 0, FogTexSize - 1);
+    		int32 MaxX  = FMath::Clamp(CenterX + MaxDX, 0, FogTexSize - 1);
+
+    		FColor* Row = FogPixels.GetData() + Y * FogTexSize;
+    		for (int32 X = MinX; X <= MaxX; ++X)
+    		{
+    			float dX = float(X - CenterX);
+    			float DistSq = dX*dX + float(dY*dY);
+
+    			if (DistSq > OuterRadiusSq)
+    			{
+    				// außerhalb des gesamten Bereichs: schwarz lassen
+    				continue;
+    			}
+
+    			float Intensity;
+    			if (DistSq <= HardRadiusSq)
+    			{
+    				// Innerhalb des harten Kreises: volle Helligkeit
+    				Intensity = 1.0f;
+    			}
+    			else
+    			{
+    				// im Falloff-Bereich: linear von 1.0 → 0.0
+    				float Dist   = FMath::Sqrt(DistSq);
+    				float Delta  = (Dist - float(HardRadius)) / float(FalloffPixels); // 0..1
+    				Intensity    = FMath::Clamp(1.0f - Delta, 0.0f, 1.0f);
+    			}
+
+    			uint8 Gray = uint8(FMath::RoundToInt(Intensity * 255.0f));
+
+    			// Bei Überlappungen: behalte den hellsten Wert
+    			FColor& Pixel = Row[X];
+    			if (Gray > Pixel.R)  // R,G,B sind gleich, also genügt R-Vergleich
+    			{
+    				Pixel = FColor(Gray, Gray, Gray, 255);
+    			}
+    		}
+    	}
+    	/*
+        // Rasterize the circle
+        for (int32 dY = -Radius; dY <= Radius; ++dY)
+        {
+            const int32 Y = CenterY + dY;
+            if (Y < 0 || Y >= FogTexSize)
+                continue;
+
+            int32 HalfWidth = FMath::FloorToInt(FMath::Sqrt(FMath::Max(0.f, Radius * Radius - dY * dY)));
+            int32 MinX = FMath::Clamp(CenterX - HalfWidth, 0, FogTexSize - 1);
+            int32 MaxX = FMath::Clamp(CenterX + HalfWidth, 0, FogTexSize - 1);
+
+            FColor* Row = FogPixels.GetData() + Y * FogTexSize;
+            for (int32 X = MinX; X <= MaxX; ++X)
+            {
+                Row[X] = FColor::White;
+            }
+        }
+    	*/
+    }
+
+    // Update the GPU texture
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
+    FogMaskTexture->UpdateTextureRegions(0, 1, Region, FogTexSize * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(FogPixels.GetData()));
 }

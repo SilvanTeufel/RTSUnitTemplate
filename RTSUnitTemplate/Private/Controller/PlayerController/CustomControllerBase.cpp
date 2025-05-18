@@ -525,35 +525,6 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	//MoveToLocationUEPathFinding(Unit, Location);
 }
 
-void ACustomControllerBase::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
-{
-    FogMinBounds = Min;
-    FogMaxBounds = Max;
-}
-
-void ACustomControllerBase::BeginPlay()
-{
-	Super::BeginPlay();
-	if (IsLocalController())
-	{
-		InitFogMaskTexture();
-	}
-}
-
-void ACustomControllerBase::InitFogMaskTexture()
-{
-    FogMaskTexture = UTexture2D::CreateTransient(FogTexSize, FogTexSize, PF_B8G8R8A8);
-    check(FogMaskTexture);
-
-    FogMaskTexture->SRGB = false;
-    FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
-    FogMaskTexture->MipGenSettings = TMGS_NoMipmaps;
-    FogMaskTexture->AddToRoot();
-    FogMaskTexture->UpdateResource();
-
-    FogPixels.SetNumUninitialized(FogTexSize * FogTexSize);
-}
-
 void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
 {
 	UWorld* World = GetWorld();
@@ -562,114 +533,11 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
 	for (TActorIterator<AFogActor> It(World); It; ++It)
 	{
 		AFogActor* FogActor = *It;
-		UE_LOG(LogTemp, Warning, TEXT("FogActor->TeamId! %d"), FogActor->TeamId);
-		UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId! %d"), SelectableTeamId);
+		//UE_LOG(LogTemp, Warning, TEXT("FogActor->TeamId! %d"), FogActor->TeamId);
+		//UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId! %d"), SelectableTeamId);
 		//if (FogActor && FogActor->TeamId == SelectableTeamId)
 		{
 			FogActor->Multicast_UpdateFogMaskWithCircles(Entities);
-			/*
-			if (HasAuthority())
-			{
-				UE_LOG(LogTemp, Warning, TEXT("DO MULTICAST!"));
-				FogActor->Multicast_UpdateFogMaskWithCircles(Entities);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("DO Server_RequestFogUpdate!"));
-				FogActor->Server_RequestFogUpdate(Entities);
-			}
-			break;*/
 		}
 	}
-}
-
-void ACustomControllerBase::Server_RequestFogUpdate_Implementation(const TArray<FMassEntityHandle>& Entities)
-{
-	Multicast_UpdateFogMaskWithCircles(Entities);
-}
-
-void ACustomControllerBase::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<FMassEntityHandle>& Entities)
-{
-	// Now this logic runs on *every* client and server.
-	if (HasAuthority())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Server] UpdateFogMaskWithCircles called on controller %s"), *GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Client] UpdateFogMaskWithCircles called on controller %s"), *GetName());
-	}
-	
-    if (!FogMaskTexture) return;
-
-    for (FColor& C : FogPixels)
-        C = FColor::Black;
-
-    TArray<FVector> UnitWorldPositions;
-
-    if (UWorld* World = GetWorld())
-    {
-        UMassEntitySubsystem* EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(World);
-        if (!EntitySubsystem) return;
-
-        FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
-
-        for (const FMassEntityHandle& E : Entities)
-        {
-            const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
-            const FMassCombatStatsFragment* CF = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
-            if (!TF || !CF) continue;
-
-            if (CF->TeamId == SelectableTeamId) // Only your team's units
-            {
-                UnitWorldPositions.Add(TF->GetTransform().GetLocation());
-            }
-        }
-    }
-
-    // Write white circles for visible units
-    for (const FVector& WP : UnitWorldPositions)
-    {
-        float U = (WP.X - FogMinBounds.X) / (FogMaxBounds.X - FogMinBounds.X);
-        float V = (WP.Y - FogMinBounds.Y) / (FogMaxBounds.Y - FogMinBounds.Y);
-
-        float TexXf = U * FogTexSize;
-        float TexYf = V * FogTexSize; // flip Y
-
-        int32 CenterX = FMath::Clamp(FMath::RoundToInt(TexXf), 0, FogTexSize - 1);
-        int32 CenterY = FMath::Clamp(FMath::RoundToInt(TexYf), 0, FogTexSize - 1);
-
-        for (int32 dY = -CircleRadius; dY <= CircleRadius; ++dY)
-        {
-            int32 Y = CenterY + dY;
-            if (Y < 0 || Y >= FogTexSize) continue;
-
-            int32 HalfW = FMath::FloorToInt(FMath::Sqrt(FMath::Max(0.f, CircleRadius * CircleRadius - dY * dY)));
-            int32 MinX = FMath::Clamp(CenterX - HalfW, 0, FogTexSize - 1);
-            int32 MaxX = FMath::Clamp(CenterX + HalfW, 0, FogTexSize - 1);
-
-            FColor* Row = FogPixels.GetData() + Y * FogTexSize;
-            for (int32 X = MinX; X <= MaxX; ++X)
-            {
-                Row[X] = FColor::White;
-            }
-        }
-    }
-
-    // Upload to GPU
-    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
-    FogMaskTexture->UpdateTextureRegions(0, 1, Region, FogTexSize * sizeof(FColor), sizeof(FColor), (uint8*)FogPixels.GetData());
-}
-
-void ACustomControllerBase::ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex)
-{
-    if (!MeshComponent || !BaseMaterial || !FogMaskTexture) return;
-
-    MeshComponent->SetMaterial(MaterialIndex, BaseMaterial);
-
-    UMaterialInstanceDynamic* MID = MeshComponent->CreateDynamicMaterialInstance(MaterialIndex, BaseMaterial);
-    if (MID)
-    {
-        MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
-    }
 }

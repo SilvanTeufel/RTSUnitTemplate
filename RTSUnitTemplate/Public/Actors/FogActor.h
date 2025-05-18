@@ -41,21 +41,21 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
-
-	UFUNCTION(Server, Reliable)
-	void Server_RequestFogUpdate(const TArray<FMassEntityHandle>& Entities);
-
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector2D FogMinBounds = FVector2D(-10000.f, -10000.f);
+	int32 FogSize = 200.f;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	FVector2D FogMinBounds = FVector2D(-FogSize*200*50, -FogSize*200*50);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	FVector2D FogMaxBounds = FVector2D(FogSize*200*50, FogSize*200*50);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector2D FogMaxBounds = FVector2D(10000.f, 10000.f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 FogTexSize = 1024;
+	int32 FogTexSize = 0.25*1024;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CircleRadius = 32;
