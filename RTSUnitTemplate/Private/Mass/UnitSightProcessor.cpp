@@ -44,6 +44,8 @@ void UUnitSightProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -56,13 +58,212 @@ void UUnitSightProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArray
 }
 
 
+void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 
-// Presuming SEmptyEntityArray is defined appropriately, e.g.,
-// static const TArray<FMassEntityHandle> SEmptyEntityArray;
-// in your class or a relevant utility header.
-// If not, you can use TArray<FMassEntityHandle>() directly where SEmptyEntityArray was used,
-// though a static const is slightly more efficient if that path is hit very frequently.
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return;
+    }
+    TimeSinceLastRun = 0.f;
 
+    // 3. Pull in the raw detection‐range signals this tick:
+    TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
+    static const TArray<FMassEntityHandle> SEmptyEntityArray;
+    const TArray<FMassEntityHandle>& SignaledEntities = (SignaledEntitiesPtr && !SignaledEntitiesPtr->IsEmpty())
+        ? *SignaledEntitiesPtr
+        : SEmptyEntityArray;
+
+    // 4. Prepare our per‐frame containers:
+    TMap<FMassEntityHandle, TSet<FMassEntityHandle>> CurrentFrameSights;
+    TArray<FMassEntityHandle> FogEntities;
+    TArray<FMassSightSignalPayload> PendingSignals;
+
+    for (const FMassEntityHandle& T : SignaledEntities)
+    {
+        if (EntityManager.IsEntityValid(T))
+        {
+            auto& State = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(T);
+            State.TeamOverlapsPerTeam.Empty();
+            State.DetectorOverlapsPerTeam.Empty();
+        }
+    }
+
+    // 5. Chunk loop: detect who sees whom this tick, collect FogEntities & build CurrentFrameSights
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    [this, &PendingSignals, &EntityManager, &CurrentFrameSights, &FogEntities, &SignaledEntities](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList      = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const TConstArrayView<FTransformFragment> DetectorTransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassCombatStatsFragment> DetectorStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> DetectorCharacList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const float Now = World->GetTimeSeconds();
+        
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i];
+
+
+            // Skip brand‐new units
+            if ((Now - StateFrag.BirthTime) < 1.0f)
+            {
+                continue;
+            }
+
+            const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
+            const FMassCombatStatsFragment DetectorStats = DetectorStatsList[i];
+            const FMassAgentCharacteristicsFragment DetectorCharacteristics = DetectorCharacList[i];
+            const FVector DetectorLocation = DetectorTransformList[i].GetTransform().GetLocation();
+
+
+            // collect for fog‐of‐war
+            FogEntities.Add(DetectorEntity);
+            
+
+            // --- STEP 2: test newly signaled entities against active SightRadius
+            for (const FMassEntityHandle& SignaledTarget : SignaledEntities)
+            {
+                if (!EntityManager.IsEntityValid(SignaledTarget)) continue;
+                if (SignaledTarget == DetectorEntity) continue;
+                
+                const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
+                if (!TargetStats) continue;
+                
+                if (DetectorStats.TeamId == TargetStats->TeamId) continue;
+
+                const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(SignaledTarget);
+                if (!TargetTransform) continue;
+                FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
+                
+                FMassAgentCharacteristicsFragment& TargetCharacteristics = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(SignaledTarget);
+
+                const float Dist = FVector::Dist(DetectorLocation, TargetTransform->GetTransform().GetLocation());
+                if (Dist <= DetectorStats.SightRadius)
+                {
+          
+                    // Enter sight
+                    if (DetectorCharacteristics.bCanDetectInvisible && TargetCharacteristics.bIsInvisible)
+                    {
+                        TargetCharacteristics.bIsInvisible = false;
+                        int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+                        DetectorOverlapCount++;
+                    }
+
+                    int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+                    SightOverlapCount++;
+
+                   // PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitEnterSight);
+                    
+                }else if (Dist > DetectorStats.LoseSightRadius)
+                {
+                    /*
+                    int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+                    if (SightOverlapCount >= 1)
+                    {
+                        SightOverlapCount--;
+                    }
+                    else
+                    {
+                        SightOverlapCount = 0;
+                    }
+
+                    int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+                    if (DetectorCharacteristics.bCanDetectInvisible && DetectorOverlapCount > 0)
+                    {
+                        if (DetectorOverlapCount >= 1)
+                        {
+                            DetectorOverlapCount--;
+                        }
+                        else
+                        {
+                            DetectorOverlapCount = 0;
+                        }
+
+                        if (DetectorOverlapCount <= 0)
+                        {
+                            TargetCharacteristics.bIsInvisible = true;
+                        }
+                    }
+                    */
+                }
+            }
+            
+
+        }
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+
+            const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
+            const FMassCombatStatsFragment DetectorStats = DetectorStatsList[i];
+
+            for (const FMassEntityHandle& SignaledTarget : SignaledEntities)
+            {
+                const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
+                if (!TargetStats) continue;
+                    
+                FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
+
+                int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+                //UE_LOG(LogTemp, Log, TEXT("SightOverlapCount: %d"), SightOverlapCount);
+                
+                if (SightOverlapCount > 0)
+                {
+                   // UE_LOG(LogTemp, Log, TEXT("Sight is Greater 0 !! %d"), SightOverlapCount);
+                    PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitEnterSight);
+                }else if (SightOverlapCount <= 0)
+                {
+                    PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitExitSight); 
+                }
+
+            }
+        }
+        
+    });
+    
+    if (SignalSubsystem && FogEntities.Num() > 0)
+    {
+        SignalSubsystem->SignalEntities(UnitSignals::UpdateFogMask, FogEntities);
+    }else
+    {
+        UE_LOG(LogTemp, Error, TEXT("No Entities Found!"));
+    }
+    // Dispatch signals
+    if (!PendingSignals.IsEmpty())
+    {
+        if (SignalSubsystem)
+        {
+            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
+            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+            {
+                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+                {
+                    for (const FMassSightSignalPayload& Payload : SignalsToSend)
+                    {
+                        if (!Payload.SignalName.IsNone())
+                        {
+                           StrongSignalSubsystem->SignalEntities(Payload.SignalName, {Payload.TargetEntity, Payload.DetectorEntity});
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // CRITICAL: Consume the signals after processing them for this tick.
+    if (SignaledEntitiesPtr) // Check if the key existed before trying to remove
+    {
+        ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
+    }
+}
+
+
+
+/*
 void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 
@@ -228,137 +429,5 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     {
         ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
     }
-}
-/*
-void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
-    if (!SignaledEntitiesPtr || SignaledEntitiesPtr->IsEmpty())
-    {
-        // No presence signals received since last tick.
-        // We MUST still run the target loss logic for existing targets.
-        // Fall through to ForEachEntityChunk, but the inner loop over signaled entities won't run.
-    }
-
-    // Use a const reference for safety and potentially minor efficiency
-    const TArray<FMassEntityHandle>& SignaledEntities = (SignaledEntitiesPtr) ? *SignaledEntitiesPtr : TArray<FMassEntityHandle>{}; // Empty array if ptr is null
-
-    TArray<FMassSightSignalPayload> PendingSignals;
-    // Keep track of entities from the buffer that we actually process
-    SignaledEntitiesProcessedThisTick.Reset();
-    if (SignaledEntitiesPtr)
-    {
-        SignaledEntitiesProcessedThisTick.Append(SignaledEntities); // Add all potential targets initially
-    }
-
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [&PendingSignals, &EntityManager, SignaledEntities, this](FMassExecutionContext& ChunkContext)
-    {
-             const int32 NumEntities = ChunkContext.GetNumEntities();
-             
-            auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-            const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-            const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-
-            //UE_LOG(LogTemp, Log, TEXT("UUnitSightProcessor Entities: %d"), NumEntities);
-   
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            FMassAIStateFragment& StateFrag = StateList[i];
-            
-            const float Now = World->GetTimeSeconds();
-              if ((Now - StateFrag.BirthTime) < 1.0f)
-              {
-                  continue;  
-              }
-     
-            const FMassEntityHandle DetectorEntity = ChunkContext.GetEntity(i);
-            const FTransform& DetectorTransform = TransformList[i].GetTransform();
-            const FMassCombatStatsFragment& DetectorStatsFrag = StatsList[i];
-            const FVector DetectorLocation = DetectorTransform.GetLocation();
-
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD START ---
-            {
-                TSet<FMassEntityHandle> NewLastSeen;
-
-                //UE_LOG(LogTemp, Log, TEXT("DetectorStatsFrag.LoseSightRadius: %f"), DetectorStatsFrag.LoseSightRadius);
-                //UE_LOG(LogTemp, Log, TEXT("DetectorStatsFrag.SightRadius: %f"), DetectorStatsFrag.SightRadius);
-                // 1) First, gather all entities we *could* still consider seen:
-                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
-                {
-                    if (!EntityManager.IsEntityValid(T)) continue;
-                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
-                    if (!TF) continue;
-                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
-                    if (Dist <= DetectorStatsFrag.LoseSightRadius)
-                    {
-                        NewLastSeen.Add(T);
-                    }
-                }
-    
-                // 2) Then, also add any *newly* seen inside SightRadius
-                for (const FMassEntityHandle& T : SignaledEntities)
-                {
-                    if (T == DetectorEntity) continue;
-                    if (!EntityManager.IsEntityValid(T)) continue;
-                    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(T);
-                    if (!TF) continue;
-                    const float Dist = FVector::Dist(DetectorLocation, TF->GetTransform().GetLocation());
-                    if (Dist < DetectorStatsFrag.SightRadius)
-                    {
-                        if (!NewLastSeen.Contains(T))
-                        {
-                            // EnterSight
-                            PendingSignals.Emplace(T,DetectorEntity, UnitSignals::UnitEnterSight);
-                        }
-                        NewLastSeen.Add(T);
-                    }
-                }
-
-           
-                // 3) Anyone in the *old* LastSeenTargets but not in our NewLastSeen set has now truly exited
-                for (const FMassEntityHandle& T : StateFrag.LastSeenTargets)
-                {
-                    if (!NewLastSeen.Contains(T))
-                    {
-                        PendingSignals.Emplace(T,DetectorEntity, UnitSignals::UnitExitSight);
-                    }
-                }
-
-                // 4) Store for next tick
-                StateFrag.LastSeenTargets = MoveTemp(NewLastSeen);
-            }
-            // --- YOUR FOG-OF-WAR OVERLAP REBUILD END ---
-        }
-    });
-
-    // Dispatch signals
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            // Capture the weak subsystem pointer and move the pending signals list
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                // Check if the subsystem is still valid on the Game Thread
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSightSignalPayload& Payload : SignalsToSend)
-                    {
-                        // Check if the FName is valid before sending
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           // Send signal safely from the Game Thread using FName
-                           StrongSignalSubsystem->SignalEntities(Payload.SignalName, {Payload.TargetEntity, Payload.DetectorEntity});
-                        }
-                    }
-                }
-            });
-        }
-    }
-
-    //ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
-    SignaledEntitiesProcessedThisTick.Empty(); // Clear the processed set
 }
 */

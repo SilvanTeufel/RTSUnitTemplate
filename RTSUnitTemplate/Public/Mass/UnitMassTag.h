@@ -172,8 +172,16 @@ struct FMassAIStateFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float BirthTime = TNumericLimits<float>::Max();
 
-	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	TSet<FMassEntityHandle> LastSeenTargets; 
+	/** How many overlaps this target has *per team* (any overlap). */
+	UPROPERTY(VisibleAnywhere, Transient)
+	TMap<int32, int32> TeamOverlapsPerTeam;
+
+	/** How many overlaps this target has *per team* from detectors that can see invisibles. */
+	UPROPERTY(VisibleAnywhere, Transient)
+	TMap<int32, int32> DetectorOverlapsPerTeam;
+	
+	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	//TSet<FMassEntityHandle> LastSeenTargets; 
 };
 
 //----------------------------------------------------------------------//

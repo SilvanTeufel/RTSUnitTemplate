@@ -55,11 +55,9 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         return;
     }
 
-    // --- Intervall erreicht, Logik ausführen ---
-
     // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
     TimeSinceLastRun -= ExecutionInterval;
-    // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
+     //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
     if (!SignalSubsystem)
     {
         return;
@@ -69,39 +67,14 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        // UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! %d"), NumEntities);
-        // const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
-        // const auto Stats = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        // const auto Characteristics = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+            //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             
             const FMassEntityHandle CurrentEntity = ChunkContext.GetEntity(i);
-            /*
-            if (!EntityManager.IsEntityValid(CurrentEntity)) continue;
-                
-            if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, CurrentEntity) ||
-                 !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, CurrentEntity) ||
-                 !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, CurrentEntity))
-            {
-              // skip any entity missing one of the required fragments
-              continue;
-            }
-            */
             const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentEntity);
-            // Create the signal data payload
-            //FUnitPresenceSignal SignalData;
-            //SignalData.SignalerEntity = CurrentEntity;
-            //SignalData.Location = Transforms[i].GetTransform().GetLocation(); // Use GetLocation()
-            //SignalData.TeamId = Stats[i].TeamId;
-            //SignalData.bIsInvisible = Characteristics[i].bIsInvisible;
-            //SignalData.bIsFlying = Characteristics[i].bIsFlying;
-
-            // Broadcast the signal
-            // The SignalSubsystem automatically handles spatial partitioning
-            //SignalSubsystem->SignalEntity(UnitPresenceSignalName, CurrentEntity, SignalData);
-
+            
             if (TargetStatsFrag->Health > 0.f)
             {
                 if (!SignalSubsystem)

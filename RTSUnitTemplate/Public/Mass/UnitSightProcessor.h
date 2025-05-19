@@ -50,7 +50,6 @@ private:
 	// Buffer to store entities received from the signal delegate between calls
 	// Key: Signal Name, Value: Array of Entities that signaled
 	TMap<FName, TArray<FMassEntityHandle>> ReceivedSignalsBuffer;
-
 	// Keep track of processed entities from buffer to handle target loss check correctly
 	TSet<FMassEntityHandle> SignaledEntitiesProcessedThisTick;
 };
