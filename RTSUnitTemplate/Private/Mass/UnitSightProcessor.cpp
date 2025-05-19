@@ -72,13 +72,18 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
     // 3. Pull in the raw detection‐range signals this tick:
     TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
-    static const TArray<FMassEntityHandle> SEmptyEntityArray;
-    const TArray<FMassEntityHandle>& SignaledEntities = (SignaledEntitiesPtr && !SignaledEntitiesPtr->IsEmpty())
-        ? *SignaledEntitiesPtr
-        : SEmptyEntityArray;
+    if (!SignaledEntitiesPtr || SignaledEntitiesPtr->IsEmpty())
+    {
+        // No presence signals received since last tick.
+        // We MUST still run the target loss logic for existing targets.
+        // Fall through to ForEachEntityChunk, but the inner loop over signaled entities won't run.
+    }
+
+    // Use a const reference for safety and potentially minor efficiency
+    const TArray<FMassEntityHandle>& SignaledEntities = (SignaledEntitiesPtr) ? *SignaledEntitiesPtr : TArray<FMassEntityHandle>{}; // Empty array if ptr is null
 
     // 4. Prepare our per‐frame containers:
-    TMap<FMassEntityHandle, TSet<FMassEntityHandle>> CurrentFrameSights;
+
     TArray<FMassEntityHandle> FogEntities;
     TArray<FMassSightSignalPayload> PendingSignals;
 
@@ -94,7 +99,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
     // 5. Chunk loop: detect who sees whom this tick, collect FogEntities & build CurrentFrameSights
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-    [this, &PendingSignals, &EntityManager, &CurrentFrameSights, &FogEntities, &SignaledEntities](FMassExecutionContext& ChunkContext)
+    [this, &PendingSignals, &EntityManager, &FogEntities, &SignaledEntities](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList      = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -132,9 +137,11 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 
                 const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
                 if (!TargetStats) continue;
+
+              
                 
                 if (DetectorStats.TeamId == TargetStats->TeamId) continue;
-
+                
                 const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(SignaledTarget);
                 if (!TargetTransform) continue;
                 FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
@@ -148,7 +155,6 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     // Enter sight
                     if (DetectorCharacteristics.bCanDetectInvisible && TargetCharacteristics.bIsInvisible)
                     {
-                        TargetCharacteristics.bIsInvisible = false;
                         int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
                         DetectorOverlapCount++;
                     }
@@ -207,7 +213,8 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 if (!TargetStats) continue;
                     
                 FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
-
+                FMassAgentCharacteristicsFragment& TargetCharacteristics = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(SignaledTarget);
+                
                 int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
                 //UE_LOG(LogTemp, Log, TEXT("SightOverlapCount: %d"), SightOverlapCount);
                 
@@ -218,6 +225,16 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }else if (SightOverlapCount <= 0)
                 {
                     PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitExitSight); 
+                }
+
+                int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
+
+                if (DetectorOverlapCount > 0)
+                {
+                    TargetCharacteristics.bIsInvisible = false;
+                }else if (DetectorOverlapCount <= 0)
+                {
+                    TargetCharacteristics.bIsInvisible = true;
                 }
 
             }

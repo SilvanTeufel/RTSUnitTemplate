@@ -124,7 +124,7 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
 			OwningPlayerController = ControllerBase;
-			ControllerBase->Multi_SetFogManagerUnit(this);
+			//ControllerBase->Multi_SetFogManagerUnit(this);
 		}
 	}
 }
@@ -591,13 +591,31 @@ void APerformanceUnit::SetClientVisibility(bool bVisible)
 
 void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
 {
+
+	if (IsVisibleEnemy == bVisible) return;
+	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
 	
 	APlayerController* PlayerController = World->GetFirstPlayerController();
-	if (!PlayerController || Cast<ACustomControllerBase>(PlayerController)->SelectableTeamId != DetectingActor->TeamId) return;
+	if (PlayerController)
+	if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(PlayerController))
+	{
+		//if (!HasAuthority())
+			//UE_LOG(LogTemp, Log, TEXT("FOUDN CONTROLLER %d // %d DetectingACTOR"), MyController->SelectableTeamId, DetectingActor->TeamId);
+		
+		if (MyController->SelectableTeamId == DetectingActor->TeamId)
+		{
+			//UE_LOG(LogTemp, Log, TEXT("FOUND MYControler!!!!! %d"), MyController->SelectableTeamId);
+			//if (TeamId == DetectingActor->TeamId) return;
+
+			//if (!HasAuthority())
+				//UE_LOG(LogTemp, Log, TEXT("SET!!!!!"));
 	
-	IsVisibleEnemy = bVisible;
+	
+			IsVisibleEnemy = bVisible;
+		}
+	}
 }
 
 

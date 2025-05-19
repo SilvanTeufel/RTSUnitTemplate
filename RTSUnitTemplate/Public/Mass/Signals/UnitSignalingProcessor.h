@@ -28,7 +28,7 @@ protected:
 	static const FName UnitPresenceSignalName;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float ExecutionInterval = 0.1f;
+	float ExecutionInterval = 0.2f;
 	
 private:
 	FMassEntityQuery EntityQuery;

@@ -61,10 +61,9 @@ void UDetectionProcessor::BeginDestroy()
 // Called by the Signal Subsystem when the corresponding signal is processed
 void UDetectionProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities)
 {
-    // Append the received entities to our buffer for processing in Execute
-    // This function might be called multiple times per frame if signals are dispatched in batches
-    ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
-    // UE_LOG(LogMass, Verbose, TEXT("HandleUnitPresenceSignal: Received %d entities for signal %s"), Entities.Num(), *SignalName.ToString());
+
+  ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
+
 }
 
 void UDetectionProcessor::ConfigureQueries()
@@ -149,7 +148,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); 
         //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
        
-            
+            UE_LOG(LogTemp, Log, TEXT("Detection SignaledEntities.Num(): %u"), SignaledEntities.Num());
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; 
