@@ -357,8 +357,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::Attack)
                         {
-                        	//EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-	                        //EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
                         else if (SignalName == UnitSignals::PatrolIdle)
@@ -375,8 +375,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::Pause)
                         {
-                        	//EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-                        	//EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
+                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Run)
                         {
