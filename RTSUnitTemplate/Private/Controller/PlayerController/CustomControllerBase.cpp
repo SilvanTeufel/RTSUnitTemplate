@@ -16,6 +16,7 @@
 #include "Actors/FogActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Mass/Signals/MySignals.h"
 
 
 void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
@@ -182,6 +183,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     }
 
 	AiStatePtr->StoredLocation = NewTargetLocation;
+	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
     // Now, modify the specific entity's fragment data
     MoveTargetFragmentPtr->Center = NewTargetLocation;
     MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Move; // Set the intended action
@@ -196,11 +198,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 	if (AttackToggled)
 	{
-		//UE_LOG(LogTemp, Log, TEXT("ADDED DETECTION!"));
 		EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 	}else
 	{
-		//UE_LOG(LogTemp, Log, TEXT("REMOVED DETECTION!"));
 		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
 	}
 
@@ -515,7 +515,7 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	}
 
 	float Speed = Unit->Attributes->GetBaseRunSpeed();
-	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
+	//FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
 	SetUnitState_Replication(Unit,1);
 	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f);

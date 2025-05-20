@@ -311,6 +311,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsInvisible = false;
 
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	bool bCanBeInvisible = false;
+	
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanDetectInvisible = false;
 

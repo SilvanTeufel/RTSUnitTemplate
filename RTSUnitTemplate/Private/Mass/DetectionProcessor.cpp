@@ -146,14 +146,13 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); 
-        //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
-       
-            UE_LOG(LogTemp, Log, TEXT("Detection SignaledEntities.Num(): %u"), SignaledEntities.Num());
+
+            //UE_LOG(LogTemp, Log, TEXT("Detect Entities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& StateFrag = StateList[i]; 
+            FMassAIStateFragment& DetectorStateFrag = StateList[i]; 
             const float Now = World->GetTimeSeconds();
-            if ((Now - StateFrag.BirthTime) < 1.0f /* or 2.0f */)
+            if ((Now - DetectorStateFrag.BirthTime) < 1.0f /* or 2.0f */)
             {
                 continue;  // this entity is not yet “1 second old”
             }
@@ -166,16 +165,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAgentCharacteristicsFragment& DetectorCharFrag = CharList[i];
             const FVector DetectorLocation = DetectorTransform.GetLocation();
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i];
-
-            /*
-            if (!DetectorTargetFrag.TargetEntity.IsSet() || !IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity))
-            {
-                // Target is gone; clear it out
-                DetectorTargetFrag.TargetEntity.Reset();
-                DetectorTargetFrag.bHasValidTarget = false;
-                // Optionally push a “lost target” signal or reset movement
-                continue;
-            }*/
             
             FMassEntityHandle BestTargetEntity;
            
@@ -196,7 +185,6 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity);
                     continue;
                 }
-
            
                 // *Guard each fragment* before dereferencing it
                 if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, PotentialTargetEntity) ||
@@ -207,7 +195,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                   SignaledEntitiesProcessedThisTick.Remove(PotentialTargetEntity);
                   continue;
                 }
-
+                
                 const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(PotentialTargetEntity);
                 const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTargetEntity);
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(PotentialTargetEntity);
@@ -218,29 +206,41 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 const FVector TargetLocation = TargetTransform.GetLocation();
                 const FMassCombatStatsFragment& TargetStats = *TargetStatsFrag;
                 const FMassAgentCharacteristicsFragment& TargetChars = *TargetCharFrag;
-
-
-
                 
-                //UE_LOG(LogTemp, Log, TEXT("AAAA"));
                 // --- Perform Checks ---
                 if (TargetStats.TeamId == DetectorStatsFrag.TeamId) continue;
-             
+                
                 
                 bool bCanAttackTarget = true;
-                if (DetectorCharFrag.bCanOnlyAttackGround && TargetChars.bIsFlying) bCanAttackTarget = false;
-                else if (DetectorCharFrag.bCanOnlyAttackFlying && !TargetChars.bIsFlying) bCanAttackTarget = false;
-                else if (TargetChars.bIsInvisible && !DetectorCharFrag.bCanDetectInvisible) bCanAttackTarget = false;
+                if (DetectorCharFrag.bCanOnlyAttackGround && TargetChars.bIsFlying)
+                {
+                    //UE_LOG(LogTemp, Log, TEXT("DetectorCharFrag.bCanOnlyAttackGround %d"), DetectorCharFrag.bCanOnlyAttackGround);
+                    //UE_LOG(LogTemp, Log, TEXT("TargetChars.bIsFlying %d"), TargetChars.bIsFlying);
+                    bCanAttackTarget = false;
+                }
+                else if (DetectorCharFrag.bCanOnlyAttackFlying && !TargetChars.bIsFlying)
+                {
+                    //UE_LOG(LogTemp, Log, TEXT("DetectorCharFrag.bCanOnlyAttackFlying %d"), DetectorCharFrag.bCanOnlyAttackFlying);
+                    //UE_LOG(LogTemp, Log, TEXT("TargetChars.bIsFlying %d"), TargetChars.bIsFlying);
+                    bCanAttackTarget = false;
+                }
+                else if (TargetChars.bIsInvisible && !DetectorCharFrag.bCanDetectInvisible)
+                {
+                    //UE_LOG(LogTemp, Log, TEXT("DetectorCharFrag.bCanDetectInvisible %d"), DetectorCharFrag.bCanDetectInvisible);
+                    //UE_LOG(LogTemp, Log, TEXT("TargetChars.bIsInvisible %d"), TargetChars.bIsInvisible);
+                    bCanAttackTarget = false;
+                }
                 if (!bCanAttackTarget) continue;
                 
                 const float Dist = FVector::Dist(DetectorLocation, TargetLocation);
-
+                
                 // --- Update Best Target Logic ---
                 if (Dist < DetectorStatsFrag.SightRadius && TargetStatsFrag->Health > 0)
                 {
                     BestTargetEntity = PotentialTargetEntity;
                     BestTargetLocation = TargetLocation;
                     bFoundValidTargetThisRun = true;
+                    //UE_LOG(LogTemp, Log, TEXT("FOUND TARGET!"));
                 }
                 
                 // --- Check Current Target Viability Logic ---
@@ -254,7 +254,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     
                     if (CurrentDist <= DetectorStatsFrag.LoseSightRadius && CurrentTargetStatsFrag->Health > 0) // Check against LOSE sight radius
                     {
-                        if (!bFoundValidTargetThisRun || Dist >= CurrentDist) {
+                        if (!bFoundValidTargetThisRun) { // || Dist >= CurrentDist
                              bFoundValidTargetThisRun        = false;
                              bCurrentTargetStillViable       = true;
                              CurrentTargetLatestLocation     = TargetLocation;
@@ -276,15 +276,14 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
             else if (bCurrentTargetStillViable) // bHadValidTargetPreviously &&
             {
-                //UE_LOG(LogTemp, Log, TEXT("SAME TARGET."));
+                // UE_LOG(LogTemp, Log, TEXT("SAME TARGET."));
                 DetectorTargetFrag.LastKnownLocation = CurrentTargetLatestLocation; // Update location
                 DetectorTargetFrag.bHasValidTarget = true;
             }
             else
             {
                 //UE_LOG(LogTemp, Log, TEXT("NO TARGET."));
-               // DetectorTargetFrag.TargetEntity.Reset();
-               // DetectorTargetFrag.bHasValidTarget = false;
+                UpdateMoveTarget(MoveTargetFrag, DetectorStateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
             }
 
             if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
@@ -294,12 +293,12 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 const FVector CurrentTargetLocation = CurrentTargetDetectorTransform.GetLocation();
                 const float CurrentDist = FVector::Dist(DetectorLocation, CurrentTargetLocation);
                 const FMassCombatStatsFragment* CurrentTargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(DetectorTargetFrag.TargetEntity);
-                
+                //UE_LOG(LogTemp, Log, TEXT("LoseSightCHECK."));
                 if (CurrentDist > DetectorStatsFrag.LoseSightRadius || CurrentTargetStatsFrag->Health <= 0) // Check against LOSE sight radius
                 {
                     DetectorTargetFrag.TargetEntity.Reset();
                     DetectorTargetFrag.bHasValidTarget = false;
-                    UpdateMoveTarget(MoveTargetFrag, StateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
+                    UpdateMoveTarget(MoveTargetFrag, DetectorStateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
                 }
                  // If it's the current target but outside lose radius, bCurrentTargetStillViable remains false
             }
@@ -307,9 +306,12 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             // --- Tag Management (using final state) ---
             
-             if (DetectorTargetFrag.bHasValidTarget)
+             if (DetectorTargetFrag.bHasValidTarget && !DetectorStateFrag.SwitchingState)
              {
                  PendingSignals.Emplace(DetectorEntity, UnitSignals::SetUnitToChase);
+             }else if (!DetectorStateFrag.SwitchingState)
+             {
+                 PendingSignals.Emplace(DetectorEntity, UnitSignals::SetUnitStatePlaceholder);
              }
             
         } // End loop through detector entities in chunk

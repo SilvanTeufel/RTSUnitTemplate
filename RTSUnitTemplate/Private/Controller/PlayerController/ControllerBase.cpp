@@ -292,8 +292,6 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 
 void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const FHitResult& InHitResult)
 {
-
-	UE_LOG(LogTemp, Warning, TEXT("FireAbilityMouseHit_Implementation!!!!!!!"));
 	if (Unit)
 	{
 		Unit->FireMouseHitAbility(InHitResult);

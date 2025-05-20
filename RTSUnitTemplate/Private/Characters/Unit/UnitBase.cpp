@@ -249,6 +249,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CanDetectInvisible);
 	DOREPLIFETIME(AUnitBase, CanAttack);
 	DOREPLIFETIME(AUnitBase, IsInvisible);
+	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
 	DOREPLIFETIME(AUnitBase, IsFlying);
 	DOREPLIFETIME(AUnitBase, FlyHeight)
 

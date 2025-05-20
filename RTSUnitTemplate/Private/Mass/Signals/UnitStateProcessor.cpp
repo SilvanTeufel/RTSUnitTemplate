@@ -1991,7 +1991,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
+						//UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}

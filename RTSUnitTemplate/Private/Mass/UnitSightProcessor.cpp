@@ -153,7 +153,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 {
           
                     // Enter sight
-                    if (DetectorCharacteristics.bCanDetectInvisible && TargetCharacteristics.bIsInvisible)
+                    if (DetectorCharacteristics.bCanDetectInvisible && TargetCharacteristics.bCanBeInvisible)
                     {
                         int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
                         DetectorOverlapCount++;
@@ -232,7 +232,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 if (DetectorOverlapCount > 0)
                 {
                     TargetCharacteristics.bIsInvisible = false;
-                }else if (DetectorOverlapCount <= 0)
+                }else if (DetectorOverlapCount <= 0 && TargetCharacteristics.bCanBeInvisible)
                 {
                     TargetCharacteristics.bIsInvisible = true;
                 }
