@@ -336,8 +336,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
 
 			
-			CameraControllerBase->Multi_SetFogManager(AllUnits);;
-			
+			CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
 			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));

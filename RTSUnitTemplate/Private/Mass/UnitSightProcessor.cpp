@@ -149,7 +149,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 FMassAgentCharacteristicsFragment& TargetCharacteristics = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(SignaledTarget);
 
                 const float Dist = FVector::Dist(DetectorLocation, TargetTransform->GetTransform().GetLocation());
-                if (Dist <= DetectorStats.SightRadius)
+                if (Dist <= DetectorStats.SightRadius && DetectorStats.Health > 0.0f) // && TargetStats->Health > 0.0f && DetectorStats.Health > 0.0f
                 {
           
                     // Enter sight
@@ -211,16 +211,16 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
                 if (!TargetStats) continue;
-                    
+                if (TargetStats->TeamId == DetectorStats.TeamId) continue;
+                
                 FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
                 FMassAgentCharacteristicsFragment& TargetCharacteristics = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(SignaledTarget);
                 
                 int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
-                //UE_LOG(LogTemp, Log, TEXT("SightOverlapCount: %d"), SightOverlapCount);
                 
                 if (SightOverlapCount > 0)
                 {
-                   // UE_LOG(LogTemp, Log, TEXT("Sight is Greater 0 !! %d"), SightOverlapCount);
+                    //UE_LOG(LogTemp, Log, TEXT("SightOverlapCount: %d // TeamId: %d // TargetTeamId: %d"), SightOverlapCount, DetectorStats.TeamId, TargetStats->TeamId);
                     PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitEnterSight);
                 }else if (SightOverlapCount <= 0)
                 {

@@ -800,6 +800,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
 void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 {
+	UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState!"));
     // --- Vorab-Checks außerhalb des AsyncTasks ---
     if (!EntitySubsystem)
     {
@@ -845,8 +846,9 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
     	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
     			
-    			if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())){
-					SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
+    			if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom){ //  && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())
+    				UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState! To PatrolRandom"));
+    				SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
 				}
 				else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
 					SwitchState(UnitSignals::PatrolIdle, CapturedEntity, GTEntityManager);
@@ -2029,13 +2031,16 @@ void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntit
 					// Check Signal Name
 					if (SignalName == UnitSignals::UnitEnterSight)
 					{
+						//UE_LOG(LogTemp, Log, TEXT("/// -> DetectorUnitBase>TeamId: %d"), DetectorUnitBase->TeamId)
 						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase, true);
 					}
 					// Check Signal Name
 						
 					if (SignalName == UnitSignals::UnitExitSight)
 					{
-						//UE_LOG(LogTemp, Error, TEXT("Set InVisible!!!"));
+						//if (DetectorUnitBase->TeamId == 1)
+						//UE_LOG(LogTemp, Log, TEXT("/// -> DetectorUnitBase>TeamId: %d"), DetectorUnitBase->TeamId)
+						
 						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase,false);
 					}
 				}

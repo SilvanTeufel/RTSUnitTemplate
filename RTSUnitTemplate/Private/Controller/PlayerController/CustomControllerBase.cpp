@@ -19,7 +19,7 @@
 #include "Mass/Signals/MySignals.h"
 
 
-void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AActor*>& AllUnits)
+void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
 {
 	if (!IsLocalController()) return;
 	
@@ -45,7 +45,9 @@ void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AAct
 		if (NewSelection[i] && NewSelection[i]->TeamId == SelectableTeamId)
 		{
 			NewSelection[i]->IsMyTeam = true;
-			NewSelection[i]->SpawnFogOfWarManager(this);
+			//NewSelection[i]->OwningPlayerController = this;
+			//NewSelection[i]->SetOwningPlayerController();
+			//NewSelection[i]->SpawnFogOfWarManager(this);
 		}
 	}
 
@@ -54,7 +56,7 @@ void ACustomControllerBase::Multi_SetFogManager_Implementation(const TArray<AAct
 		Camera->SetupResourceWidget(this);
 }
 
-
+/*
 void ACustomControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
 {
 	if (IsValid(Unit))
@@ -63,7 +65,7 @@ void ACustomControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceU
 			Unit->IsMyTeam = true;
 			Unit->SpawnFogOfWarManager(this);
 		}
-}
+}*/
 
 void ACustomControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()
 {
@@ -139,7 +141,7 @@ void ACustomControllerBase::AgentInit_Implementation()
 }
 
 
-void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius)
+void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -196,7 +198,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 
-	if (AttackToggled)
+	UE_LOG(LogTemp, Log, TEXT("AttackToggled!!!!! %d"), AttackT);
+	
+	if (AttackT)
 	{
 		EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 	}else
@@ -220,17 +224,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-	// MoveTargetFragmentPtr->MarkNetDirty(); // If CreateNewAction doesn't do it implicitly
-	// Inside CorrectSetUnitMoveTarget, after CreateNewAction
-	/*
-	if (MoveTargetFragmentPtr) // Check ptr again just in case
-	{
-		UE_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget for Entity %s: Action triggered. CurrentAction is now: %s"),
-			   *InEntity.DebugGetDescription(),
-			   *UEnum::GetValueAsString(MoveTargetFragmentPtr->GetCurrentAction()));
-	}
-	*/
-    //E_LOG(LogTemp, Log, TEXT("SetUnitMoveTarget: Updated move target for entity %s"), *InEntity.DebugGetDescription());
+
 }
 
 void ACustomControllerBase::RightClickPressedMass()
@@ -379,7 +373,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 				}else
 				{
 					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-					LeftClickAttackMass(SelectedUnits[i], RunLocation);
+					LeftClickAttackMass(SelectedUnits[i], RunLocation, AttackToggled);
 					PlayAttackSound = true;
 				}
 			}
@@ -460,7 +454,7 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
 {
 	if (Unit && Unit->UnitState != UnitData::Dead) {
 	
@@ -482,7 +476,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 					
 				if (Unit && Unit->UnitState != UnitData::Dead)
 				{
-					LeftClickAMoveUEPFMass(Unit, Location);
+					LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 				}
 					
 			}else
@@ -494,7 +488,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
 				/// A-Move Units ///
-				LeftClickAMoveUEPFMass(Unit, Location);
+				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 			}
 					
 		}
@@ -502,7 +496,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 	}
 }
 
-void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Unit, FVector Location)
+void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
 {
 	if (!Unit) return;
 
@@ -518,7 +512,7 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	//FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
 	SetUnitState_Replication(Unit,1);
-	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f);
+	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f, AttackT);
 
 	//Unit->SetUnitState(UnitData::Run);
 	//SetUnitState_Multi(Unit, 1);

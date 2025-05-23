@@ -86,8 +86,8 @@ public:
 	void DestroyFogManager();
 
 	
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SetOwningPlayerControllerAndSpawnFogManager();
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=RTSUnitTemplate)
+	void SetOwningPlayerController();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.01, 0.01, 200);

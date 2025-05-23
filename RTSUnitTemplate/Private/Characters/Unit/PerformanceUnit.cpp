@@ -87,7 +87,7 @@ void APerformanceUnit::BeginPlay()
 	Super::BeginPlay();
 
 
-	SetOwningPlayerControllerAndSpawnFogManager();
+	SetOwningPlayerController();
 	
 }
 
@@ -111,9 +111,8 @@ void APerformanceUnit::DestroyFogManager()
 	}
 }
 
-void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
+void APerformanceUnit::SetOwningPlayerController_Implementation()
 {
-	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
 	
@@ -123,6 +122,7 @@ void APerformanceUnit::SetOwningPlayerControllerAndSpawnFogManager()
 		ACustomControllerBase* ControllerBase = Cast<ACustomControllerBase>(PlayerController);
 		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
+			UE_LOG(LogTemp, Error, TEXT("!!!Set OwningPlayerController!!!!"));
 			OwningPlayerController = ControllerBase;
 			//ControllerBase->Multi_SetFogManagerUnit(this);
 		}
@@ -591,22 +591,29 @@ void APerformanceUnit::SetClientVisibility(bool bVisible)
 
 void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
 {
-
+	if (IsMyTeam) return;
 	if (IsVisibleEnemy == bVisible) return;
+
+	//if (!HasAuthority()) UE_LOG(LogTemp, Log, TEXT("FIRST CHECK OK!!!!"));
 	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
-	
-	APlayerController* PlayerController = World->GetFirstPlayerController();
-	if (PlayerController)
-	if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(PlayerController))
+
+	if (!OwningPlayerController)
+	{
+		APlayerController* PlayerController = World->GetFirstPlayerController();
+		if (PlayerController) OwningPlayerController = PlayerController;
+	}
+
+	if (OwningPlayerController)
+	if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(OwningPlayerController))
 	{
 		//if (!HasAuthority())
 			//UE_LOG(LogTemp, Log, TEXT("FOUDN CONTROLLER %d // %d DetectingACTOR"), MyController->SelectableTeamId, DetectingActor->TeamId);
 		
 		if (MyController->SelectableTeamId == DetectingActor->TeamId)
 		{
-			//UE_LOG(LogTemp, Log, TEXT("FOUND MYControler!!!!! %d"), MyController->SelectableTeamId);
+			//if (!HasAuthority()) UE_LOG(LogTemp, Log, TEXT("FOUND MYControler!!!!! %d"), MyController->SelectableTeamId);
 			//if (TeamId == DetectingActor->TeamId) return;
 
 			//if (!HasAuthority())

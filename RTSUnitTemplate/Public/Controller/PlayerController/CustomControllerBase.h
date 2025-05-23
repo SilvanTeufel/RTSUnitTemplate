@@ -26,10 +26,7 @@ class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 	GENERATED_BODY()
 public:
 	UFUNCTION(NetMulticast, Reliable)
-	void Multi_SetFogManager(const TArray<AActor*>& AllUnits);
-	
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_SetFogManagerUnit(APerformanceUnit* Unit);
+	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_ShowWidgetsWhenLocallyControlled();
@@ -46,7 +43,13 @@ public:
 	void AgentInit();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void CorrectSetUnitMoveTarget(UObject* WorldContextObject,  AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed = 300.0f, float AcceptanceRadius = 50.0f);
+	void CorrectSetUnitMoveTarget(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressedMass();
@@ -59,10 +62,10 @@ public:
 	void LeftClickPressedMass();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAttackMass(AUnitBase* Unit, FVector Location);
+	void LeftClickAttackMass(AUnitBase* Unit, FVector Location, bool AttackT);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location);
+	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location, bool AttackT);
 
 
 	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)

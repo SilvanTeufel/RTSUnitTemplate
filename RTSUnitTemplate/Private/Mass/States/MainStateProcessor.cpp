@@ -67,7 +67,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable needed
-        //UE_LOG(LogTemp, Log, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
+        UE_LOG(LogTemp, Log, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

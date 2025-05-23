@@ -75,7 +75,7 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             const FMassEntityHandle CurrentEntity = ChunkContext.GetEntity(i);
             const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentEntity);
             
-            if (TargetStatsFrag->Health > 0.f)
+            //if (TargetStatsFrag->Health > 0.f)
             {
                 if (!SignalSubsystem)
                 {
