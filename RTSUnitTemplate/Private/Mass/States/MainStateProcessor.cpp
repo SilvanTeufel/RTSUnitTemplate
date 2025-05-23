@@ -77,7 +77,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
 
-           // UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+           UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 

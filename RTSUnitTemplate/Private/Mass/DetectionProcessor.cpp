@@ -283,7 +283,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             else
             {
                 //UE_LOG(LogTemp, Log, TEXT("NO TARGET."));
-                UpdateMoveTarget(MoveTargetFrag, DetectorStateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
+                //UpdateMoveTarget(MoveTargetFrag, DetectorStateFrag.StoredLocation, DetectorStatsFrag.RunSpeed, World);
             }
 
             if (DetectorTargetFrag.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetectorTargetFrag.TargetEntity)) //  && PotentialTargetEntity == DetectorTargetFrag.TargetEntity
@@ -309,7 +309,12 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
              if (DetectorTargetFrag.bHasValidTarget && !DetectorStateFrag.SwitchingState)
              {
                  PendingSignals.Emplace(DetectorEntity, UnitSignals::SetUnitToChase);
-             }else if (!DetectorStateFrag.SwitchingState)
+             }else if (!DetectorStateFrag.SwitchingState &&
+             !DoesEntityHaveTag(EntityManager, DetectorEntity, FMassStatePatrolTag::StaticStruct()) &&
+                 !DoesEntityHaveTag(EntityManager, DetectorEntity, FMassStatePatrolRandomTag::StaticStruct()) &&
+                !DoesEntityHaveTag(EntityManager, DetectorEntity, FMassStatePatrolIdleTag::StaticStruct()) &&
+                !DoesEntityHaveTag(EntityManager, DetectorEntity, FMassStateIdleTag::StaticStruct()) &&
+                !DoesEntityHaveTag(EntityManager, DetectorEntity, FMassStateRunTag::StaticStruct()))
              {
                  PendingSignals.Emplace(DetectorEntity, UnitSignals::SetUnitStatePlaceholder);
              }
