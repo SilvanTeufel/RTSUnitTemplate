@@ -197,8 +197,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
 
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
-
-	UE_LOG(LogTemp, Log, TEXT("AttackToggled!!!!! %d"), AttackT);
 	
 	if (AttackT)
 	{

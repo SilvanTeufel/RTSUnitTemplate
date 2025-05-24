@@ -73,7 +73,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
             FMassVelocityFragment& Velocity = VelocityList[i]; // Mutable for stopping
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            const FMassAgentCharacteristicsFragment AgentFrag = AgentFragList[i];
+            const FMassAgentCharacteristicsFragment CharacteristicsFragment = AgentFragList[i];
             // --- Stop Movement ---
             Velocity.Value = FVector::ZeroVector; // Modification stays here
 
@@ -88,7 +88,7 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Despawn Check ---
             // Ensure DespawnTime is accessible (e.g., member variable 'this->DespawnTime')
-            if (StateFrag.StateTimer >= AgentFrag.DespawnTime+1.f)
+            if (StateFrag.StateTimer >= CharacteristicsFragment.DespawnTime+1.f)
             {
                 PendingSignals.Emplace(Entity, UnitSignals::EndDead);
                   // --- Defer Entity Destruction (Stays Here) ---

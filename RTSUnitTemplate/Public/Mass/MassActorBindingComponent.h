@@ -59,13 +59,6 @@ public:
 	AActor* MyOwner;
 	// Set by your spawner when binding the actor to a Mass entity.
 	//void SetMassEntityHandle(FMassEntityHandle InHandle) { MassEntityHandle = InHandle; }
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Mass ) 
-	UStaticMesh* UnitMassMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Mass)
-	TObjectPtr<UMassEntityConfigAsset> EntityConfig;
-	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 	
 	FMassEntityHandle CreateAndLinkBuildingToMassEntity();

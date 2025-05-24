@@ -64,14 +64,19 @@ void AMissile::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Other
 			else
 				UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()-(Damage - UnitToHit->Attributes->GetMagicResistance()));
 			
-			if(UnitToHit->GetUnitState() != UnitData::Run)
+			if(UnitToHit->GetUnitState() != UnitData::Run &&
+				UnitToHit->GetUnitState() != UnitData::Attack &&
+				UnitToHit->GetUnitState() != UnitData::Casting &&
+				UnitToHit->GetUnitState() != UnitData::Rooted &&
+				UnitToHit->GetUnitState() != UnitData::Pause)
 			{
 				UnitToHit->SetUnitState( UnitData::IsAttacked );
 				
 				UWorld* World = GetWorld();
 				
 				if (!World) return;
-		
+
+				
 				UMassSignalSubsystem* SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(World);
 
 				if (!SignalSubsystem) return;

@@ -127,9 +127,15 @@ void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<F
 
                 const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
                 FMassActorFragment*        AF = EM.GetFragmentDataPtr<FMassActorFragment>(E);
-                if (!TF || !AF)
+
+            	const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
+            	const FMassCombatStatsFragment* StateFrag = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+            	const FMassAgentCharacteristicsFragment* CharFrag =  EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+                if (!TF || !AF || !AI || !StateFrag || !CharFrag)
                     continue;
 
+            	if(StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
+            	
                 AUnitBase* Unit = Cast<AUnitBase>(AF->GetMutable());
                 if (Unit && Unit->TeamId == TeamId)
                 {

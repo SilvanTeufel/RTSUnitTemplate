@@ -149,9 +149,11 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 FMassAgentCharacteristicsFragment& TargetCharacteristics = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(SignaledTarget);
 
                 const float Dist = FVector::Dist(DetectorLocation, TargetTransform->GetTransform().GetLocation());
-                if (Dist <= DetectorStats.SightRadius && DetectorStats.Health > 0.0f) // && TargetStats->Health > 0.0f && DetectorStats.Health > 0.0f
+
+                
+                // && !(DetectorStats.Health <= 0.f && StateFrag.StateTimer >= DetectorCharacteristics.DespawnTime)       
+                if (Dist <= DetectorStats.SightRadius) // && TargetStats->Health > 0.0f && DetectorStats.Health > 0.0f
                 {
-          
                     // Enter sight
                     if (DetectorCharacteristics.bCanDetectInvisible && TargetCharacteristics.bCanBeInvisible)
                     {
