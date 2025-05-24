@@ -108,7 +108,7 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	int32 CheckAndRemoveDeadUnits(int32 SpawnParaId);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AUnitBase* SpawnSingleUnits(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
+	AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint = nullptr);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<int32> AvailableUnitIndexArray;

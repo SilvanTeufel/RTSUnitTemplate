@@ -87,7 +87,6 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // 4. Check if cast time is finished
 
-        	UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer: (%f) // StatsFrag.CastTime: %f"), StateFrag.StateTimer, StatsFrag.CastTime);
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
                 // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Queuing Signal %s."), Entity.Index, Entity.SerialNumber, *UnitSignals::Run.ToString());

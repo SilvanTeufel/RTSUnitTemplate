@@ -872,7 +872,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 		
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
+			
 			if(UnitToChase)
 			{
 				UnitBase->UnitToChase = UnitToChase;
@@ -909,6 +909,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 				UnitBase->UnitIndex = SummonedUnitIndexes[i];
 				SetUnitBase(SummonedUnitIndexes[i], UnitBase);
 			}
+
+			UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 			//return UnitBase->UnitIndex;
 		}
 	}

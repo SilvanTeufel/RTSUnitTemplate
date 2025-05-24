@@ -518,7 +518,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Locati
 				if (SpawnParameter && SpawnParameter->Id == id)
 				{
 			
-					return SpawnSingleUnits(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+					return SpawnSingleUnit(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
 				}
 			}
 		}
@@ -610,7 +610,7 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 	return CountOfSpecificID;
 }
 
-AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter, FVector Location,
+AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
 	AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint)
 {
 	if (!SpawnParameter.UnitBaseClass) return nullptr;
@@ -685,7 +685,6 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnits(FUnitSpawnParameter SpawnParameter
 		}
 		UnitBase->UnitState = SpawnParameter.State;
 		UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
-
 
 		if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
 		{
@@ -839,7 +838,6 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->InitializeAttributes();
 			
 				UnitBase->MassActorBindingComponent->SetupMassOnUnit();
-				
 				int32 Index;
 				
 				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);

@@ -388,7 +388,7 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
 	MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
 
-	UE_LOG(LogTemp, Log, TEXT("MoveTarget.Center: %s"), *MoveTarget.Center.ToString());
+	//UE_LOG(LogTemp, Log, TEXT("MoveTarget.Center: %s"), *MoveTarget.Center.ToString());
 	FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
 	MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
 }

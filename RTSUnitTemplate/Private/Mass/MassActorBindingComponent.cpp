@@ -365,6 +365,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
+			
 		}
 	}
 	
@@ -700,7 +701,7 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	{
 		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
 	}
-
+	
 }
 
 

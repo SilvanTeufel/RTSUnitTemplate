@@ -80,7 +80,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
 
-            UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor NumEntities: %d"), NumEntities);
+            //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
@@ -110,7 +110,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
-            if (Stats.TeamId == 7) UE_LOG(LogTemp, Log, TEXT("BBBBBBBBB"));
             // --- In Attack Range ---
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
@@ -125,7 +124,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Still Chasing (Out of Range) ---
             // UpdateMoveTarget modifies fragment directly, keep it here
-            if (Stats.TeamId == 7) UE_LOG(LogTemp, Log, TEXT("TargetFrag.LastKnownLocation: %s"), *TargetFrag.LastKnownLocation.ToString());
             UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
             // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
         }

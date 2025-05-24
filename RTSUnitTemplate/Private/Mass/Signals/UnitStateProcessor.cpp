@@ -315,9 +315,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
 			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 
-			FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
-
-			if (CombatStatsFrag->TeamId == 7) UE_LOG(LogTemp, Log, TEXT("SwitchState! %s"), *SignalName.ToString());
+			//FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+			//if (CombatStatsFrag->TeamId == 3) UE_LOG(LogTemp, Error, TEXT("SwitchState! %s"), *SignalName.ToString());
+	
 	
             if (ActorFragPtr)
             {
@@ -458,6 +458,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
              }
 
+	//if (CombatStatsFrag->TeamId == 3)UE_LOG(LogTemp, Error, TEXT("Set StateFragment->SwitchingState to FALSE!"));
 	StateFragment->SwitchingState = false;
 }
 
@@ -1003,11 +1004,16 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 							CurrentTargetState != UnitData::Pause &&
 							CurrentTargetState != UnitData::Casting &&
 							CurrentTargetState != UnitData::Rooted &&
-							CurrentTargetState != UnitData::Attack)
+							CurrentTargetState != UnitData::Attack &&
+							CurrentTargetState != UnitData::IsAttacked)
 						{
           
                         	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-							if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
+							if (SignalSubsystem)
+							{
+								TargetAIStateFragment->StateTimer = 0.f;
+								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
+							}
                         }
                         else if(StrongTarget->GetUnitState() == UnitData::Casting)
                         {
@@ -1102,26 +1108,38 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
                         // --- Perform Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
-                        StrongAttacker->SetUnitState(UnitData::Attack);
-						bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
-						
-						if (bIsActivated) return;
-                    	bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
-                    	if (bIsActivated) return;
-                        if (AttackerRange >= 600.f)
-                        {
-                           bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
-                        	if (bIsActivated) return;
-                        }
-
                     	
+						bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
+
+                    
+						if (!bIsActivated)
+						{
+							bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
+						}
+                    	if (!bIsActivated)
+                    	{
+							//if (AttackerRange >= 600.f)
+							{
+							   bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
+							}
+                    	}
+                    	
+                    	if (bIsActivated)
+                    	{
+                    		FMassAIStateFragment* AttackerStats = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
+                    		AttackerStats->SwitchingState = false;
+                    		return;
+                    	}
+
+       
                         StrongAttacker->SpawnProjectile(StrongTarget, StrongAttacker);
                     	
                         const FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
                         FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity);
-              
+ 
                     	if (TargetStats)
                         {
+     
                                  // Check fragment needed for state timer changes
                                  if (!TargetAIStateFragment)
                                  {
@@ -1135,10 +1153,12 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 								   CurrentTargetState != UnitData::Pause &&
 								   CurrentTargetState != UnitData::Casting &&
 								   CurrentTargetState != UnitData::Rooted &&
-								   CurrentTargetState != UnitData::Attack)
+								   CurrentTargetState != UnitData::Attack&&
+									CurrentTargetState != UnitData::IsAttacked)
                                  {
                                      if (SignalSubsystem)
                                      {
+                                     		TargetAIStateFragment->StateTimer = 0.f;
                                          SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
                                      }
                                      // Let IsAttacked signal handler change Actor state
@@ -1154,10 +1174,8 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                      StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime; // Assuming ok on game thread
                                  }
                              // --- End Actual Post-Attack Logic ---
+                    		SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                         } // End else block (TargetStats was valid)
-
-                    	
-                    	SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                     } // End check Actors/Entities valid
                     else
                     {
@@ -1963,7 +1981,8 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						}
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						
+
+						UE_LOG(LogTemp, Error, TEXT("Switching state with PlaceholderSignal: %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2129,6 +2148,15 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 		if (StateFragment)
 		{
 			StateFragment->BirthTime = Now;
+
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(E);
+			
+			if (ActorFragPtr)
+			{
+				AActor* TargetActor = ActorFragPtr->GetMutable();
+				AUnitBase* Unit = Cast<AUnitBase>(TargetActor);
+				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
+			}
 		}
 	}
 }

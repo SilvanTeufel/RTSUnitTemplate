@@ -54,6 +54,9 @@ public:
 	bool SwitchEntityTag(UScriptStruct* TagToAdd);
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder);
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SyncTranslation();
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);

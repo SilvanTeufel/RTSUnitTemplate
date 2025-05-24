@@ -122,7 +122,6 @@ void APerformanceUnit::SetOwningPlayerController_Implementation()
 		ACustomControllerBase* ControllerBase = Cast<ACustomControllerBase>(PlayerController);
 		if (ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0) && ControllerBase->SelectableTeamId != -1)
 		{
-			UE_LOG(LogTemp, Error, TEXT("!!!Set OwningPlayerController!!!!"));
 			OwningPlayerController = ControllerBase;
 			//ControllerBase->Multi_SetFogManagerUnit(this);
 		}

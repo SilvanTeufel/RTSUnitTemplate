@@ -254,6 +254,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 				AbilityQueueSize++;
 			}
 		}
+
 		return bIsActivated;
 	}
 }
