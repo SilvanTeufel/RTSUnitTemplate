@@ -44,6 +44,7 @@ void UPauseStateProcessor::Initialize(UObject& Owner)
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -58,6 +59,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     TArray<FMassSignalPayload> PendingSignals;
 
+    
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
@@ -110,7 +112,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 }
         }
     }); // End ForEachEntityChunk
-
+  
 
     // --- Schedule Game Thread Task to Send Queued Signals ---
     if (!PendingSignals.IsEmpty())
@@ -137,4 +139,5 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             });
         }
     }
+    
 }

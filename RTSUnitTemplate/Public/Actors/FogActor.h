@@ -43,7 +43,11 @@ public:
 	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
 	
 	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
+	void Multicast_UpdateFogMaskWithCircles(
+		const TArray<FVector_NetQuantize>& Positions,
+		const TArray<float>&              WorldRadii,
+		const TArray<uint8>&              UnitTeamIds);
+	//void Multicast_UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 FogSize = 200.f;
@@ -59,7 +63,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CircleRadius = 32;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float FogUpdateRate = 0.1f;
 private:
 	FTimerHandle FogUpdateTimerHandle;
 	

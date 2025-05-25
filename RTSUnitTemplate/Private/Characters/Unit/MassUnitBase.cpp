@@ -18,7 +18,14 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 		ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
 		ISMComponent->SetupAttachment(RootComponent);
 		ISMComponent->SetVisibility(false);
+		ISMComponent->SetIsReplicated(true);
 	}
+}
+
+void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 }
 
 bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
@@ -384,4 +391,15 @@ bool AMassUnitBase::SyncTranslation()
 	Current.SetTranslation(GetActorLocation());
 
 	return true;
+}
+
+void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 InstIndex,
+	const FTransform& NewTransform)
+{
+	if (ISMComponent && ISMComponent->IsValidInstance(InstIndex))
+	{
+		// world‑space = true, mark render state dirty, teleport = true
+		// Was true,true, true
+		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, true);
+	}
 }

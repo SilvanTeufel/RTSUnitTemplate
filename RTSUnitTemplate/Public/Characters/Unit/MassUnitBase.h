@@ -18,6 +18,8 @@ public:
 	
 	AMassUnitBase(const FObjectInitializer& ObjectInitializer);
 
+	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+	
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
@@ -25,11 +27,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
 	bool bUseSkeletalMovement = true;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UInstancedStaticMeshComponent* ISMComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ISM")
 	int32 InstanceIndex = INDEX_NONE;
+	
 	/**
 * Adds a specific Mass Tag to the entity associated with this Actor.
 * @param TagToAdd The script struct representing the tag type to add (e.g., FMassStateIdleTag::StaticStruct()).
@@ -58,6 +61,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SyncTranslation();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
 

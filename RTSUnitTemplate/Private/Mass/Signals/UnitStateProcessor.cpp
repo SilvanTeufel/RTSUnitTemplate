@@ -28,6 +28,7 @@
 #include "Engine/World.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/GameViewportClient.h"
+#include "Mass/States/ChaseStateProcessor.h"
 
 UUnitStateProcessor::UUnitStateProcessor()
 {
@@ -315,6 +316,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
 			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 
+	
 			//FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
 			//if (CombatStatsFrag->TeamId == 3) UE_LOG(LogTemp, Error, TEXT("SwitchState! %s"), *SignalName.ToString());
 	
@@ -325,6 +327,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                 if (IsValid(Actor)) 
                 {
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+            
+                	
                     if (UnitBase)
                     {
                         // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
@@ -369,7 +373,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
-                        	UE_LOG(LogTemp, Log, TEXT("Set to PatrolIdle! Tag"));
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
 	                        EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
                         }
@@ -382,6 +385,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::Pause)
                         {
+                        	//if (!UnitBase->bUseSkeletalMovement) return;
+                        	
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                         	EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
                         }
@@ -424,17 +429,17 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
-                        	UE_LOG(LogTemp, Log, TEXT("Set to PatrolIdle! State"));
 	                        UnitBase->SetUnitState(UnitData::PatrolIdle);
                         }
                         else if (SignalName == UnitSignals::PatrolRandom){ UnitBase->SetUnitState(UnitData::PatrolRandom); }
-                        else if (SignalName == UnitSignals::Pause) { UnitBase->SetUnitState(UnitData::Pause); }
+                        else if (SignalName == UnitSignals::Pause)
+                        {
+                        	UnitBase->SetUnitState(UnitData::Pause);
+                        }
                         else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
                         else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
                         else if (SignalName == UnitSignals::IsAttacked)
                         {
-                        	//StateFragment->PlaceholderSignal = UnitSignals::Chase;
-                        	//UnitBase->UnitStatePlaceholder = UnitData::Chase;
                         	UnitBase->SetUnitState(UnitData::IsAttacked);
                         }
                         else if (SignalName == UnitSignals::GoToBase){ UnitBase->SetUnitState(UnitData::GoToBase); }
@@ -948,6 +953,20 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 	// Ensure Actors and Entities are still valid
                     if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
                     {
+
+                    	/*
+                    	if (!StrongAttacker->bUseSkeletalMovement)
+                    	{
+                    		if (auto* TransformFrag =  GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity))
+                    		{
+								const FTransform& MassTransform = TransformFrag->GetTransform();
+                    		
+								StrongAttacker->Multicast_UpdateISMInstanceTransform(
+									StrongAttacker->InstanceIndex,
+									MassTransform
+								);
+							}
+                    	}*/
                         // --- Access Fragments on Game Thread ---
                         // *** FIX: AttackerEntity and TargetEntity are now captured ***
                         const FMassCombatStatsFragment* AttackerStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerEntity);
@@ -990,10 +1009,11 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                             	HealthBarWidget->UpdateWidget();
                             }
                         }
-	
-                        StrongAttacker->ServerMeeleImpactEvent();
-                        StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
-                        StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
+                    	
+                    	StrongAttacker->ServerMeeleImpactEvent();
+                    	StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
+                    	StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
+                    	
 
                     	
                     	GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
@@ -2144,18 +2164,49 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 		;
 		// Grab the *target* fragment on that entity and stamp it
 		FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
-        
+		FTransformFragment* TransformFragPtr = EntityManager.GetFragmentDataPtr<FTransformFragment>(E);
 		if (StateFragment)
 		{
 			StateFragment->BirthTime = Now;
 
 			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(E);
-			
+	
 			if (ActorFragPtr)
 			{
 				AActor* TargetActor = ActorFragPtr->GetMutable();
 				AUnitBase* Unit = Cast<AUnitBase>(TargetActor);
+
+				if (!Unit || !IsValid(TargetActor)) return;
+				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
+				
+				if (TransformFragPtr)
+				{
+					
+					if (Unit->bUseSkeletalMovement)
+					{
+						const FTransform& ActorTransform = Unit->GetActorTransform();
+						TransformFragPtr->SetTransform(ActorTransform);
+					}else
+					{
+						const FTransform& ActorTransform = Unit->ISMComponent->GetComponentTransform();
+
+						const FVector Scale3D = ActorTransform.GetScale3D();
+						 UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!"));
+						UE_LOG(LogTemp, Log, TEXT("%s: Spanwed ISMComponent world‐space scale = %s"),
+							   *Unit->GetName(),
+							   *Scale3D.ToString());
+
+						 UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!"));
+						TransformFragPtr->SetTransform(ActorTransform);
+
+					
+						//const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
+						//MassTransform.SetLocation(ActorTransform.GetLocation());
+						// MassTransform.SetRotation(ActorTransform.GetRotation());
+						// MassTransform.SetScale3D(ActorTransform.GetScale3D());
+					}
+				}
 			}
 		}
 	}

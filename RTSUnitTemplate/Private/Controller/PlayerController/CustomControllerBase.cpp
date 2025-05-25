@@ -519,6 +519,54 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 
 void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
 {
+    UWorld* World = GetWorld();
+    if (!ensure(World)) return;
+
+    // Prepare three parallel arrays
+    TArray<FVector_NetQuantize> Positions;
+    TArray<float>               WorldRadii;
+    TArray<uint8>               UnitTeamIds;
+
+    if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+    {
+        FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+
+        for (const FMassEntityHandle& E : Entities)
+        {
+            if (!EM.IsEntityValid(E))
+                continue;
+
+            const FTransformFragment*               TF       = EM.GetFragmentDataPtr<FTransformFragment>(E);
+            const FMassCombatStatsFragment*         StateFrag= EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+            const FMassAIStateFragment*             AI       = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
+            const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+
+            if (!TF || !StateFrag || !AI || !CharFrag)
+                continue;
+
+            // skip dead/despawned
+            if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime)
+                continue;
+
+                // 1) world‐loc
+                Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
+                // 2) world‐space sight radius
+                WorldRadii.Add(StateFrag->SightRadius);
+                // 3) unit’s team
+                UnitTeamIds.Add(StateFrag->TeamId);
+        }
+    }
+
+    // **One** multicast to all FogActors
+    for (TActorIterator<AFogActor> It(World); It; ++It)
+    {
+        It->Multicast_UpdateFogMaskWithCircles(Positions, WorldRadii, UnitTeamIds);
+    }
+}
+
+/*
+ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
+{
 	UWorld* World = GetWorld();
 	if (!World) return;
 
@@ -533,3 +581,4 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
 		}
 	}
 }
+*/

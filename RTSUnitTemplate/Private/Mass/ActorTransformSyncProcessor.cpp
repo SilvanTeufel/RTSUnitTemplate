@@ -22,19 +22,14 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     bRequiresGameThreadExecution = false;
     // Optional ExecutionOrder settings...
 }
-/*
-void UActorTransformSyncProcessor::Initialize(UObject& Owner)
-{
-    Super::Initialize(Owner);
-    // You don't necessarily need the RepresentationSubsystem pointer directly
-    // if you use FMassActorFragment for the actor link.
-}
-*/
+
 void UActorTransformSyncProcessor::ConfigureQueries()
 {
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     // Use FMassActorFragment to get the linked actor
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -50,35 +45,11 @@ void UActorTransformSyncProcessor::ConfigureQueries()
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
-    //EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // <-- HINZUGEFÜGT: Geschwindigkeit lesen für Rotation
+
     EntityQuery.RegisterWithProcessor(*this); // Important!
-    // Shared fragment defining LOD distances, etc. Might not be strictly needed
-    // in Execute if just checking LOD level, but good practice to include.
-    //EntityQuery.AddConstSharedRequirement<FMassRepresentationLODParams>(EMassFragmentPresence::All);
 
-    // Optional but recommended: Add a tag requirement if you only want to sync
-    // entities specifically marked as having an Actor representation.
-    // The MassActor subsystem usually adds this tag automatically.
-     //EntityQuery.AddTagRequirement<FMassHasActorRepresentationTag>(EMassFragmentPresence::All);
-
-    // Process entities that are visible (LOD > Off)
-    //EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::All); // Ensure LOD fragment exists
 }
-
 /*
-struct FActorTransformUpdatePayload
-{
-    // Use TWeakObjectPtr for safety, as the Actor could be destroyed
-    // between the worker thread collecting it and the game thread processing it.
-    TWeakObjectPtr<AActor> ActorPtr;
-    FTransform NewTransform;
-
-    FActorTransformUpdatePayload(AActor* InActor, const FTransform& InTransform)
-        : ActorPtr(InActor), NewTransform(InTransform)
-    {}
-};*/
-
-
 struct FActorTransformUpdatePayload
 {
     TWeakObjectPtr<AActor> ActorPtr;
@@ -90,7 +61,7 @@ struct FActorTransformUpdatePayload
         : ActorPtr(InActor), NewTransform(InTransform), InstanceIndex(InInstanceIndex), bUseSkeletal(bInUseSkeletal)
     {}
 };
-
+*/
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
@@ -120,8 +91,9 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
+        TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+            const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -133,9 +105,26 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             if (!UnitBase->IsNetVisible() && AccumulatedTimeB <= 0.5f) continue;
             if (UnitBase->IsNetVisible() || AccumulatedTimeB > 0.5f) bResetVisibilityTimer = true;
 
-            const FTransform& MassTransform = TransformFragments[i].GetTransform();
-            const FVector CurrentActorLocation = Actor->GetActorLocation();
-            const FQuat CurrentActorRotation = Actor->GetActorQuat();
+            FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
+            
+            FVector CurrentActorLocation;
+            FQuat CurrentActorRotation;
+
+            if (UnitBase->bUseSkeletalMovement)
+            {
+                CurrentActorLocation = Actor->GetActorLocation();
+                CurrentActorRotation = Actor->GetActorQuat();
+                MassTransform.SetScale3D(UnitBase->GetActorScale3D());
+            }else
+            {
+                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
+                MassTransform.SetScale3D(ActorTransform.GetScale3D());
+                MassTransform.SetRotation(ActorTransform.GetRotation());
+                CurrentActorLocation = ActorTransform.GetLocation();
+                CurrentActorRotation = ActorTransform.GetRotation();
+            }
+
+            
             FVector FinalLocation = MassTransform.GetLocation();
 
             float CapsuleHalfHeight = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
@@ -159,6 +148,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 }
             }
 
+     
             FQuat TargetRotation = CurrentActorRotation;
             const FVector MoveDirection = FinalLocation - CurrentActorLocation;
 
@@ -174,8 +164,38 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
             const float RotationInterpolationSpeed = 5.0f;
             const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(ActualDeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
+       
+/*
+            FVector Dir = FinalLocation - CurrentActorLocation;
+        Dir.Z = 0.0f; // LookAt in XY plane
+        if (!Dir.Normalize())
+        {
+            continue; // Avoid issues with zero direction
+        }
+        const FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-            FTransform FinalActorTransform(SmoothedRotation, FinalLocation, MassTransform.GetScale3D());
+        // --- Interpolation ---
+        const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
+        const FQuat CurrentQuat = Actor->GetActorQuat(); // Reading actor state
+        FQuat SmoothedRotation;
+            
+        if (RotationSpeedDeg > KINDA_SMALL_NUMBER)
+        {
+            SmoothedRotation = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, AccumulatedTimeB, FMath::DegreesToRadians(RotationSpeedDeg));
+        }
+        else // Instant rotation if speed is zero/negligible
+        {
+            SmoothedRotation = DesiredQuat;
+        }
+    */
+
+        //UE_LOG(LogTemp, Log, TEXT("Processor SmoothedRotation = %s"),
+           //*SmoothedRotation.ToString());
+
+
+            //MassTransform.SetRotation(SmoothedRotation);
+            //MassTransform.SetScale3D(MassTransform.GetScale3D());
+            FTransform FinalActorTransform(SmoothedRotation, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
 
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {
@@ -205,13 +225,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                     {
                         if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                         {
-                            if (UInstancedStaticMeshComponent* ISM = Unit->ISMComponent)
-                            {
-                                if (ISM->IsValidInstance(Update.InstanceIndex))
-                                {
-                                    ISM->UpdateInstanceTransform(Update.InstanceIndex, Update.NewTransform, true, true, true);
-                                }
-                            }
+                            Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
                         }
                     }
                 }
@@ -219,170 +233,3 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         });
     }
 }
-
-
-/*
-void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    // --- Throttling calculations remain the same ---
-    HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
-    MinTickInterval = FMath::Max(0.001f, MinTickInterval);
-    MaxTickInterval = FMath::Max(MinTickInterval, MaxTickInterval);
-    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
-    if (ActualDeltaTime <= 0.0f)
-    {
-        return;
-    }
-    const float LowDeltaTimeThreshold = 1.0f / HighFPSThreshold;
-    const float HighDeltaTimeThreshold = 1.0f / LowFPSThreshold;
-    const FVector2D InputDeltaTimeRange(LowDeltaTimeThreshold, HighDeltaTimeThreshold);
-    const FVector2D OutputIntervalRange(MinTickInterval, MaxTickInterval);
-    const float CurrentDynamicTickInterval = FMath::GetMappedRangeValueClamped(InputDeltaTimeRange, OutputIntervalRange, ActualDeltaTime);
-
-    AccumulatedTimeA += ActualDeltaTime;
-    if (AccumulatedTimeA < CurrentDynamicTickInterval)
-    {
-        return;
-    }
-    AccumulatedTimeA = 0.0f;
-
-    AccumulatedTimeB += ActualDeltaTime;
-    bool bResetVisibilityTimer = false;
-
-    // --- Create a list to store updates needed for the Game Thread ---
-    TArray<FActorTransformUpdatePayload> PendingActorUpdates;
-    // Reserve some memory based on expected number of updates per tick if known
-    // PendingActorUpdates.Reserve(ExpectedUpdates);
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        // Capture PendingActorUpdates by reference to fill it
-        [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
-        // We only need ReadOnly access now within the lambda as we don't modify the fragment directly here
-        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
-        const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
-
-        //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor::Execute started NumEntities: %d"), NumEntities);
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            AActor* Actor = ActorFragments[i].GetMutable();
-            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-            // Get the actor pointer, but don't modify it directly here
-            //AActor* Actor = ActorFragments[i].Get(); // Use Get() for const view
-            //AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-
-            // It's still important to check IsValid here before accessing UnitBase members
-            if (!IsValid(UnitBase)) continue;
-
-            // --- Visibility Check ---
-            //bool UnitIsVisible = UnitBase->IsOnViewport && (!UnitBase->EnableFog || UnitBase->IsVisibleEnemy || UnitBase->IsMyTeam);
-            if (!UnitBase->IsNetVisible() && AccumulatedTimeB <= 0.5f)
-            {
-                continue; // Skip update calculation for this non-visible, recently updated actor
-            }
-            if (UnitBase->IsNetVisible() || AccumulatedTimeB > 0.5f)
-            {
-                 bResetVisibilityTimer = true; // Mark that we potentially need to reset the timer
-            }
-
-            // --- Calculate Target Transform ---
-            const FTransform& MassTransform = TransformFragments[i].GetTransform();
-            // Get current state directly needed for calculation (might still need Game Thread access protection
-            // if these getters aren't thread-safe, but often reads are safer than writes).
-            // For maximum safety, consider caching these on the game thread previously or using Mass state.
-            const FVector CurrentActorLocation = Actor->GetActorLocation(); // Potential thread-safety issue depending on engine version/implementation
-            const FQuat CurrentActorRotation = Actor->GetActorQuat();       // Potential thread-safety issue
-
-            FVector FinalLocation = MassTransform.GetLocation();
-
-            // Z LOCATION ADAPTATION
-            float CapsuleHalfHeight = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-            
-            FCollisionQueryParams Params;
-            Params.AddIgnoredActor(UnitBase); // always ignore self
-
-            FCollisionObjectQueryParams ObjectParams;
-            ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic); // ECC_GameTraceChannel1 // ECC_WorldStatic
-
-            // 2) In your sync processor, trace:
-            FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, CurrentActorLocation.Z + 500.0f);
-            FVector TraceEnd   = TraceStart - FVector(0,0,1000.0f);
-
-            FHitResult Hit;
-            if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
-            {
-
-                AActor* HitActor = Hit.GetActor();
-                float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
-                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= CapsuleHalfHeight) // && DeltaZ <= CapsuleHalfHeight
-                {
-                    FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
-                }else
-                {
-                    //FinalLocation.Z = CurrentActorLocation.Z;
-                }
-            }
-            else
-            {
-                //FinalLocation.Z = CurrentActorLocation.Z;
-            }
-
-            
-            //FinalLocation.Z = CurrentActorLocation.Z; // Keep original Z
-
-            FQuat TargetRotation = CurrentActorRotation;
-            const FVector MoveDirection = FinalLocation - CurrentActorLocation;
-
-            if (MoveDirection.SizeSquared() > MinMovementDistanceSq)
-            {
-                FVector MoveDirection2D = MoveDirection;
-                MoveDirection2D.Z = 0.0f;
-                if (MoveDirection2D.Normalize())
-                {
-                    TargetRotation = MoveDirection2D.ToOrientationQuat();
-                }
-            }
-
-            const float RotationInterpolationSpeed = 5.0f;
-            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(ActualDeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
-
-            FTransform FinalActorTransform(SmoothedRotation, FinalLocation, MassTransform.GetScale3D());
-
-            // --- Check if update is needed and add to pending list ---
-            // GetActorTransform() might also not be thread-safe. Compare against MassTransform or previous state if possible.
-            // For simplicity here, we assume it's okay or accept minor inaccuracy.
-            if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
-            {
-                // Instead of calling SetActorTransform, add data to the list
-                PendingActorUpdates.Emplace(Actor, FinalActorTransform);
-            }
-        }
-    }); // End ForEachEntityChunk
-
-
-    // --- Reset Visibility Timer ---
-    if (bResetVisibilityTimer)
-    {
-        AccumulatedTimeB = 0.0f;
-    }
-
-    // --- Schedule Game Thread Task ---
-    if (!PendingActorUpdates.IsEmpty())
-    {
-        // Capture the list of updates by value (moving it) into the lambda
-        AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingActorUpdates)]()
-        {
-            for (const FActorTransformUpdatePayload& Update : Updates)
-            {
-                // Check if the actor is still valid before applying the transform
-                if (AActor* Actor = Update.ActorPtr.Get()) // Get the raw pointer from TWeakObjectPtr
-                {
-                    // This part now runs safely on the Game Thread
-                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-                }
-            }
-        });
-    }
-}
-*/

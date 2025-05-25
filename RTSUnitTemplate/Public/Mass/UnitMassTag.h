@@ -145,6 +145,18 @@ struct FMassSignalPayload
 		: TargetEntity(InEntity), SignalName(InSignalName)
 	{}
 };
+
+struct FActorTransformUpdatePayload
+{
+	TWeakObjectPtr<AActor> ActorPtr;
+	FTransform NewTransform;
+	int32 InstanceIndex = INDEX_NONE;
+	bool bUseSkeletal = true;
+
+	FActorTransformUpdatePayload(AActor* InActor, const FTransform& InTransform, bool bInUseSkeletal, int32 InInstanceIndex = INDEX_NONE)
+		: ActorPtr(InActor), NewTransform(InTransform), InstanceIndex(InInstanceIndex), bUseSkeletal(bInUseSkeletal)
+	{}
+};
 //----------------------------------------------------------------------//
 //  AI State Fragment
 //----------------------------------------------------------------------//

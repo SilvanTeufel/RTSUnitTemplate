@@ -27,7 +27,7 @@ void AFogActor::BeginPlay()
 	Super::BeginPlay();
 	InitFogMaskTexture();
 	// Start timer to apply material every 0.2 seconds
-	GetWorldTimerManager().SetTimer(FogUpdateTimerHandle, this, &AFogActor::Multicast_ApplyFogMask, 0.2f, true);
+	GetWorldTimerManager().SetTimer(FogUpdateTimerHandle, this, &AFogActor::Multicast_ApplyFogMask, FogUpdateRate, true);
 }
 
 void AFogActor::Tick(float DeltaTime)
@@ -99,6 +99,102 @@ void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 	FogMaxBounds = Max;
 }
 
+void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(
+    const TArray<FVector_NetQuantize>& Positions,
+    const TArray<float>&              WorldRadii,
+    const TArray<uint8>&              UnitTeamIds)
+{
+    if (!FogMaskTexture)
+    {
+        return;
+    }
+
+    // 1) Clear mask to black
+    for (FColor& Pixel : FogPixels)
+    {
+        Pixel = FColor::Black;
+    }
+
+    // 2) Precompute for pixel conversion
+    const float WorldExtentX = FogMaxBounds.X - FogMinBounds.X;
+    const float WorldExtentY = FogMaxBounds.Y - FogMinBounds.Y;
+
+    // 3) Loop over the parallel arrays
+    const int32 Count = FMath::Min3(Positions.Num(), WorldRadii.Num(), UnitTeamIds.Num());
+    for (int32 i = 0; i < Count; ++i)
+    {
+        // 3a) Team filter
+        if (UnitTeamIds[i] != TeamId)
+        {
+            continue;
+        }
+
+        // 3b) Compute pixel‐space center
+        const FVector WorldPos = Positions[i];
+        const float U = (WorldPos.X - FogMinBounds.X) / WorldExtentX;
+        const float V = (WorldPos.Y - FogMinBounds.Y) / WorldExtentY;
+        const int32 CenterX = FMath::Clamp(FMath::RoundToInt(U * FogTexSize), 0, FogTexSize - 1);
+        const int32 CenterY = FMath::Clamp(FMath::RoundToInt(V * FogTexSize), 0, FogTexSize - 1);
+
+        // 3c) Compute soft circle radii in pixels
+        const float Normalized = WorldRadii[i] / WorldExtentX;  
+        int32 HardRadius = FMath::RoundToInt(Normalized * FogTexSize);
+        HardRadius = FMath::Clamp(HardRadius, 0, FogTexSize - 1);
+        const int32 FalloffPixels = FMath::Max(1, HardRadius / 10);
+
+        const float HardRadiusSq  = float(HardRadius * HardRadius);
+        const float OuterRadiusSq = float((HardRadius + FalloffPixels) * (HardRadius + FalloffPixels));
+
+        // 3d) Draw the circle into FogPixels
+        for (int32 dY = - (HardRadius + FalloffPixels); dY <= (HardRadius + FalloffPixels); ++dY)
+        {
+            const int32 Y = CenterY + dY;
+            if (Y < 0 || Y >= FogTexSize) continue;
+
+            FColor* Row = FogPixels.GetData() + Y * FogTexSize;
+            for (int32 dX = - (HardRadius + FalloffPixels); dX <= (HardRadius + FalloffPixels); ++dX)
+            {
+                const int32 X = CenterX + dX;
+                if (X < 0 || X >= FogTexSize) continue;
+
+                const float DistSq = float(dX*dX + dY*dY);
+                if (DistSq > OuterRadiusSq)
+                {
+                    continue;
+                }
+
+                float Intensity;
+                if (DistSq <= HardRadiusSq)
+                {
+                    Intensity = 1.0f;
+                }
+                else
+                {
+                    const float Dist   = FMath::Sqrt(DistSq);
+                    const float Delta  = (Dist - float(HardRadius)) / float(FalloffPixels); // 0..1
+                    Intensity          = FMath::Clamp(1.0f - Delta, 0.0f, 1.0f);
+                }
+
+                const uint8 Gray = uint8(FMath::RoundToInt(Intensity * 255.0f));
+                FColor& Pixel    = Row[X];
+                if (Gray > Pixel.R)  // since R=G=B
+                {
+                    Pixel = FColor(Gray, Gray, Gray, 255);
+                }
+            }
+        }
+    }
+
+    // 4) Upload updated pixels to the GPU texture
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
+    FogMaskTexture->UpdateTextureRegions(
+        0, 1, Region,
+        FogTexSize * sizeof(FColor),
+        sizeof(FColor),
+        reinterpret_cast<uint8*>(FogPixels.GetData())
+    );
+}
+/*
 void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<FMassEntityHandle>& Entities)
 {
     if (!FogMaskTexture)
@@ -140,7 +236,8 @@ void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<F
                 if (Unit && Unit->TeamId == TeamId)
                 {
                     // Store world position
-                    FVector Loc = Unit->GetActorLocation();
+                	FVector Loc = TF->GetTransform().GetLocation();
+                    //FVector Loc = Unit->GetActorLocation();
                     UnitWorldPositions.Add(Loc);
 
                     // Convert sight radius (world units) to texture-space pixels
@@ -223,28 +320,9 @@ void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(const TArray<F
     			}
     		}
     	}
-    	/*
-        // Rasterize the circle
-        for (int32 dY = -Radius; dY <= Radius; ++dY)
-        {
-            const int32 Y = CenterY + dY;
-            if (Y < 0 || Y >= FogTexSize)
-                continue;
-
-            int32 HalfWidth = FMath::FloorToInt(FMath::Sqrt(FMath::Max(0.f, Radius * Radius - dY * dY)));
-            int32 MinX = FMath::Clamp(CenterX - HalfWidth, 0, FogTexSize - 1);
-            int32 MaxX = FMath::Clamp(CenterX + HalfWidth, 0, FogTexSize - 1);
-
-            FColor* Row = FogPixels.GetData() + Y * FogTexSize;
-            for (int32 X = MinX; X <= MaxX; ++X)
-            {
-                Row[X] = FColor::White;
-            }
-        }
-    	*/
     }
 
     // Update the GPU texture
     FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
     FogMaskTexture->UpdateTextureRegions(0, 1, Region, FogTexSize * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(FogPixels.GetData()));
-}
+}*/
