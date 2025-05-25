@@ -182,7 +182,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             
 
             const float RotationInterpolationSpeed = 5.0f;
-            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(AccumulatedTimeA * RotationInterpolationSpeed, 0.0f, 1.0f));
+            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(DeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
        
             
             /*
@@ -197,13 +197,15 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             }
             */
 
-        if (UnitBase->bUseSkeletalMovement)
+        if (!UnitBase->bUseSkeletalMovement)
         {
             UE_LOG(LogTemp, Log, TEXT("Look Processor SmoothedRotation = %s"),
        *SmoothedRotation.ToString());
 
             UE_LOG(LogTemp, Log, TEXT("Look Processor TargetLocation = %s"),
        *TargetLocation.ToString());
+            UE_LOG(LogTemp, Log, TEXT("Look Processor TargetRotation = %s"),
+*TargetRotation.ToString());
         }
             FTransform FinalTransform(SmoothedRotation, ActorLocation, MassTransform.GetScale3D()); // TransformFrag.GetScale3D()
             // --- Check if update is needed and add to list ---
@@ -227,18 +229,14 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
                 // Check if the actor is still valid on the Game Thread
                 AActor* Actor = Update.ActorPtr.Get();
                 
-                if (!Update.bUseSkeletal)
-                {
-                    if (Update.bUseSkeletal)
-                    {
-                       Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-                    }
-                    else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
-                    {
-                       Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
-                    }
-                    
-                }
+                if (Update.bUseSkeletal)
+               {
+                   Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+               }
+               else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
+               {
+                   Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
+               }
             }
         });
     }

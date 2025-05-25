@@ -197,6 +197,13 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             //MassTransform.SetScale3D(MassTransform.GetScale3D());
             FTransform FinalActorTransform(SmoothedRotation, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
 
+
+            DrawDebugDirectionalArrow(
+            GetWorld(),
+            FinalLocation,
+            FinalLocation + SmoothedRotation.GetForwardVector() * 100.0f,
+            20.0f, FColor::Red, false, 1.0f);
+            
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {
                 PendingActorUpdates.Emplace(Actor, FinalActorTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);

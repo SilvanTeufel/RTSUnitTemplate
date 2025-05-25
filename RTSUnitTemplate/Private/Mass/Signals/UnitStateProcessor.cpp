@@ -2182,7 +2182,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				
 				if (TransformFragPtr)
 				{
-					
+					/*
 					if (Unit->bUseSkeletalMovement)
 					{
 						const FTransform& ActorTransform = Unit->GetActorTransform();
@@ -2190,8 +2190,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					}else
 					{
 						const FTransform& ActorTransform = Unit->ISMComponent->GetComponentTransform();
-
 						const FVector Scale3D = ActorTransform.GetScale3D();
+						
 						 UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 						UE_LOG(LogTemp, Log, TEXT("%s: Spanwed ISMComponent world‐space scale = %s"),
 							   *Unit->GetName(),
@@ -2206,6 +2206,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 						// MassTransform.SetRotation(ActorTransform.GetRotation());
 						// MassTransform.SetScale3D(ActorTransform.GetScale3D());
 					}
+
+					*/
 				}
 			}
 		}
