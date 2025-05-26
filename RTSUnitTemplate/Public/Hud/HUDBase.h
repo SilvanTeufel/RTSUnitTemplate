@@ -24,12 +24,15 @@ class RTSUNITTEMPLATE_API AHUDBase : public AHUD
 
 public:
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DrawHUD", Keywords = "RTSUnitTemplate DrawHUD"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		virtual void DrawHUD(); // used in Tick();
 
-	void Tick(float DeltaSeconds);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		void SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax);
+	
+		void Tick(float DeltaSeconds);
 
-	void BeginPlay() override;
+		void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

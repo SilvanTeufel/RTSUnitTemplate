@@ -186,7 +186,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             //FTransform FinalActorTransform(TargetRotation, FinalLocation,  MassTransform.GetScale3D())
             MassTransform.SetRotation(FinalActorTransform.GetRotation());
             MassTransform.SetLocation(FinalLocation);
-            
+
+            /*
             DrawDebugDirectionalArrow(
             GetWorld(),
             FinalLocation,
@@ -198,7 +199,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             FinalLocation,
             FinalLocation + DesiredQuat.GetForwardVector() * 100.0f,
             20.0f, FColor::Green, false, 1.0f);
-            
+            */
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {
                 PendingActorUpdates.Emplace(Actor, FinalActorTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);

@@ -32,6 +32,8 @@ void AHUDBase::DrawHUD()
 		
 		CurrentPoint = GetMousePos2D();
 
+		//SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
+		
 		if (abs(InitialPoint.X - CurrentPoint.X) >= 2) {
 
 			DrawRect(FLinearColor(0, 0, 1, .15f),
@@ -120,8 +122,8 @@ void AHUDBase::DrawHUD()
 
 
 				const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(NewUnitBases[i]);
-			
-				if(Controller && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
+				
+				if(Controller && NewUnitBases[i]->bUseSkeletalMovement  && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
 				{
 					if (NewUnitBases[i]->GetOwner() == nullptr) NewUnitBases[i]->SetOwner(Controller);
 					NewUnitBases[i]->SetSelected();
@@ -134,8 +136,85 @@ void AHUDBase::DrawHUD()
 			
 			if(Controller) Controller->AbilityArrayIndex = 0;
 		}
-
 	}
+}
+
+void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
+{
+	UE_LOG(LogTemp, Verbose, TEXT("SelectISMUnitsInRectangle!!!!!!!!!"));
+    APlayerController* PC = GetOwningPlayerController();
+    ACameraControllerBase* Controller = Cast<ACameraControllerBase>(PC);
+    if (!Controller)
+        return;
+
+    // Iterate all UnitBase actors
+	UE_LOG(LogTemp, Verbose, TEXT("FriendlyUnits.Num()=%d"), FriendlyUnits.Num());
+    for (int32 i = 0; i < FriendlyUnits.Num(); i++)  // FriendlyUnits // for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It) 
+    {
+        //AUnitBase* Unit = *It;
+    	AUnitBase* Unit = FriendlyUnits[i];
+        if (!Unit->bUseSkeletalMovement)
+            continue;
+
+        // Retrieve Mass entity and combat-stats fragment
+        FMassEntityManager* EntityManager = nullptr;
+        FMassEntityHandle EntityHandle;
+        if (!Unit->GetMassEntityData(EntityManager, EntityHandle) ||
+            !EntityManager->IsEntityValid(EntityHandle))
+        {
+            continue;
+        }
+        FMassCombatStatsFragment* CombatStats =
+            EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
+        if (!CombatStats)
+            continue;
+
+        // Team check via fragment
+        int32 TeamId = CombatStats->TeamId;
+        if (TeamId != Controller->SelectableTeamId && Controller->SelectableTeamId != 0)
+            continue;
+
+    	UE_LOG(LogTemp, Verbose, TEXT("Unit '%s': TeamId=%d"), *Unit->GetName(), CombatStats->TeamId);
+    	
+        UInstancedStaticMeshComponent* ISM = Unit->ISMComponent;
+        if (!ISM)
+            continue;
+
+        // Test each instance
+        const int32 Count = ISM->GetInstanceCount();
+        for (int32 Index = 0; Index < Count; ++Index)
+        {
+            FTransform Xform;
+            ISM->GetInstanceTransform(Index, Xform, /*bWorldSpace=*/true);
+            FVector WorldLoc = Xform.GetLocation();
+
+            FVector2D ScreenLoc;
+            if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
+                continue;
+
+        	UE_LOG(LogTemp, VeryVerbose, TEXT("Unit '%s' instance %d world=(%.1f,%.1f,%.1f) projected=(%.1f,%.1f)"),
+				*Unit->GetName(), Index,
+				WorldLoc.X, WorldLoc.Y, WorldLoc.Z,
+				ScreenLoc.X, ScreenLoc.Y);
+
+            // Screen‑space AABB test
+            if (ScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
+                ScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&
+                ScreenLoc.Y >= FMath::Min(RectMin.Y, RectMax.Y) &&
+                ScreenLoc.Y <= FMath::Max(RectMin.Y, RectMax.Y))
+            {
+                // Select this unit
+                if (Unit->GetOwner() == nullptr)
+                {
+                    Unit->SetOwner(Controller);
+                }
+                Unit->SetSelected();
+                SelectedUnits.AddUnique(Unit);
+                SelectUnitsFromSameSquad(Unit);
+                break;  // one hit is enough
+            }
+        }
+    }
 }
 
 void AHUDBase::Tick(float DeltaSeconds)
@@ -149,7 +228,6 @@ void AHUDBase::Tick(float DeltaSeconds)
 		MoveUnitsThroughWayPoints(FriendlyUnits);
 		IsSpeakingUnitClose(FriendlyUnits, GameMode->SpeakingUnits);
 	}
-
 }
 
 
