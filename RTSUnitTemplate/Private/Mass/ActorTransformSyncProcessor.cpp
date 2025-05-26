@@ -26,6 +26,8 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
 void UActorTransformSyncProcessor::ConfigureQueries()
 {
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
+
     // Use FMassActorFragment to get the linked actor
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
@@ -94,10 +96,13 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
             const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
+             const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+            const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
+
+            const FMassMoveTargetFragment MoveFrag = MoveTargetList[i];
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
@@ -107,27 +112,27 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             
-            FVector CurrentActorLocation;
-            FQuat CurrentActorRotation;
+            FVector CurrentActorLocation = Actor->GetActorLocation();
+            float HeightOffset;
 
             if (UnitBase->bUseSkeletalMovement)
             {
-                CurrentActorLocation = Actor->GetActorLocation();
-                CurrentActorRotation = Actor->GetActorQuat();
+                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
                 MassTransform.SetScale3D(UnitBase->GetActorScale3D());
             }else
             {
-                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
+               
+                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform(); //UnitBase->ISMComponent->GetComponentTransform();
                 MassTransform.SetScale3D(ActorTransform.GetScale3D());
-                MassTransform.SetRotation(ActorTransform.GetRotation());
-                CurrentActorLocation = ActorTransform.GetLocation();
-                CurrentActorRotation = ActorTransform.GetRotation();
+                
+                FVector InstanceScale = ActorTransform.GetScale3D();
+                HeightOffset = InstanceScale.Z/2;
             }
 
             
             FVector FinalLocation = MassTransform.GetLocation();
 
-            float CapsuleHalfHeight = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        
             FCollisionQueryParams Params;
             Params.AddIgnoredActor(UnitBase);
 
@@ -142,67 +147,56 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             {
                 AActor* HitActor = Hit.GetActor();
                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
-                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= CapsuleHalfHeight)
+                if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset)
                 {
-                    FinalLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+                    FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
                 }
             }
-
-     
-            FQuat TargetRotation = CurrentActorRotation;
-            const FVector MoveDirection = FinalLocation - CurrentActorLocation;
-
-            if (MoveDirection.SizeSquared() > MinMovementDistanceSq)
-            {
-                FVector MoveDirection2D = MoveDirection;
-                MoveDirection2D.Z = 0.0f;
-                if (MoveDirection2D.Normalize())
-                {
-                    TargetRotation = MoveDirection2D.ToOrientationQuat();
-                }
-            }
-
-            const float RotationInterpolationSpeed = 5.0f;
-            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(ActualDeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
-       
-/*
-            FVector Dir = FinalLocation - CurrentActorLocation;
-        Dir.Z = 0.0f; // LookAt in XY plane
-        if (!Dir.Normalize())
-        {
-            continue; // Avoid issues with zero direction
-        }
-        const FQuat DesiredQuat = Dir.ToOrientationQuat();
-
-        // --- Interpolation ---
-        const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
-        const FQuat CurrentQuat = Actor->GetActorQuat(); // Reading actor state
-        FQuat SmoothedRotation;
             
-        if (RotationSpeedDeg > KINDA_SMALL_NUMBER)
-        {
-            SmoothedRotation = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, AccumulatedTimeB, FMath::DegreesToRadians(RotationSpeedDeg));
-        }
-        else // Instant rotation if speed is zero/negligible
-        {
-            SmoothedRotation = DesiredQuat;
-        }
-    */
+            FVector Dir =  (MoveFrag.Center - FinalLocation)*1000.f;
+            Dir.Z = FinalLocation.Z; // LookAt in XY plane
+            if (!Dir.Normalize())
+            {
+                continue; // Avoid issues with zero direction
+            }
+            
+            const FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-        //UE_LOG(LogTemp, Log, TEXT("Processor SmoothedRotation = %s"),
-           //*SmoothedRotation.ToString());
+            // --- Interpolation ---
+            const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
 
-
-            //MassTransform.SetRotation(SmoothedRotation);
-            //MassTransform.SetScale3D(MassTransform.GetScale3D());
-            FTransform FinalActorTransform(SmoothedRotation, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-
+            
+                
+            const FQuat CurrentQuat = MassTransform.GetRotation();
+            
+            FQuat NewQuat;
+            if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
+            {
+                NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
+            }
+            else // Instant rotation if speed is zero/negligible
+            {
+                NewQuat = DesiredQuat;
+            }
+            
+            
+            FTransform FinalActorTransform  = FTransform (NewQuat, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
+            
+            //FTransform FinalActorTransform(TargetRotation, FinalLocation,  MassTransform.GetScale3D())
+            MassTransform.SetRotation(FinalActorTransform.GetRotation());
+            MassTransform.SetLocation(FinalLocation);
+            
+            DrawDebugDirectionalArrow(
+            GetWorld(),
+            FinalLocation,
+            FinalLocation + DesiredQuat.GetForwardVector() * 100.0f,
+            20.0f, FColor::Red, false, 1.0f);
 
             DrawDebugDirectionalArrow(
             GetWorld(),
             FinalLocation,
-            FinalLocation + SmoothedRotation.GetForwardVector() * 100.0f,
-            20.0f, FColor::Red, false, 1.0f);
+            FinalLocation + DesiredQuat.GetForwardVector() * 100.0f,
+            20.0f, FColor::Green, false, 1.0f);
             
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {

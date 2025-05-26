@@ -60,7 +60,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         // We likely only need read access to fragments within the lambda now
-       // const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+            
         const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); // ReadOnly access is sufficient
@@ -107,21 +107,15 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
         
             FVector ActorLocation = MassTransform.GetLocation();
 
-            FVector CurrentActorLocation;
-            FQuat CurrentActorRotation;
+
             
             if (UnitBase->bUseSkeletalMovement)
             {
-                CurrentActorLocation = Actor->GetActorLocation();
-                CurrentActorRotation = Actor->GetActorQuat();
                 MassTransform.SetScale3D(UnitBase->GetActorScale3D());
             }else
             {
-                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
+                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();; //UnitBase->ISMComponent->GetComponentTransform();
                 MassTransform.SetScale3D(ActorTransform.GetScale3D());
-                MassTransform.SetRotation(ActorTransform.GetRotation());
-                CurrentActorLocation = ActorTransform.GetLocation();
-                CurrentActorRotation = ActorTransform.GetRotation();
             }
 
             
@@ -146,9 +140,9 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
                  }
              }
 
-            /*
+         
             FVector Dir = TargetLocation - ActorLocation;
-            Dir.Z = 0.0f; // LookAt in XY plane
+            Dir.Z = ActorLocation.Z; // LookAt in XY plane
             if (!Dir.Normalize())
             {
                 continue; // Avoid issues with zero direction
@@ -158,10 +152,11 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             // --- Interpolation ---
             const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
 
-            const FQuat CurrentQuat = Actor->GetActorQuat();
-
+            //const FQuat CurrentQuat = Actor->GetActorQuat();
+            const FQuat CurrentQuat = MassTransform.GetRotation();
+            
             FQuat NewQuat;
-            if (RotationSpeedDeg > KINDA_SMALL_NUMBER)
+            if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
             {
                 NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, DeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
             }
@@ -169,51 +164,23 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             {
                 NewQuat = DesiredQuat;
             }
-        */
-            FQuat TargetRotation = CurrentActorRotation;
-            const FVector MoveDirection = TargetLocation - CurrentActorLocation;
-            
-            FVector MoveDirection2D = MoveDirection;
-            MoveDirection2D.Z = 0.0f;
-            if (MoveDirection2D.Normalize())
-            {
-                    TargetRotation = MoveDirection2D.ToOrientationQuat();
-            }
-            
+        
 
-            const float RotationInterpolationSpeed = 5.0f;
-            const FQuat SmoothedRotation = FQuat::Slerp(CurrentActorRotation, TargetRotation, FMath::Clamp(DeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
-       
-            
-            /*
-            // --- Prepare Final Transform ---
-            if (Unit->bUseSkeletalMovement)
-            {
-                TransformFrag.SetScale3D(Unit->GetActorScale3D());
-            }else
-            {
-                const FTransform& ISMTransform = Unit->ISMComponent->GetComponentTransform();
-                TransformFrag.SetScale3D(ISMTransform.GetScale3D());
-            }
-            */
+            FTransform FinalActorTransform;
+            if (UnitBase->bUseSkeletalMovement)
+                FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D());
+            else
+                FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
 
-        if (!UnitBase->bUseSkeletalMovement)
-        {
-            UE_LOG(LogTemp, Log, TEXT("Look Processor SmoothedRotation = %s"),
-       *SmoothedRotation.ToString());
-
-            UE_LOG(LogTemp, Log, TEXT("Look Processor TargetLocation = %s"),
-       *TargetLocation.ToString());
-            UE_LOG(LogTemp, Log, TEXT("Look Processor TargetRotation = %s"),
-*TargetRotation.ToString());
-        }
-            FTransform FinalTransform(SmoothedRotation, ActorLocation, MassTransform.GetScale3D()); // TransformFrag.GetScale3D()
+            MassTransform.SetRotation(FinalActorTransform.GetRotation());
+           
+            //FTransform FinalTransform(SmoothedRotation, ActorLocation, MassTransform.GetScale3D()); // TransformFrag.GetScale3D()
             // --- Check if update is needed and add to list ---
             if (UnitBase) // && !Actor->GetActorTransform().GetRotation().Equals(SmoothedRotation, 0.01f)
             {
                 const bool bUseSkeletal = UnitBase->bUseSkeletalMovement;
                 const int32 InstIdx     = UnitBase->InstanceIndex;
-                PendingLookAtUpdates.Emplace(Actor, FinalTransform, bUseSkeletal, InstIdx);
+                PendingLookAtUpdates.Emplace(Actor, FinalActorTransform, bUseSkeletal, InstIdx);
             }
         }
     }); // End ForEachEntityChunk

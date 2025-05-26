@@ -398,8 +398,7 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 {
 	if (ISMComponent && ISMComponent->IsValidInstance(InstIndex))
 	{
-		// world‑space = true, mark render state dirty, teleport = true
-		// Was true,true, true
-		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, true);
+		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, false, false);
+		//ISMComponent->MarkRenderStateDirty();
 	}
 }
