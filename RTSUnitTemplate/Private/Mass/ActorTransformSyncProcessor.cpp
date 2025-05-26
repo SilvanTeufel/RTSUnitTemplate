@@ -117,8 +117,9 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
             if (UnitBase->bUseSkeletalMovement)
             {
-                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
                 MassTransform.SetScale3D(UnitBase->GetActorScale3D());
+
+                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
             }else
             {
                

@@ -108,18 +108,24 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             FVector ActorLocation = MassTransform.GetLocation();
 
 
+            float HeightOffset;
             
             if (UnitBase->bUseSkeletalMovement)
             {
                 MassTransform.SetScale3D(UnitBase->GetActorScale3D());
+
+                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
             }else
             {
                 const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();; //UnitBase->ISMComponent->GetComponentTransform();
                 MassTransform.SetScale3D(ActorTransform.GetScale3D());
+                
+                FVector InstanceScale = ActorTransform.GetScale3D();
+                HeightOffset = InstanceScale.Z/2;
             }
 
             
-            float CapsuleHalfHeight = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+            
              FCollisionQueryParams Params;
              Params.AddIgnoredActor(UnitBase);
 
@@ -134,9 +140,9 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
              {
                  AActor* HitActor = Hit.GetActor();
                  float DeltaZ = Hit.ImpactPoint.Z - ActorLocation.Z;
-                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= CapsuleHalfHeight)
+                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset)
                  {
-                     ActorLocation.Z = Hit.ImpactPoint.Z + CapsuleHalfHeight;
+                     ActorLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
                  }
              }
 
