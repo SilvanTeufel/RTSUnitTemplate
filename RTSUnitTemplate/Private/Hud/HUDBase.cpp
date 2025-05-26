@@ -31,8 +31,6 @@ void AHUDBase::DrawHUD()
 		SelectedUnits.Empty();
 		
 		CurrentPoint = GetMousePos2D();
-
-		//SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
 		
 		if (abs(InitialPoint.X - CurrentPoint.X) >= 2) {
 
@@ -136,45 +134,29 @@ void AHUDBase::DrawHUD()
 			
 			if(Controller) Controller->AbilityArrayIndex = 0;
 		}
+		SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
 	}
 }
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
 {
-	UE_LOG(LogTemp, Verbose, TEXT("SelectISMUnitsInRectangle!!!!!!!!!"));
+	//UE_LOG(LogTemp, Error, TEXT("SelectISMUnitsInRectangle!!!!!!!!!"));
     APlayerController* PC = GetOwningPlayerController();
     ACameraControllerBase* Controller = Cast<ACameraControllerBase>(PC);
     if (!Controller)
         return;
 
     // Iterate all UnitBase actors
-	UE_LOG(LogTemp, Verbose, TEXT("FriendlyUnits.Num()=%d"), FriendlyUnits.Num());
-    for (int32 i = 0; i < FriendlyUnits.Num(); i++)  // FriendlyUnits // for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It) 
+	//UE_LOG(LogTemp, Error, TEXT("FriendlyUnits.Num()=%d"), FriendlyUnits.Num());
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)   // FriendlyUnits // for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It) 
     {
-        //AUnitBase* Unit = *It;
-    	AUnitBase* Unit = FriendlyUnits[i];
-        if (!Unit->bUseSkeletalMovement)
+        AUnitBase* Unit = *It;
+    	//AUnitBase* Unit = FriendlyUnits[i];
+    	
+        if (Unit->bUseSkeletalMovement || Unit->TeamId != Controller->SelectableTeamId)
             continue;
 
-        // Retrieve Mass entity and combat-stats fragment
-        FMassEntityManager* EntityManager = nullptr;
-        FMassEntityHandle EntityHandle;
-        if (!Unit->GetMassEntityData(EntityManager, EntityHandle) ||
-            !EntityManager->IsEntityValid(EntityHandle))
-        {
-            continue;
-        }
-        FMassCombatStatsFragment* CombatStats =
-            EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
-        if (!CombatStats)
-            continue;
-
-        // Team check via fragment
-        int32 TeamId = CombatStats->TeamId;
-        if (TeamId != Controller->SelectableTeamId && Controller->SelectableTeamId != 0)
-            continue;
-
-    	UE_LOG(LogTemp, Verbose, TEXT("Unit '%s': TeamId=%d"), *Unit->GetName(), CombatStats->TeamId);
+    	//UE_LOG(LogTemp, Error, TEXT("Unit '%s': TeamId=%d"), *Unit->GetName(), CombatStats->TeamId);
     	
         UInstancedStaticMeshComponent* ISM = Unit->ISMComponent;
         if (!ISM)
@@ -191,12 +173,12 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
             FVector2D ScreenLoc;
             if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
                 continue;
-
-        	UE_LOG(LogTemp, VeryVerbose, TEXT("Unit '%s' instance %d world=(%.1f,%.1f,%.1f) projected=(%.1f,%.1f)"),
+			/*
+        	UE_LOG(LogTemp, Error, TEXT("Unit '%s' instance %d world=(%.1f,%.1f,%.1f) projected=(%.1f,%.1f)"),
 				*Unit->GetName(), Index,
 				WorldLoc.X, WorldLoc.Y, WorldLoc.Z,
 				ScreenLoc.X, ScreenLoc.Y);
-
+			*/
             // Screen‑space AABB test
             if (ScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
                 ScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&

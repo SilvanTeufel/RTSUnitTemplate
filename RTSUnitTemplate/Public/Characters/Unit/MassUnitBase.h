@@ -23,16 +23,15 @@ public:
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
-	bool bUseSkeletalMovement = true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UInstancedStaticMeshComponent* ISMComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ISM")
 	int32 InstanceIndex = INDEX_NONE;
-	
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
+	bool bUseSkeletalMovement = true;
 	/**
 * Adds a specific Mass Tag to the entity associated with this Actor.
 * @param TagToAdd The script struct representing the tag type to add (e.g., FMassStateIdleTag::StaticStruct()).

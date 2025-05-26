@@ -4,6 +4,7 @@
 #include "Characters/Unit/MassUnitBase.h"
 
 #include "Mass/Signals/MySignals.h"
+#include "Net/UnrealNetwork.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -26,6 +27,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, ISMComponent);
+	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
 }
 
 bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)

@@ -7,7 +7,6 @@
 #include "Core/UnitData.h"
 #include "AbilitySystemInterface.h"
 #include <GameplayEffectTypes.h>
-
 #include "SpawnerUnit.h"
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/AttributeSetBase.h"
@@ -37,7 +36,7 @@ struct FQueuedAbility
 };
 
 UCLASS()
-class RTSUNITTEMPLATE_API AGASUnit : public ASpawnerUnit, public IAbilitySystemInterface
+class RTSUNITTEMPLATE_API AGASUnit : public ASpawnerUnit, public IAbilitySystemInterface // ASpawnerUnit
 {
 	GENERATED_BODY()
 	

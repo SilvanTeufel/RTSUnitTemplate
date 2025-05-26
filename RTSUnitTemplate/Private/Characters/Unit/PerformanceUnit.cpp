@@ -80,6 +80,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
 	DOREPLIFETIME(APerformanceUnit, bClientIsVisible);
+	
 }
 
 void APerformanceUnit::BeginPlay()
@@ -289,6 +290,18 @@ void APerformanceUnit::VisibilityTickFog()
 
 void APerformanceUnit::CheckViewport()
 {
+	
+
+	FVector ALocation = GetActorLocation();
+	/*
+	if (!bUseSkeletalMovement)
+	{
+		FTransform Xform;
+		ISMComponent->GetInstanceTransform(Index, Xform, true);
+		FVector WorldLoc = Xform.GetLocation();
+	}
+		*/
+	
 	if (IsInViewport(GetActorLocation(), VisibilityOffset))
 	{
 		IsOnViewport = true;
