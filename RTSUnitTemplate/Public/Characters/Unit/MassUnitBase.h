@@ -3,14 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Characters/Unit/WorkingUnitBase.h"
+#include "AbilityUnit.h"
 #include "MassUnitBase.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API AMassUnitBase : public AWorkingUnitBase
+class RTSUNITTEMPLATE_API AMassUnitBase : public AAbilityUnit
 {
 	GENERATED_BODY()
 

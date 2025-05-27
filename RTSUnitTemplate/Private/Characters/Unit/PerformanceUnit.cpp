@@ -267,12 +267,16 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 		Capsule->SetVisibility(desiredVisibility, true);
 	
 	USkeletalMeshComponent* SkelMesh = GetMesh();
-	if (SkelMesh)
+	if (SkelMesh && bUseSkeletalMovement)
 		{
 			SkelMesh->SetVisibility(desiredVisibility, true);
 			SkelMesh->bPauseAnims = !desiredVisibility;
 		}
 
+	if (ISMComponent && !bUseSkeletalMovement)
+	{
+		ISMComponent->SetVisibility(desiredVisibility, true);
+	}
 }
 
 
@@ -293,16 +297,16 @@ void APerformanceUnit::CheckViewport()
 	
 
 	FVector ALocation = GetActorLocation();
-	/*
+
 	if (!bUseSkeletalMovement)
 	{
 		FTransform Xform;
-		ISMComponent->GetInstanceTransform(Index, Xform, true);
-		FVector WorldLoc = Xform.GetLocation();
+		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
+		ALocation = Xform.GetLocation();
 	}
-		*/
+		
 	
-	if (IsInViewport(GetActorLocation(), VisibilityOffset))
+	if (IsInViewport(ALocation, VisibilityOffset))
 	{
 		IsOnViewport = true;
 	}
@@ -366,6 +370,16 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		
 		if(HealthBarUpdateTriggered)	
 			HealthBarWidget->UpdateWidget();
+
+
+		if(!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)
+		{
+			FTransform Xform;
+			ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
+			FVector ALocation = Xform.GetLocation();
+
+			HealthWidgetComp->SetWorldLocation(ALocation);
+		}
 	}
 }
 

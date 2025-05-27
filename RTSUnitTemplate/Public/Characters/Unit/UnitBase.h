@@ -5,11 +5,11 @@
 #include "CoreMinimal.h"
 #include "Navigation/CrowdAgentInterface.h"
 #include "Navigation/CrowdFollowingComponent.h"
-#include "MassUnitBase.h"
+//#include "MassUnitBase.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
-#include "PathSeekerBase.h"
+#include "WorkingUnitBase.h"
 #include "Navigation/CrowdFollowingComponent.h"
 #include "NavigationSystem.h"
 #include "AI/Navigation/NavigationTypes.h"
@@ -17,7 +17,7 @@
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AUnitBase : public AMassUnitBase
+class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
 

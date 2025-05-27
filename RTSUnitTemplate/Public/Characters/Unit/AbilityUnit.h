@@ -3,13 +3,13 @@
 
 #include "CoreMinimal.h"
 #include "Core/UnitData.h"
-#include "PathSeekerBase.h"
+#include "LevelUnit.h"
 #include "TimerManager.h"
 #include "AbilityUnit.generated.h"
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AAbilityUnit : public APathSeekerBase
+class RTSUNITTEMPLATE_API AAbilityUnit : public ALevelUnit
 {
 	GENERATED_BODY()
 

@@ -3,7 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilityUnit.h"
+//#include "AbilityUnit.h"
+#include "PathSeekerBase.h"
 #include "Components/CapsuleComponent.h"
 #include "TransportUnit.generated.h"
 
@@ -11,7 +12,7 @@
  * 
  */
 UCLASS()
-class RTSUNITTEMPLATE_API ATransportUnit : public AAbilityUnit
+class RTSUNITTEMPLATE_API ATransportUnit : public APathSeekerBase
 {
 	GENERATED_BODY()
 

@@ -3,8 +3,9 @@
 
 #include "CoreMinimal.h"
 #include "GASUnit.h"
-#include "LevelUnit.h"
+//#include "LevelUnit.h"
 #include "MassEntityTypes.h"
+#include "MassUnitBase.h"
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
@@ -16,7 +17,7 @@
 #include "PerformanceUnit.generated.h"
 
 UCLASS()
-class RTSUNITTEMPLATE_API APerformanceUnit : public ALevelUnit
+class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase
 {
 	GENERATED_BODY()
 
