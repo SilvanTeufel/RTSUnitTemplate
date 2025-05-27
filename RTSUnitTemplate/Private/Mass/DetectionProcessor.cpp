@@ -101,7 +101,217 @@ void UDetectionProcessor::ConfigureQueries()
 }
 
 
+void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    // 1. Zeit akkumulieren
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 
+    // 2. Prüfen, ob das Intervall erreicht wurde
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; // Intervall nicht erreicht, überspringen
+    }
+
+    // 3. Signaled Entities aus dem Buffer auslesen
+    TArray<FMassEntityHandle>* SignaledEntitiesPtr = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange);
+    const TArray<FMassEntityHandle> SignaledEntities = SignaledEntitiesPtr ? *SignaledEntitiesPtr : TArray<FMassEntityHandle>{};
+
+    // --- Pre-fetch fragment data für signalisierte Entities ---
+    struct FCachedSignalData
+    {
+        FMassEntityHandle Entity;
+        FTransform         Transform;
+        FMassCombatStatsFragment      CombatStats;
+        FMassAgentCharacteristicsFragment Char;
+        bool              bValid = false;
+    };
+
+    TArray<FCachedSignalData> CachedSignals;
+    CachedSignals.Reserve(SignaledEntities.Num());
+
+    for (const FMassEntityHandle& Handle : SignaledEntities)
+    {
+        FCachedSignalData Data;
+        Data.Entity = Handle;
+
+        if (!EntityManager.IsEntityValid(Handle))
+        {
+            continue;
+        }
+
+        // Prüfen, ob alle benötigten Fragmente vorhanden sind
+        if (DoesEntityHaveFragment<FTransformFragment>(EntityManager, Handle) &&
+            DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, Handle) &&
+            DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, Handle))
+        {
+            // Fragmente holen und in Data cachen
+            const FTransformFragment* Tf  = EntityManager.GetFragmentDataPtr<FTransformFragment>(Handle);
+            const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Handle);
+            const FMassAgentCharacteristicsFragment* Ch = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Handle);
+
+            Data.Transform     = Tf->GetTransform();
+            Data.CombatStats   = *Stats;
+            Data.Char          = *Ch;
+            Data.bValid        = true;
+        }
+
+        CachedSignals.Add(Data);
+    }
+
+    // 4. Für jedes Chunk der eigenen Entities Analysieren
+    TArray<FMassSignalPayload> PendingSignals;
+    SignaledEntitiesProcessedThisTick.Reset();
+    if (SignaledEntitiesPtr)
+    {
+        SignaledEntitiesProcessedThisTick.Append(SignaledEntities);
+    }
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        [&PendingSignals, &EntityManager, &CachedSignals, this](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList   = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto& TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto TargetList  = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
+        const auto& StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto& CharList  = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        auto MoveTargetList   = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& DetState = StateList[i];
+            const float Now = World->GetTimeSeconds();
+            if (Now - DetState.BirthTime < 1.0f)
+            {
+                continue; // Entity noch zu jung
+            }
+
+            const FMassEntityHandle SelfEntity = ChunkContext.GetEntity(i);
+            const FVector DetectorLocation = TransformList[i].GetTransform().GetLocation();
+            FMassAITargetFragment& DetTarget = TargetList[i];
+            const FMassCombatStatsFragment& DetStats = StatsList[i];
+            const FMassAgentCharacteristicsFragment& DetChar = CharList[i];
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+
+            // Tracking Best/New Target
+            FMassEntityHandle BestEntity;
+            FVector BestLocation = FVector::ZeroVector;
+            bool bFoundNew = false;
+            bool bCurrentStillViable = false;
+            FVector CurrentLocation = FVector::ZeroVector;
+
+            // Durch alle gecachten Signale iterieren
+            for (const FCachedSignalData& Sig : CachedSignals)
+            {
+                if (!Sig.bValid || Sig.Entity == SelfEntity)
+                {
+                    continue;
+                }
+
+                // Teams und Charakteristika prüfen
+                if (Sig.CombatStats.TeamId == DetStats.TeamId)
+                {
+                    continue;
+                }
+                bool bCanAttack = true;
+                if (DetChar.bCanOnlyAttackGround && Sig.Char.bIsFlying)      bCanAttack = false;
+                if (DetChar.bCanOnlyAttackFlying && !Sig.Char.bIsFlying)     bCanAttack = false;
+                if (Sig.Char.bIsInvisible && !DetChar.bCanDetectInvisible)   bCanAttack = false;
+                if (!bCanAttack) continue;
+
+                const float Dist = FVector::Dist(DetectorLocation, Sig.Transform.GetLocation());
+                // Neue Ziele entdecken
+                if (Dist < DetStats.SightRadius && Sig.CombatStats.Health > 0)
+                {
+                    BestEntity   = Sig.Entity;
+                    BestLocation = Sig.Transform.GetLocation();
+                    bFoundNew    = true;
+                }
+
+                // Aktuelles Ziel aufrechterhalten?
+                if (DetTarget.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetTarget.TargetEntity))
+                {
+                    const FTransformFragment* CurrTf = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetTarget.TargetEntity);
+                    FVector CurrLoc = CurrTf->GetTransform().GetLocation();
+                    const float CurrDist = FVector::Dist(DetectorLocation, CurrLoc);
+                    const FMassCombatStatsFragment* CurrStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(DetTarget.TargetEntity);
+                    if (CurrDist <= DetStats.LoseSightRadius && CurrStats->Health > 0 && !bFoundNew)
+                    {
+                        bCurrentStillViable = true;
+                        CurrentLocation = CurrLoc;
+                    }
+                }
+            }
+
+            // Fragment-Update basierend auf Funden
+            if (bFoundNew)
+            {
+                DetTarget.TargetEntity      = BestEntity;
+                DetTarget.LastKnownLocation = BestLocation;
+                DetTarget.bHasValidTarget   = true;
+            }
+            else if (bCurrentStillViable)
+            {
+                DetTarget.LastKnownLocation = CurrentLocation;
+                DetTarget.bHasValidTarget   = true;
+            }
+            else
+            {
+                // kein Ziel, ggf. MoveTarget zurücksetzen
+            }
+
+            // Verlust prüfen
+            if (DetTarget.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetTarget.TargetEntity))
+            {
+                const FTransformFragment* CurrTf = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetTarget.TargetEntity);
+                const FVector CurrLoc = CurrTf->GetTransform().GetLocation();
+                const float Dist = FVector::Dist(DetectorLocation, CurrLoc);
+                const FMassCombatStatsFragment* CurrStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(DetTarget.TargetEntity);
+                if (Dist > DetStats.LoseSightRadius || CurrStats->Health <= 0)
+                {
+                    DetTarget.TargetEntity.Reset();
+                    DetTarget.bHasValidTarget = false;
+                    UpdateMoveTarget(MoveTarget, DetState.StoredLocation, DetStats.RunSpeed, World);
+                }
+            }
+
+            // Signale zum State Wechsel
+            if (DetTarget.bHasValidTarget && !DetState.SwitchingState)
+            {
+                PendingSignals.Emplace(SelfEntity, UnitSignals::SetUnitToChase);
+            }
+            else if (!DetState.SwitchingState)
+            {
+                PendingSignals.Emplace(SelfEntity, UnitSignals::SetUnitStatePlaceholder);
+            }
+        }
+    });
+
+    // 5. Ausgehende Signale senden
+    if (!PendingSignals.IsEmpty() && SignalSubsystem)
+    {
+        TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;
+        AsyncTask(ENamedThreads::GameThread, [SubPtr, Signals = MoveTemp(PendingSignals)]()
+        {
+            if (UMassSignalSubsystem* Sub = SubPtr.Get())
+            {
+                for (const FMassSignalPayload& P : Signals)
+                {
+                    if (!P.SignalName.IsNone())
+                    {
+                        Sub->SignalEntity(P.SignalName, P.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+
+    // 6. Cleanup
+    ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
+    SignaledEntitiesProcessedThisTick.Empty();
+}
+
+/*
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // 1. Zeit akkumulieren
@@ -152,7 +362,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         {
             FMassAIStateFragment& DetectorStateFrag = StateList[i]; 
             const float Now = World->GetTimeSeconds();
-            if ((Now - DetectorStateFrag.BirthTime) < 1.0f /* or 2.0f */)
+            if ((Now - DetectorStateFrag.BirthTime) < 1.0f)
             {
                 continue;  // this entity is not yet “1 second old”
             }
@@ -352,3 +562,4 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
     SignaledEntitiesProcessedThisTick.Empty(); // Clear the processed set
 }
+*/
