@@ -772,7 +772,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->OnRep_MeshMaterialPath();
 
 				UnitBase->SetReplicateMovement(true);
-				SetReplicates(true);
+				UnitBase->SetReplicates(true);
 				//UnitBase->GetMesh()->SetIsReplicated(true);
 				
 				UnitBase->SetMeshRotationServer();

@@ -57,7 +57,6 @@ void UUnitSightProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArray
     // UE_LOG(LogMass, Verbose, TEXT("HandleUnitPresenceSignal: Received %d entities for signal %s"), Entities.Num(), *SignalName.ToString());
 }
 
-
 void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // 1. Zeit akkumulieren
@@ -134,15 +133,24 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 if (!EntityManager.IsEntityValid(SignaledTarget)) continue;
                 if (SignaledTarget == DetectorEntity) continue;
+
                 
-                const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
+                if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, SignaledTarget) ||
+                !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, SignaledTarget) ||
+                !DoesEntityHaveFragment<FMassAIStateFragment>(EntityManager, SignaledTarget) ||
+                !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, SignaledTarget))
+                    continue;
+                
+               const FMassCombatStatsFragment* TargetStats = TryGetFragmentDataPtr<FMassCombatStatsFragment>(EntityManager, SignaledTarget);
+                
                 if (!TargetStats) continue;
 
               
                 
                 if (DetectorStats.TeamId == TargetStats->TeamId) continue;
-                
-                const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(SignaledTarget);
+
+                // EntityManager.GetFragmentDataChecked
+                const FTransformFragment* TargetTransform = TryGetFragmentDataPtr<FTransformFragment>(EntityManager, SignaledTarget);
                 if (!TargetTransform) continue;
                 FMassAIStateFragment& TargetStateFrag = EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(SignaledTarget);
                 
@@ -151,7 +159,6 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 const float Dist = FVector::Dist(DetectorLocation, TargetTransform->GetTransform().GetLocation());
 
                 
-                // && !(DetectorStats.Health <= 0.f && StateFrag.StateTimer >= DetectorCharacteristics.DespawnTime)       
                 if (Dist <= DetectorStats.SightRadius) // && TargetStats->Health > 0.0f && DetectorStats.Health > 0.0f
                 {
                     // Enter sight
@@ -163,40 +170,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
                     int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
                     SightOverlapCount++;
-
-                   // PendingSignals.Emplace(SignaledTarget, DetectorEntity, UnitSignals::UnitEnterSight);
                     
-                }else if (Dist > DetectorStats.LoseSightRadius)
-                {
-                    /*
-                    int32& SightOverlapCount = TargetStateFrag.TeamOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
-                    if (SightOverlapCount >= 1)
-                    {
-                        SightOverlapCount--;
-                    }
-                    else
-                    {
-                        SightOverlapCount = 0;
-                    }
-
-                    int32& DetectorOverlapCount = TargetStateFrag.DetectorOverlapsPerTeam.FindOrAdd(DetectorStats.TeamId);
-                    if (DetectorCharacteristics.bCanDetectInvisible && DetectorOverlapCount > 0)
-                    {
-                        if (DetectorOverlapCount >= 1)
-                        {
-                            DetectorOverlapCount--;
-                        }
-                        else
-                        {
-                            DetectorOverlapCount = 0;
-                        }
-
-                        if (DetectorOverlapCount <= 0)
-                        {
-                            TargetCharacteristics.bIsInvisible = true;
-                        }
-                    }
-                    */
                 }
             }
             
@@ -211,7 +185,16 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             for (const FMassEntityHandle& SignaledTarget : SignaledEntities)
             {
-                const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SignaledTarget);
+                if (!EntityManager.IsEntityValid(SignaledTarget)) continue;
+                if (SignaledTarget == DetectorEntity) continue;
+                
+                if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, SignaledTarget) ||
+                    !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, SignaledTarget) ||
+                    !DoesEntityHaveFragment<FMassAIStateFragment>(EntityManager, SignaledTarget) ||
+                    !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, SignaledTarget))
+                                        continue;
+  
+                const FMassCombatStatsFragment* TargetStats = TryGetFragmentDataPtr<FMassCombatStatsFragment>(EntityManager, SignaledTarget);
                 if (!TargetStats) continue;
                 if (TargetStats->TeamId == DetectorStats.TeamId) continue;
                 

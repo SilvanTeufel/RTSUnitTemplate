@@ -50,6 +50,40 @@ void UChaseStateProcessor::Initialize(UObject& Owner)
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
+/**
+ * Calculates a pseudo-random, deterministic 2D offset based on an Entity Handle.
+ * @param Entity The handle of the entity needing an offset.
+ * @param MinRadius The minimum distance from the target.
+ * @param MaxRadius The maximum distance from the target.
+ * @return A FVector containing the X/Y offset (Z is 0).
+ */
+FVector CalculateChaseOffset(const FMassEntityHandle& Entity, float MinRadius = 100.0f, float MaxRadius = 250.0f)
+{
+    if (!Entity.IsSet() || MinRadius >= MaxRadius || MinRadius < 0.f)
+    {
+        return FVector::ZeroVector;
+    }
+
+    // Use the entity index to seed our "randomness" deterministically.
+    const uint32 Index = Entity.Index;
+
+    // Use parts of the Golden Angle (137.5 degrees) for good angular distribution.
+    const float AngleDeg = FMath::Fmod(static_cast<float>(Index) * 137.50776405f, 360.0f);
+
+    // Vary the radius based on the index, ensuring it's within bounds.
+    // We use a different multiplier to avoid radius aligning perfectly with angle for sequential indices.
+    const float RadiusRange = MaxRadius - MinRadius;
+    const float Radius = MinRadius + FMath::Fmod(static_cast<float>(Index) * 61.803398875f, RadiusRange);
+
+    // Convert to radians for Cos/Sin
+    const float AngleRad = FMath::DegreesToRadians(AngleDeg);
+
+    // Calculate offset in X/Y plane
+    return FVector(Radius * FMath::Cos(AngleRad),
+                   Radius * FMath::Sin(AngleRad),
+                   0.0f);
+}
+
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
@@ -123,8 +157,13 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
 
             // --- Still Chasing (Out of Range) ---
-            // UpdateMoveTarget modifies fragment directly, keep it here
-            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
+            // **** NEW CODE: Calculate Offset ****
+           // You might want to adjust Min/Max Radius based on unit size or target.
+           FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 300.0f);
+           FVector SlottedTargetLocation = TargetFrag.LastKnownLocation + ChaseOffset;
+           // **********************************
+
+            UpdateMoveTarget(MoveTarget, SlottedTargetLocation, Stats.RunSpeed, World);
             // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
         }
     }); // End ForEachEntityChunk

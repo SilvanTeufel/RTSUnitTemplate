@@ -196,9 +196,9 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                   continue;
                 }
                 
-                const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(PotentialTargetEntity);
-                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(PotentialTargetEntity);
-                const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(PotentialTargetEntity);
+                const FMassCombatStatsFragment* TargetStatsFrag = TryGetFragmentDataPtr<FMassCombatStatsFragment>(EntityManager, PotentialTargetEntity);
+                const FTransformFragment* TargetTransformFrag = TryGetFragmentDataPtr<FTransformFragment>(EntityManager,PotentialTargetEntity);
+                const FMassAgentCharacteristicsFragment* TargetCharFrag = TryGetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityManager,PotentialTargetEntity);
     
                 // --- End Data Fetching ---
 

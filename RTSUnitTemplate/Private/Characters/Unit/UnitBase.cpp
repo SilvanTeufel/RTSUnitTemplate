@@ -822,13 +822,15 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 		FTransform UnitTransform;
 	
 		UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
+
 		
 		
 		const auto UnitBase = Cast<AUnitBase>
 			(UGameplayStatics::BeginDeferredActorSpawnFromClass
 			(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
 
-	
+		//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
+		
 		if(SpawnParameter.UnitControllerBaseClass)
 		{
 			AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
@@ -864,7 +866,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			UnitBase->OnRep_MeshMaterialPath();
 
 			UnitBase->SetReplicateMovement(true);
-			SetReplicates(true);
+			UnitBase->SetReplicates(true);
 			//UnitBase->GetMesh()->SetIsReplicated(true);
 
 			// Does this have to be replicated?
@@ -883,7 +885,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			 Cast<AActor>(UnitBase), 
 			 UnitTransform
 			);
-
+			
+			UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 
 			UnitBase->InitializeAttributes();
 			UnitBase->SquadId = GameMode->HighestSquadId;
@@ -910,7 +913,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 				SetUnitBase(SummonedUnitIndexes[i], UnitBase);
 			}
 
-			UnitBase->MassActorBindingComponent->SetupMassOnUnit();
+			//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 			//return UnitBase->UnitIndex;
 		}
 	}

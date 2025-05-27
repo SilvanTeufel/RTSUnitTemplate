@@ -508,6 +508,31 @@ bool DoesEntityHaveFragment(
 	return false;
 }
 
+template<typename FragmentType>
+const FragmentType* TryGetFragmentDataPtr(const FMassEntityManager& EntityManager, FMassEntityHandle Entity)
+{
+	if (!EntityManager.IsEntityValid(Entity))
+	{
+		return nullptr;
+	}
+
+	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
+	if (!ArchetypeHandle.IsValid())
+	{
+		return nullptr;
+	}
+
+	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
+
+	if (!FragmentStruct || !Composition.Fragments.Contains(*FragmentStruct))
+	{
+		return nullptr;
+	}
+
+	return EntityManager.GetFragmentDataPtr<FragmentType>(Entity);
+}
+
 inline bool IsFullyValidTarget(FMassEntityManager& EM, FMassEntityHandle H)
 {
 	return H.IsSet()

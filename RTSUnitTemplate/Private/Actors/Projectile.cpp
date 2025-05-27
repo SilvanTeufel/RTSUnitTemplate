@@ -479,10 +479,14 @@ void AProjectile::SetIsAttacked(AUnitBase* UnitToHit)
 		UMassSignalSubsystem* SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(World);
 
 		if (!SignalSubsystem) return;
-				
-		FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
-		SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, MassEntityHandle);
 		
+		if (UnitToHit && UnitToHit->MassActorBindingComponent)
+		{
+			FMassEntityHandle MassEntityHandle =  UnitToHit->MassActorBindingComponent->GetMassEntityHandle();
+		
+			if (MassEntityHandle.IsValid())
+				SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, MassEntityHandle);
+		}
 	}else if(UnitToHit->GetUnitState() == UnitData::Casting)
 	{
 		UnitToHit->UnitControlTimer -= UnitToHit->ReduceCastTime;

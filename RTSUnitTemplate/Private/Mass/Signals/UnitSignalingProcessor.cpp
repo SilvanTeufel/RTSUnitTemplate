@@ -88,7 +88,13 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 {
                      continue; // Handle missing subsystem
                 }
-            
+
+                if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, CurrentEntity) ||
+                !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, CurrentEntity) ||
+                !DoesEntityHaveFragment<FMassAIStateFragment>(EntityManager, CurrentEntity) ||
+                !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, CurrentEntity))
+                    continue;
+                
                 SignalSubsystem->SignalEntityDeferred(
                 ChunkContext,
                 UnitSignals::UnitInDetectionRange,
