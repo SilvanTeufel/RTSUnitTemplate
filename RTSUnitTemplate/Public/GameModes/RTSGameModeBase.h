@@ -76,9 +76,6 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTeamIdsAndWaypoints();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnAIFogManager();
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerFromDataTable(FVector Location, AUnitBase* UnitToChase);

@@ -9,7 +9,6 @@
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
-#include "Actors/FogOfWarCentralManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -88,7 +87,7 @@ void APerformanceUnit::BeginPlay()
 	Super::BeginPlay();
 
 
-	SetOwningPlayerController();
+	//SetOwningPlayerController();
 	
 }
 
@@ -96,11 +95,12 @@ void APerformanceUnit::Destroyed()
 {
 	Super::Destroyed();
 
-	DestroyFogManager();
+	//DestroyFogManager();
 }
-
+/*
 void APerformanceUnit::DestroyFogManager()
 {
+	
 	if (SpawnedFogManager)
 	{
 		// Detach the FogManager from this unit
@@ -110,8 +110,10 @@ void APerformanceUnit::DestroyFogManager()
 		SpawnedFogManager->Destroy();
 		SpawnedFogManager = nullptr;
 	}
+	
 }
-
+*/
+/*
 void APerformanceUnit::SetOwningPlayerController_Implementation()
 {
 	UWorld* World = GetWorld();
@@ -128,11 +130,12 @@ void APerformanceUnit::SetOwningPlayerController_Implementation()
 		}
 	}
 }
-
+*/
+/*
 void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 {
 
-/*
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -194,15 +197,17 @@ void APerformanceUnit::SpawnFogOfWarManager(APlayerController* PC)
 						
 					}
 	}
-	*/
-}
 
+}
+*/
+
+/*
 void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC)
 {
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("World is not valid."));
+
 		return;
 	}
 
@@ -214,7 +219,6 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 	
 	if (FogOfWarManagerClass && ControllerBase)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SpawnFogOfWarManagerTeamIndependent!"));
 					FVector SpawnLocation = GetActorLocation();
 					FRotator SpawnRotation = FRotator::ZeroRotator;
 					FTransform SpawnTransform(SpawnRotation, SpawnLocation);
@@ -243,21 +247,16 @@ void APerformanceUnit::SpawnFogOfWarManagerTeamIndependent(APlayerController* PC
 						SpawnedFogManager->Mesh->SetAffectDistanceFieldLighting(false);
 						// Finish spawning the actor. This will trigger its BeginPlay().
 						UGameplayStatics::FinishSpawningActor(SpawnedFogManager, SpawnTransform);
-						UE_LOG(LogTemp, Warning, TEXT("SpawnedFogManager! %d"), SpawnedFogManager->PlayerTeamId);
+
 						if (SpawnedFogManager)
 						{
 							SpawnedFogManager->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("rootSocket"));
-						}
-
-						for (TActorIterator<AFogOfWarCentralManager> It(GetWorld()); It; ++It)
-						{
-							It->FogManagers.Add(SpawnedFogManager);
-							break;
 						}
 					}
 	}
 	
 }
+*/
 
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
@@ -358,12 +357,9 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		{
 			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 			HealthBarUpdateTriggered = true;
-			//if(Projectile) ProjectileAndEffectsVisibility(Projectile->Mesh, Projectile->Mesh_B, Projectile->Niagara, Projectile->Niagara_B);
-			//if(Projectile) Projectile->SetProjectileVisibility(true);
 		}
 		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
 		{
-			//if(Projectile) Projectile->SetVisibility(false);
 			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 			HealthBarUpdateTriggered = false;
 		}

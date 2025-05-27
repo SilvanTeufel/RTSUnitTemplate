@@ -33,9 +33,6 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
 		{
 			NewSelection.Add(Unit);
-		}else if (Unit && Unit->SpawnedFogManager)
-		{
-			Unit->DestroyFogManager();
 		}
 	}
 

@@ -74,21 +74,21 @@ public:
 
 	virtual void Destroyed() override;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	//TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
 	
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SpawnFogOfWarManager(APlayerController* PC);
+	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	//void SpawnFogOfWarManager(APlayerController* PC);
 
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void SpawnFogOfWarManagerTeamIndependent(APlayerController* PC);
+	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	//void SpawnFogOfWarManagerTeamIndependent(APlayerController* PC);
 	
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	void DestroyFogManager();
+	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	//void DestroyFogManager();
 
 	
-	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=RTSUnitTemplate)
-	void SetOwningPlayerController();
+	//UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=RTSUnitTemplate)
+	//void SetOwningPlayerController();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.01, 0.01, 200);
@@ -211,8 +211,8 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AProjectile* Projectile;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	AFogOfWarManager* SpawnedFogManager;
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
+	//AFogOfWarManager* SpawnedFogManager;
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	APlayerController* OwningPlayerController;

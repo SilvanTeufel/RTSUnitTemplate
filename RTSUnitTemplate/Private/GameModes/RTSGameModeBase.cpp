@@ -358,24 +358,6 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	//SpawnAIFogManager();
 }
 
-void ARTSGameModeBase::SpawnAIFogManager()
-{
-	// TSGameMode->AllUnits is onyl available on Server why we start running on server
-	// We Mutlicast to CLient and send him AllUnits as parameter
-
-	for (int32 i = 0; i < AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		// Every Controller can Check his own TeamId
-		if (Unit && Unit->GetUnitState() != UnitData::Dead && !Unit->SpawnedFogManager)
-		{
-			Unit->SpawnFogOfWarManagerTeamIndependent(GetWorld()->GetFirstPlayerController());
-		}
-	}
-
-
-}
-
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
 {
 
@@ -694,12 +676,6 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 
 		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
-
-		APlayerController* MyPC = GetWorld()->GetFirstPlayerController();
-		if (MyPC)
-		{
-			UnitBase->SpawnFogOfWarManagerTeamIndependent(MyPC);
-		}
 		
 		if(SpawnParameter.Attributes)
 		{

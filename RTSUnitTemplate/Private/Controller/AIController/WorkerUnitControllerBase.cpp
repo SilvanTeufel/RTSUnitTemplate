@@ -659,7 +659,6 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			if (NewUnit && ControllerBase)
 			{
 				NewUnit->IsMyTeam = true;
-				NewUnit->SpawnFogOfWarManager(ControllerBase);
 				UnitBase->FinishedBuild();
 			}
 		

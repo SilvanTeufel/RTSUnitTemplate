@@ -33,6 +33,7 @@ void UUnitSignalingProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
     
     // Ensure it's one of our units (optional, but good practice)
     EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All); // Adjust tag if needed
@@ -74,7 +75,13 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             
             const FMassEntityHandle CurrentEntity = ChunkContext.GetEntity(i);
             const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentEntity);
+            const FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentEntity);
             
+           const float Now = GetWorld()->GetTimeSeconds();
+           if ((Now - StateFrag->BirthTime) < 1.0f /* or 2.0f */)
+           {
+               continue;  // this entity is not yet “1 second old”
+           }
             //if (TargetStatsFrag->Health > 0.f)
             {
                 if (!SignalSubsystem)

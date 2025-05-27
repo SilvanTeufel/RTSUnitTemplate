@@ -77,8 +77,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
         
-            if (StatsFrag.TeamId == 3)
-            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+            //if (StatsFrag.TeamId == 3)
+            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
