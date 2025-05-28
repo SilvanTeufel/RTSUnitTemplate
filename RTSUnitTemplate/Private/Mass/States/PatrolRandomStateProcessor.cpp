@@ -88,7 +88,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for StopMovement
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-           // UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor NumEntities: %d"), NumEntities);
+           //UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -111,20 +111,18 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
             // --- 2. Check if current patrol destination reached ---
             // Only check if actually moving towards a destination
-            if (MoveTarget.GetCurrentAction() == EMassMovementAction::Move)
+            //if (MoveTarget.GetCurrentAction() == EMassMovementAction::Move)
             {
                 const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
                 const FVector CurrentDestination = MoveTarget.Center;
                 const float AcceptanceRadius = MoveTarget.SlackRadius * 4; // Consider making multiplier a variable
-                const float AcceptanceRadiusSq = FMath::Square(AcceptanceRadius);
-                const float DistSq = FVector::DistSquared(CurrentLocation, CurrentDestination);
-
-                if (DistSq <= AcceptanceRadiusSq && !StateFrag.SwitchingState) // --- Destination Reached ---
+                const float Dist= FVector::Dist(CurrentLocation, CurrentDestination);
+                
+                if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState) // --- Destination Reached ---
                 {
                     StateFrag.SwitchingState = true;
                     // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::PatrolIdle);
-
                     StateFrag.StateTimer = 0.f; // Reset timer immediately (modifies fragment)
 
                     // Stop movement immediately (modifies fragment)

@@ -282,7 +282,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
             else if (!DetState.SwitchingState)
             {
-                PendingSignals.Emplace(SelfEntity, UnitSignals::SetUnitStatePlaceholder);
+                //PendingSignals.Emplace(SelfEntity, UnitSignals::SetUnitStatePlaceholder);
             }
         }
     });

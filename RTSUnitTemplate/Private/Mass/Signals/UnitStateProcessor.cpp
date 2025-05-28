@@ -375,6 +375,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
 	                        EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
+                        	StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
+                        	UnitBase->UnitStatePlaceholder = UnitData::PatrolIdle;
                         }
                         else if (SignalName == UnitSignals::PatrolRandom)
                         {
@@ -641,7 +643,7 @@ void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandl
 		// Rufe die Funktion auf, die die eigentliche Arbeit für eine einzelne Entity macht
 		// Die internen Checks (Subsystem, Validität etc.) sind in der Hilfsfunktion enthalten.
 		SynchronizeStatsFromActorToFragment(Entity);
-		SynchronizeUnitState(Entity);
+		//SynchronizeUnitState(Entity);
 	}
 }
 
@@ -2176,6 +2178,46 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				AUnitBase* Unit = Cast<AUnitBase>(TargetActor);
 
 				if (!Unit || !IsValid(TargetActor)) return;
+
+
+
+
+
+				UE_LOG(LogTemp, Log, TEXT("1111111111111111111spawnswitch!!!!!!!!!!!!!!!!!!!!!!!!!!"));
+
+				if (Unit->UnitState == UnitData::PatrolRandom)
+				{
+					if (!EntityManager.IsEntityValid(E))
+					{
+						continue;
+					}
+
+					// --- Hole benötigte Fragmente für DIESE Entity ---
+					FMassAIStateFragment* StateFragPtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
+					FMassPatrolFragment* PatrolFragPtr = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(E);
+					FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(E);
+					const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+
+					// Prüfe, ob alle nötigen Fragmente vorhanden sind
+					if (!StateFragPtr || !PatrolFragPtr || !MoveTargetPtr || !StatsFragPtr)
+					{
+						continue;
+					}
+
+					// Dereferenziere Pointer für einfacheren Zugriff
+					FMassAIStateFragment& StateFrag = *StateFragPtr;
+					FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
+					FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
+					const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
+
+					UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+					if (!NavSys) { continue; }
+				
+					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
+					//SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, E);
+					//StateFrag.StateTimer = 0.f;
+				}
+
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 				

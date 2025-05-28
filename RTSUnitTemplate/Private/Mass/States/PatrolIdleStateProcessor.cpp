@@ -78,7 +78,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Keep mutable if needed
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
-            //UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
+           // UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update
@@ -101,7 +101,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 continue; // Exit loop for this entity as we are switching to Chase
             }
-
             
             float IdleDuration = FMath::FRandRange(PatrolFrag.RandomPatrolMinIdleTime, PatrolFrag.RandomPatrolMaxIdleTime);
         	
@@ -111,7 +110,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             	
                 if (Roll > PatrolFrag.IdleChance)
                 {
-                   PendingSignals.Emplace(Entity, UnitSignals::PISwitcher);
+                    PendingSignals.Emplace(Entity, UnitSignals::PISwitcher);
                    StateFrag.StateTimer = 0.f;
                 }
             }

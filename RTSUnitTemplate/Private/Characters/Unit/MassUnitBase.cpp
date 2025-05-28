@@ -235,30 +235,30 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 
 	if (GetUnitState() == UnitData::Idle)
 		StateFrag->PlaceholderSignal = UnitSignals::Idle;
-	else if (GetUnitState() == UnitData::Chase)
-		StateFrag->PlaceholderSignal = UnitSignals::Chase;
-	else if (GetUnitState() == UnitData::Attack)
-		StateFrag->PlaceholderSignal = UnitSignals::Attack;
-	else if (GetUnitState() == UnitData::Pause)
-		StateFrag->PlaceholderSignal = UnitSignals::Pause;
-	else if (GetUnitState() == UnitData::Dead)
-		StateFrag->PlaceholderSignal = UnitSignals::Dead;
 	else if (GetUnitState() == UnitData::Run)
 		StateFrag->PlaceholderSignal = UnitSignals::Run;
 	else if (GetUnitState() == UnitData::PatrolRandom)
 		StateFrag->PlaceholderSignal = UnitSignals::PatrolRandom;
 	else if (GetUnitState() == UnitData::PatrolIdle)
 		StateFrag->PlaceholderSignal = UnitSignals::PatrolIdle;
-	else if (GetUnitState() == UnitData::GoToBase)
-		StateFrag->PlaceholderSignal = UnitSignals::GoToBase;
-	else if (GetUnitState() == UnitData::GoToBuild)
-		StateFrag->PlaceholderSignal = UnitSignals::GoToBuild;
-	else if (GetUnitState() == UnitData::Build)
-		StateFrag->PlaceholderSignal = UnitSignals::Build;
 	else if (GetUnitState() == UnitData::GoToResourceExtraction)
 		StateFrag->PlaceholderSignal = UnitSignals::GoToResourceExtraction;
-	else if (GetUnitState() == UnitData::ResourceExtraction)
-		StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction;
+	//else if (GetUnitState() == UnitData::Chase)
+		//StateFrag->PlaceholderSignal = UnitSignals::Chase;
+	//else if (GetUnitState() == UnitData::Attack)
+		//StateFrag->PlaceholderSignal = UnitSignals::Attack;
+	//else if (GetUnitState() == UnitData::Pause)
+		//StateFrag->PlaceholderSignal = UnitSignals::Pause;
+	//else if (GetUnitState() == UnitData::Dead)
+		//StateFrag->PlaceholderSignal = UnitSignals::Dead;
+	//else if (GetUnitState() == UnitData::GoToBase)
+		//StateFrag->PlaceholderSignal = UnitSignals::GoToBase;
+	//else if (GetUnitState() == UnitData::GoToBuild)
+		//StateFrag->PlaceholderSignal = UnitSignals::GoToBuild;
+	//else if (GetUnitState() == UnitData::Build)
+		//StateFrag->PlaceholderSignal = UnitSignals::Build;
+	//else if (GetUnitState() == UnitData::ResourceExtraction)
+		//StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction;
 	
 		
 	if      (TagToAdd == FMassStateIdleTag::StaticStruct())                 SetUnitState(UnitData::Idle);
