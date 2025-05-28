@@ -161,16 +161,33 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 	// Determine tag from UnitState
 	UScriptStruct* NewTag = nullptr;
+	UScriptStruct* SecondTag = nullptr;
 	switch (UnitState)
 	{
-	case UnitData::Idle: NewTag = FMassStateIdleTag::StaticStruct(); break;
+	case UnitData::Idle:
+		{
+			NewTag = FMassStateIdleTag::StaticStruct();
+			SecondTag = FMassStateDetectTag::StaticStruct();
+		}
+		break;
 	case UnitData::Chase: NewTag = FMassStateChaseTag::StaticStruct(); break;
 	case UnitData::Attack: NewTag = FMassStateAttackTag::StaticStruct(); break;
 	case UnitData::Pause: NewTag = FMassStatePauseTag::StaticStruct(); break;
 	case UnitData::Dead: NewTag = FMassStateDeadTag::StaticStruct(); break;
 	case UnitData::Run: NewTag = FMassStateRunTag::StaticStruct(); break;
-	case UnitData::PatrolRandom: NewTag = FMassStatePatrolRandomTag::StaticStruct(); break;
-	case UnitData::PatrolIdle: NewTag = FMassStatePatrolIdleTag::StaticStruct(); break;
+	case UnitData::PatrolRandom:
+		{
+			NewTag = FMassStatePatrolRandomTag::StaticStruct();
+			SecondTag = FMassStateDetectTag::StaticStruct();
+		}
+		break;
+	case UnitData::PatrolIdle:
+		{
+			NewTag = FMassStatePatrolIdleTag::StaticStruct();
+			SecondTag = FMassStateDetectTag::StaticStruct();
+			
+		}
+		break;
 	case UnitData::Casting: NewTag = FMassStateCastingTag::StaticStruct(); break;
 	case UnitData::IsAttacked: NewTag = FMassStateIsAttackedTag::StaticStruct(); break;
 	case UnitData::GoToBase: NewTag = FMassStateGoToBaseTag::StaticStruct(); break;
@@ -185,6 +202,10 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 	SetUnitState(UnitState);
 	EntityManager->AddTagToEntity(EntityHandle, NewTag);
+	if (SecondTag != nullptr)
+	{
+		EntityManager->AddTagToEntity(EntityHandle, SecondTag);
+	}
 
 	return true;
 }

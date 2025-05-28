@@ -200,6 +200,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             bool bCurrentStillViable = false;
             FVector CurrentLocation = FVector::ZeroVector;
 
+            float ShortestDistance = DetStats.SightRadius;
             // Durch alle gecachten Signale iterieren
             for (const FCachedSignalData& Sig : CachedSignals)
             {
@@ -221,24 +222,28 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
                 const float Dist = FVector::Dist(DetectorLocation, Sig.Transform.GetLocation());
                 // Neue Ziele entdecken
-                if (Dist < DetStats.SightRadius && Sig.CombatStats.Health > 0)
+                if ( Dist < ShortestDistance && Dist < DetStats.SightRadius && Sig.CombatStats.Health > 0)
                 {
                     BestEntity   = Sig.Entity;
                     BestLocation = Sig.Transform.GetLocation();
                     bFoundNew    = true;
+                    ShortestDistance = Dist;
                 }
-
+                
                 // Aktuelles Ziel aufrechterhalten?
                 if (DetTarget.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetTarget.TargetEntity))
                 {
                     const FTransformFragment* CurrTf = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetTarget.TargetEntity);
-                    FVector CurrLoc = CurrTf->GetTransform().GetLocation();
-                    const float CurrDist = FVector::Dist(DetectorLocation, CurrLoc);
                     const FMassCombatStatsFragment* CurrStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(DetTarget.TargetEntity);
-                    if (CurrDist <= DetStats.LoseSightRadius && CurrStats->Health > 0 && !bFoundNew)
-                    {
-                        bCurrentStillViable = true;
-                        CurrentLocation = CurrLoc;
+
+                     if (CurrTf != nullptr || CurrStats != nullptr) {
+                        FVector CurrLoc = CurrTf->GetTransform().GetLocation();
+                        const float CurrDist = FVector::Dist(DetectorLocation, CurrLoc);
+                        if (CurrDist <= DetStats.LoseSightRadius && CurrStats->Health > 0 && !bFoundNew)
+                        {
+                            bCurrentStillViable = true;
+                            CurrentLocation = CurrLoc;
+                        }
                     }
                 }
             }
@@ -264,14 +269,22 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             if (DetTarget.TargetEntity.IsSet() && IsFullyValidTarget(EntityManager, DetTarget.TargetEntity))
             {
                 const FTransformFragment* CurrTf = EntityManager.GetFragmentDataPtr<FTransformFragment>(DetTarget.TargetEntity);
-                const FVector CurrLoc = CurrTf->GetTransform().GetLocation();
-                const float Dist = FVector::Dist(DetectorLocation, CurrLoc);
                 const FMassCombatStatsFragment* CurrStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(DetTarget.TargetEntity);
-                if (Dist > DetStats.LoseSightRadius || CurrStats->Health <= 0)
+                if (CurrTf == nullptr || CurrStats == nullptr)
                 {
                     DetTarget.TargetEntity.Reset();
                     DetTarget.bHasValidTarget = false;
                     UpdateMoveTarget(MoveTarget, DetState.StoredLocation, DetStats.RunSpeed, World);
+                }else
+                {
+                    const FVector CurrLoc = CurrTf->GetTransform().GetLocation();
+                    const float Dist = FVector::Dist(DetectorLocation, CurrLoc);
+                    if (Dist > DetStats.LoseSightRadius || CurrStats->Health <= 0)
+                    {
+                        DetTarget.TargetEntity.Reset();
+                        DetTarget.bHasValidTarget = false;
+                        UpdateMoveTarget(MoveTarget, DetState.StoredLocation, DetStats.RunSpeed, World);
+                    }
                 }
             }
 

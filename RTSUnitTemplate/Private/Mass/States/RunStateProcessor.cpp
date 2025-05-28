@@ -82,7 +82,7 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
             StateFrag.StateTimer += ExecutionInterval;
 
-            bool HasDetection = DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct());
+         
            // UE_LOG(LogTemp, Log, TEXT("Run Hast DetectTag: %d // %d"), HasDetection, i);
            // UE_LOG(LogTemp, Log, TEXT("TargetFrag.bHasValidTarget: %d // %d"), TargetFrag.bHasValidTarget, i);
            // UE_LOG(LogTemp, Log, TEXT("StateFrag.SwitchingState: %d // %d"), StateFrag.SwitchingState, i);
@@ -92,9 +92,7 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
               // UE_LOG(LogTemp, Log, TEXT("SWITCH!"));
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
-            }
-             // 1. Check if already at the final destination
-            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
+            }else if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
             {
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;

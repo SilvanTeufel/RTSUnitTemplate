@@ -103,9 +103,6 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
-
-                StateFrag.StateTimer = 0.f; // Reset timer immediately (modifies fragment)
-                // Maybe stop movement here too? StopMovement(MoveTarget, World);
                 continue; // Switch state, process next entity
             }
 

@@ -150,7 +150,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
-
                 // StopMovement modifies fragment directly, keep it here
                 //StopMovement(MoveTarget, World);
                 continue;

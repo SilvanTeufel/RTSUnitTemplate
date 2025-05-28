@@ -2003,7 +2003,6 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
 
-						UE_LOG(LogTemp, Error, TEXT("Switching state with PlaceholderSignal: %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2179,11 +2178,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 
 				if (!Unit || !IsValid(TargetActor)) return;
 
-
-
-
-
-				UE_LOG(LogTemp, Log, TEXT("1111111111111111111spawnswitch!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 
 				if (Unit->UnitState == UnitData::PatrolRandom)
 				{

@@ -8,6 +8,7 @@
 #include "MassRepresentationFragments.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
+#include "Steering/MassSteeringFragments.h"
 
 ULookAtProcessor::ULookAtProcessor()
 {
@@ -27,7 +28,13 @@ void ULookAtProcessor::ConfigureQueries()
 
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-	
+
+
+    // ← HERE: steering + avoidance forces as inputs
+    //EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
+    //EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadOnly);
+
+    
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
 	// Schließe tote oder pausierte Einheiten aus (optional, je nach gewünschtem Verhalten)
@@ -64,8 +71,12 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
         const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); // ReadOnly access is sufficient
-     
         TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
+
+            // ← HERE: new steering & force views
+        //const TConstArrayView<FMassSteeringFragment> SteeringList  = ChunkContext.GetFragmentView<FMassSteeringFragment>();
+       // const TConstArrayView<FMassForceFragment> ForceList        = ChunkContext.GetFragmentView<FMassForceFragment>();
+
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -170,16 +181,12 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             {
                 NewQuat = DesiredQuat;
             }
-        
+ 
 
-            FTransform FinalActorTransform;
-            if (UnitBase->bUseSkeletalMovement)
-                FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D());
-            else
-                FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
+            FTransform FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
 
             MassTransform.SetRotation(FinalActorTransform.GetRotation());
-           
+            MassTransform.SetLocation(FinalActorTransform.GetLocation());
             //FTransform FinalTransform(SmoothedRotation, ActorLocation, MassTransform.GetScale3D()); // TransformFrag.GetScale3D()
             // --- Check if update is needed and add to list ---
             if (UnitBase) // && !Actor->GetActorTransform().GetRotation().Equals(SmoothedRotation, 0.01f)
