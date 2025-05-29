@@ -730,14 +730,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
         	
-        	if (WorkerStats && WorkerStats->UpdateMovement)
-        	{
-        		UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
-
-        		if (WorkerStats->BasePosition != FVector::ZeroVector &&
-        			WorkerStats->ResourcePosition != FVector::ZeroVector)
-        			WorkerStats->UpdateMovement = false;
-        	}
             // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
             if (CombatStatsFrag && AttributeSet)
             {
@@ -812,6 +804,18 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		}
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             	}
+
+            	if (WorkerStats && WorkerStats->UpdateMovement)
+            	{
+            		TArray<FMassEntityHandle> CapturedEntitys;
+            		CapturedEntitys.Emplace(CapturedEntity);
+            		HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+					UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
+
+					//if (WorkerStats->BasePosition != FVector::ZeroVector &&
+						//WorkerStats->ResourcePosition != FVector::ZeroVector)
+						//WorkerStats->UpdateMovement = false;
+				}
             }
         }
         else
@@ -1448,7 +1452,7 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-		HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  EntitiesCopy);
+		//HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  EntitiesCopy);
 		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
 		{
 			// Check entity validity *on the game thread*
@@ -1466,9 +1470,9 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase) //  && IsValid(UnitBase->ResourcePlace)
+					if (UnitBase && UnitBase->ResourcePlace && UnitBase->ResourcePlace->WorkResourceClass)
 					{
-						//SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						// SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 						//UnitBase->UnitControlTimer = 0;
 						//UnitBase->SetUEPathfinding = true;
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
@@ -1837,7 +1841,105 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     return UnitBase;
 }
 
+void UUnitStateProcessor::SpawnWorkResource(
+    EResourceType ResourceType,
+    FVector Location,
+    TSubclassOf<AWorkResource>   WRClass,
+    AUnitBase*                   ActorToLockOn)
+{
+    if (!WRClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: no WRClass!"));
+        return;
+    }
 
+    if (!ActorToLockOn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: ActorToLockOn == nullptr!"));
+        return;
+    }
+
+    if (!ActorToLockOn->ResourcePlace || !ActorToLockOn->ResourcePlace->Mesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: ActorToLockOn->ResourcePlace or Mesh is null!"));
+        return;
+    }
+	
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SpawnWorkResource: GetWorld() == nullptr!"));
+        return;
+    }
+
+    // -- SETUP TRANSFORM --
+    FTransform SpawnTransform;
+    SpawnTransform.SetLocation(Location);
+    SpawnTransform.SetRotation(FQuat::Identity);
+
+    // -- DEFERRED SPAWN --
+    AWorkResource* NewRes = Cast<AWorkResource>(
+        UGameplayStatics::BeginDeferredActorSpawnFromClass(
+            World,
+            WRClass,
+            SpawnTransform,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+
+    if (!NewRes)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SpawnWorkResource: BeginDeferredActorSpawnFromClass returned null!"));
+        return;
+    }
+
+    // Initialize properties *before* finishing spawn
+    NewRes->IsAttached   = true;
+    NewRes->ResourceType = ResourceType;
+
+    UGameplayStatics::FinishSpawningActor(NewRes, SpawnTransform);
+
+    // -- TIDY UP any existing resource on the unit --
+    if (ActorToLockOn->WorkResource)
+    {
+        ActorToLockOn->WorkResource->Destroy();
+        ActorToLockOn->WorkResource = nullptr;
+    }
+
+    // -- ASSIGN the freshly spawned resource to the unit --
+    ActorToLockOn->WorkResource = NewRes;
+
+    // -- UPDATE the place’s remaining amount --
+    float& Remaining     = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
+    const float MaxRemain = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
+
+    Remaining = FMath::Max(0.f, Remaining - NewRes->Amount);
+
+    // If we’ve completely depleted it, just destroy it and bail
+    if (Remaining <= KINDA_SMALL_NUMBER)
+    {
+        ActorToLockOn->ResourcePlace->Destroy();
+        ActorToLockOn->ResourcePlace = nullptr;
+        return;
+    }
+
+    // Otherwise, update the visual scale of the “ResourcePlace” mesh
+    float Ratio    = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
+    float NewScale = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
+    ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
+
+    // -- FINALLY, ATTACH to the unit’s mesh socket --
+    static const FName SocketName(TEXT("ResourceSocket"));
+    if (ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
+    {
+        NewRes->AttachToComponent(
+            ActorToLockOn->GetMesh(),
+            FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+            SocketName);
+
+        // Offset if needed
+        NewRes->SetActorRelativeLocation(NewRes->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
+    }
+}
+
+/*
 void UUnitStateProcessor::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
 {
 
@@ -1923,6 +2025,7 @@ void UUnitStateProcessor::SpawnWorkResource(EResourceType ResourceType, FVector 
 	}
 	
 }
+*/
 
 void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
 {
