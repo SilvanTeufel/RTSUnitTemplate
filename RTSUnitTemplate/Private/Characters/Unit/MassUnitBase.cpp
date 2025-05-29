@@ -199,7 +199,8 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Unknown UnitState."), *GetName());
 		return false;
 	}
-
+	
+	
 	SetUnitState(UnitState);
 	EntityManager->AddTagToEntity(EntityHandle, NewTag);
 	if (SecondTag != nullptr)

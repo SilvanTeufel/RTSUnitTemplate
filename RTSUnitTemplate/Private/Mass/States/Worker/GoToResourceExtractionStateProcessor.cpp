@@ -98,17 +98,18 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
             const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && AIState.StateTimer >= ExecutionInterval*3.f)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
             {
-                AIState.StateTimer = 0.f;
+                AIState.SwitchingState = true;
+               // AIState.StateTimer = 0.f;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
                 StopMovement(MoveTarget, World);
-                continue;
+                //continue;
             }
             // --- 4. Update Movement (If Not Arrived) ---
             // Continue moving towards the target resource node location.
-            UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStatsFrag.RunSpeed, World);
+            //UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStatsFrag.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 

@@ -74,8 +74,9 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
             // --- Pre-check ---
             // Basic validation of essential build parameter. More robust validation assumed external.
-            if (WorkerStats.BuildingAvailable) // Check if Building is allready set
+            if (WorkerStats.BuildingAvailable && !AIState.SwitchingState) // Check if Building is allready set
             {
+                AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                 // Signal handler should remove the Build tag.
                 continue; // Skip this entity
@@ -87,8 +88,9 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- Completion Check ---
-            if (AIState.StateTimer >= WorkerStats.BuildTime)
+            if (AIState.StateTimer >= WorkerStats.BuildTime && !AIState.SwitchingState)
             {
+                AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SpawnBuildingRequest);
                 //PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction);
                 continue; // Skip to next entity in chunk

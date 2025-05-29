@@ -52,6 +52,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector ShooterLocation;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FRotator RotationOffset = FRotator(0.f);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = 0.0f;
 	
@@ -113,7 +116,7 @@ public:
 	int TeamId = 1;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float MovementSpeed = 100.f;
+	float MovementSpeed = 1000.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> ProjectileEffect;

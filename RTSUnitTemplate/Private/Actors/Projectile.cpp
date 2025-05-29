@@ -61,10 +61,43 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	Shooter = ShootingActor;
 	SetOwner(Shooter);
 	
-	if(TargetLocation.IsZero())
-		TargetLocation = TargetActor->GetActorLocation();
-
-	
+	if (Target)
+	{
+		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
+		{
+			if (UnitTarget->bUseSkeletalMovement)
+			{
+				// Aim at the actor’s root location
+				TargetLocation = UnitTarget->GetActorLocation();
+			}
+			else if (UnitTarget->ISMComponent)
+			{
+				// Aim at the ISM instance’s world location
+				FTransform InstanceXform;
+				UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+				TargetLocation = InstanceXform.GetLocation();
+			}
+			else
+			{
+				// Fallback
+				TargetLocation = UnitTarget->GetActorLocation();
+			}
+		}
+		else
+		{
+			// Non‐unit targets just give their root location
+			TargetLocation = Target->GetActorLocation();
+		}
+	}
+	/*
+	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
+	if (!FlyDir.IsNearlyZero())
+	{
+		// assume you have a FRotator ProjectileRotationOffset member
+		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
+		SetActorRotation(AimRot);
+	}
+	*/
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
 	
@@ -84,10 +117,44 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	Shooter = ShootingActor;
 	SetOwner(Shooter);
 	
-	if(TargetLocation.IsZero())
-		TargetLocation = TargetActor->GetActorLocation();
+	if (Target)
+	{
+		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
+		{
+			if (UnitTarget->bUseSkeletalMovement)
+			{
+				// Aim at the actor’s root location
+				TargetLocation = UnitTarget->GetActorLocation();
+			}
+			else if (UnitTarget->ISMComponent)
+			{
+				// Aim at the ISM instance’s world location
+				FTransform InstanceXform;
+				UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+				TargetLocation = InstanceXform.GetLocation();
+			}
+			else
+			{
+				// Fallback
+				TargetLocation = UnitTarget->GetActorLocation();
+			}
+		}
+		else
+		{
+			// Non‐unit targets just give their root location
+			TargetLocation = Target->GetActorLocation();
+		}
+	}
 
-	
+	/*
+	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
+	if (!FlyDir.IsNearlyZero())
+	{
+		// assume you have a FRotator ProjectileRotationOffset member
+		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
+		SetActorRotation(AimRot);
+	}
+	*/
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
 	
@@ -107,6 +174,15 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	Shooter = ShootingActor;
 	TargetLocation = Aim;
 	SetOwner(Shooter);
+
+	/*
+	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
+	if (!FlyDir.IsNearlyZero())
+	{
+		// assume you have a FRotator ProjectileRotationOffset member
+		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
+		SetActorRotation(AimRot);
+	}*/
 	
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
@@ -245,6 +321,52 @@ bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
 
 void AProjectile::FlyToUnitTarget()
 {
+	if (!FollowTarget)
+	{
+		// simple straight‐line fallback
+		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds());
+		return;
+	}
+
+	AUnitBase* UnitTarget = Cast<AUnitBase>(Target);
+	if (UnitTarget && UnitTarget->GetUnitState() != UnitData::Dead)
+	{
+		// choose the “current” target location based on skeletal vs ISM
+		FVector CurrentTargetLoc;
+		if (UnitTarget->bUseSkeletalMovement)
+		{
+			// use the actor’s mesh/capsule location
+			CurrentTargetLoc = UnitTarget->GetActorLocation();
+		}
+		else
+		{
+			FTransform InstanceXform;
+			UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+			CurrentTargetLoc = InstanceXform.GetLocation();
+		}
+
+		// compute direction and move
+		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), CurrentTargetLoc);
+		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
+
+		// check for impact
+		const float Distance = FVector::Dist(GetActorLocation(), CurrentTargetLoc);
+		if (Distance <= MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f)
+		{
+			Impact(Target);
+			Destroy(true, false);
+		}
+	}
+	else
+	{
+		// target is dead or invalid: destroy or switch to fallback
+		Destroy(true, false);
+	}
+}
+/*
+void AProjectile::FlyToUnitTarget()
+{
 	AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
 		
 	if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead && FollowTarget) 
@@ -270,7 +392,7 @@ void AProjectile::FlyToUnitTarget()
 		Impact(Target);
 		Destroy(true, false);
 	}
-}
+}*/
 
 void AProjectile::FlyToLocationTarget()
 {

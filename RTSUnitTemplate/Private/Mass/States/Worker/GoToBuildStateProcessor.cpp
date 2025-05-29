@@ -105,9 +105,10 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
         
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && AIState.StateTimer >= ExecutionInterval*3.f)
+            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
             {
-                AIState.StateTimer = 0.f;
+                //AIState.StateTimer = 0.f;
+                AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
                 StopMovement(MoveTarget, World);
@@ -117,7 +118,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // --- 2. Movement Logic ---
             const float TargetSpeed = Stats.RunSpeed;
             // Use the externally provided helper function
-            UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, TargetSpeed, World);
+            //UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, TargetSpeed, World);
 
         } // End loop through entities
     }); // End ForEachEntityChunk

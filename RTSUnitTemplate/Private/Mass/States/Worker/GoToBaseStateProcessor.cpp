@@ -111,7 +111,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
    
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {
-                AIState.StateTimer = 0.f;
+                //AIState.StateTimer = 0.f;
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
@@ -123,7 +123,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // --- 2. Movement Logic ---
             const float TargetSpeed = CombatStats.RunSpeed; // Get speed from Combat stats
             // Use the externally provided helper function
-            UpdateMoveTarget(MoveTarget,  WorkerStats.BasePosition, TargetSpeed, World);
+            //UpdateMoveTarget(MoveTarget,  WorkerStats.BasePosition, TargetSpeed, World);
 
         } // End loop through entities
     }); // End ForEachEntityChunk

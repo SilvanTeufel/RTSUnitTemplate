@@ -76,7 +76,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
-        
+
+            
             if (StatsFrag.TeamId == 1)
             UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
