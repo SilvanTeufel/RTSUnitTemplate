@@ -69,6 +69,7 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
 
+            /*
             //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -78,7 +79,7 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             const FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentEntity);
             
            const float Now = GetWorld()->GetTimeSeconds();
-           if ((Now - StateFrag->BirthTime) < 1.0f /* or 2.0f */)
+           if ((Now - StateFrag->BirthTime) < 1.0f )
            {
                continue;  // this entity is not yet “1 second old”
            }
@@ -101,6 +102,7 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 CurrentEntity);
             }
         }
+            */
     });
 }
 

@@ -55,8 +55,7 @@ private:
 	  FName SignalName,
 	  TArray<FMassEntityHandle>& Entities
 	);
-
-
+	
 	void SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager);
 
 	UFUNCTION() // Wichtig für Signal-Registrierung per Name oder Delegate

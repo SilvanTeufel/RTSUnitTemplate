@@ -47,6 +47,7 @@ void ULookAtProcessor::ConfigureQueries()
 
 void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+ 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // --- Throttling ---
@@ -72,10 +73,6 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); // ReadOnly access is sufficient
         TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
-
-            // ← HERE: new steering & force views
-        //const TConstArrayView<FMassSteeringFragment> SteeringList  = ChunkContext.GetFragmentView<FMassSteeringFragment>();
-       // const TConstArrayView<FMassForceFragment> ForceList        = ChunkContext.GetFragmentView<FMassForceFragment>();
 
             
         for (int32 i = 0; i < NumEntities; ++i)
@@ -116,7 +113,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             // Reading actor state might have thread-safety implications, but often acceptable.
             FTransform& MassTransform = TransformList[i].GetMutableTransform();
         
-            FVector ActorLocation = MassTransform.GetLocation();
+            FVector ActorLocation = MassTransform.GetLocation(); // Actor->GetActorLocation();
 
 
             float HeightOffset;
@@ -136,7 +133,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             }
 
             
-            
+          
              FCollisionQueryParams Params;
              Params.AddIgnoredActor(UnitBase);
 
@@ -156,10 +153,12 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
                      ActorLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
                  }
              }
+            
 
          
             FVector Dir = TargetLocation - ActorLocation;
-            Dir.Z = ActorLocation.Z; // LookAt in XY plane
+
+            Dir.Z = 0.f;  // LookAt in XY plane
             if (!Dir.Normalize())
             {
                 continue; // Avoid issues with zero direction
@@ -184,9 +183,10 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
  
 
             FTransform FinalActorTransform = FTransform (NewQuat, ActorLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-
             MassTransform.SetRotation(FinalActorTransform.GetRotation());
             MassTransform.SetLocation(FinalActorTransform.GetLocation());
+            
+            //MassTransform.SetLocation(FinalActorTransform.GetLocation());
             //FTransform FinalTransform(SmoothedRotation, ActorLocation, MassTransform.GetScale3D()); // TransformFrag.GetScale3D()
             // --- Check if update is needed and add to list ---
             if (UnitBase) // && !Actor->GetActorTransform().GetRotation().Equals(SmoothedRotation, 0.01f)
@@ -220,4 +220,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             }
         });
     }
+
+
+    
 }

@@ -155,7 +155,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             }
             
             FVector Dir =  (MoveFrag.Center - FinalLocation)*1000.f;
-            Dir.Z = FinalLocation.Z; // LookAt in XY plane
+            Dir.Z = 0.f;  // LookAt in XY plane
             if (!Dir.Normalize())
             {
                 continue; // Avoid issues with zero direction

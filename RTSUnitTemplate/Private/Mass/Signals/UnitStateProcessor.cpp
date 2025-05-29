@@ -370,7 +370,11 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
 	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
                         }
-                        else if (SignalName == UnitSignals::Dead) { EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity); }
+                        else if (SignalName == UnitSignals::Dead)
+                        {
+                        	StateFragment->DeathTime  = World->GetTimeSeconds();
+	                        EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity);
+                        }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
                         	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
@@ -428,7 +432,10 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     	if (SignalName == UnitSignals::Idle) { UnitBase->SetUnitState(UnitData::Idle); }
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
-                        else if (SignalName == UnitSignals::Dead) { UnitBase->SetUnitState(UnitData::Dead); }
+                        else if (SignalName == UnitSignals::Dead)
+                        {
+	                        UnitBase->SetUnitState(UnitData::Dead);
+                        }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
 	                        UnitBase->SetUnitState(UnitData::PatrolIdle);
@@ -1502,6 +1509,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
+						UnitBase->SwitchEntityTagByState(UnitBase->UnitState, UnitBase->UnitStatePlaceholder);
 						StateFrag->SwitchingState = false;
 					}
 				}
@@ -2063,7 +2071,50 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 	});
 }
 
+/*
+void UUnitStateProcessor::HandleSightCount(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	
+	
+	if (!EntitySubsystem) { return; }
+    
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
+	FMassAgentCharacteristicsFragment TargetChar =  EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(Entities[0]);
+	FMassAgentCharacteristicsFragment DetectorChar = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(Entities[1]);
+
+
+	FMassAIStateFragment TargetStats =  EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(Entities[0]);
+	FMassCombatStatsFragment DetectorCombatStats = EntityManager.GetFragmentDataChecked<FMassCombatStatsFragment>(Entities[1]);
+
+
+	if (TargetChar || DetectorChar || TargetStats || DetectorCombatStats) return;
+	
+	int32& DCount = TargetStats.DetectorOverlapsPerTeam.FindOrAdd(DetectorCombatStats.TeamId);
+	int32& TCount = TargetStats.TeamOverlapsPerTeam.FindOrAdd(DetectorCombatStats.TeamId);
+	if (SignalName == UnitSignals::AddSight)
+	{
+		if (DetectorChar.bCanDetectInvisible || !TargetChar.bCanBeInvisible)
+		{
+
+			DCount++;
+		}
+
+		TCount++;
+	}
+
+	if (DCount > 0)
+	{
+		TargetChar.bIsInvisible = false;
+	}
+	else if (TargetChar.bCanBeInvisible)
+	{
+		TargetChar.bIsInvisible = true;
+	}
+	
+}
+
+*/
 void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	if (!EntitySubsystem) 
@@ -2154,7 +2205,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	TArray<FMassEntityHandle>& Entities)
 {
 	const float Now = World->GetTimeSeconds();
-
+	
 	if (!EntitySubsystem) { return; }
     
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -2168,7 +2219,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 		if (StateFragment)
 		{
 			StateFragment->BirthTime = Now;
-
+			
 			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(E);
 	
 			if (ActorFragPtr)

@@ -20,10 +20,12 @@ void UUnitSightProcessor::Initialize(UObject& Owner)
     if (World)
     {
         SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-        EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+        if (!SignalSubsystem) return;
         
-        if (SignalSubsystem)
-        {
+        EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+
+        if (!EntitySubsystem) return;
+
             // Ensure previous handle is removed if Initialize is called multiple times (unlikely for processors, but safe)
             
             if (SignalDelegateHandle.IsValid())
@@ -34,7 +36,7 @@ void UUnitSightProcessor::Initialize(UObject& Owner)
             SignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange)
                                       .AddUObject(this, &UUnitSightProcessor::HandleUnitPresenceSignal);
             //UE_LOG(LogMass, Log, TEXT("UDetectionProcessor bound to signal '%s'"), *UnitSignals::UnitInDetectionRange.ToString());
-        }
+        
     }
 }
 
@@ -46,6 +48,8 @@ void UUnitSightProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 
+    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -57,6 +61,175 @@ void UUnitSightProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArray
     // UE_LOG(LogMass, Verbose, TEXT("HandleUnitPresenceSignal: Received %d entities for signal %s"), Entities.Num(), *SignalName.ToString());
 }
 
+
+void UUnitSightProcessor::Execute(
+    FMassEntityManager&   EntityManager,
+    FMassExecutionContext& Context)
+{
+    // 1) Accumulate time
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return;
+    }
+    TimeSinceLastRun = 0.f;
+
+    // 2) Gather every “alive” entity into a flat array
+    struct FLocalInfo
+    {
+        FMassEntityHandle                           Entity;
+        FVector                                     Location;
+        const FMassCombatStatsFragment*             Stats;   
+        FMassAgentCharacteristicsFragment*          Char;    // <--- mutable pointer
+        FMassAIStateFragment*                       State;
+    };
+    TArray<FLocalInfo> AllEntities;
+    AllEntities.Reserve(256);
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        [&AllEntities, this](FMassExecutionContext& ChunkCtx)
+    {
+        const int32 N = ChunkCtx.GetNumEntities();
+        const auto& Transforms = ChunkCtx.GetFragmentView<FTransformFragment>();
+        const auto& StatsList  = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
+        auto*        StateList = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>().GetData();
+        auto*        CharList  = ChunkCtx.GetMutableFragmentView<FMassAgentCharacteristicsFragment>().GetData();
+
+        for (int32 i = 0; i < N; ++i)
+        {
+            FMassAIStateFragment& State = StateList[i];
+            // skip super-young or long-dead
+            const float Age   = World->GetTimeSeconds() - State.BirthTime;
+            const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
+            if (Age < 1.f || SinceDeath > 4.f)
+            {
+                continue;
+            }
+
+            AllEntities.Add({
+                ChunkCtx.GetEntity(i),
+                Transforms[i].GetTransform().GetLocation(),
+                &StatsList[i],
+                &CharList[i],
+                &StateList[i]
+            });
+        }
+    });
+
+    // 3) Now do your O(M²) pass exactly once over that flat list
+    TArray<FMassEntityHandle>         FogEntities;
+    TArray<FMassSightSignalPayload>   PendingSignals;
+    FogEntities.Reserve(AllEntities.Num());
+    PendingSignals.Reserve(AllEntities.Num() * 2);
+
+    const float Now = World->GetTimeSeconds();
+    for (int32 i = 0; i < AllEntities.Num(); ++i)
+    {
+        const auto& Det = AllEntities[i];
+        FogEntities.Add(Det.Entity);
+
+        for (int32 j = 0; j < AllEntities.Num(); ++j)
+        {
+            if (i == j) continue;
+            const auto& Tgt = AllEntities[j];
+
+            // filter by team
+            if (Det.Stats->TeamId == Tgt.Stats->TeamId) 
+                continue;
+
+            const float DistSqr = FVector::DistSquared(Det.Location, Tgt.Location);
+            if (DistSqr > FMath::Square(Det.Stats->SightRadius)) 
+                continue;
+
+            // accumulate per-detector & per-team overlap counts
+            if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
+            {
+                Tgt.State->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+            }
+
+            //UE_LOG(LogTemp, Log, TEXT("THIS IS IN SIGHT!"));
+            Tgt.State->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+        }
+    }
+
+    // 4) Emit signals & update invisibility
+    for (auto& Detector : AllEntities)
+    {
+        const int32 DetectorTeamId = Detector.Stats->TeamId;
+        
+        for (auto& Target : AllEntities)
+        {
+            if (Target.Stats->TeamId == Detector.Stats->TeamId) continue;
+            
+            const int32 SightCount = Target.State->TeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+   
+        
+            //UE_LOG(LogTemp, Log, TEXT("SightCount: %d"), SightCount);
+            if (SightCount > 0)
+            {
+                PendingSignals.Emplace(Target.Entity, /* detector= */ Detector.Entity, UnitSignals::UnitEnterSight);
+            }
+            else
+            {
+                PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitExitSight);
+            }
+
+       
+            const int32 DetectCount = Target.State->DetectorOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+            if (DetectCount > 0)
+            {
+                Target.Char->bIsInvisible = false;
+            }
+            else if (Target.Char->bCanBeInvisible)
+            {
+                Target.Char->bIsInvisible = true;
+            }
+            // clear for next tick
+        }
+    }
+
+
+    for (auto& Target : AllEntities)
+    {
+        Target.State->TeamOverlapsPerTeam.Empty();
+        Target.State->DetectorOverlapsPerTeam.Empty();
+    }
+    // 5) Update fog mask once
+    if (SignalSubsystem && FogEntities.Num() > 0)
+    {
+        SignalSubsystem->SignalEntities(UnitSignals::UpdateFogMask, FogEntities);
+    }
+
+    // 6) Dispatch sight signals once
+    if (SignalSubsystem && PendingSignals.Num() > 0)
+    {
+
+        /*
+        UE_LOG(LogTemp, Log, TEXT(
+            "UUnitSightProcessor: saw %d detectors, queued %d sight-signals."),
+            AllEntities.Num(), PendingSignals.Num());
+            */
+        TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;
+        AsyncTask(ENamedThreads::GameThread,
+            [SubPtr, Signals = MoveTemp(PendingSignals)]()
+        {
+            if (auto* Sub = SubPtr.Get())
+            {
+                for (auto& P : Signals)
+                {
+                    if (!P.SignalName.IsNone())
+                    {
+                        Sub->SignalEntities(P.SignalName,
+                            { P.TargetEntity, P.DetectorEntity });
+                    }
+                }
+            }
+        });
+    }
+}
+
+
+/*
 void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // 1. Zeit akkumulieren
@@ -163,7 +336,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             for (const FCachedSightData& Target : CachedTargets)
             {
-                if (!Target.bValid || Target.Entity == Detector)
+                if (!Target.bValid || Target.Entity == Detector || (Now - Target.State.DeathTime) > 4.0f)
                 {
                     continue;
                 }
@@ -198,7 +371,7 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
             for (const FCachedSightData& Target : CachedTargets)
             {
-                if (!Target.bValid || Target.Entity == Detector)
+                if (!Target.bValid || Target.Entity == Detector || (Now - Target.State.DeathTime) > 4.0f)
                 {
                     continue;
                 }
@@ -259,6 +432,8 @@ void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
     }
 }
+
+
 /*
 void UUnitSightProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {

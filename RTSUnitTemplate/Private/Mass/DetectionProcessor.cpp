@@ -100,6 +100,175 @@ void UDetectionProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UDetectionProcessor::Execute(
+    FMassEntityManager&   EntityManager,
+    FMassExecutionContext& Context)
+{
+    // 1) Timer
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return;
+    }
+    TimeSinceLastRun = 0.f;
+
+    // 2) Build a flat array of “all my detectors”
+    struct FUnitInfo
+    {
+        FMassEntityHandle                          Entity;
+        FVector                                    Location;
+        FMassAIStateFragment*                      State;
+        FMassAITargetFragment*                     TargetFrag;
+        FMassMoveTargetFragment*                   MoveFrag;
+        const FMassCombatStatsFragment*            Stats;
+        const FMassAgentCharacteristicsFragment*   Char;
+    };
+    TArray<FUnitInfo> Units;
+    Units.Reserve(256);
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+        [&Units, this](FMassExecutionContext& ChunkCtx)
+    {
+        const int32 N = ChunkCtx.GetNumEntities();
+        const auto& Transforms    = ChunkCtx.GetFragmentView<FTransformFragment>();
+        auto*        StateList    = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>().GetData();
+        auto*        TargetList   = ChunkCtx.GetMutableFragmentView<FMassAITargetFragment>().GetData();
+        auto*        MoveList     = ChunkCtx.GetMutableFragmentView<FMassMoveTargetFragment>().GetData();
+        const auto&  StatsList    = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
+        const auto&  CharList     = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+
+        for (int32 i = 0; i < N; ++i)
+        {
+            // skip too‐young
+            const float Age = World->GetTimeSeconds() - StateList[i].BirthTime;
+            if (Age < 1.f) 
+                continue;
+
+            Units.Add({
+                ChunkCtx.GetEntity(i),
+                Transforms[i].GetTransform().GetLocation(),
+                &StateList[i],
+                &TargetList[i],
+                &MoveList[i],
+                &StatsList[i],
+                &CharList[i]
+            });
+        }
+    });
+
+    // 3) For each detector, scan every other unit to pick BestEntity / CurrentStillViable
+    TArray<FMassSignalPayload> PendingSignals;
+    PendingSignals.Reserve(Units.Num());
+
+    for (auto& Det : Units)
+    {
+        const float Now = World->GetTimeSeconds();
+
+        FMassEntityHandle BestEntity;
+        FVector BestLocation = FVector::ZeroVector;
+        bool bFoundNew = false;
+        bool bCurrentStillViable = false;
+        FVector CurrentLocation = FVector::ZeroVector;
+        float ShortestDistSq = FMath::Square(Det.Stats->SightRadius);
+
+        for (auto& Tgt : Units)
+        {
+            if (Tgt.Entity == Det.Entity) 
+                continue;
+
+            // skip friendly
+            if (Tgt.Stats->TeamId == Det.Stats->TeamId) 
+                continue;
+
+            // skip too‐young / too‐old
+            const float TgtAge = Now - Tgt.State->BirthTime;
+            const float SinceDeath = Now - Tgt.State->DeathTime;
+            if (TgtAge < 1.f || SinceDeath > 4.f) 
+                continue;
+
+            // can I attack their type?
+            if ((Det.Char->bCanOnlyAttackGround && Tgt.Char->bIsFlying) ||
+                (Det.Char->bCanOnlyAttackFlying && !Tgt.Char->bIsFlying) ||
+                (Tgt.Char->bIsInvisible && !Det.Char->bCanDetectInvisible))
+            {
+                continue;
+            }
+
+            const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
+            // “new” target if in sight radius and closer than anything before, and alive
+            if (DistSq < ShortestDistSq && Tgt.Stats->Health > 0)
+            {
+                BestEntity     = Tgt.Entity;
+                BestLocation   = Tgt.Location;
+                bFoundNew      = true;
+                ShortestDistSq = DistSq;
+            }
+
+            // “current” target still viable if it’s the same one and within lose‐sight radius
+            if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
+                DistSq < FMath::Square(Det.Stats->LoseSightRadius))
+            {
+                CurrentLocation    = Tgt.Location;
+                bCurrentStillViable = true;
+            }
+        }
+
+        // 4) Update target fragment
+        if (bFoundNew)
+        {
+            Det.TargetFrag->TargetEntity      = BestEntity;
+            Det.TargetFrag->LastKnownLocation = BestLocation;
+            Det.TargetFrag->bHasValidTarget   = true;
+            if (!Det.State->SwitchingState)
+            {
+                PendingSignals.Emplace(Det.Entity, UnitSignals::SetUnitToChase);
+            }
+        }
+        else if (bCurrentStillViable)
+        {
+            Det.TargetFrag->LastKnownLocation = CurrentLocation;
+            Det.TargetFrag->bHasValidTarget   = true;
+        }
+        else
+        {
+            Det.TargetFrag->TargetEntity.Reset();
+            Det.TargetFrag->bHasValidTarget = false;
+            UpdateMoveTarget(
+                *Det.MoveFrag,
+                Det.State->StoredLocation,
+                Det.Stats->RunSpeed,
+                World);
+        }
+
+        // 5) Queue a single state‐change signal
+        /*
+        if (Det.TargetFrag->bHasValidTarget && !Det.State->SwitchingState)
+        {
+            PendingSignals.Emplace(Det.Entity, UnitSignals::SetUnitToChase);
+        }*/
+    }
+
+    // 6) Dispatch all signals at once
+    if (!PendingSignals.IsEmpty() && SignalSubsystem)
+    {
+        TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;
+        AsyncTask(ENamedThreads::GameThread,
+            [SubPtr, Signals = MoveTemp(PendingSignals)]()
+        {
+            if (auto* Sub = SubPtr.Get())
+            {
+                for (auto& P : Signals)
+                {
+                    if (!P.SignalName.IsNone())
+                    {
+                        Sub->SignalEntity(P.SignalName, P.TargetEntity);
+                    }
+                }
+            }
+        });
+    }
+}
+/*
 
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
@@ -323,6 +492,7 @@ void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     ReceivedSignalsBuffer.Remove(UnitSignals::UnitInDetectionRange);
     SignaledEntitiesProcessedThisTick.Empty();
 }
+*/
 
 /*
 void UDetectionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)

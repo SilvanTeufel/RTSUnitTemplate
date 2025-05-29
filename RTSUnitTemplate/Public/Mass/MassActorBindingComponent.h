@@ -102,7 +102,7 @@ public:
 	float LoseSightRadius = 2500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
-	float DespawnTime = 4.0f;
+	float DespawnTime = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float IsAttackedDuration = 0.3f;

@@ -184,6 +184,8 @@ struct FMassAIStateFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float BirthTime = TNumericLimits<float>::Max();
 
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float DeathTime = TNumericLimits<float>::Max();
 	/** How many overlaps this target has *per team* (any overlap). */
 	UPROPERTY(VisibleAnywhere, Transient)
 	TMap<int32, int32> TeamOverlapsPerTeam;
@@ -215,7 +217,12 @@ struct FMassAITargetFragment : public FMassFragment
     /** Gibt an, ob aktuell ein gültiges Ziel verfolgt/angevisiert wird. Wird von einem TargetAcquisitionProcessor gesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasValidTarget = false;
+	
+	/** The set of entities this detector currently believes it can see. */
+	TSet<FMassEntityHandle> PreviouslySeen;
 
+	/** The set we’ll build fresh each tick. */
+	TSet<FMassEntityHandle> CurrentlySeen;
 };
 
 //----------------------------------------------------------------------//
