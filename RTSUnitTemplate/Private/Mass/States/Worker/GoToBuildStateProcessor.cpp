@@ -36,6 +36,15 @@ void UGoToBuildStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);       // For speed
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::All);
 
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+
+    EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -96,7 +105,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
                  PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
-                 StopMovement(MoveTarget, World);
+                 //StopMovement(MoveTarget, World);
                  continue;
             }
 
@@ -111,7 +120,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
-                StopMovement(MoveTarget, World);
+                //StopMovement(MoveTarget, World);
                 continue;
             }
             

@@ -31,6 +31,15 @@ void UBuildStateProcessor::ConfigureQueries()
     // State Tag
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::All);
 
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+
+    EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -72,7 +81,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             FMassAIStateFragment& AIState = AIStateList[i];
             const FMassEntityHandle Entity = Context.GetEntity(i);
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
-            // --- Pre-check ---
+            // --- Pre-checs ---
             // Basic validation of essential build parameter. More robust validation assumed external.
             if (WorkerStats.BuildingAvailable && !AIState.SwitchingState) // Check if Building is allready set
             {

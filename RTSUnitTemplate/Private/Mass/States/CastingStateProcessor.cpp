@@ -43,7 +43,7 @@ void UCastingStateProcessor::Initialize(UObject& Owner)
 
 void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
+    // QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
 	
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)

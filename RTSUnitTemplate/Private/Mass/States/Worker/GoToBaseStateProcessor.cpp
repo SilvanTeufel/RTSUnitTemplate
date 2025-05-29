@@ -34,6 +34,16 @@ void UGoToBaseStateProcessor::ConfigureQueries()
     // State Tag
     EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::All);
 
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+
+    EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -65,24 +75,23 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
+        
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
-        const TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
         const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetFragmentView<FMassWorkerStatsFragment>();
         const TConstArrayView<FMassCombatStatsFragment> CombatStatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
-
+      
         const int32 NumEntities = Context.GetNumEntities();
 
+            UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
             const FTransform& CurrentTransform = TransformList[i].GetTransform();
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
-            const FMassCombatStatsFragment& CombatStats = CombatStatsList[i];
             FMassAIStateFragment& AIState = AIStateList[i];
 
             // Increment state timer
@@ -97,7 +106,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             {
                  AIState.SwitchingState = true;
                  PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate fallback signal FName
-                 StopMovement(MoveTarget, World);
+                 //StopMovement(MoveTarget, World);
                  continue;
             }
 
@@ -107,7 +116,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             //const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
 
             //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
-            PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
+            // PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
    
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {
@@ -115,17 +124,15 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
-                StopMovement(MoveTarget, World);
+               // StopMovement(MoveTarget, World);
                 continue;
             }
             
 
             // --- 2. Movement Logic ---
-            const float TargetSpeed = CombatStats.RunSpeed; // Get speed from Combat stats
             // Use the externally provided helper function
-            //UpdateMoveTarget(MoveTarget,  WorkerStats.BasePosition, TargetSpeed, World);
-
         } // End loop through entities
+            
     }); // End ForEachEntityChunk
 
     // --- Schedule Game Thread Task to Send Queued Signals ---

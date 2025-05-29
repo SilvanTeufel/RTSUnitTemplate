@@ -455,6 +455,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
 	                        UnitBase->SetUnitState(UnitData::GoToBase);
                         	UpdateWorkerMovement(Entity,UnitBase);
+                        	UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!UnitData::GoToBase!!!!!!!!!!!!!!"));
                         }
                     	else if (SignalName == UnitSignals::GoToBuild )
                     	{
@@ -729,10 +730,13 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
         	
-        	if (WorkerStats && WorkerStats->UpdateMovement && WorkerStats->BasePosition != FVector::ZeroVector)
+        	if (WorkerStats && WorkerStats->UpdateMovement)
         	{
         		UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
-        		WorkerStats->UpdateMovement = false;
+
+        		if (WorkerStats->BasePosition != FVector::ZeroVector &&
+        			WorkerStats->ResourcePosition != FVector::ZeroVector)
+        			WorkerStats->UpdateMovement = false;
         	}
             // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
             if (CombatStatsFrag && AttributeSet)
@@ -1444,6 +1448,7 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
+		HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  EntitiesCopy);
 		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
 		{
 			// Check entity validity *on the game thread*
@@ -1461,12 +1466,14 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase && IsValid(UnitBase->ResourcePlace))
+					if (UnitBase) //  && IsValid(UnitBase->ResourcePlace)
 					{
-						SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
-						UnitBase->UnitControlTimer = 0;
-						UnitBase->SetUEPathfinding = true;
+						//SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						//UnitBase->UnitControlTimer = 0;
+						//UnitBase->SetUEPathfinding = true;
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
+
+						
 					}
 				}
 			}
@@ -2229,7 +2236,9 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	if (!EntitySubsystem) { return; }
     
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	
+
+
+	TArray<FMassEntityHandle> Worker;
 	for (FMassEntityHandle& E : Entities)
 	{
 		;
@@ -2286,6 +2295,10 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
+				if (Unit->IsWorker)
+				{
+					Worker.Emplace(E);
+				}
 				
 				if (TransformFragPtr)
 				{
@@ -2319,6 +2332,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 			}
 		}
 	}
+
+	HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  Worker);
 }
 
 

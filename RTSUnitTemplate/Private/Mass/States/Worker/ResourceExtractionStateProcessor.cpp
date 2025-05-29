@@ -34,12 +34,20 @@ void UResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);     // Read/Write StateTimer
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);   // Read ResourceExtractionTime
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);      // Read target validity (bHasValidTarget) and target entity handle if needed
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);     // Write Velocity to stop movement
+   // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);     // Write Velocity to stop movement
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     // Ensure all entities processed by this will have these fragments.
     // Consider adding EMassFragmentPresence::All checks if necessary,
     // though processors usually run *after* state setup ensures fragments exist.
 
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+
+    EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -51,7 +59,7 @@ void UResourceExtractionStateProcessor::Initialize(UObject& Owner)
 
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    QUICK_SCOPE_CYCLE_COUNTER(STAT_UResourceExtractionStateProcessor_Execute);
+   // QUICK_SCOPE_CYCLE_COUNTER(STAT_UResourceExtractionStateProcessor_Execute);
     
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
@@ -60,61 +68,71 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
     }
     TimeSinceLastRun -= ExecutionInterval;
     
-    UWorld* World = EntityManager.GetWorld(); // Get World via EntityManager
-    if (!World) return;
-    
     if (!SignalSubsystem) return;
     
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager)); // Optional pre-allocation
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
-        [this, World, &PendingSignals](FMassExecutionContext& ChunkContext)
+        [this,  &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
 
         const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
-        const auto AiTargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>(); // Using FMassAITargetFragment
-        const auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-        const auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        //const auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 
+            UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
-            const FMassAITargetFragment& AiTargetFrag = AiTargetList[i]; // Get the AI Target fragment
-            FMassVelocityFragment& Velocity = VelocityList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+          //  FMassVelocityFragment& Velocity = VelocityList[i];
+    ;
 
             // --- 2. Stop Movement ---
             // Ensure the worker isn't moving while extracting
-            Velocity.Value = FVector::ZeroVector;
-
-            if (!WorkerStatsFrag.ResourceAvailable)
+           // Velocity.Value = FVector::ZeroVector;
+        /*
+            if (!WorkerStatsFrag.ResourceAvailable && !StateFrag.SwitchingState)
             {
+                StateFrag.SwitchingState = true;
                 // Target is lost or invalid. Signal to go idle or find a new task.
                 PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
-                StopMovement(MoveTarget, World); // Stop current movement
+                //StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
-            
+            */
             // --- 3. Increment Extraction Timer ---
             StateFrag.StateTimer += ExecutionInterval;
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
             // --- 4. Check if Extraction Time Elapsed ---
-            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime)
+           
+            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
             {
-                StateFrag.StateTimer = 0.f;
-                PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
+                StateFrag.SwitchingState = true;
+                //StateFrag.StateTimer = 0.f;
+               PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
                 continue; // Move to next entity
             }
 
+/*
+            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                // Target is lost or invalid. Signal to go idle or find a new task.
+                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
+                //StopMovement(MoveTarget, World); // Stop current movement
+                continue;
+            }
+*/
+            
             // --- Still Extracting ---
             // Keep velocity zeroed (already done above) and let the timer continue.
         }
+            
     }); // End ForEachEntityChunk
 
 

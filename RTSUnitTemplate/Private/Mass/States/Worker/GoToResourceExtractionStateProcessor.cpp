@@ -17,7 +17,7 @@ UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void UGoToResourceExtractionStateProcessor::ConfigureQueries()
@@ -33,6 +33,15 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // Might read velocity to see if stuck? Optional.
 
+
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+
+    EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -44,8 +53,9 @@ void UGoToResourceExtractionStateProcessor::Initialize(UObject& Owner)
 
 void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
-
+    //QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
+    //TRACE_CPUPROFILER_EVENT_SCOPE(UGoToResourceExtractionStateProcessor_Execute);
+    
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -53,46 +63,43 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     }
     TimeSinceLastRun -= ExecutionInterval;
     
-    UWorld* World = Context.GetWorld(); // Get World via Context
-    if (!World) return;
+    //UWorld* World = Context.GetWorld(); // Get World via Context
+   // if (!World) return;
 
     if (!SignalSubsystem) return;
-
 
     
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(EntityManager, Context,
         // Capture World for helper functions
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
-
-        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+            
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
-        const auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
+            UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
+
+            
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            const FMassAITargetFragment& AiTargetFrag = TargetList[i];
             FMassAIStateFragment& AIState = AIStateList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
-            const FMassCombatStatsFragment& CombatStatsFrag = CombatStatsList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
             AIState.StateTimer += ExecutionInterval;
             // --- 1. Check Target Validity ---
+
+   
             if (!WorkerStatsFrag.ResourceAvailable)
             {
                 // Target is lost or invalid. Signal to go idle or find a new task.
                 PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
-                StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
 
@@ -101,15 +108,9 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
-               // AIState.StateTimer = 0.f;
-                // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
-                StopMovement(MoveTarget, World);
-                //continue;
             }
-            // --- 4. Update Movement (If Not Arrived) ---
-            // Continue moving towards the target resource node location.
-            //UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStatsFrag.RunSpeed, World);
+            
         }
     }); // End ForEachEntityChunk
 
