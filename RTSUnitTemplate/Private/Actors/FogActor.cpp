@@ -54,7 +54,9 @@ void AFogActor::InitFogMaskTexture()
 
 	FogMaskTexture->SRGB = false;
 	FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
-	FogMaskTexture->MipGenSettings = TMGS_NoMipmaps;
+//#if WITH_EDITORONLY_DATA
+	//FogMaskTexture->MipGenSettings = TMGS_NoMipmaps;
+//#endif
 	FogMaskTexture->AddToRoot();
 	FogMaskTexture->UpdateResource();
 

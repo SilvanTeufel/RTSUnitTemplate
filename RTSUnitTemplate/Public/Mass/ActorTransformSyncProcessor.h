@@ -19,19 +19,19 @@ class RTSUNITTEMPLATE_API UActorTransformSyncProcessor : public UMassProcessor
 public:
 	UActorTransformSyncProcessor();
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeA = 0.0f;
 	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeB = 0.0f;
 
 	
 	/** Geschwindigkeit, mit der sich der Actor in die Bewegungsrichtung dreht (Grad pro Sekunde). */
-	UPROPERTY(EditDefaultsOnly, Category = "Rotation")
+	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
 	float ActorRotationSpeed = 10*360.0f;
 
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
-	UPROPERTY(EditDefaultsOnly, Category = "Rotation")
+	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
 	float MinMovementDistanceForRotation = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Performance Throttling", meta = (ClampMin = "0.001", UIMin="0.001"))

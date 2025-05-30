@@ -19,7 +19,7 @@ public:
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeA = 0.0f;
 
 private:

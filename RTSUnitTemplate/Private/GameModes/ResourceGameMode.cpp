@@ -513,8 +513,8 @@ void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType R
 		if (Worker && Worker->TeamId == TeamId)
 		{
 			// Cast the Controller property to AWorkingUnitController
-			AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
-			if (WorkerController)
+			//AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
+			//if (WorkerController)
 			{
 				// This worker has a AWorkingUnitController, proceed as needed
 				TeamWorkerCount++;

@@ -27,7 +27,7 @@ protected:
 	// Static name for the signal type for consistency
 	static const FName UnitPresenceSignalName;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.2f;
 	
 private:

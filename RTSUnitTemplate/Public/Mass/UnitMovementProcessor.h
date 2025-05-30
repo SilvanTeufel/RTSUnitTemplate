@@ -75,7 +75,7 @@ protected:
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
     virtual void Initialize(UObject& Owner) override; // Falls du es überschreibst
 
-    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
 
    // void RequestPathfindingAsync(FMassEntityHandle Entity, const FVector& StartLocation, const FVector& EndLocation, ANavigationData* NavData, TSharedPtr<const FNavigationQueryFilter> QueryFilter); // Verwende TSharedPtr für Filter
