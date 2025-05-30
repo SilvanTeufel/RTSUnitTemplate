@@ -95,7 +95,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             // --- 2. Stop Movement ---
             // Ensure the worker isn't moving while extracting
            // Velocity.Value = FVector::ZeroVector;
-        /*
+       
             if (!WorkerStatsFrag.ResourceAvailable && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
@@ -104,7 +104,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                 //StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
-            */
+            
             // --- 3. Increment Extraction Timer ---
             StateFrag.StateTimer += ExecutionInterval;
             PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
@@ -114,21 +114,9 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             {
                 StateFrag.SwitchingState = true;
                 //StateFrag.StateTimer = 0.f;
-               PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
+                PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
                 continue; // Move to next entity
             }
-
-/*
-            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
-            {
-                StateFrag.SwitchingState = true;
-                // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
-                //StopMovement(MoveTarget, World); // Stop current movement
-                continue;
-            }
-*/
-            
             // --- Still Extracting ---
             // Keep velocity zeroed (already done above) and let the timer continue.
         }

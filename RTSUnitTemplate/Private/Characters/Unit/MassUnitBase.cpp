@@ -3,6 +3,7 @@
 
 #include "Characters/Unit/MassUnitBase.h"
 
+#include "MassSignalSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 
@@ -97,6 +98,7 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
+	UE_LOG(LogTemp, Warning, TEXT("!!SwitchEntityTagByState!!!"));
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -200,13 +202,28 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 		return false;
 	}
 	
-	
 	SetUnitState(UnitState);
+	
 	EntityManager->AddTagToEntity(EntityHandle, NewTag);
 	if (SecondTag != nullptr)
 	{
 		EntityManager->AddTagToEntity(EntityHandle, SecondTag);
 	}
+
+	if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!!SEND SIGNAL!!!"));
+		SignalSubsystem->SignalEntity(UnitSignals::SyncUnitBase, EntityHandle);
+	}
+	/*
+	if (IsWorker)
+	{
+		if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("!!SEND SIGNAL!!!"));
+			SignalSubsystem->SignalEntity(UnitSignals::UpdateWorkerMovement, EntityHandle);
+		}
+	}*/
 
 	return true;
 }
@@ -302,6 +319,14 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	
 	EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
 	// Like AddTag, RemoveTag doesn't return status. Assume success if code reached here.
+
+	if (IsWorker)
+	{
+		if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
+		{
+			SignalSubsystem->SignalEntity(UnitSignals::UpdateWorkerMovement, EntityHandle);
+		}
+	}
 	return true;
 }
 

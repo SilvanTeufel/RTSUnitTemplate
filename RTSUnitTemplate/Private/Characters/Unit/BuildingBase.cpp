@@ -160,6 +160,7 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 
 	UnitBase->SetUEPathfinding = true;
 	UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+	UnitBase->SwitchEntityTagByState(UnitData::GoToResourceExtraction, UnitBase->UnitStatePlaceholder);
 }
 
 bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
@@ -194,6 +195,7 @@ bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* Reso
 		UnitBase->BuildArea->ControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBuild);
+		UnitBase->SwitchEntityTagByState(UnitData::GoToBuild, UnitBase->UnitStatePlaceholder);
 		return true;
 	}
 	

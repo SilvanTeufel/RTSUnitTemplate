@@ -313,6 +313,7 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	
 	UnitBase->SetUEPathfinding = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
+	Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
 }
 
 bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
@@ -345,6 +346,7 @@ bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		Worker->BuildArea->ControlTimer = 0.f;
 		UnitBase->SetUEPathfinding = true;
 		Worker->SetUnitState(UnitData::GoToBuild);
+		Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
 	} else
 	{
 		return false;
@@ -393,9 +395,15 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		{
 			UnitBase->SetUEPathfinding = true;
 			if(Worker->WorkResource)
+			{
 				Worker->SetUnitState(UnitData::GoToBase);
+				Worker->SwitchEntityTagByState(UnitData::GoToBase, Worker->UnitStatePlaceholder);
+			}
 			else
+			{
 				Worker->SetUnitState(UnitData::GoToResourceExtraction);
+				Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
+			}
 		}
 
 }

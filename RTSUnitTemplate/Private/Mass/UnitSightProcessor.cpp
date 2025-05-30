@@ -11,6 +11,7 @@ UUnitSightProcessor::UUnitSightProcessor()
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Standalone);
+    bRequiresGameThreadExecution = true;
 }
 
 void UUnitSightProcessor::Initialize(UObject& Owner)
@@ -46,6 +47,7 @@ void UUnitSightProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
@@ -82,6 +84,7 @@ void UUnitSightProcessor::Execute(
         const FMassCombatStatsFragment*             Stats;   
         FMassAgentCharacteristicsFragment*          Char;    // <--- mutable pointer
         FMassAIStateFragment*                       State;
+        FMassSightFragment*                         Sight;
     };
     TArray<FLocalInfo> AllEntities;
     AllEntities.Reserve(256);
@@ -93,6 +96,7 @@ void UUnitSightProcessor::Execute(
         const auto& Transforms = ChunkCtx.GetFragmentView<FTransformFragment>();
         const auto& StatsList  = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
         auto*        StateList = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>().GetData();
+        auto*        SightList = ChunkCtx.GetMutableFragmentView<FMassSightFragment>().GetData();
         auto*        CharList  = ChunkCtx.GetMutableFragmentView<FMassAgentCharacteristicsFragment>().GetData();
 
         for (int32 i = 0; i < N; ++i)
@@ -111,7 +115,8 @@ void UUnitSightProcessor::Execute(
                 Transforms[i].GetTransform().GetLocation(),
                 &StatsList[i],
                 &CharList[i],
-                &StateList[i]
+                &StateList[i],
+                &SightList[i]
             });
         }
     });
@@ -144,11 +149,11 @@ void UUnitSightProcessor::Execute(
             // accumulate per-detector & per-team overlap counts
             if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
             {
-                Tgt.State->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+                Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
             }
 
             //UE_LOG(LogTemp, Log, TEXT("THIS IS IN SIGHT!"));
-            Tgt.State->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+            Tgt.Sight->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
         }
     }
 
@@ -161,7 +166,7 @@ void UUnitSightProcessor::Execute(
         {
             if (Target.Stats->TeamId == Detector.Stats->TeamId) continue;
             
-            const int32 SightCount = Target.State->TeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+            const int32 SightCount = Target.Sight->TeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
    
         
             //UE_LOG(LogTemp, Log, TEXT("SightCount: %d"), SightCount);
@@ -175,7 +180,7 @@ void UUnitSightProcessor::Execute(
             }
 
        
-            const int32 DetectCount = Target.State->DetectorOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+            const int32 DetectCount = Target.Sight->DetectorOverlapsPerTeam.FindOrAdd(DetectorTeamId);
             if (DetectCount > 0)
             {
                 Target.Char->bIsInvisible = false;
@@ -191,8 +196,8 @@ void UUnitSightProcessor::Execute(
 
     for (auto& Target : AllEntities)
     {
-        Target.State->TeamOverlapsPerTeam.Empty();
-        Target.State->DetectorOverlapsPerTeam.Empty();
+        Target.Sight->TeamOverlapsPerTeam.Empty();
+        Target.Sight->DetectorOverlapsPerTeam.Empty();
     }
     // 5) Update fog mask once
     if (SignalSubsystem && FogEntities.Num() > 0)

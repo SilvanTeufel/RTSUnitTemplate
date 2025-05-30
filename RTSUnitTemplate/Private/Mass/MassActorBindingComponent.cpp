@@ -167,6 +167,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     
     	
 		FMassAIStateFragment::StaticStruct(),
+    	FMassSightFragment::StaticStruct(),
 		FMassAITargetFragment::StaticStruct(), 
 		FMassCombatStatsFragment::StaticStruct(), 
 		FMassAgentCharacteristicsFragment::StaticStruct(), 
@@ -409,6 +410,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
     
     	
 		FMassAIStateFragment::StaticStruct(),
+    	FMassSightFragment::StaticStruct(),
 		FMassAITargetFragment::StaticStruct(), 
 		FMassCombatStatsFragment::StaticStruct(), 
 		FMassAgentCharacteristicsFragment::StaticStruct(), 

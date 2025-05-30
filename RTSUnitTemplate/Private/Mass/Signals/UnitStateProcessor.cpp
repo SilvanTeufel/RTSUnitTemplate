@@ -124,6 +124,9 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
 
     	SpawnSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUnitSpawnedSignal));
+
+    	UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
     	
     }
 }
@@ -286,6 +289,14 @@ void UUnitStateProcessor::BeginDestroy()
             
 		SpawnSignalDelegateHandle.Reset();
 	}
+
+	if (SignalSubsystem && UpdateWorkerMovementDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
+		.Remove(UpdateWorkerMovementDelegateHandle);
+            
+		UpdateWorkerMovementDelegateHandle.Reset();
+	}
 	
     SignalSubsystem = nullptr; // Null out pointers if needed
     EntitySubsystem = nullptr;
@@ -423,8 +434,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::GoToResourceExtraction;
                         	UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
+
+                        	UE_LOG(LogTemp, Log, TEXT("GoToResourceExtraction"));
+		
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
+                        	UE_LOG(LogTemp, Log, TEXT("ResourceExtraction"));
                         	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
                         }
 
@@ -454,19 +469,18 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::GoToBase)
                         {
 	                        UnitBase->SetUnitState(UnitData::GoToBase);
-                        	UpdateWorkerMovement(Entity,UnitBase);
-                        	UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!UnitData::GoToBase!!!!!!!!!!!!!!"));
+                        	UpdateUnitMovement(Entity , UnitBase);
                         }
                     	else if (SignalName == UnitSignals::GoToBuild )
                     	{
                     		UnitBase->SetUnitState(UnitData::GoToBuild);
-                    		UpdateWorkerMovement(Entity,UnitBase);
+                    		UpdateUnitMovement(Entity , UnitBase);
                     	}
                     	else if (SignalName == UnitSignals::Build){ UnitBase->SetUnitState(UnitData::Build); }
                     	else if (SignalName == UnitSignals::GoToResourceExtraction)
                     	{
                     		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
-                    		UpdateWorkerMovement(Entity,UnitBase);
+                    		UpdateUnitMovement(Entity , UnitBase);
                     	}
                     	else if (SignalName == UnitSignals::ResourceExtraction) { UnitBase->SetUnitState(UnitData::ResourceExtraction); }
 
@@ -663,7 +677,7 @@ void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandl
 		// Rufe die Funktion auf, die die eigentliche Arbeit für eine einzelne Entity macht
 		// Die internen Checks (Subsystem, Validität etc.) sind in der Hilfsfunktion enthalten.
 		SynchronizeStatsFromActorToFragment(Entity);
-		//SynchronizeUnitState(Entity);
+		SynchronizeUnitState(Entity);
 	}
 }
 
@@ -805,6 +819,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             	}
 
+            	/*
             	if (WorkerStats && WorkerStats->UpdateMovement)
             	{
             		TArray<FMassEntityHandle> CapturedEntitys;
@@ -815,7 +830,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 					//if (WorkerStats->BasePosition != FVector::ZeroVector &&
 						//WorkerStats->ResourcePosition != FVector::ZeroVector)
 						//WorkerStats->UpdateMovement = false;
-				}
+				}*/
             }
         }
         else
@@ -865,6 +880,8 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         // --- Code in dieser Lambda läuft jetzt im GameThread ---
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
+    	if (!StrongUnitActor->IsWorker) return;
+    		
         if (!EntitySubsystem)
         {
             //UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState (GameThread): EntitySubsystem wurde null!"));
@@ -872,38 +889,29 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         }
         FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
     	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
-    			
-    			if(StrongUnitActor->GetUnitState() == UnitData::PatrolRandom && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())){ //  && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())
-    				//UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState! To PatrolRandom"));
 
-    				// --- Hole benötigte Fragmente für DIESE Entity ---
-					FMassAIStateFragment* StateFragPtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
-					FMassPatrolFragment* PatrolFragPtr = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
-					FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
-					FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
 
-					// Prüfe, ob alle nötigen Fragmente vorhanden sind
-					if (!StateFragPtr || !PatrolFragPtr || !MoveTargetPtr || !StatsFragPtr)
-					{
-						return;
-					}
-    				UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-					if (!NavSys) {  return; }
-        	
-    				// Dereferenziere Pointer für einfacheren Zugriff
-					FMassAIStateFragment& StateFrag = *StateFragPtr;
-					FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
-					FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
-					const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
-        	
-					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
-					SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, CapturedEntity);
-					StateFrag.StateTimer = 0.f;
-    				//SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
+				TArray<FMassEntityHandle> CapturedEntitys;
+				CapturedEntitys.Emplace(CapturedEntity);
+				//HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+				//UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
+    			UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+    			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
+    			}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
+    				State->StateTimer = 0.f;
+    				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
+    			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
+					State->StateTimer = 0.f;
+					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
+    			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
+    			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
 				}
-				else if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
 
-					//UE_LOG(LogTemp, Log, TEXT("Calling UnitData::PatrolIdle!"));
+    	/*
+				if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
 					SwitchState(UnitSignals::PatrolIdle, CapturedEntity, GTEntityManager);
 				}
 				else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
@@ -913,12 +921,13 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 				   SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
 				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-						State->StateTimer = 0.f;
+					State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
 				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
 					State->StateTimer = 0.f;
 				   SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
 				}
+    	*/
 			//}
         //}
     }); // Ende AsyncTask Lambda
@@ -1470,9 +1479,9 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase && UnitBase->ResourcePlace && UnitBase->ResourcePlace->WorkResourceClass)
+					if (UnitBase && UnitBase->ResourcePlace && IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->WorkResourceClass)
 					{
-						// SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 						//UnitBase->UnitControlTimer = 0;
 						//UnitBase->SetUEPathfinding = true;
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
@@ -1537,11 +1546,14 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
+						
+						UpdateUnitMovement(Entity , UnitBase);
 
-					
-						UpdateWorkerMovement(Entity , UnitBase);
+						//SwitchState( UnitSignals::GoToBase, Entity, EntityManager);
 						UnitBase->SwitchEntityTagByState(UnitBase->UnitState, UnitBase->UnitStatePlaceholder);
 						StateFrag->SwitchingState = false;
+						
+						
 					}
 				}
 			}
@@ -2440,36 +2452,115 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 }
 
 
-void UUnitStateProcessor::UpdateWorkerMovement(
-	FMassEntityHandle& E, AUnitBase* Unit)
+void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 
-	if (!EntitySubsystem) { return; }
-    
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	
-	if (Unit->IsWorker)
+
+	// **Keep initial checks outside AsyncTask if possible and thread-safe**
+	if (!EntitySubsystem)
 	{
-		FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(E);
-		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(E);
-		const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+		// Log error - This check itself is generally safe
+		return;
+	}
+    
+	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+    
+	//AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+	//{
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+    
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    
+		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
+		{
+			// Check entity validity *on the game thread*
+			if (!EntityManager.IsEntityValid(Entity)) 
+			{
+				continue;
+			}
+			
+			
+			SynchronizeStatsFromActorToFragment(Entity);
+			// 4. Call the target method. This is now safe because:
+			//    - We are on the Game Thread.
+			//    - We have validated Worker and Worker->ResourcePlace pointers.
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			if (ActorFragPtr)
+			{
+				AActor* Actor = ActorFragPtr->GetMutable(); 
+				if (IsValid(Actor))
+				{
+					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+					if (UnitBase && UnitBase->IsWorker)
+					{
+						FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity);
+						FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+						const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+
+						if (!WorkerStatsFrag || !MoveTargetPtr || !StatsFragPtr) return;
+						
+						FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr;
+						const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
+				
+						if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
+						{
+							UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
+						}else if (UnitBase->UnitState == UnitData::GoToBase)
+						{
+							TArray<FMassEntityHandle> CapturedEntitys;
+							CapturedEntitys.Emplace(Entity);
+							HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+		
+							if (UnitBase->WorkResource)
+							UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
+						}else if (UnitBase->UnitState == UnitData::GoToBuild)
+						{
+							UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition,  StatsFrag.RunSpeed, World);
+						}
+					}
+				}
+			}
+		}
+	//});
+}
+
+void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase)
+{
+	
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	if (!EntityManager.IsEntityValid(Entity)) 
+	{
+		return;
+	}
+	
+	if (UnitBase && UnitBase->IsWorker)
+	{
+		FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity);
+		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+		const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
 
 		if (!WorkerStatsFrag || !MoveTargetPtr || !StatsFragPtr) return;
-						
+
+		SynchronizeStatsFromActorToFragment(Entity);
+		
 		FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr;
 		const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
-		
-		if (Unit->UnitState == UnitData::GoToResourceExtraction)
+				
+		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToResourceExtraction!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
-		}else if (Unit->UnitState == UnitData::GoToBase)
+		}else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToBase!!!!!!!!!!!!!!!!!!!!!!!!!!"));
+			TArray<FMassEntityHandle> CapturedEntitys;
+			CapturedEntitys.Emplace(Entity);
+			HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 			UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
-		}else if (Unit->UnitState == UnitData::GoToBuild)
+		}else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToBuild!!!!!!!!!!!!!!!!!!!!!!!!!!"));
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition,  StatsFrag.RunSpeed, World);
 		}
 	}

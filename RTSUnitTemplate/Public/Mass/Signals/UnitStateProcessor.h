@@ -223,6 +223,12 @@ private:
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
+
+	FDelegateHandle UpdateWorkerMovementDelegateHandle;
+	
 	UFUNCTION()
-	void UpdateWorkerMovement(FMassEntityHandle& E, AUnitBase* Unit);
+	void UpdateWorkerMovement(FName SignalName, TArray<FMassEntityHandle>& Entities);
+	
+	UFUNCTION()
+	void UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
 };
