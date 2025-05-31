@@ -813,7 +813,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 			
 				UnitBase->InitializeAttributes();
 			
-				UnitBase->MassActorBindingComponent->SetupMassOnUnit();
+				//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 				int32 Index;
 				
 				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);

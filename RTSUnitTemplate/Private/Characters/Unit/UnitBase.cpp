@@ -1089,7 +1089,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			 UnitTransform
 			);
 			
-			UnitBase->MassActorBindingComponent->SetupMassOnUnit();
+			//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 
 			UnitBase->InitializeAttributes();
 			UnitBase->SquadId = GameMode->HighestSquadId;
