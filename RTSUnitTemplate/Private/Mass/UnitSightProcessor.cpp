@@ -5,6 +5,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/DetectionProcessor.h"
 #include "Mass/Signals/MySignals.h"
+#include "Async/Async.h"
 
 UUnitSightProcessor::UUnitSightProcessor()
 {

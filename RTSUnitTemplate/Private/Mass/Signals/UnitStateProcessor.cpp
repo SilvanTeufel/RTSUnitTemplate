@@ -29,6 +29,7 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/GameViewportClient.h"
 #include "Mass/States/ChaseStateProcessor.h"
+#include "Async/Async.h"
 
 UUnitStateProcessor::UUnitStateProcessor()
 {

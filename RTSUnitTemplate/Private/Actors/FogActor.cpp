@@ -4,6 +4,8 @@
 #include "Actors/FogActor.h"
 
 #include "MassActorSubsystem.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
 // Sets default values

@@ -11,6 +11,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "Async/Async.h"
 
 // ...
 

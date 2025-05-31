@@ -15,6 +15,7 @@
 
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "Async/Async.h"
 
 
 UChaseStateProcessor::UChaseStateProcessor()

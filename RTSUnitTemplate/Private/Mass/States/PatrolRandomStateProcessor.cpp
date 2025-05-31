@@ -13,6 +13,7 @@
 #include "Characters/Unit/UnitBase.h" // Für Cast
 #include "Actors/Waypoint.h"      // Für Waypoint-Interaktion (falls noch nötig)
 #include "Mass/Signals/MySignals.h"
+#include "Async/Async.h"
 
 UPatrolRandomStateProcessor::UPatrolRandomStateProcessor()
 {

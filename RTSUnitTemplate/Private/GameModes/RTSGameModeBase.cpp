@@ -237,6 +237,7 @@ void ARTSGameModeBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & 
 	//DOREPLIFETIME(ARTSGameModeBase, SpawnTimerHandleMap);
 	DOREPLIFETIME(ARTSGameModeBase, TimerIndex);
 	DOREPLIFETIME(ARTSGameModeBase, AllUnits);
+	DOREPLIFETIME(ARTSGameModeBase, CameraUnits);
 }
 
 int32 FindMatchingIndex(const TArray<int32>& IdArray, int32 SearchId)

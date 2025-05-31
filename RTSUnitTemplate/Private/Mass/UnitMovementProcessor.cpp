@@ -11,6 +11,7 @@
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
+#include "Async/Async.h"
 
 UUnitMovementProcessor::UUnitMovementProcessor()
 {

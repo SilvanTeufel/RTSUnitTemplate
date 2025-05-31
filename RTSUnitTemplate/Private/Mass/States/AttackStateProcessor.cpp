@@ -13,6 +13,7 @@
 #include "MassArchetypeTypes.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
+#include "Async/Async.h"
 
 
 UAttackStateProcessor::UAttackStateProcessor()

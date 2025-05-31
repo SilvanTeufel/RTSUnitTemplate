@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
+#include "Components/SkeletalMeshComponent.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {

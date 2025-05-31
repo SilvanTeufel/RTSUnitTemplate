@@ -11,6 +11,7 @@
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/Actor.h"
+#include "Async/Async.h"
 
 UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here

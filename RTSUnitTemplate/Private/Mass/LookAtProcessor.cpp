@@ -9,6 +9,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
 #include "Steering/MassSteeringFragments.h"
+#include "Async/Async.h"
 
 ULookAtProcessor::ULookAtProcessor()
 {

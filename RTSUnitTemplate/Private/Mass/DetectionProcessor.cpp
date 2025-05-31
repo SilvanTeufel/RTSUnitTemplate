@@ -9,6 +9,7 @@
 #include "MassSignalTypes.h" 
 #include "MassStateTreeFragments.h"  // For FMassStateDeadTag
 #include "MassNavigationFragments.h" // For FMassAgentCharacteristicsFragment
+#include "Async/Async.h"
 #include "Mass/Signals/UnitSignalingProcessor.h"
 
 
