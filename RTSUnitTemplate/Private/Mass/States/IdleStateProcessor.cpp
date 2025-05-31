@@ -1,5 +1,4 @@
-// In IdleStateProcessor.cpp
-
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/IdleStateProcessor.h" // Dein Prozessor-Header
 
 // Andere notwendige Includes...

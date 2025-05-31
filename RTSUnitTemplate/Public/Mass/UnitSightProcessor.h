@@ -1,3 +1,4 @@
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 // UnitSightProcessor.h
 #pragma once
 

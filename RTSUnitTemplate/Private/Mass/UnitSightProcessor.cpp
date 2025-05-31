@@ -1,3 +1,4 @@
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/UnitSightProcessor.h"
 #include "MassCommonFragments.h"
 #include "MassEntitySubsystem.h"

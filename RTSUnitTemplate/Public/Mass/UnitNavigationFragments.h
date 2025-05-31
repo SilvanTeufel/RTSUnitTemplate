@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#pragma once
 
 #include "MassEntityTypes.h"
 #include "NavigationPath.h" // Required for FNavPathSharedPtr
@@ -22,9 +23,6 @@ struct FUnitNavigationPathFragment : public FMassFragment
 
 	UPROPERTY() 
 	bool bIsPathfindingInProgress = false;
-	// Optional: Add timestamp for replanning if needed later
-	// UPROPERTY()
-	// float LastPathUpdateTime = 0.f;
 
 	/** Reset path data */
 	void ResetPath()
@@ -32,15 +30,10 @@ struct FUnitNavigationPathFragment : public FMassFragment
 		CurrentPath.Reset(); // Clears the shared pointer
 		CurrentPathPointIndex = 0;
 		PathTargetLocation = FVector::ZeroVector;
-		// LastPathUpdateTime = 0.f;
 	}
 
 	bool HasValidPath() const
 	{
-		// FNavPathSharedPtr::IsValid() checks if the shared pointer is not null.
-		// You could potentially add && CurrentPath->IsValid() if the FNavigationPath
-		// object itself has further internal validity checks you want to include,
-		// but checking the pointer is usually the primary step.
 		return CurrentPath.IsValid();
 	}
 };

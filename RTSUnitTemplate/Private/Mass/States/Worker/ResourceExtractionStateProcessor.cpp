@@ -1,5 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/Worker/ResourceExtractionStateProcessor.h" // Header for this processor
 #include "MassExecutionContext.h"
 #include "MassCommonFragments.h"     // For FTransformFragment (if needed later)

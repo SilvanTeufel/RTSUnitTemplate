@@ -1,4 +1,4 @@
-// Header: UnitStateProcessor.h
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"

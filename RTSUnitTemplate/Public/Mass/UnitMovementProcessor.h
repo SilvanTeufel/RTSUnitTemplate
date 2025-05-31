@@ -1,47 +1,4 @@
-
-// Header: UnitMovementProcessor.h
-/*
-#pragma once
-
-#include "CoreMinimal.h"
-#include "MassProcessor.h"
-#include "MassEntityTypes.h"
-#include "UnitMovementProcessor.generated.h"
-
-// Forward Declarations
-class UNavigationSystemV1;
-struct FMassExecutionContext;
-struct FTransformFragment;
-struct FMassVelocityFragment; // Nur noch zum Lesen (optional)
-struct FMassMoveTargetFragment;
-struct FMassNavigationPathFragment; // Pfad-Speicher
-struct FMassSteeringFragment;     // Ausgabe für Lenkung
-struct FMassAgentRadiusFragment;  // Für Radien
-struct FUnitMassTag;
-struct FMassReachedDestinationTag; // Signal-Tag
-
-UCLASS()
-class RTSUNITTEMPLATE_API UUnitMovementProcessor : public UMassProcessor
-{
-    GENERATED_BODY()
-
-public:
-    UUnitMovementProcessor();
-
-protected:
-    virtual void ConfigureQueries() override;
-    virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-
-private:
-    FMassEntityQuery EntityQuery;
-
-    // Akzeptanzradius für Wegpunkte (relativ zum Agentenradius?)
-    UPROPERTY(EditDefaultsOnly, Category = "Movement")
-    float PathWaypointAcceptanceRadiusFactor = 1.5f; // Faktor * AgentRadius
-};
-
-*/
-
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"

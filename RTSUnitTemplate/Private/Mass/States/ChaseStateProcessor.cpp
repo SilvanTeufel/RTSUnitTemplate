@@ -1,3 +1,4 @@
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/ChaseStateProcessor.h" // Passe Pfad an
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"

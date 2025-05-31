@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#pragma once
 
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"

@@ -1,5 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Avoidance/UnitMassStandingAvoidanceProcess.h"
 #include "Avoidance/MassAvoidanceFragments.h"      // For FMassGhostLocationFragment etc.
 #include "MassExecutionContext.h"

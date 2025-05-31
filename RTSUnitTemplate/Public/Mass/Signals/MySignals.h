@@ -1,4 +1,4 @@
-﻿// In UnitSignals.h or a similar header
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h" // Or Engine minimal header
