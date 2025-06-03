@@ -334,6 +334,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsFlying = false;
 
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float FlyHeight = 500.f;
+	
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanOnlyAttackFlying = true;
 

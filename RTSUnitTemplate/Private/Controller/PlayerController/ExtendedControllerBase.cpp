@@ -1784,7 +1784,8 @@ void AExtendedControllerBase::LoadUnits_Implementation(const TArray<AUnitBase*>&
 						// Fallback: if no hit, subtract a default fly height
 						UnitsToLoad[i]->RunLocation = Transporter->GetActorLocation();
 					}
-					
+
+				
 					RightClickRunUEPF(UnitsToLoad[i], UnitsToLoad[i]->RunLocation, true);
 				}
 			}

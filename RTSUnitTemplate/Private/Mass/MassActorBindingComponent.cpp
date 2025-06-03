@@ -123,6 +123,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassUnitSetup = false;
+			bIsMassUnit = true;
 		}
     }
 	
@@ -364,7 +365,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
-			
+			bIsMassUnit = true;
 		}
 	}
 	
@@ -586,8 +587,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         {
             // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
             CharFrag->bIsFlying = UnitOwner->IsFlying; // Assuming direct property access
+        	CharFrag->FlyHeight = UnitOwner->FlyHeight;
             CharFrag->bCanOnlyAttackFlying = UnitOwner->CanOnlyAttackFlying;
-            CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackFlying;
+            CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackGround;
             CharFrag->bIsInvisible = UnitOwner->IsInvisible;
         	CharFrag->bCanBeInvisible = UnitOwner->bCanBeInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;

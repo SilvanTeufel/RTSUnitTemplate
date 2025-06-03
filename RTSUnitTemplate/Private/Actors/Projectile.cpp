@@ -397,7 +397,7 @@ void AProjectile::FlyToUnitTarget()
 void AProjectile::FlyToLocationTarget()
 {
 	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-	AddActorWorldOffset(Direction * MovementSpeed);
+	AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
 }
 
 void AProjectile::Impact(AActor* ImpactTarget)

@@ -35,15 +35,19 @@ protected:
 	UPROPERTY() // Don't save this pointer
 	UMassEntitySubsystem* MassEntitySubsystemCache;
 
+
 	UPROPERTY()
 	bool bNeedsMassUnitSetup = false;
 
 
 	UPROPERTY()
 	bool bNeedsMassBuildingSetup = false;
-
+	
 public:
 
+	UPROPERTY()
+	bool bIsMassUnit = false;
+	
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

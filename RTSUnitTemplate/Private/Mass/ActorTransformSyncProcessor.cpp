@@ -31,6 +31,8 @@ void UActorTransformSyncProcessor::ConfigureQueries()
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -96,6 +98,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
             const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
              const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+            const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+            
             const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -149,7 +153,10 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset)
                 {
-                    FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                    if (!CharList[i].bIsFlying)
+                        FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                    else
+                        FinalLocation.Z = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
                 }
             }
             

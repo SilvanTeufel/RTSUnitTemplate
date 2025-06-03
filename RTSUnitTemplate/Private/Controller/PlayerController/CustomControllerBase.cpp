@@ -222,6 +222,116 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 }
 
+
+void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
+{
+		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
+		{
+
+			// Set up start and end points for the line trace (downward direction)
+			FVector Start = Transporter->GetActorLocation();
+			FVector End = Start - FVector(0.f, 0.f, 10000.f); // Trace far enough downwards
+
+			FHitResult HitResult;
+			FCollisionQueryParams QueryParams;
+			// Ignore the transporter itself
+			QueryParams.AddIgnoredActor(Transporter);
+
+			// Perform the line trace on a suitable collision channel, e.g., ECC_Visibility or a custom one
+			bool DidHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
+			
+			
+			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
+			{
+				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
+				{
+					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
+					float Distance = FVector::Dist2D(UnitsToLoad[i]->GetActorLocation(), Transporter->GetActorLocation());
+
+					// If the unit is within 250 units, load it instantly.
+					if (Distance <= Transporter->InstantLoadRange)
+					{
+						Transporter->LoadUnit(UnitsToLoad[i]);
+					}
+					else
+					{
+						// Otherwise, set it as ready for transport so it can move towards the transporter.
+						UnitsToLoad[i]->SetRdyForTransport(true);
+					}
+					// Perform the line trace on a suitable collision channel, e.g., ECC_Visibility or a custom one
+					if (DidHit)
+					{
+						// Use the hit location's Z coordinate and keep X and Y from the transporter
+						FVector NewRunLocation = Transporter->GetActorLocation();
+						NewRunLocation.Z = HitResult.Location.Z+50.f;
+						UnitsToLoad[i]->RunLocation = NewRunLocation;
+					}
+					else
+					{
+						// Fallback: if no hit, subtract a default fly height
+						UnitsToLoad[i]->RunLocation = Transporter->GetActorLocation();
+					}
+					
+					if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+					{
+						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
+						CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], UnitsToLoad[i]->RunLocation, Speed, 40.f);
+						SetUnitState_Replication(SelectedUnits[i], 1);
+					}
+					else
+					{
+						RightClickRunUEPF(UnitsToLoad[i], UnitsToLoad[i]->RunLocation, true);
+					}
+				}
+			}
+			
+			SetUnitState_Replication(Transporter,0);
+
+		}else
+		{
+			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
+			{
+				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
+				{
+					UnitsToLoad[i]->SetRdyForTransport(false);
+				}
+			}
+		}
+	
+}
+
+bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
+{
+	if (!Hit_Pawn.bBlockingHit) return false;
+
+
+		AActor* HitActor = Hit_Pawn.GetActor();
+		
+		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
+	
+		LoadUnitsMass(SelectedUnits, UnitBase);
+	
+		if (UnitBase && UnitBase->IsATransporter){
+		
+			TArray<AUnitBase*> NewSelection;
+
+			NewSelection.Emplace(UnitBase);
+			
+			FTimerHandle TimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+				TimerHandle,
+				[this, NewSelection]()
+				{
+					Client_UpdateHUDSelection(NewSelection, SelectableTeamId);
+				},
+				1.0f,  // Delay time in seconds (change as needed)
+				false  // Do not loop
+			);
+			return true;
+		}
+	return false;
+}
+
 void ACustomControllerBase::RightClickPressedMass()
 {
 	
@@ -229,14 +339,14 @@ void ACustomControllerBase::RightClickPressedMass()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
 	
-	if (!CheckClickOnTransportUnit(Hit))
+	if (!CheckClickOnTransportUnitMass(Hit))
 	{
 		if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		{
 			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 			if(!CheckClickOnWorkArea(Hit))
 			{
-				RunUnitsAndSetWaypointsMass(Hit);
+					RunUnitsAndSetWaypointsMass(Hit);
 			}
 		}
 	}
@@ -283,27 +393,50 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				//PlayWaypointSound = true;
 			}else if (IsShiftPressed) {
 				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
-	
+				
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
-				//SelectedUnits[i]->SetUnitState(UnitData::Run);
-				SetUnitState_Replication(SelectedUnits[i], 1);
+
+				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+				{
+					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
+					SetUnitState_Replication(SelectedUnits[i], 1);
+				}
+				else
+				{
+					RightClickRunShift(SelectedUnits[i], RunLocation);
+				}
+				
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
-				//SelectedUnits[i]->SetUnitState(UnitData::Run);
-				SetUnitState_Replication(SelectedUnits[i], 1);
+
+				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+				{
+					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
+					SetUnitState_Replication(SelectedUnits[i], 1);
+				}
+				else
+				{
+					RightClickRunUEPF(SelectedUnits[i], RunLocation, true);
+				}
+				
 				PlayRunSound = true;
 			}
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
-				//SelectedUnits[i]->SetUnitState(UnitData::Run);
-				SetUnitState_Replication(SelectedUnits[i], 1);
+				
+				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+				{
+					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
+					SetUnitState_Replication(SelectedUnits[i], 1);
+				}
+				else
+					RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i);
+				
+				
 				PlayRunSound = true;
 			}
 		}
@@ -368,7 +501,14 @@ void ACustomControllerBase::LeftClickPressedMass()
 				}else
 				{
 					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-					LeftClickAttackMass(SelectedUnits[i], RunLocation, AttackToggled);
+					if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+					{
+						LeftClickAttackMass(SelectedUnits[i], RunLocation, AttackToggled);
+					}else
+					{
+						LeftClickAttack(SelectedUnits[i], RunLocation);
+					}
+					
 					PlayAttackSound = true;
 				}
 			}

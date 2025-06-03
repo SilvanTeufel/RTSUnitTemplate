@@ -51,6 +51,13 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+
+	UFUNCTION(Server, Reliable)
+	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool CheckClickOnTransportUnitMass(FHitResult Hit_Pawn);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressedMass();
 

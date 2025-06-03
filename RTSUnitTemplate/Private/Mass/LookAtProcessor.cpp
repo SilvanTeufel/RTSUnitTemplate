@@ -27,7 +27,7 @@ void ULookAtProcessor::ConfigureQueries()
 
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
     // ← HERE: steering + avoidance forces as inputs
     //EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
@@ -72,7 +72,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); // ReadOnly access is sufficient
         TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
-
+            const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -149,7 +149,10 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
                  float DeltaZ = Hit.ImpactPoint.Z - ActorLocation.Z;
                  if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset)
                  {
-                     ActorLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                     if (!CharList[i].bIsFlying)
+                         ActorLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                     else
+                         ActorLocation.Z = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
                  }
              }
             

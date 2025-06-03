@@ -131,8 +131,8 @@ void AUnitControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >
 
 void AUnitControllerBase::Tick(float DeltaSeconds)
 {
-	// Super::Tick(DeltaSeconds);
-	// UnitControlStateMachine(MyUnitBase, DeltaSeconds);
+	//Super::Tick(DeltaSeconds);
+	UnitControlStateMachine(MyUnitBase, DeltaSeconds);
 }
 
 FRotator AUnitControllerBase::GetControlRotation() const
@@ -231,7 +231,7 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 {
 
 	
-		//UE_LOG(LogTemp, Warning, TEXT("Controller UnitBase->Attributes! %f"), UnitBase->Attributes->GetAttackDamage());
+		// UE_LOG(LogTemp, Warning, TEXT("UnitControlStateMachine"));
 		if(!UnitBase) return;
 		if (!UnitBase->IsInitialized) return;
 	
@@ -322,10 +322,10 @@ void AUnitControllerBase::UnitControlStateMachine(AUnitBase* UnitBase, float Del
 			{
 				if(Debug) UE_LOG(LogTemp, Warning, TEXT("Run"));
 				
-				//if(UnitBase->UEPathfindingUsed)
-					//RunUEPathfinding(UnitBase, DeltaSeconds);
-				//else
-					//Run(UnitBase, DeltaSeconds);
+				if(UnitBase->UEPathfindingUsed)
+					RunUEPathfinding(UnitBase, DeltaSeconds);
+				else
+					Run(UnitBase, DeltaSeconds);
 			}
 		break;
 		case UnitData::Chase:
