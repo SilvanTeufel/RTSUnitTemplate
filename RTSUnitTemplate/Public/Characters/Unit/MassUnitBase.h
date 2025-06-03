@@ -66,6 +66,12 @@ public:
 	
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);
+
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void StartAcceleratingTowardsDestination(const FVector& NewDestination, float NewAccelerationRate, float NewRequiredDistanceToStart);
+
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration);
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
 

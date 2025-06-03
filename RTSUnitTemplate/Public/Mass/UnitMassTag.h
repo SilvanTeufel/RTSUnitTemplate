@@ -50,7 +50,25 @@ USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassHasTargetTag : public FMassTag { GENERATED_BODY() }; // Wenn bHasValidTarget true ist
 USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY() }; // Von Movement gesetzt
 //USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
+USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() }; 
 
+USTRUCT()
+struct FMassChargeTimerFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	// Time when the charge effect should end (using game time seconds)
+	UPROPERTY()
+	float ChargeEndTime = 0.f;
+
+	// The speed the unit should revert to after the charge
+	UPROPERTY()
+	float OriginalDesiredSpeed; // Or just float if you don't use FMassFactor for speed
+
+	// Flag to indicate if the original speed was set (optional, for robustness)
+	UPROPERTY()
+	bool bOriginalSpeedSet = false;
+};
 
 USTRUCT()
 struct FMassWorkerStatsFragment : public FMassFragment

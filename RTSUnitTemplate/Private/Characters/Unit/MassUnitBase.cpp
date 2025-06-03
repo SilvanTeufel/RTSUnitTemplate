@@ -491,3 +491,114 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 		//ISMComponent->MarkRenderStateDirty();
 	}
 }
+
+
+void AMassUnitBase::StartAcceleratingTowardsDestination(const FVector& NewDestination, float NewAccelerationRate, float NewRequiredDistanceToStart)
+{
+	// Don't initiate a charge if the unit is dead.
+	if (GetUnitState() == UnitData::Dead)
+	{
+		return;
+	}
+    
+	// Compute the current distance to the destination.
+	const FVector CurrentLocation = GetActorLocation();
+	const float DistanceToTarget = FVector::Dist(CurrentLocation, NewDestination);
+    
+	// If already close enough, abort the charge.
+	if (DistanceToTarget <= NewRequiredDistanceToStart)
+	{
+		return;
+	}
+    
+	// Compute the direction to the destination.
+	//const FVector Direction = (NewDestination - CurrentLocation).GetSafeNormal();
+
+	//FVector ActorLocation = GetActorLocation();
+	//FVector NewActorLocation = ActorLocation + Direction * NewAccelerationRate;
+	//SetActorLocation(NewActorLocation);
+	//SetTranslationLocation(NewActorLocation);
+
+	Attributes->SetRunSpeed(Attributes->GetRunSpeed()*10);
+	// Here we use LaunchCharacter to give the unit an instantaneous impulse.
+	// The impulse magnitude is based on the provided acceleration rate.
+	// The second and third parameters ensure our launch overrides any existing velocity in the XY and Z axes.
+	//LaunchCharacter(Direction * NewAccelerationRate, true, false);
+	//SetTranslationLocation(NewPosition);
+	//SyncTranslation();
+	// Optionally, if you need to use NewTargetVelocity at some point (for example, to set a maximum speed),
+	// you can consider blending that in based on your game design.
+}
+
+void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration)
+{
+    if (GetUnitState() == UnitData::Dead)
+    {
+        return;
+    }
+
+    FMassEntityManager* EntityManager;
+    FMassEntityHandle EntityHandle;
+
+    if (!GetMassEntityData(EntityManager, EntityHandle))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): StartCharge failed - could not get Mass entity data."), *GetName());
+        return;
+    }
+
+    if (!EntityManager->IsEntityValid(EntityHandle))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): StartCharge failed - entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+        return;
+    }
+
+    // --- 1. Get/Add FMassChargeTimerFragment ---
+    FMassChargeTimerFragment* ChargeTimer = EntityManager->GetFragmentDataPtr<FMassChargeTimerFragment>(EntityHandle);
+    if (!ChargeTimer)
+    {
+        // Add the fragment if it doesn't exist.
+        // Ensure FMassChargeTimerFragment is added to the entity's archetype if it's always needed for charging units,
+        // or add it dynamically here.
+        EntityManager->AddFragmentToEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct());
+        ChargeTimer = EntityManager->GetFragmentDataPtr<FMassChargeTimerFragment>(EntityHandle);
+        if(!ChargeTimer) {
+             UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Failed to add or get FMassChargeTimerFragment for entity %s."), *GetName(), *EntityHandle.DebugGetDescription());
+             return;
+        }
+    }
+
+    // --- 2. Update FMassMoveTargetFragment ---
+    FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
+    if (!MoveTarget)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): StartCharge failed - FMassMoveTargetFragment not found on entity %s."), *GetName(), *EntityHandle.DebugGetDescription());
+        EntityManager->RemoveFragmentFromEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct()); // Clean up
+        return;
+    }
+
+    // Store original speed if not already charging (or if re-triggering should reset it)
+
+
+    MoveTarget->Center = NewDestination;
+    MoveTarget->DesiredSpeed.Set(ChargeSpeed);
+    MoveTarget->SlackRadius = 50.0f;
+    //MoveTarget->Intent = EMassMovementAction::Move;
+
+    // --- 3. Set Charge Timer and Tag ---
+    ChargeTimer->ChargeEndTime = GetWorld()->GetTimeSeconds() + ChargeDuration;
+	ChargeTimer->OriginalDesiredSpeed = Attributes->GetRunSpeed();
+	ChargeTimer->bOriginalSpeedSet = true;
+    // Remove other incompatible state tags and add the FMassStateChargingTag.
+    // This logic should be robust (e.g., use your SwitchEntityTag or similar)
+    // For simplicity, assuming direct add/remove:
+    // EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateRunTag::StaticStruct()); // Example
+    EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct()); // Ensure FMassStateChargingTag is defined
+
+    // Make sure your movement processors (UUnitMovementProcessor) are configured to process entities
+    // with FMassStateChargingTag if they are to move during the charge.
+    // For example, in UUnitMovementProcessor::ConfigureQueries():
+    // EntityQuery.AddTagRequirement<FMassStateChargingTag>(EMassFragmentPresence::Any);
+
+    UE_LOG(LogTemp, Log, TEXT("AMassUnitBase (%s): Entity %s starting charge. Ends at: %.2f. Original Speed: %.2f"),
+        *GetName(), *EntityHandle.DebugGetDescription(), ChargeTimer->ChargeEndTime, ChargeTimer->OriginalDesiredSpeed);
+}

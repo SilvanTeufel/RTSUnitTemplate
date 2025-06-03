@@ -169,7 +169,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	FMassSightFragment::StaticStruct(),
 		FMassAITargetFragment::StaticStruct(), 
 		FMassCombatStatsFragment::StaticStruct(), 
-		FMassAgentCharacteristicsFragment::StaticStruct(), 
+		FMassAgentCharacteristicsFragment::StaticStruct(),
+    	FMassChargeTimerFragment::StaticStruct(),
 
 		FMassWorkerStatsFragment::StaticStruct(),
 		// Actor Representation & Sync
@@ -187,11 +188,14 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
     if (!OutArchetype.IsValid()) return false;
 
-// --- Define and Package Shared Fragment Values ---
+	AUnitBase* MyUnit = Cast<AUnitBase>(MyOwner);
+// --- Define and Package Shared Fragment Values --
+	if (!MyUnit) return false;
+	
 	FMassMovementParameters MovementParamsInstance;
-	MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
+	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()+100.f; //500.0f;     // Set desired value
 	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
-	MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
+	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
 	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
 	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
 	// Ensure values are validated if needed (or use MovementParamsInstance.GetValidated())

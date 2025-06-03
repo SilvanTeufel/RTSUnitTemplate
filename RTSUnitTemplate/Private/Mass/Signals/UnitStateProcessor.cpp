@@ -1052,42 +1052,72 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                             	HealthBarWidget->UpdateWidget();
                             }
                         }
-                    	
-                    	StrongAttacker->ServerMeeleImpactEvent();
-                    	StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
-                    	StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
-                    	
 
+                    	// --- Perform Core Actor Actions ---
+							 StrongAttacker->ServerStartAttackEvent_Implementation();
                     	
-                    	GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
+							 bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->AttackAbilityID, StrongAttacker->AttackAbilities);
 
-                    	UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
-			
-						if (CurrentTargetState != UnitData::Run &&
-							CurrentTargetState != UnitData::Pause &&
-							CurrentTargetState != UnitData::Casting &&
-							CurrentTargetState != UnitData::Rooted &&
-							CurrentTargetState != UnitData::Attack &&
-							CurrentTargetState != UnitData::IsAttacked)
-						{
-          
-                        	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+                    
+							 if (!bIsActivated)
+							 {
+								 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
+							 }
+							 if (!bIsActivated)
+							 {
+								 //if (AttackerRange >= 600.f)
+								 {
+									bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
+								 }
+							 }
+
+
+                    	if (bIsActivated)
+                    	{
+                    		UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 							if (SignalSubsystem)
 							{
-								TargetAIStateFragment->StateTimer = 0.f;
-								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
+					
+								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, AttackerEntity);
+								return;
 							}
-                        }
-                        else if(StrongTarget->GetUnitState() == UnitData::Casting)
-                        {
-                        	TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
-	                        StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime;
-                        }
-                        else if(StrongTarget->GetUnitState() == UnitData::Rooted)
-                        {
-                        	TargetAIStateFragment->StateTimer -= StrongTarget->ReduceRootedTime;
-	                        StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime;
-                        }
+                    	}
+                    		StrongAttacker->ServerMeeleImpactEvent();
+							StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
+							StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
+                    	
+
+                    	
+							GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
+
+							UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
+			
+							if (CurrentTargetState != UnitData::Run &&
+								CurrentTargetState != UnitData::Pause &&
+								CurrentTargetState != UnitData::Casting &&
+								CurrentTargetState != UnitData::Rooted &&
+								CurrentTargetState != UnitData::Attack &&
+								CurrentTargetState != UnitData::IsAttacked)
+							{
+          
+								UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+								if (SignalSubsystem)
+								{
+									TargetAIStateFragment->StateTimer = 0.f;
+									SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
+								}
+							}
+							else if(StrongTarget->GetUnitState() == UnitData::Casting)
+							{
+								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
+								StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime;
+							}
+							else if(StrongTarget->GetUnitState() == UnitData::Rooted)
+							{
+								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceRootedTime;
+								StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime;
+							}
+                    	
                     }
                 }); // End AsyncTask Lambda
              } // End check for valid UnitBase, Target, etc.

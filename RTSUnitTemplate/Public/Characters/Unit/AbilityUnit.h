@@ -39,10 +39,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 200.f);
-
-	UFUNCTION(BlueprintCallable, Category = Ability)
-	void StartAcceleratingTowardsDestination(const FVector& NewDestination, float NewAccelerationRate, float NewRequiredDistanceToStart);
-
+	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingFromDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);
 	
