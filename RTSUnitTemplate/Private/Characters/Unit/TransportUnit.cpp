@@ -139,7 +139,7 @@ void ATransportUnit::UnloadNextUnit()
 			
 			// Apply any additional unload offset.
 			LoadedUnit->SetActorLocation(UnloadLocation + UnloadOffset);
-
+			LoadedUnit->SetTranslationLocation(UnloadLocation + UnloadOffset);
 			// Re-enable collision.
 			//LoadedUnit->SetActorEnableCollision(true);
 			LoadedUnit->SetUnitState(UnitData::Idle);

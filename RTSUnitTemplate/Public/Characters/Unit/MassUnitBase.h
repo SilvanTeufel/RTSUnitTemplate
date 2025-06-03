@@ -61,6 +61,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SyncTranslation();
 
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetTranslationLocation(FVector NewLocation);
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);
 	

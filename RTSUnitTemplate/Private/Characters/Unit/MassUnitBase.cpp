@@ -443,6 +443,45 @@ bool AMassUnitBase::SyncTranslation()
 	return true;
 }
 
+
+bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle   EntityHandle;
+
+	// Grab our Mass entity data
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// already logged in GetMassEntityData
+		return false;
+	}
+
+	// Make sure it’s still alive
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning,
+			   TEXT("AMassUnitBase (%s): SyncTranslation failed – entity %s invalid."),
+			   *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	// Fetch the transform fragment and overwrite its translation
+	FTransformFragment* TransformFrag = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle);
+	if (!TransformFrag)
+	{
+		UE_LOG(LogTemp, Warning,
+			   TEXT("AMassUnitBase (%s): SyncTranslation failed – no FTransformFragment found."),
+			   *GetName());
+		return false;
+	}
+
+	// Sync
+	FTransform& Current = TransformFrag->GetMutableTransform();
+	Current.SetTranslation(NewLocation);
+
+	return true;
+}
+
 void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 InstIndex,
 	const FTransform& NewTransform)
 {
