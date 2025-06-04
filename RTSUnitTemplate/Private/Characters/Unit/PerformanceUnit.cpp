@@ -633,7 +633,7 @@ void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUn
 		//if (!HasAuthority())
 			//UE_LOG(LogTemp, Log, TEXT("FOUDN CONTROLLER %d // %d DetectingACTOR"), MyController->SelectableTeamId, DetectingActor->TeamId);
 		
-		if (MyController->SelectableTeamId == DetectingActor->TeamId)
+		if (MyController->IsValidLowLevel() && MyController->SelectableTeamId == DetectingActor->TeamId)
 		{
 			//if (!HasAuthority()) UE_LOG(LogTemp, Log, TEXT("FOUND MYControler!!!!! %d"), MyController->SelectableTeamId);
 			//if (TeamId == DetectingActor->TeamId) return;

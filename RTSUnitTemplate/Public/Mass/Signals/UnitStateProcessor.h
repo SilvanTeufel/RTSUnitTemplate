@@ -96,6 +96,7 @@ private:
 	FDelegateHandle SyncUnitBaseDelegateHandle;
 	
 	FDelegateHandle SetUnitToChaseSignalDelegateHandle;
+	FDelegateHandle RangedAbilitySignalDelegateHandle;
 	FDelegateHandle MeleeAttackSignalDelegateHandle;
 	FDelegateHandle RangedAttackSignalDelegateHandle;
 	FDelegateHandle StartDeadSignalDelegateHandle;
@@ -125,6 +126,13 @@ private:
 
 	UPROPERTY()
 	AResourceGameMode* ResourceGameMode;
+
+	
+	UFUNCTION()
+	void UnitActivateRangedAbilities(
+	  FName SignalName,
+	  TArray<FMassEntityHandle>& Entities
+	);
 	
 	UFUNCTION()
 	void UnitMeeleAttack(

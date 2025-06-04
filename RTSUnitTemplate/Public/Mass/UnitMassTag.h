@@ -71,6 +71,20 @@ struct FMassChargeTimerFragment : public FMassFragment
 };
 
 USTRUCT()
+struct FMassMovementOverrideFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	bool bOverrideMaxSpeed = false;
+
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float OverriddenMaxSpeed = 0.f;
+
+	// You could add bOverrideAcceleration, OverriddenAcceleration, etc.
+};
+
+USTRUCT()
 struct FMassWorkerStatsFragment : public FMassFragment
 {
 	GENERATED_BODY()

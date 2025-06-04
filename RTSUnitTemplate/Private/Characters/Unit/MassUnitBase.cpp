@@ -567,6 +567,24 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
         }
     }
 
+	/*
+	FMassMovementParameters MovementParamsInstance;
+	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()*5; //500.0f;     // Set desired value
+	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
+	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
+	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
+	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f
+	*/
+	/*
+	FMassMovementParameters* MoveParameters = EntityManager->GetFragmentDataPtr<FMassMovementParameters>(EntityHandle);
+	if (!MoveParameters)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NO MOVE PARAMETERS FOUND!!"));
+		return;
+	}
+
+	MoveParameters->DefaultDesiredSpeed = ChargeSpeed;
+	*/
     // --- 2. Update FMassMoveTargetFragment ---
     FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
     if (!MoveTarget)
@@ -576,18 +594,53 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
         return;
     }
 
-    // Store original speed if not already charging (or if re-triggering should reset it)
-
-
-    MoveTarget->Center = NewDestination;
-    MoveTarget->DesiredSpeed.Set(ChargeSpeed);
-    MoveTarget->SlackRadius = 50.0f;
+	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
+   // MoveTarget->Center = NewDestination;
+    //MoveTarget->DesiredSpeed.Set(ChargeSpeed);
+    //MoveTarget->SlackRadius = 50.0f;
     //MoveTarget->Intent = EMassMovementAction::Move;
 
     // --- 3. Set Charge Timer and Tag ---
-    ChargeTimer->ChargeEndTime = GetWorld()->GetTimeSeconds() + ChargeDuration;
+    ChargeTimer->ChargeEndTime = ChargeDuration;
 	ChargeTimer->OriginalDesiredSpeed = Attributes->GetRunSpeed();
 	ChargeTimer->bOriginalSpeedSet = true;
+
+	/*
+	FMassMovementOverrideFragment* MovementOverride = EntityManager->GetFragmentDataPtr<FMassMovementOverrideFragment>(EntityHandle);
+	if (!MovementOverride)
+	{
+		EntityManager->AddFragmentToEntity(EntityHandle, FMassMovementOverrideFragment::StaticStruct());
+		MovementOverride = EntityManager->GetFragmentDataPtr<FMassMovementOverrideFragment>(EntityHandle);
+	}
+
+	if (MovementOverride)
+	{
+		MovementOverride->bOverrideMaxSpeed = true;
+		MovementOverride->OverriddenMaxSpeed = ChargeSpeed; // Or Attributes->GetRunSpeed() * ChargeMaxSpeedFactor
+		UE_LOG(LogTemp, Log, TEXT("Entity %s: MovementOverrideFragment MaxSpeed set to %f"), *EntityHandle.DebugGetDescription(), MovementOverride->OverriddenMaxSpeed);
+	} else {
+		UE_LOG(LogTemp, Error, TEXT("Entity %s: Failed to add/get FMassMovementOverrideFragment."), *EntityHandle.DebugGetDescription());
+	}*/
+
+	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
+	if (!StateFrag)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NO STATE FRAG FOUND"));
+		return;
+	}
+
+	StateFrag->StateTimer = 0.f;
+
+
+	FMassCombatStatsFragment* StatsFrag = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
+	if (!StatsFrag)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NO StatsFrag FOUND"));
+		return;
+	}
+
+	StateFrag->StateTimer = 0.f;
+	StatsFrag->RunSpeed = ChargeSpeed;
     // Remove other incompatible state tags and add the FMassStateChargingTag.
     // This logic should be robust (e.g., use your SwitchEntityTag or similar)
     // For simplicity, assuming direct add/remove:

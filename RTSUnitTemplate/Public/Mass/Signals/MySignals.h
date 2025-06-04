@@ -61,6 +61,8 @@ namespace UnitSignals
 	const FName UnitEnterSight(TEXT("UnitEnterSight"));
 	const FName UnitExitSight(TEXT("UnitExitSight"));
 	const FName UpdateFogMask(TEXT("SetFogParameter"));
+
+	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 }
 
 USTRUCT()

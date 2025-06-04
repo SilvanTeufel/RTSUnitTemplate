@@ -130,6 +130,9 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
 
+            if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
+                PendingSignals.Emplace(Entity, UnitSignals::UseRangedAbilitys);
+            
             // || !TargetFrag.TargetEntity.IsSet() &&
             if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
             {

@@ -83,6 +83,11 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     	SetUnitToChaseSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SetUnitToChase));
 
+
+    
+    	RangedAbilitySignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UseRangedAbilitys)
+		  .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UnitActivateRangedAbilities));
+    	
     	MeleeAttackSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UnitMeeleAttack));
 
@@ -182,6 +187,13 @@ void UUnitStateProcessor::BeginDestroy()
 		SetUnitToChaseSignalDelegateHandle.Reset();
 	}
 
+	if (SignalSubsystem && RangedAbilitySignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UseRangedAbilitys)
+		.Remove(RangedAbilitySignalDelegateHandle);
+            
+		RangedAbilitySignalDelegateHandle.Reset();
+	}
 	
 	if (SignalSubsystem && MeleeAttackSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
@@ -932,6 +944,100 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     }); // Ende AsyncTask Lambda
 }
 
+void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!!UnitActivateRangedAbilities!!!!!!!!!!!!!!!!!!!"));
+    if (!EntitySubsystem)
+    {
+        // UE_LOG(LogTemp, Error, TEXT("UnitActivateRangedAbilities called but EntitySubsystem is null!"));
+        return;
+    }
+
+    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+    for (const FMassEntityHandle& Entity : Entities)
+    {
+        if (!EntityManager.IsEntityValid(Entity))
+        {
+            continue;
+        }
+
+        FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+        if (ActorFragPtr)
+        {
+            AActor* Actor = ActorFragPtr->GetMutable(); // GetMutable if you might change actor state directly, Get if just reading
+            if (IsValid(Actor))
+            {
+                AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+                if (UnitBase)
+                {
+                    // At this point, UnitBase is valid.
+                    // If your abilities require specific conditions checkable here (e.g., has a target, enough mana),
+                    // you could read other fragments (like FMassAITargetFragment, FMassCombatStatsFragment)
+                    // and perform those checks before dispatching the AsyncTask.
+
+                    // For simplicity, this example proceeds directly to attempting activation on the GameThread.
+
+                    TWeakObjectPtr<AUnitBase> WeakAttacker(UnitBase);
+                    FMassEntityHandle AttackerEntity = Entity; // Capture for potential signals or logging
+
+                    // Dispatch to GameThread for ability activation as it involves Actor UFUNCTIONs
+                    AsyncTask(ENamedThreads::GameThread, [this, AttackerEntity, WeakAttacker]() mutable
+                    {
+                        AUnitBase* StrongAttacker = WeakAttacker.Get();
+
+                        if (!EntitySubsystem) // Re-check EntitySubsystem on GameThread
+                        {
+                            // UE_LOG(LogTemp, Error, TEXT("UnitActivateRangedAbilities (GameThread): EntitySubsystem became null!"));
+                            return;
+                        }
+                        // No need for GTEntityManager if not accessing fragments here, but good practice if you might add it later
+                        // FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+
+                        if (StrongAttacker /*&& GTEntityManager.IsEntityValid(AttackerEntity)*/) // Ensure Attacker is valid
+                        {
+                            bool bIsActivated = false;
+                        	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!!UnitActivateRangedAbilities22222222222!!!!!!!!!!!!!!!!!!!"));
+                            // Attempt to activate Throw Ability
+                            // Add any prerequisite checks for ThrowAbility here if needed
+                            if (StrongAttacker->ThrowAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
+                            {
+                                bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
+                            }
+
+                            // If Throw Ability was not activated, attempt Offensive Ability
+                            if (!bIsActivated && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
+                            {
+                                // Original code had a commented-out range check: //if (AttackerRange >= 600.f)
+                                // If you need such a condition, you'd calculate AttackerRange here.
+                                // This would likely involve getting the target's location,
+                                // which means FMassAITargetFragment and target's FTransformFragment
+                                // would need to be accessed (potentially captured or re-fetched on GT).
+
+                                // For this example, we'll call it unconditionally if Throw wasn't activated.
+                                bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
+                            }
+
+                            if (bIsActivated)
+                            {
+                                UE_LOG(LogTemp, Verbose, TEXT("Unit %s activated a ranged/offensive ability."), *StrongAttacker->GetName());
+
+                                // Optional: Signal that an ability was used.
+                                // This could be the same 'IsAttacked' signal if these abilities put the unit into an attack-like state,
+                                // or a new signal like 'SpecialAbilityUsed'.
+                            }
+                            else
+                            {
+                                // UE_LOG(LogTemp, Verbose, TEXT("Unit %s did not activate Throw or Offensive ability."), *StrongAttacker->GetName());
+                            }
+                        }
+                    }); // End AsyncTask Lambda
+                } // End if (UnitBase)
+            } // End if (IsValid(Actor))
+        } // End if (ActorFragPtr)
+    } // End loop through Entities
+}
+
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     if (!EntitySubsystem)
@@ -1058,7 +1164,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                     	
 							 bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->AttackAbilityID, StrongAttacker->AttackAbilities);
 
-                    
+                    		/*
 							 if (!bIsActivated)
 							 {
 								 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
@@ -1069,19 +1175,19 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 								 {
 									bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
 								 }
-							 }
+							 }*/
 
-
+						/*
                     	if (bIsActivated)
                     	{
                     		UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 							if (SignalSubsystem)
 							{
 					
-								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, AttackerEntity);
+								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
 								return;
 							}
-                    	}
+                    	}*/
                     		StrongAttacker->ServerMeeleImpactEvent();
 							StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
 							StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
@@ -1247,7 +1353,9 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 								   CurrentTargetState != UnitData::Casting &&
 								   CurrentTargetState != UnitData::Rooted &&
 								   CurrentTargetState != UnitData::Attack&&
-									CurrentTargetState != UnitData::IsAttacked)
+									CurrentTargetState != UnitData::IsAttacked &&
+									!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateChargingTag::StaticStruct())
+									)
                                  {
                                      if (SignalSubsystem)
                                      {

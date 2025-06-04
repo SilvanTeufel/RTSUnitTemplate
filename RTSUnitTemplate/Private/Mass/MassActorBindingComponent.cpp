@@ -193,7 +193,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	if (!MyUnit) return false;
 	
 	FMassMovementParameters MovementParamsInstance;
-	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()+100.f; //500.0f;     // Set desired value
+	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()*20; //500.0f;     // Set desired value
 	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
 	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
 	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
@@ -234,11 +234,17 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
 	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
 	// (you can also tweak stiffness if desired)
-	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
+	// --- INCREASE THESE FOR STRONGER PUSHING ---
+	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance + 50.f; // Or a fixed larger value like 100.f or 125.f
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 2000.f; // Significantly increase this for a stronger push
+
+	
+	//MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
 	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
 	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
 	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
 
+	
 	// Validate and create the shared fragment
 	FConstSharedStruct MovingAvoidanceParamSharedFragment =
 		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
@@ -255,7 +261,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
 	// ***** --- ADD THIS LINE --- *****
 	// ***** --- END ADDED LINE --- *****
-
+	
 	
     SharedValues.Sort();
 

@@ -298,7 +298,14 @@ void AUnitBase::OnRep_MeshMaterialPath()
 		if (NewMaterial)
 		{
 			// Apply the material to the first material slot
-			GetMesh()->SetMaterial(0, NewMaterial);
+			if (bUseSkeletalMovement)
+			{
+				GetMesh()->SetMaterial(0, NewMaterial);
+			}
+			else
+			{
+				ISMComponent->SetMaterial(0, NewMaterial);
+			}
 		}
 	}
 }
