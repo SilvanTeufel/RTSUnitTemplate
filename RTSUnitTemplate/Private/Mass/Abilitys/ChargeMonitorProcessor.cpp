@@ -45,7 +45,6 @@ void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
        
             const int32 NumEntities = ChunkContext.GetNumEntities();
 
-            UE_LOG(LogTemp, Warning, TEXT("UChargeMonitorProcessor: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassChargeTimerFragment& ChargeTimer = ChargeTimerList[i];
@@ -55,8 +54,6 @@ void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             State.StateTimer += ExecutionInterval;
             if (State.StateTimer >= ChargeTimer.ChargeEndTime)
             {
-                UE_LOG(LogTemp, Log, TEXT("ChargeMonitor: Entity %s charge duration ended."), *Entity.DebugGetDescription());
-
                 // 1. Revert speed
                 if (ChargeTimer.bOriginalSpeedSet)
                 {

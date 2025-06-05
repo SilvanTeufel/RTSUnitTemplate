@@ -66,7 +66,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
     if (!World)
     {
-        UE_LOG(LogTemp, Error, TEXT("UGoToBuildStateProcessor: Cannot execute without a valid UWorld."));
+        //UE_LOG(LogTemp, Error, TEXT("UGoToBuildStateProcessor: Cannot execute without a valid UWorld."));
         return;
     }
 
@@ -87,7 +87,6 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
         const int32 NumEntities = Context.GetNumEntities();
 
-            UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);

@@ -99,7 +99,6 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
-	UE_LOG(LogTemp, Warning, TEXT("!!SwitchEntityTagByState!!!"));
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -213,7 +212,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 	if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("!!SEND SIGNAL!!!"));
+
 		SignalSubsystem->SignalEntity(UnitSignals::SyncUnitBase, EntityHandle);
 	}
 	/*
@@ -532,7 +531,6 @@ void AMassUnitBase::StartAcceleratingTowardsDestination(const FVector& NewDestin
 
 void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration)
 {
-	UE_LOG(LogTemp, Warning, TEXT(" StartCharge!!!!!!!! "));
     if (GetUnitState() == UnitData::Dead)
     {
         return;
@@ -557,38 +555,10 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     FMassChargeTimerFragment* ChargeTimer = EntityManager->GetFragmentDataPtr<FMassChargeTimerFragment>(EntityHandle);
     if (!ChargeTimer)
     {
-        // Add the fragment if it doesn't exist.
-        // Ensure FMassChargeTimerFragment is added to the entity's archetype if it's always needed for charging units,
-        // or add it dynamically here.
-    	/*
-        EntityManager->AddFragmentToEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct());
-        ChargeTimer = EntityManager->GetFragmentDataPtr<FMassChargeTimerFragment>(EntityHandle);
-        if(!ChargeTimer) {
-             UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Failed to add or get FMassChargeTimerFragment for entity %s."), *GetName(), *EntityHandle.DebugGetDescription());
-             return;
-        }*/
-
     	return;
     }
 
-	/*
-	FMassMovementParameters MovementParamsInstance;
-	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()*5; //500.0f;     // Set desired value
-	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
-	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
-	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
-	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f
-	*/
-	/*
-	FMassMovementParameters* MoveParameters = EntityManager->GetFragmentDataPtr<FMassMovementParameters>(EntityHandle);
-	if (!MoveParameters)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("NO MOVE PARAMETERS FOUND!!"));
-		return;
-	}
 
-	MoveParameters->DefaultDesiredSpeed = ChargeSpeed;
-	*/
     // --- 2. Update FMassMoveTargetFragment ---
     FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
     if (!MoveTarget)
@@ -599,32 +569,13 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     }
 
 	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
-   // MoveTarget->Center = NewDestination;
-    //MoveTarget->DesiredSpeed.Set(ChargeSpeed);
-    //MoveTarget->SlackRadius = 50.0f;
-    //MoveTarget->Intent = EMassMovementAction::Move;
+
 
     // --- 3. Set Charge Timer and Tag ---
     ChargeTimer->ChargeEndTime = ChargeDuration;
 	ChargeTimer->OriginalDesiredSpeed = Attributes->GetRunSpeed();
 	ChargeTimer->bOriginalSpeedSet = true;
 
-	/*
-	FMassMovementOverrideFragment* MovementOverride = EntityManager->GetFragmentDataPtr<FMassMovementOverrideFragment>(EntityHandle);
-	if (!MovementOverride)
-	{
-		EntityManager->AddFragmentToEntity(EntityHandle, FMassMovementOverrideFragment::StaticStruct());
-		MovementOverride = EntityManager->GetFragmentDataPtr<FMassMovementOverrideFragment>(EntityHandle);
-	}
-
-	if (MovementOverride)
-	{
-		MovementOverride->bOverrideMaxSpeed = true;
-		MovementOverride->OverriddenMaxSpeed = ChargeSpeed; // Or Attributes->GetRunSpeed() * ChargeMaxSpeedFactor
-		UE_LOG(LogTemp, Log, TEXT("Entity %s: MovementOverrideFragment MaxSpeed set to %f"), *EntityHandle.DebugGetDescription(), MovementOverride->OverriddenMaxSpeed);
-	} else {
-		UE_LOG(LogTemp, Error, TEXT("Entity %s: Failed to add/get FMassMovementOverrideFragment."), *EntityHandle.DebugGetDescription());
-	}*/
 
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
 	if (!StateFrag)
@@ -632,9 +583,6 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
 		UE_LOG(LogTemp, Warning, TEXT("NO STATE FRAG FOUND"));
 		return;
 	}
-
-	StateFrag->StateTimer = 0.f;
-
 
 	FMassCombatStatsFragment* StatsFrag = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
 	if (!StatsFrag)
@@ -645,17 +593,6 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
 
 	StateFrag->StateTimer = 0.f;
 	StatsFrag->RunSpeed = ChargeSpeed;
-    // Remove other incompatible state tags and add the FMassStateChargingTag.
-    // This logic should be robust (e.g., use your SwitchEntityTag or similar)
-    // For simplicity, assuming direct add/remove:
-    // EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateRunTag::StaticStruct()); // Example
-    EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct()); // Ensure FMassStateChargingTag is defined
 
-    // Make sure your movement processors (UUnitMovementProcessor) are configured to process entities
-    // with FMassStateChargingTag if they are to move during the charge.
-    // For example, in UUnitMovementProcessor::ConfigureQueries():
-    // EntityQuery.AddTagRequirement<FMassStateChargingTag>(EMassFragmentPresence::Any);
-
-    UE_LOG(LogTemp, Log, TEXT("AMassUnitBase (%s): Entity %s starting charge. Ends at: %.2f. Original Speed: %.2f"),
-        *GetName(), *EntityHandle.DebugGetDescription(), ChargeTimer->ChargeEndTime, ChargeTimer->OriginalDesiredSpeed);
+    EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct());
 }

@@ -233,7 +233,6 @@ void UDetectionProcessor::Execute(
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT(" Set to Stored !!! "));
             Det.TargetFrag->TargetEntity.Reset();
             Det.TargetFrag->bHasValidTarget = false;
             UpdateMoveTarget(

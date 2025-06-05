@@ -445,12 +445,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::GoToResourceExtraction;
                         	UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
-
-                        	UE_LOG(LogTemp, Log, TEXT("GoToResourceExtraction"));
-		
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
-                        	UE_LOG(LogTemp, Log, TEXT("ResourceExtraction"));
                         	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
                         }
 
@@ -780,11 +776,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
             	{
-
-            		UE_LOG(LogTemp, Warning, TEXT(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"));
-            		UE_LOG(LogTemp, Warning, TEXT("PatrolFrag->TargetWaypointLocation %s."), *PatrolFrag->TargetWaypointLocation.ToString());
-            		UE_LOG(LogTemp, Warning, TEXT("StrongUnitActor->NextWaypoint->GetActorLocation() %s."), *StrongUnitActor->NextWaypoint->GetActorLocation().ToString());
-            		UE_LOG(LogTemp, Warning, TEXT("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"));
             		if (PatrolFrag->TargetWaypointLocation != StrongUnitActor->NextWaypoint->GetActorLocation())
             		{
             			// <<< REPLACE Properties with your actual variable names >>>
