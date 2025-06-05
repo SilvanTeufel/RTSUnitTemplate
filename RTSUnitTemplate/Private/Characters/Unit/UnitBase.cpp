@@ -617,11 +617,35 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
 
 	if (!ProjectileBaseClass) return;
+
+	
 	
 	if(ShootingUnit)
 	{
+
+
+		// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
+		FVector ShootingUnitLocation = ShootingUnit->GetActorLocation(); // Default to actor's root location
+
+		// If this spawning unit is not using skeletal movement, check if it's an ISM
+		// and use its instance location for calculating the aim direction.
+		if (!ShootingUnit->bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
+		{
+			if (ShootingUnit->ISMComponent && ShootingUnit->InstanceIndex >= 0)
+			{
+				FTransform SpawnerInstanceTransform;
+				ShootingUnit->ISMComponent->GetInstanceTransform(
+					ShootingUnit->InstanceIndex,
+					SpawnerInstanceTransform,
+					/*bWorldSpace=*/ true
+				);
+				ShootingUnitLocation = SpawnerInstanceTransform.GetLocation();
+			}
+		}
+		// --- END OF ADDED SECTION ---
+		
 		FTransform Transform;
-		Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
+		Transform.SetLocation(ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
 
 
 		// 2) Figure out the exact world‐space "aim" point
@@ -643,14 +667,17 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 				);
 				AimLocation = InstXf.GetLocation();
 			}
+
+			// if (UnitTarget->GetUnitState() == UnitData::Dead) return;
 			// otherwise we just leave AimLocation == actor root
 		}
 		
-		FVector Direction = (AimLocation - GetActorLocation()).GetSafeNormal();
+		FVector Direction = (AimLocation - ShootingUnitLocation).GetSafeNormal();
 		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
 
 		Transform.SetRotation(FQuat(InitialRotation));
 		Transform.SetScale3D(ShootingUnit->ProjectileScale);
+
 		
 		const auto MyProjectile = Cast<AProjectile>
 							(UGameplayStatics::BeginDeferredActorSpawnFromClass
@@ -693,6 +720,26 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
     AUnitBase* TargetUnit   = Cast<AUnitBase>(Aim);
 
+	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
+	FVector ShootingUnitLocation = ShootingUnit->GetActorLocation(); // Default to actor's root location
+
+	// If this spawning unit is not using skeletal movement, check if it's an ISM
+	// and use its instance location for calculating the aim direction.
+	if (!ShootingUnit->bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
+	{
+		if (ShootingUnit->ISMComponent && ShootingUnit->InstanceIndex >= 0)
+		{
+			FTransform SpawnerInstanceTransform;
+			ShootingUnit->ISMComponent->GetInstanceTransform(
+				ShootingUnit->InstanceIndex,
+				SpawnerInstanceTransform,
+				/*bWorldSpace=*/ true
+			);
+			ShootingUnitLocation = SpawnerInstanceTransform.GetLocation();
+		}
+	}
+	// --- END OF ADDED SECTION ---
+
     // 1) Determine the true “center” we want to spread around
     FVector AimCenter = Aim->GetActorLocation();
     if (TargetUnit)
@@ -721,7 +768,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     {
         // alternate left/right spread
         int32  MultiAngle     = (Count == 0) ? 0 : ((Count & 1) ? 1 : -1);
-        FVector ToCenterDir   = (AimCenter - GetActorLocation()).GetSafeNormal();
+        FVector ToCenterDir   = (AimCenter - ShootingUnitLocation).GetSafeNormal();
         FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
         FVector SpreadOffset  = PerpOffsetDir * Spread;
 
@@ -734,12 +781,12 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
         {
             FTransform SpawnXf;
             SpawnXf.SetLocation(
-                GetActorLocation()
+            ShootingUnitLocation
                 + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
                 + ProjectileSpawnOffset
             );
 
-            const FVector Dir          = (LocationToShoot - GetActorLocation()).GetSafeNormal();
+            const FVector Dir          = (LocationToShoot - ShootingUnitLocation).GetSafeNormal();
             const FRotator InitialRot  = Dir.Rotation() + ProjectileRotationOffset;
             SpawnXf.SetRotation(FQuat(InitialRot));
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
@@ -850,6 +897,26 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 {
     if (!ProjectileClass)
         return;
+	
+	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
+	FVector SpawnerLocationForAimDir = GetActorLocation(); // Default to actor's root location
+
+	// If this spawning unit is not using skeletal movement, check if it's an ISM
+	// and use its instance location for calculating the aim direction.
+	if (!bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
+	{
+		if (ISMComponent && InstanceIndex >= 0)
+		{
+			FTransform SpawnerInstanceTransform;
+			ISMComponent->GetInstanceTransform(
+				InstanceIndex,
+				SpawnerInstanceTransform,
+				/*bWorldSpace=*/ true
+			);
+			SpawnerLocationForAimDir = SpawnerInstanceTransform.GetLocation();
+		}
+	}
+	// --- END OF ADDED SECTION ---
 
     // Base spawn‐origin offset
     const FVector SpawnOrigin = GetActorLocation()
@@ -860,7 +927,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     {
         // Alternate left/right offsets for multi‐shot spread
         const int   MultiAngle    = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
-        const FVector ToAimDir     = (Aim - GetActorLocation()).GetSafeNormal();
+        const FVector ToAimDir     = (Aim - SpawnerLocationForAimDir).GetSafeNormal();
         const FVector SpreadOffset = FRotator(0.f, MultiAngle * 90.f, 0.f)
                                      .RotateVector(ToAimDir)
                                      * Spread;

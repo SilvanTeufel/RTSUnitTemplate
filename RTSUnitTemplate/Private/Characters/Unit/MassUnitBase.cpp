@@ -559,12 +559,15 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
         // Add the fragment if it doesn't exist.
         // Ensure FMassChargeTimerFragment is added to the entity's archetype if it's always needed for charging units,
         // or add it dynamically here.
+    	/*
         EntityManager->AddFragmentToEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct());
         ChargeTimer = EntityManager->GetFragmentDataPtr<FMassChargeTimerFragment>(EntityHandle);
         if(!ChargeTimer) {
              UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Failed to add or get FMassChargeTimerFragment for entity %s."), *GetName(), *EntityHandle.DebugGetDescription());
              return;
-        }
+        }*/
+
+    	return;
     }
 
 	/*

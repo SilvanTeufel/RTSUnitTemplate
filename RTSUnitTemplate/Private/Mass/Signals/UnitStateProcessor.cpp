@@ -946,7 +946,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 
 void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!!UnitActivateRangedAbilities!!!!!!!!!!!!!!!!!!!"));
     if (!EntitySubsystem)
     {
         // UE_LOG(LogTemp, Error, TEXT("UnitActivateRangedAbilities called but EntitySubsystem is null!"));
@@ -997,7 +996,6 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                         if (StrongAttacker /*&& GTEntityManager.IsEntityValid(AttackerEntity)*/) // Ensure Attacker is valid
                         {
                             bool bIsActivated = false;
-                        	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!!UnitActivateRangedAbilities22222222222!!!!!!!!!!!!!!!!!!!"));
                             // Attempt to activate Throw Ability
                             // Add any prerequisite checks for ThrowAbility here if needed
                             if (StrongAttacker->ThrowAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
@@ -1300,6 +1298,36 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     // --- Check validity ON Game Thread ---
                     if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
                     {
+
+                       // ========================================================================
+                        // /// START: ADDED DISTANCE CHECK ///
+                        // ========================================================================
+                       const FTransformFragment* AttackerTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity);
+					   const FTransformFragment* TargetTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
+
+					   if (AttackerTransformFrag && TargetTransformFrag)
+					   {
+						   const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
+						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
+						   const float DistanceSquared = FVector::DistSquared(CurrentAttackerLocation, CurrentTargetLocation);
+						   const float AttackRangeSquared = AttackerRange * AttackerRange; // AttackerRange was captured
+		   				
+
+							if (DistanceSquared > AttackRangeSquared)
+							{
+	      
+								FMassAIStateFragment* AttackerStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
+								if(AttackerStateFrag)
+								{
+									 AttackerStateFrag->SwitchingState = false;
+								}
+								return; // Abort the attack as target is out of range
+							}
+						// ========================================================================
+						// /// END: ADDED DISTANCE CHECK ///
+						// ========================================================================
+					   }
+                    	
                         UWorld* World = StrongAttacker->GetWorld();
                         if (!World) { return; }
                         UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>(); // Get once
@@ -2540,8 +2568,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					if (!NavSys) { continue; }
 				
 					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
-					//SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, E);
-					//StateFrag.StateTimer = 0.f;
 				}
 
 				
@@ -2554,32 +2580,12 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				
 				if (TransformFragPtr)
 				{
-					/*
-					if (Unit->bUseSkeletalMovement)
+					if (Unit) 
 					{
-						const FTransform& ActorTransform = Unit->GetActorTransform();
-						TransformFragPtr->SetTransform(ActorTransform);
-					}else
-					{
-						const FTransform& ActorTransform = Unit->ISMComponent->GetComponentTransform();
-						const FVector Scale3D = ActorTransform.GetScale3D();
-						
-						 UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!"));
-						UE_LOG(LogTemp, Log, TEXT("%s: Spanwed ISMComponent world‐space scale = %s"),
-							   *Unit->GetName(),
-							   *Scale3D.ToString());
-
-						 UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!!!!!!!"));
-						TransformFragPtr->SetTransform(ActorTransform);
-
-					
-						//const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
-						//MassTransform.SetLocation(ActorTransform.GetLocation());
-						// MassTransform.SetRotation(ActorTransform.GetRotation());
-						// MassTransform.SetScale3D(ActorTransform.GetScale3D());
+						const FVector ActorInitialLocation = Unit->GetActorLocation();
+						FTransform MyTransform = TransformFragPtr->GetMutableTransform();
+						MyTransform.SetLocation(ActorInitialLocation);
 					}
-
-					*/
 				}
 			}
 		}

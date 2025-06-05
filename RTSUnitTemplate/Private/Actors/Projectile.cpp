@@ -65,28 +65,25 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	{
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
+			/*
+			if (UnitTarget->GetUnitState() == UnitData::Dead)
+			{
+				DestroyProjectile();
+				return;
+			}
+			*/
 			if (UnitTarget->bUseSkeletalMovement)
 			{
 				// Aim at the actor’s root location
 				TargetLocation = UnitTarget->GetActorLocation();
 			}
-			else if (UnitTarget->ISMComponent)
+			else
 			{
 				// Aim at the ISM instance’s world location
 				FTransform InstanceXform;
 				UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
 				TargetLocation = InstanceXform.GetLocation();
 			}
-			else
-			{
-				// Fallback
-				TargetLocation = UnitTarget->GetActorLocation();
-			}
-		}
-		else
-		{
-			// Non‐unit targets just give their root location
-			TargetLocation = Target->GetActorLocation();
 		}
 	}
 	/*
@@ -98,8 +95,6 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		SetActorRotation(AimRot);
 	}
 	*/
-	if(ShootingActor)
-		ShooterLocation = ShootingActor->GetActorLocation();
 	
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
@@ -108,6 +103,16 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		Damage = ShootingUnit->Attributes->GetAttackDamage();
 		TeamId = ShootingUnit->TeamId;
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
+
+
+		if(ShootingUnit->bUseSkeletalMovement)
+			ShooterLocation = ShootingUnit->GetActorLocation();
+		else
+		{
+			FTransform InstanceXform;
+			ShootingUnit->ISMComponent->GetInstanceTransform( ShootingUnit->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+			ShooterLocation = InstanceXform.GetLocation();
+		}
 	}
 }
 
@@ -273,7 +278,7 @@ void AProjectile::Tick(float DeltaTime)
 			Mesh_A->AddLocalRotation(NewRotation);
 		}
 	}
-	if(LifeTime > MaxLifeTime)
+	if(LifeTime > MaxLifeTime && !FollowTarget)
 	{
 		Destroy(true, false);
 	}else if(LifeTime > MaxLifeTime && FollowTarget)
@@ -319,13 +324,14 @@ bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
 	return false;
 }
 
+
 void AProjectile::FlyToUnitTarget()
 {
 	if (!FollowTarget)
 	{
 		// simple straight‐line fallback
 		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds());
+		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
 		return;
 	}
 
@@ -345,25 +351,22 @@ void AProjectile::FlyToUnitTarget()
 			UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
 			CurrentTargetLoc = InstanceXform.GetLocation();
 		}
-
-		// compute direction and move
-		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), CurrentTargetLoc);
-		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
-
-		// check for impact
-		const float Distance = FVector::Dist(GetActorLocation(), CurrentTargetLoc);
-		if (Distance <= MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f)
-		{
-			Impact(Target);
-			Destroy(true, false);
-		}
+		
+		TargetLocation = CurrentTargetLoc;
 	}
-	else
+
+
+	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
+	AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
+	
+	const float Distance = FVector::Dist(GetActorLocation(), TargetLocation);
+	if (Distance <= (MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f))
 	{
-		// target is dead or invalid: destroy or switch to fallback
+		Impact(Target);
 		Destroy(true, false);
 	}
 }
+
 /*
 void AProjectile::FlyToUnitTarget()
 {
