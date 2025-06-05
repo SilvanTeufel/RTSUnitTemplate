@@ -430,7 +430,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
     	
-        //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
 
     FMassArchetypeCreationParams Params;
@@ -441,69 +440,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
     if (!OutArchetype.IsValid()) return false;
 
 
-	//FMassMovementParameters MovementParamsInstance;
-	//MovementParamsInstance.MaxSpeed = 500.0f;     // Set desired value
-	//MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
-	//MovementParamsInstance.DefaultDesiredSpeed = 400.0f; // Example: Default speed slightly less than max
-	//MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
-	//MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
-	
-	//FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
-
-	// Package the shared fragments
 	FMassArchetypeSharedFragmentValues SharedValues;
-	//SharedValues.AddConstSharedFragment(MovementParamSharedFragment);
-	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
 
-	// 2. Steering Parameters (Using default values initially)
-	//FMassMovingSteeringParameters MovingSteeringParamsInstance;
-	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
-	//MovingSteeringParamsInstance.ReactionTime = 0.0f; // Faster reaction (Default 0.3) // 0.05f;
-	//MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
-
-	//FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
-	//SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
-
-/*
-	FMassStandingSteeringParameters StandingSteeringParamsInstance;
-	// You can modify defaults here if needed
-	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
-	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
-
-	// 3. Avoidance Parameters (Now explicitly initialized)
-	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
-	// Core detection radius
-	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
-	// Separation tuning
-	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance;  //75.f // How close they can get before repelling
-	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= AvoidanceDistance;   // Wall‐avoidance distance
-	// Predictive avoidance tuning
-	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
-	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
-	// (you can also tweak stiffness if desired)
-	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
-	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
-	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
-	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
-	
-	// Validate and create the shared fragment
-	FConstSharedStruct MovingAvoidanceParamSharedFragment =
-		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
-	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
-	*/
-	// Standing avoidance (if you also use standing avoidance)
-	//FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
-	//StandingAvoidanceParamsInstance.GhostObstacleDetectionDistance = 300.f;
-	//StandingAvoidanceParamsInstance.GhostSeparationDistance       = 20.f;
-	//StandingAvoidanceParamsInstance.GhostSeparationStiffness      = 200.f;
-	// … any other Ghost* fields you want to override …
-	/*
-	FConstSharedStruct StandingAvoidanceParamSharedFragment =
-	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
-	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
-	// ***** --- ADD THIS LINE --- *****
-	// ***** --- END ADDED LINE --- *****
-	*/
 	
     SharedValues.Sort();
 

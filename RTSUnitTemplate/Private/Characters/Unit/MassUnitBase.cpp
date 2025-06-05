@@ -532,6 +532,7 @@ void AMassUnitBase::StartAcceleratingTowardsDestination(const FVector& NewDestin
 
 void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration)
 {
+	UE_LOG(LogTemp, Warning, TEXT(" StartCharge!!!!!!!! "));
     if (GetUnitState() == UnitData::Dead)
     {
         return;

@@ -565,8 +565,9 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
             FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
             FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
+
         	
-                    SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
+                    SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
                     SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
                     StateFrag.StateTimer = 0.f;
         } // Ende for each entity
@@ -623,7 +624,7 @@ void UUnitStateProcessor::ForceSetPatrolRandomTarget(FMassEntityHandle& Entity)
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
     	
             // Rufe die NavSys-abhängige Funktion sicher hier auf
-            SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
+            SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
 
             // Signalisiere den Zustandswechsel
             // SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
@@ -779,15 +780,42 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
             	{
-					// <<< REPLACE Properties with your actual variable names >>>
-					PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
-					//PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
-					//PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
-					PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
-					PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
-					PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
-					PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
-					PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
+
+            		UE_LOG(LogTemp, Warning, TEXT(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"));
+            		UE_LOG(LogTemp, Warning, TEXT("PatrolFrag->TargetWaypointLocation %s."), *PatrolFrag->TargetWaypointLocation.ToString());
+            		UE_LOG(LogTemp, Warning, TEXT("StrongUnitActor->NextWaypoint->GetActorLocation() %s."), *StrongUnitActor->NextWaypoint->GetActorLocation().ToString());
+            		UE_LOG(LogTemp, Warning, TEXT("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"));
+            		if (PatrolFrag->TargetWaypointLocation != StrongUnitActor->NextWaypoint->GetActorLocation())
+            		{
+            			// <<< REPLACE Properties with your actual variable names >>>
+						PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
+						//PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
+						//PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
+						PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
+						PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
+
+	
+						PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
+
+						PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
+						PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
+
+            			/*
+						 FMassMoveTargetFragment* MoveTargetFragPtr = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
+						 UWorld* CurrentWorld = StrongUnitActor->GetWorld();
+						 UNavigationSystemV1* CurrentNavSys = nullptr;
+						 if (CurrentWorld)
+						 {
+							 CurrentNavSys = UNavigationSystemV1::GetCurrent(CurrentWorld);
+						 }
+            			
+						 if (MoveTargetFragPtr && CurrentNavSys && CurrentWorld)
+						 {
+						 	//UE_LOG(LogTemp, Warning, TEXT("PatrolFrag->TargetWaypointLocation %s."), *PatrolFrag->TargetWaypointLocation.ToString());
+							//SetNewRandomPatrolTarget(*PatrolFrag, *MoveTargetFragPtr,StateFrag CurrentNavSys, CurrentWorld, CombatStatsFrag->RunSpeed);
+						 }
+						*/
+            		}
 				}
 
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
@@ -2566,8 +2594,9 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 
 					UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
 					if (!NavSys) { continue; }
-				
-					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, NavSys, World, StatsFrag.RunSpeed);
+
+					PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
+					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
 				}
 
 				

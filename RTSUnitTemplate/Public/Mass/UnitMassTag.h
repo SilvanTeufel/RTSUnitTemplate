@@ -441,6 +441,7 @@ struct FMassPatrolFragment : public FMassFragment
 
 inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
 {
+	UE_LOG(LogTemp, Warning, TEXT(" UpdateMoveTarget: %s"),  *TargetLocation.ToString());
 	if (!World)
 	{
 		// Log the error and exit
@@ -476,8 +477,9 @@ inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 	// Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
 }
 
-inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
+inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
 {
+	UE_LOG(LogTemp, Warning, TEXT("SetNewRandomPatrolTarget!!!!!!"));
 	FVector BaseWaypointLocation = PatrolFrag.TargetWaypointLocation; // Muss korrekt gesetzt sein!
 	if (BaseWaypointLocation == FVector::ZeroVector)
 	{
@@ -501,6 +503,8 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 
 	if (bSuccess)
 	{
+		StateFragPtr->StoredLocation = RandomPoint.Location;
+		UE_LOG(LogTemp, Warning, TEXT(" RandomPoint.Location: %s"),  *RandomPoint.Location.ToString());
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);
 	}
 	
