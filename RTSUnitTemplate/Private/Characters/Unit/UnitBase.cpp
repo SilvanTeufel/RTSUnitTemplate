@@ -687,7 +687,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
 			
-			MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
+			//MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
 			
 			//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
 
@@ -807,9 +807,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 MyProj->TargetLocation   = LocationToShoot;
                 MyProj->InitForAbility(Aim, Attacker);
 
-                MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(
-                    MyProj, &AProjectile::OnOverlapBegin
-                );
+                //MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
                 MyProj->MaxPiercedTargets = MaxPiercedTargets;
                 MyProj->FollowTarget      = FollowTarget;
                 MyProj->IsBouncingNext    = IsBouncingNext;
@@ -962,9 +960,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             Proj->TargetLocation    = LocationToShoot;
             Proj->InitForLocationPosition(LocationToShoot, this);
 
-            Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(
-                Proj, &AProjectile::OnOverlapBegin
-            );
+            //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
             Proj->MaxPiercedTargets = MaxPiercedTargets;
             Proj->IsBouncingNext    = IsBouncingNext;
             Proj->IsBouncingBack    = IsBouncingBack;

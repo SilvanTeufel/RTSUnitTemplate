@@ -17,11 +17,30 @@ public:
 	// Sets default values for this actor's properties
 	AProjectile();
 
+	// OnConstruction is the ideal place to create the instance
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "Components")
+	UInstancedStaticMeshComponent* ISMComponent;
+
+	UPROPERTY(Replicated)
+	int32 InstanceIndex;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.025f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ProjectileScale = FVector(0.5, 0.5, 0.5);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;
+
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector FlightDirection;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsInitialized = false;;
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
@@ -72,12 +91,17 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RotationSpeed = FVector(0.5f);
-	
+
+	/*
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh_A;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStaticMeshComponent* Mesh_B;
+	*/
+
+	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void Multicast_UpdateISMTransform(const FTransform& NewTransform);
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_A;
@@ -98,10 +122,10 @@ public:
 	float ScaleImpactSound = 1.f;
 
 	
-	UStaticMeshComponent* GetMesh(){ return Mesh_A; };
+	//UStaticMeshComponent* GetMesh(){ return Mesh_A; };
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UMaterialInterface* Material;
+	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//UMaterialInterface* Material;
 
 	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Damage;

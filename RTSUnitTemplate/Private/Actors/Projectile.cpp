@@ -25,11 +25,17 @@ AProjectile::AProjectile()
 	SetRootComponent(SceneRoot); // Set it as the root component
 
 	// Create all components and attach them to the SceneRoot
-	Mesh_A = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	Mesh_A->SetupAttachment(SceneRoot); // Attach to the new root
+	//Mesh_A = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	//Mesh_A->SetupAttachment(SceneRoot); // Attach to the new root
 	
-	Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
-	Mesh_B->SetupAttachment(SceneRoot);
+	//Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
+	//Mesh_B->SetupAttachment(SceneRoot);
+
+	ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
+	ISMComponent->SetupAttachment(RootComponent);
+	ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Disable collision on the ISM
+	ISMComponent->SetIsReplicated(true);
+	ISMComponent->SetVisibility(false, true);
 	
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(SceneRoot);
@@ -38,14 +44,15 @@ AProjectile::AProjectile()
 	Niagara_B->SetupAttachment(SceneRoot);
 	
 	// Collision settings for Mesh
-	Mesh_A->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Mesh_A->SetCollisionProfileName(TEXT("Trigger"));
-	Mesh_A->SetGenerateOverlapEvents(true);
+	//Mesh_A->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	//Mesh_A->SetCollisionProfileName(TEXT("Trigger"));
+	//Mesh_A->SetGenerateOverlapEvents(true);
 
 	// Optionally, initialize Niagara properties here
 	SceneRoot->SetVisibility(false, true);
 
 	bReplicates = true;
+	InstanceIndex = INDEX_NONE; // Initialize the instance index
 	/*
 	if (HasAuthority())
 	{
@@ -54,6 +61,32 @@ AProjectile::AProjectile()
 		SetReplicateMovement(true);
 	}*/
 }
+
+void AProjectile::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// Create a single instance for this projectile actor in its own ISM component
+	if (ISMComponent && ISMComponent->GetStaticMesh() && InstanceIndex == INDEX_NONE)
+	{
+		ISMComponent->ClearInstances();
+
+		// Create a new transform based on the actor's spawn transform, but with our custom scale.
+		FTransform NewInstanceTransform = Transform;
+		NewInstanceTransform.SetScale3D(ProjectileScale); // Use the scale variable
+
+		
+		InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, /*bWorldSpace=*/true);
+
+		
+		const FVector StartLocation = NewInstanceTransform.GetLocation();
+
+		// Calculate the one-time flight direction
+		FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
+		bIsInitialized = true;
+	}
+}
+
 
 void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 {
@@ -114,6 +147,7 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 			ShooterLocation = InstanceXform.GetLocation();
 		}
 	}
+	
 }
 
 void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
@@ -150,16 +184,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 			TargetLocation = Target->GetActorLocation();
 		}
 	}
-
-	/*
-	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
-	if (!FlyDir.IsNearlyZero())
-	{
-		// assume you have a FRotator ProjectileRotationOffset member
-		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
-		SetActorRotation(AimRot);
-	}
-	*/
+	
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
 	
@@ -171,6 +196,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
 	}
+	
 }
 
 void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
@@ -199,6 +225,34 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
 	}
+
+
+	FTransform InstanceTransform;
+	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, true);
+	}
+	else
+	{
+		// Fallback to actor location if instance is somehow invalid
+		InstanceTransform = GetActorTransform();
+	}
+    
+	const FVector StartLocation = InstanceTransform.GetLocation();
+
+	// Calculate the one-time flight direction
+	FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
+
+	// Check for a zero vector to prevent getting stuck
+	if (FlightDirection.IsNearlyZero())
+	{
+		// The target is the same as the start, destroy the projectile to prevent errors
+		Destroy();
+		return;
+	}
+
+
+	bIsInitialized = true;
 }
 
 
@@ -212,7 +266,8 @@ void AProjectile::SetProjectileVisibility_Implementation()
 	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibleEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
 	bool bFinalVisibility = bShootingVisible || bTargetVisible;
 	
-	SceneRoot->SetVisibility(bFinalVisibility, true);
+	//SceneRoot->SetVisibility(bFinalVisibility, true);
+	ISMComponent->SetVisibility(bFinalVisibility, true);
 }
 
 // Called when the game starts or when spawned
@@ -231,7 +286,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, ImpactSound);
 	DOREPLIFETIME(AProjectile, ImpactVFX);
 	
-	DOREPLIFETIME(AProjectile, Material);
+	//DOREPLIFETIME(AProjectile, Material);
 	DOREPLIFETIME(AProjectile, Damage);
 	DOREPLIFETIME(AProjectile, LifeTime);
 	DOREPLIFETIME(AProjectile, MaxLifeTime);
@@ -255,8 +310,40 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, ScaleImpactVFX);
 	DOREPLIFETIME(AProjectile, ScaleImpactSound);
 
+	DOREPLIFETIME(AProjectile, InstanceIndex);
+	DOREPLIFETIME(AProjectile, ISMComponent);
+	
 	DOREPLIFETIME(AProjectile, Niagara_A);
 	DOREPLIFETIME(AProjectile, Niagara_B);
+}
+
+// Implement the new multicast function to update clients
+void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& NewTransform)
+{
+	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		ISMComponent->UpdateInstanceTransform(InstanceIndex, NewTransform, true, false, false);
+	}
+	/*
+	if (!HasAuthority())
+	{
+		SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}*/
+	// Manually move Niagara_A to the new location
+
+	if (Niagara_A)
+	{
+		Niagara_A->SetWorldLocation(NewTransform.GetLocation());
+		// Optionally update rotation as well if needed
+		// Niagara_A->SetWorldRotation(NewTransform.GetRotation()); 
+	}
+
+	// Manually move Niagara_B to the new location
+	if (Niagara_B)
+	{
+		Niagara_B->SetWorldLocation(NewTransform.GetLocation());
+		// Niagara_B->SetWorldRotation(NewTransform.GetRotation());
+	}
 }
 
 // Called every frame
@@ -268,14 +355,21 @@ void AProjectile::Tick(float DeltaTime)
 	
 	if(RotateMesh)
 	{
-		// Calculate rotation amount based on DeltaTime and RotationSpeed
-	
-		FRotator NewRotation = FRotator(RotationSpeed.X * DeltaTime, RotationSpeed.Y * DeltaTime, RotationSpeed.Z * DeltaTime);
-
-		// Apply rotation to the mesh
-		if (Mesh_A) // Assuming your mesh component is named MeshComponent
+		// We only want the server to calculate this and replicate it
+		if (HasAuthority())
 		{
-			Mesh_A->AddLocalRotation(NewRotation);
+			// 1. Get the current transform of the instance. It already includes this frame's movement.
+			FTransform CurrentTransform;
+			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/true);
+
+			// 2. Calculate the rotation amount (the delta) for this frame.
+			FRotator RotationDelta = FRotator(RotationSpeed.X * DeltaTime, RotationSpeed.Y * DeltaTime, RotationSpeed.Z * DeltaTime);
+
+			// 3. Add the rotation delta to the instance's current rotation.
+			CurrentTransform.ConcatenateRotation(RotationDelta.Quaternion());
+			
+			// 4. Replicate this final transform to all clients.
+			Multicast_UpdateISMTransform(CurrentTransform);
 		}
 	}
 	if(LifeTime > MaxLifeTime && !FollowTarget)
@@ -292,8 +386,6 @@ void AProjectile::Tick(float DeltaTime)
 	{
 		FlyToLocationTarget();
 	}
-	
-	
 }
 
 void AProjectile::CheckViewport()
@@ -327,11 +419,94 @@ bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
 
 void AProjectile::FlyToUnitTarget()
 {
+    if (!HasAuthority()) return;
+
+    // --- 1. Determine Direction of Travel ---
+
+    if (!FollowTarget)
+    {
+        // NON-HOMING: The direction is fixed, pointing from the start to the initial target location.
+        // We use the ACTOR'S location as the start, not the shooter's, for a true straight line.
+    }
+    else // HOMING: The projectile adjusts its course towards the moving target.
+    {
+        AUnitBase* UnitTarget = Cast<AUnitBase>(Target);
+        if (UnitTarget && UnitTarget->GetUnitState() != UnitData::Dead)
+        {
+           // Update the target's current location from its actor or ISM component
+           FVector CurrentTargetLoc;
+           if (UnitTarget->bUseSkeletalMovement)
+           {
+              CurrentTargetLoc = UnitTarget->GetActorLocation();
+           }
+           else if (UnitTarget->ISMComponent)
+           {
+              FTransform InstanceXform;
+              UnitTarget->ISMComponent->GetInstanceTransform(UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true);
+              CurrentTargetLoc = InstanceXform.GetLocation();
+           }
+           TargetLocation = CurrentTargetLoc;
+        }
+
+        // For TRUE homing, the direction is from the projectile's CURRENT position to the target's CURRENT position.
+        FlightDirection  = (TargetLocation - GetActorLocation()).GetSafeNormal();
+    }
+
+    // --- 2. Calculate Movement for This Frame ---
+    const float FrameSpeed = MovementSpeed * GetWorld()->GetDeltaSeconds() * 10.f;
+    const FVector FrameMovement = FlightDirection  * FrameSpeed;
+
+	//FTransform NewTransform = GetActorTransform();
+	FTransform NewTransform;
+	ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ NewTransform, /*worldSpace=*/ true);
+    NewTransform.AddToTranslation(FrameMovement);
+
+    // --- 3. THE FIX: Update the Actor's Transform on the Server ---
+    // This moves the logical actor, ensuring GetActorLocation() is correct for all subsequent logic.
+    //SetActorTransform(NewTransform, false, nullptr, ETeleportType::None);
+
+    // --- 4. Update the Visuals on All Machines ---
+    // This tells clients to update their visuals to match the new server position.
+    if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+    {
+       Multicast_UpdateISMTransform(NewTransform);
+    }
+
+    // --- 5. Check for Impact with Corrected Logic ---
+    // This check now works correctly because GetActorLocation() is up-to-date.
+    const float Distance = FVector::Dist(NewTransform.GetLocation(), TargetLocation);
+    if (Distance <= FrameSpeed)
+    {
+       Impact(Target);
+       Destroy(true, false);
+    }
+}
+/*
+void AProjectile::FlyToUnitTarget()
+{
+	if (!HasAuthority()) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("FlyToUnitTarget"));
+	
 	if (!FollowTarget)
 	{
 		// simple straight‐line fallback
 		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-		AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
+		// --- 2. Calculate and Apply Movement ---
+		const float FrameSpeed = MovementSpeed * GetWorld()->GetDeltaSeconds() * 0.5f;
+		const FVector FrameMovement = Direction * FrameSpeed;
+
+		// --- 2. Calculate and Apply New Transform ---
+		FTransform InstanceTransform;
+		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform);
+		InstanceTransform.AddToTranslation(FrameMovement);
+
+		// B. Update the visual Instanced Static Mesh.
+		if (HasAuthority() && ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			Multicast_UpdateISMTransform(InstanceTransform);
+		}
+		
 		return;
 	}
 
@@ -348,7 +523,7 @@ void AProjectile::FlyToUnitTarget()
 		else
 		{
 			FTransform InstanceXform;
-			UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+			UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, InstanceXform,  true );
 			CurrentTargetLoc = InstanceXform.GetLocation();
 		}
 		
@@ -357,7 +532,21 @@ void AProjectile::FlyToUnitTarget()
 
 
 	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-	AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
+	// --- 2. Calculate and Apply Movement ---
+	const float FrameSpeed = MovementSpeed * GetWorld()->GetDeltaSeconds() * 0.5f;
+	const FVector FrameMovement = Direction * FrameSpeed;
+
+	// --- 2. Calculate and Apply New Transform ---
+	FTransform InstanceTransform;
+	ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform);
+	InstanceTransform.AddToTranslation(FrameMovement);
+	
+	// B. Update the visual Instanced Static Mesh.
+	if (HasAuthority() && ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		Multicast_UpdateISMTransform(InstanceTransform);
+	}
+
 	
 	const float Distance = FVector::Dist(GetActorLocation(), TargetLocation);
 	if (Distance <= (MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f))
@@ -366,42 +555,169 @@ void AProjectile::FlyToUnitTarget()
 		Destroy(true, false);
 	}
 }
-
-/*
-void AProjectile::FlyToUnitTarget()
-{
-	AUnitBase* TargetToAttack = Cast<AUnitBase>(Target);
-		
-	if(TargetToAttack && TargetToAttack->GetUnitState() != UnitData::Dead && FollowTarget) 
-	{
-		if(FollowTarget)
-		{
-			const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), TargetToAttack->GetActorLocation());
-			AddActorWorldOffset(Direction * MovementSpeed);
-		}
-	}else if(FollowTarget)
-	{
-		Destroy(true, false);
-	}else
-	{
-		const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-		AddActorWorldOffset(Direction * MovementSpeed);
-	}
-
-	// Calculate the distance between the projectile and the target
-	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-	if(DistanceToTarget <= MovementSpeed && FollowTarget)
-	{
-		Impact(Target);
-		Destroy(true, false);
-	}
-}*/
+*/
 
 void AProjectile::FlyToLocationTarget()
 {
-	const FVector Direction = UKismetMathLibrary::GetDirectionUnitVector(ShooterLocation, TargetLocation);
-	AddActorWorldOffset(Direction * MovementSpeed * GetWorld()->GetDeltaSeconds()*10.f);
+	if (!bIsInitialized) return;
+    if (!HasAuthority()) return;
+
+    // --- 1. Get current transform FROM THE INSTANCE ---
+    // This is the true current location of our projectile in the world.
+    FTransform CurrentTransform;
+    if (!ISMComponent || !ISMComponent->IsValidInstance(InstanceIndex))
+    {
+        return; // Safety check
+    }
+    ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true /* bWorldSpace */);
+
+    const FVector CurrentLocation = CurrentTransform.GetLocation();
+	
+	// Check for a zero vector to prevent getting stuck
+	if (FlightDirection.IsNearlyZero(0.1f))
+	{
+		// The target is the same as the start, destroy the projectile to prevent errors
+		FlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
+	}
+	
+    // Removed the * 0.5f, as it's likely unintentional. Re-add if it's for a specific gameplay reason.
+    const FVector FrameMovement = FlightDirection * MovementSpeed * GetWorld()->GetDeltaSeconds() * 10.f;
+
+    // The potential new location after this frame's movement
+    const FVector EndLocation = CurrentLocation + FrameMovement;
+
+    // --- 3. Perform a Sphere Trace for Collision ---
+    FHitResult HitResult;
+    TArray<AActor*> ActorsToIgnore;
+    ActorsToIgnore.Add(this);
+    ActorsToIgnore.Add(Shooter);
+
+    const float BaseMeshRadius = 15.5f;
+    const float MaxScale = CurrentTransform.GetScale3D().GetMax();
+    const float FinalCollisionRadius = BaseMeshRadius * MaxScale;
+
+    TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+    ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+
+	
+    bool bHit = UKismetSystemLibrary::SphereTraceSingleForObjects(
+       GetWorld(),
+       CurrentLocation,
+       EndLocation,
+       FinalCollisionRadius,
+       ObjectTypesToQuery,
+       false,
+       ActorsToIgnore,
+       EDrawDebugTrace::None,
+       HitResult,
+       true
+    );
+
+    if (bHit)
+    {
+       OnOverlapBegin_Implementation(
+          nullptr,
+          HitResult.GetActor(),
+          HitResult.GetComponent(),
+          HitResult.Item,
+          true,
+          HitResult
+       );
+    }
+	
+    // --- 4. Update Transform and Multicast ---
+    // Calculate the new final transform
+    FTransform NewTransform = CurrentTransform;
+    NewTransform.AddToTranslation(FrameMovement);
+
+    // This is the key: We update the instance directly since we aren't using the Actor's transform as the source of truth.
+    // The next frame will correctly read the updated instance transform.
+    if (ISMComponent->IsValidInstance(InstanceIndex))
+    {
+       // Update the ISM directly
+       ISMComponent->UpdateInstanceTransform(InstanceIndex, NewTransform, true, true, true);
+       
+       // You still need to tell clients to do the same! Your multicast function is essential here.
+       // The implementation of this function should call UpdateInstanceTransform on the clients.
+       Multicast_UpdateISMTransform(NewTransform); 
+    }
 }
+/*
+
+void AProjectile::FlyToLocationTarget()
+{
+	if (!HasAuthority()) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("FlyToLocationTarget"));
+	// --- 1. Determine Direction and Movement ---
+	// The direction is from the projectile's CURRENT position towards the target location.
+	
+	const FVector Direction = (TargetLocation - GetActorLocation()).GetSafeNormal();
+	const FVector FrameMovement = Direction * MovementSpeed * GetWorld()->GetDeltaSeconds() * 0.5f;
+
+	// --- 2. Calculate and Apply New Transform ---
+	FTransform InstanceTransform;
+	ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform);
+
+	const FVector StartLocation = InstanceTransform.GetLocation();
+	const FVector EndLocation = StartLocation + FrameMovement;
+
+	// --- 2. Perform a Sphere Trace for Collision ---
+	FHitResult HitResult;
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this); // Ignore the projectile itself
+	ActorsToIgnore.Add(Shooter); // Ignore the shooter
+
+	// Get the scale vector
+	const FVector Scale = InstanceTransform.GetScale3D();
+
+	const float BaseMeshRadius = 15.5f; 
+
+	// Find the largest scale axis, in case it's non-uniform
+	const float MaxScale = FMath::Max(Scale.X, FMath::Max(Scale.Y, Scale.Z));
+
+	// Calculate the final, accurate collision radius for the trace
+	const float FinalCollisionRadius = BaseMeshRadius * MaxScale;
+	
+	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+	ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+	
+	bool bHit = UKismetSystemLibrary::SphereTraceSingleForObjects(
+		GetWorld(),
+		StartLocation,
+		EndLocation,
+		FinalCollisionRadius,
+		ObjectTypesToQuery,
+		false, // bTraceComplex
+		ActorsToIgnore,
+		EDrawDebugTrace::None, // Change to ForDuration to debug the sphere
+		HitResult,
+		true // bIgnoreSelf
+	);
+
+	if (bHit)
+	{
+		// Manually call your overlap logic, feeding it the data from our trace result.
+		OnOverlapBegin_Implementation(
+			nullptr,              // We don't have a "hitting" component, so this is null
+			HitResult.GetActor(), // The actor that was hit
+			HitResult.GetComponent(), // The component that was hit
+			HitResult.Item,       // The body index
+			true,                 // This was from a sweep
+			HitResult             // The full hit result
+		);
+        
+		// After impact, we stop here and don't continue moving. The overlap logic
+		// should handle destroying the projectile.
+		return; 
+	}
+	// B. Update the visual Instanced Static Mesh.
+	if (HasAuthority() && ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		InstanceTransform.AddToTranslation(FrameMovement);
+		Multicast_UpdateISMTransform(InstanceTransform);
+	}
+}*/
 
 void AProjectile::Impact(AActor* ImpactTarget)
 {
@@ -526,10 +842,30 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		return;
 	}
 
-	
-	if(OtherActor)
+	AUnitBase* UnitToHit = nullptr;
+
+	if (OtherActor)
 	{
-		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
+		// 1. First, try to get the unit by casting the actor we directly hit.
+		UnitToHit = Cast<AUnitBase>(OtherActor);
+
+		// 2. If the direct cast fails, it might be because we hit a component (like an ISM).
+		//    Let's check if the component's OWNER is a unit.
+		if (!UnitToHit && OtherComp)
+		{
+			AActor* OwningActor = OtherComp->GetOwner();
+
+			if (OwningActor)
+			{
+				// Now, cast the OwningActor to a UnitBase to see if it's what we're looking for.
+				UnitToHit = Cast<AUnitBase>(OwningActor);
+			}
+		}
+	}
+	
+	if(UnitToHit)
+	{
+		//AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
 		AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
@@ -678,6 +1014,17 @@ AUnitBase* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* U
 
 void AProjectile::SetVisibility(bool Visible)
 {
-	GetMesh()->SetVisibility(Visible);
+	//GetMesh()->SetVisibility(Visible);
+	
+	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		FTransform InstanceTransform;
+		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, /*bWorldSpace=*/true);
+
+		// Hide the instance by scaling it to zero, show it by scaling it back to one.
+		InstanceTransform.SetScale3D(Visible ? FVector(1.0f) : FVector::ZeroVector);
+        
+		ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceTransform, true, true);
+	}
 }
 

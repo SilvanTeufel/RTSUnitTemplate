@@ -539,16 +539,20 @@ void ACustomControllerBase::LeftClickPressedMass()
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
 
 		bool AbilityFired = false;
+		bool AbilityUnSynced = false;
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
 				if (SelectedUnits[i] && SelectedUnits[i]->CurrentSnapshot.AbilityClass && SelectedUnits[i]->CurrentDraggedAbilityIndicator)
 				{
 						FireAbilityMouseHit(SelectedUnits[i], Hit_Pawn);
 						AbilityFired = true;
+				}else
+				{
+					AbilityUnSynced = true;
 				}
 		}
 		
-		if (AbilityFired) return;
+		if (AbilityFired && !AbilityUnSynced) return;
 		
 		if (Hit_Pawn.bBlockingHit && HUDBase)
 		{

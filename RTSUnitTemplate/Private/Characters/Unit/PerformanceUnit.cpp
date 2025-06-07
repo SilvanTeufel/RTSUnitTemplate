@@ -472,6 +472,15 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
 	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
+		FVector LocationToFireEffects = GetActorLocation();
+		if (!bUseSkeletalMovement && ISMComponent)
+		{
+			FTransform InstanceTransform;
+			// Get the world-space transform of this specific unit's instance
+			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ InstanceTransform, /*worldSpace=*/ true);
+			LocationToFireEffects = InstanceTransform.GetLocation();
+		}
+		
 		UWorld* World = GetWorld();
 
 		if (!World)
@@ -491,11 +500,11 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 					FTimerHandle VisualEffectTimerHandle;
 					World->GetTimerManager().SetTimer(
 							VisualEffectTimerHandle,
-							[this, ImpactVFX, ScaleVFX]()
+							[this, ImpactVFX, ScaleVFX, LocationToFireEffects]()
 							{
 								if (GetWorld())
 								{
-									UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+									UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, LocationToFireEffects, GetActorRotation(), ScaleVFX);
 								}
 							},
 							EffectDelay,
@@ -503,7 +512,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 					);
 				}else
 				{
-					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetActorLocation(), GetActorRotation(), ScaleVFX);
+					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, LocationToFireEffects, GetActorRotation(), ScaleVFX);
 				}
 
 			}
@@ -516,11 +525,11 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 					FTimerHandle SoundTimerHandle;
 					World->GetTimerManager().SetTimer(
 						SoundTimerHandle,
-						[this, ImpactSound, ScaleSound]()
+						[this, ImpactSound, ScaleSound, LocationToFireEffects]()
 						{
 							if (GetWorld())
 							{
-								UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetActorLocation(), ScaleSound);
+								UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, LocationToFireEffects, ScaleSound);
 							}
 						},
 						SoundDelay,
@@ -528,7 +537,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 					);
 				}else
 				{
-					UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetActorLocation(), ScaleSound);
+					UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, LocationToFireEffects, ScaleSound);
 				}
 			}
 		}
