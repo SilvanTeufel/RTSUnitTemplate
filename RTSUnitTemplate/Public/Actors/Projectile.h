@@ -106,9 +106,14 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_A;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FTransform Niagara_A_Start_Transform;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_B;
-	
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FTransform Niagara_B_Start_Transform;
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraSystem* ImpactVFX;
 	

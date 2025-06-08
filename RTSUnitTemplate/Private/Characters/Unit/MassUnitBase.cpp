@@ -30,6 +30,12 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
+
+	DOREPLIFETIME(AMassUnitBase, Niagara_A);
+	DOREPLIFETIME(AMassUnitBase, Niagara_B);
+
+	DOREPLIFETIME(AMassUnitBase, Niagara_A_Start_Transform);
+	DOREPLIFETIME(AMassUnitBase, Niagara_B_Start_Transform);
 }
 
 bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
@@ -387,6 +393,16 @@ void AMassUnitBase::OnConstruction(const FTransform& Transform)
 		// will allow an append from INDEX_NONE
 		ISMComponent->ClearInstances();
 		InstanceIndex = ISMComponent->AddInstance(Transform, /*bWorldSpace=*/true);
+
+		if (Niagara_A)
+		{
+			Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
+		}
+
+		if (Niagara_B)
+		{
+			Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
+		}
 	}
 }
 
@@ -488,6 +504,54 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 	{
 		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, false, false);
 		//ISMComponent->MarkRenderStateDirty();
+	}
+
+
+	//SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Manually move Niagara_A to the new location
+
+	if (Niagara_A)
+	{
+		// Get the local offset vector (e.g., FVector(-750, 0, 0)) from the start transform
+		const FVector LocalOffset = Niagara_A_Start_Transform.GetLocation();
+
+		// Rotate this local offset by the new instance's world rotation
+		const FVector WorldOffset = NewTransform.GetRotation().RotateVector(LocalOffset);
+    
+		// Add the correctly rotated offset to the instance's location
+		const FVector FinalWorldLocation = NewTransform.GetLocation() + WorldOffset;
+
+		// Combine the instance's rotation with the component's relative rotation
+		const FQuat FinalWorldRotation = NewTransform.GetRotation() * Niagara_A_Start_Transform.GetRotation();
+       
+		// Create the final transform
+		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, NewTransform.GetScale3D());
+
+		// Set the final transform on the Niagara component
+		Niagara_A->SetWorldTransform(FinalWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	// Manually move Niagara_B to the new location
+	if (Niagara_B)
+	{
+		// Get the local offset vector (e.g., FVector(-750, 0, 0)) from the start transform
+		const FVector LocalOffset = Niagara_B_Start_Transform.GetLocation();
+
+		// Rotate this local offset by the new instance's world rotation
+		const FVector WorldOffset = NewTransform.GetRotation().RotateVector(LocalOffset);
+    
+		// Add the correctly rotated offset to the instance's location
+		const FVector FinalWorldLocation = NewTransform.GetLocation() + WorldOffset;
+
+		// Combine the instance's rotation with the component's relative rotation
+		const FQuat FinalWorldRotation = NewTransform.GetRotation() * Niagara_B_Start_Transform.GetRotation();
+       
+		// Create the final transform
+		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, NewTransform.GetScale3D());
+
+		// Set the final transform on the Niagara component
+		Niagara_B->SetWorldTransform(FinalWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 }
 

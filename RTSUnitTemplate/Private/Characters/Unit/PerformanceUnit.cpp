@@ -73,9 +73,6 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, MeeleImpactVFXDelay);
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactSoundDelay);
 
-	DOREPLIFETIME(APerformanceUnit, Niagara_A);
-	DOREPLIFETIME(APerformanceUnit, Niagara_B);
-
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
 	DOREPLIFETIME(APerformanceUnit, bClientIsVisible);
