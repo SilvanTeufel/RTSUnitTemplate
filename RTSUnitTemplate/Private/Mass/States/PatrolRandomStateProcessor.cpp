@@ -82,7 +82,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Capture World for StopMovement.
         // Do NOT capture LocalSignalSubsystem directly here.
         [&PendingSignals, World](FMassExecutionContext& ChunkContext)

@@ -76,7 +76,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
         const int32 NumEntities = Context.GetNumEntities();
 
-            UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
+            //UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& AIState = AIStateList[i];

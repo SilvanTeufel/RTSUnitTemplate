@@ -68,7 +68,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference, DO NOT capture SignalSubsystem directly
         [this, &PendingSignals, World](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
     {

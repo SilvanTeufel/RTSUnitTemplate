@@ -76,7 +76,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
     // Use the engine/Mass provided FMassSignalPayload struct
     TArray<FMassSignalPayload> PendingSignals;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
@@ -88,7 +88,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
         const int32 NumEntities = Context.GetNumEntities();
 
-            UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
+           // UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -105,9 +105,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // Basic validation of data from fragment (more robust checks should be external)
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
-                UE_LOG(LogTemp, Error, TEXT("SWITCH TO PLACEHOLDER!!!"));
                  PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
-                 //StopMovement(MoveTarget, World);
                  continue;
             }
 
@@ -115,18 +113,11 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
-
-            UE_LOG(LogTemp, Error, TEXT("DistanceToTargetCenter: %f"), DistanceToTargetCenter);
-            UE_LOG(LogTemp, Error, TEXT("WorkerStats.BuildAreaArrivalDistance: %f"), WorkerStats.BuildAreaArrivalDistance);
-            UE_LOG(LogTemp, Error, TEXT("AIState.SwitchingState: %d"), AIState.SwitchingState);
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
             {
-                UE_LOG(LogTemp, Error, TEXT("SWITCH TO BUILD PLEASE!!!"));
-                //AIState.StateTimer = 0.f;
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
-                //StopMovement(MoveTarget, World);
                 continue;
             }
             

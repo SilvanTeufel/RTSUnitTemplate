@@ -68,7 +68,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, 
+    EntityQuery.ForEachEntityChunk(Context, 
         // Capture PendingSignals by reference.
         // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)

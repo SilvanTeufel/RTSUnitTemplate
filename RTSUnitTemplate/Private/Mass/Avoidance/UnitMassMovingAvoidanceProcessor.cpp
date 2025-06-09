@@ -125,7 +125,7 @@ void UUnitMassMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManage
 
 	// --- Logging AFTER Super::Execute using DebugLogQuery ---
 	// Re-query just the force fragment to see the result.
-	DebugLogQuery.ForEachEntityChunk(EntityManager, Context, [&Context](FMassExecutionContext& ChunkContext) {
+	DebugLogQuery.ForEachEntityChunk(Context, [&Context](FMassExecutionContext& ChunkContext) {
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		const TConstArrayView<FMassForceFragment> ForceList = ChunkContext.GetFragmentView<FMassForceFragment>(); // Get force after execution
 

@@ -43,7 +43,7 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 	// Re-initialize (clear + configure) the hash‐grid
 	NavSys->GetObstacleGridMutable().Initialize(InitialCellSize);
 
-	ObstacleQuery.ForEachEntityChunk(EntityManager, Context, [&](FMassExecutionContext& ChunkContext)
+	ObstacleQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		const auto& Transforms = ChunkContext.GetFragmentView<FTransformFragment>();

@@ -64,7 +64,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
         return;
     }
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext& Context)
+    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& Context)
     {
         const int32 NumEntities = Context.GetNumEntities();
         if (NumEntities == 0) return;

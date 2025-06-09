@@ -83,7 +83,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
     if (!EntitySubsystem) return; // Needed for async result application
 
     // --- Path Following & Steering Logic ---
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();

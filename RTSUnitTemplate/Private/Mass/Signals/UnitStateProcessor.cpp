@@ -49,12 +49,12 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 	if (EntitySubsystem)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EntitySubsystem FOUND!!!!!!"));
+		//UE_LOG(LogTemp, Warning, TEXT("EntitySubsystem FOUND!!!!!!"));
 	}
 	
     if (SignalSubsystem)
     {
-    	UE_LOG(LogTemp, Warning, TEXT("SignalSubsystem FOUND!!!!!!"));
+    	//UE_LOG(LogTemp, Warning, TEXT("SignalSubsystem FOUND!!!!!!"));
         // List of signal names that should trigger ChangeUnitState
 
         // Register the same handler function for each signal in the list

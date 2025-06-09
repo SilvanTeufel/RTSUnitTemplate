@@ -63,7 +63,7 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(SomeExpectedNumber); // Optional optimization
 	
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Do NOT capture LocalSignalSubsystem directly.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {

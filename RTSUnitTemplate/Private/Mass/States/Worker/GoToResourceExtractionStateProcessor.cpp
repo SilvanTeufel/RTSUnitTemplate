@@ -71,7 +71,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     
     TArray<FMassSignalPayload> PendingSignals;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture World for helper functions
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
@@ -82,7 +82,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
-            UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
 

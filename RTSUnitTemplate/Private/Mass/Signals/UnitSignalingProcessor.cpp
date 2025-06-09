@@ -63,10 +63,10 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         return;
     }
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
+        //const int32 NumEntities = ChunkContext.GetNumEntities();
 
             /*
             //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! NumEntities: %d"), NumEntities);

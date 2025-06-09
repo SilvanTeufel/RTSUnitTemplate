@@ -92,7 +92,7 @@ void UUnitSightProcessor::Execute(
     TArray<FLocalInfo> AllEntities;
     AllEntities.Reserve(256);
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [&AllEntities, this](FMassExecutionContext& ChunkCtx)
     {
         const int32 N = ChunkCtx.GetNumEntities();

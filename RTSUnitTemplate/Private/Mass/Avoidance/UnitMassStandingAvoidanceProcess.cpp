@@ -57,7 +57,7 @@ void UUnitMassStandingAvoidanceProcess::ConfigureQueries(const TSharedRef<FMassE
 void UUnitMassStandingAvoidanceProcess::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	// --- Logging BEFORE Super::Execute using DebugLogQuery ---
-	DebugLogQuery.ForEachEntityChunk(EntityManager, Context, [&Context](FMassExecutionContext& ChunkContext) {
+	DebugLogQuery.ForEachEntityChunk(Context, [&Context](FMassExecutionContext& ChunkContext) {
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		const TConstArrayView<FMassGhostLocationFragment> GhostList = ChunkContext.GetFragmentView<FMassGhostLocationFragment>();
 		const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();

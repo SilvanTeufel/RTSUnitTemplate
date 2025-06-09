@@ -128,7 +128,7 @@ void UDetectionProcessor::Execute(
     TArray<FUnitInfo> Units;
     Units.Reserve(256);
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [&Units, this](FMassExecutionContext& ChunkCtx)
     {
         const int32 N = ChunkCtx.GetNumEntities();

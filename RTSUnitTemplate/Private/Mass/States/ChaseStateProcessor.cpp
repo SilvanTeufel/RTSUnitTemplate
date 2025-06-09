@@ -105,7 +105,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Capture World for helper functions.
         // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)

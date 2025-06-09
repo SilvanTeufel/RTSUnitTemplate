@@ -63,7 +63,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
     TArray<FActorTransformUpdatePayload> PendingLookAtUpdates;
     // PendingLookAtUpdates.Reserve(ExpectedUpdates); // Optional optimization
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingLookAtUpdates by reference
         [this, DeltaTime, &EntityManager, &PendingLookAtUpdates](FMassExecutionContext& ChunkContext)
     {
