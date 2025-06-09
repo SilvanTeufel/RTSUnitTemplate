@@ -16,15 +16,16 @@
 #include "Async/Async.h"
 
 
-UDeathStateProcessor::UDeathStateProcessor()
+UDeathStateProcessor::UDeathStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior; // Oder eigene Gruppe
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
 }
 
-void UDeathStateProcessor::ConfigureQueries()
+void UDeathStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::All); // Nur tote Entitäten
     
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer
@@ -36,9 +37,9 @@ void UDeathStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UDeathStateProcessor::Initialize(UObject& Owner)
+void UDeathStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 

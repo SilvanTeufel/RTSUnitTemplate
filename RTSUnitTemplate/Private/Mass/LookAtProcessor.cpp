@@ -9,7 +9,7 @@
 #include "Steering/MassSteeringFragments.h"
 #include "Async/Async.h"
 
-ULookAtProcessor::ULookAtProcessor()
+ULookAtProcessor::ULookAtProcessor(): EntityQuery()
 {
 	// Sollte laufen, nachdem Ziele gesetzt wurden, aber bevor/während Bewegung/Angriff relevant wird
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement; // Oder ::Behavior, je nach Präferenz
@@ -19,8 +19,10 @@ ULookAtProcessor::ULookAtProcessor()
 	// bRequiresGameThreadExecution = false;
 }
 
-void ULookAtProcessor::ConfigureQueries()
+void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+    
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
@@ -73,7 +75,8 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>(); // ReadOnly access is sufficient
         TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
             const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-            
+
+            //UE_LOG(LogTemp, Log, TEXT("ULookAtProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassAITargetFragment& TargetFrag = TargetList[i];

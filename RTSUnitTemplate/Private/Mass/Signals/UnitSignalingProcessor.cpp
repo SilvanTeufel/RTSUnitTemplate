@@ -13,20 +13,21 @@
 
 const FName UUnitSignalingProcessor::UnitPresenceSignalName = FName("UnitPresence");
 
-UUnitSignalingProcessor::UUnitSignalingProcessor()
+UUnitSignalingProcessor::UUnitSignalingProcessor(): EntityQuery()
 {
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     bAutoRegisterWithProcessingPhases = true;
 }
 
-void UUnitSignalingProcessor::Initialize(UObject& Owner)
+void UUnitSignalingProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>();
 }
 
-void UUnitSignalingProcessor::ConfigureQueries()
+void UUnitSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     // Query entities that should announce their presence
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);

@@ -11,7 +11,7 @@
 #include "Mass/Signals/MySignals.h"
 
 
-UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor()
+UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -19,8 +19,9 @@ UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor()
     bRequiresGameThreadExecution = true;
 }
 
-void UGoToResourceExtractionStateProcessor::ConfigureQueries()
+void UGoToResourceExtractionStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::All);
 
     // Fragments needed:
@@ -44,9 +45,9 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UGoToResourceExtractionStateProcessor::Initialize(UObject& Owner)
+void UGoToResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -81,7 +82,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
-            //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
 

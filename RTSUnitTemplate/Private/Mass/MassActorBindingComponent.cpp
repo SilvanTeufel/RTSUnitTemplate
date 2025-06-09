@@ -61,21 +61,33 @@ void UMassActorBindingComponent::BeginPlay()
 
 void UMassActorBindingComponent::SetupMassOnUnit()
 {
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!SetupMassOnUnit!!!!!!!!!!!!"));
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("World not FOUND!"));
+	}
+	
 	if(!MassEntitySubsystemCache)
 	{
 		if(World)
 		{
 			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+			if (!MassEntitySubsystemCache)
+			{
+				// This is the log that will likely fire for placed actors on the first attempt.
+				UE_LOG(LogTemp, Error, TEXT("MassActorBindingComponent on %s: UMassEntitySubsystem not ready yet. Will retry on Tick."), *MyOwner->GetName());
+			}
 		}
 	}
 
 	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
 	{
 		bNeedsMassUnitSetup = true;
+		UE_LOG(LogTemp, Warning, TEXT("MassActorBindingComponent on %s: Flagged for Mass unit setup."), *MyOwner->GetName());
 	}
 
 
@@ -89,12 +101,17 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
+
+	UWorld* World = GetWorld();
 	
 	if (MassEntityHandle.IsValid())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
 		return MassEntityHandle;
 	}
+	
+	MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+	
 	if (!MassEntitySubsystemCache)
 	{
 		UE_LOG(LogTemp, Error, TEXT("MassEntitySubsystem not found"));
@@ -193,7 +210,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	if (!MyUnit) return false;
 	
 	FMassMovementParameters MovementParamsInstance;
-	MovementParamsInstance.MaxSpeed = MyUnit->Attributes->GetRunSpeed()*20; //500.0f;     // Set desired value
+	MovementParamsInstance.MaxSpeed = 10000.0f; //MyUnit->Attributes->GetRunSpeed()*20; //500.0f;     // Set desired value
 	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
 	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
 	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
@@ -206,7 +223,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 
 	// Package the shared fragments
 	FMassArchetypeSharedFragmentValues SharedValues;
-	SharedValues.AddConstSharedFragment(MovementParamSharedFragment);
+	SharedValues.Add(MovementParamSharedFragment);
 	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
 
 	// 2. Steering Parameters (Using default values initially)
@@ -216,12 +233,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
 
 	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
-	SharedValues.AddConstSharedFragment(MovingSteeringParamSharedFragment);
+	SharedValues.Add(MovingSteeringParamSharedFragment);
 
 	FMassStandingSteeringParameters StandingSteeringParamsInstance;
 	// You can modify defaults here if needed
 	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
-	SharedValues.AddConstSharedFragment(StandingSteeringParamSharedFragment);
+	SharedValues.Add(StandingSteeringParamSharedFragment);
 
 	// 3. Avoidance Parameters (Now explicitly initialized)
 	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
@@ -248,7 +265,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// Validate and create the shared fragment
 	FConstSharedStruct MovingAvoidanceParamSharedFragment =
 		EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated());
-	SharedValues.AddConstSharedFragment(MovingAvoidanceParamSharedFragment);
+	SharedValues.Add(MovingAvoidanceParamSharedFragment);
 
 	// Standing avoidance (if you also use standing avoidance)
 	FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
@@ -258,7 +275,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// … any other Ghost* fields you want to override …
 	FConstSharedStruct StandingAvoidanceParamSharedFragment =
 	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
-	SharedValues.AddConstSharedFragment(StandingAvoidanceParamSharedFragment);
+	SharedValues.Add(StandingAvoidanceParamSharedFragment);
 	// ***** --- ADD THIS LINE --- *****
 	// ***** --- END ADDED LINE --- *****
 	
@@ -344,11 +361,16 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity()
 {
+	UWorld* World = GetWorld();
+	
 	if (MassEntityHandle.IsValid())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
 		return MassEntityHandle;
 	}
+
+	MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+	
 	if (!MassEntitySubsystemCache)
 	{
 		UE_LOG(LogTemp, Error, TEXT("MassEntitySubsystem not found"));

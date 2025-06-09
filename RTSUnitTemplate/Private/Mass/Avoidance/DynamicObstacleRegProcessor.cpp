@@ -7,15 +7,16 @@
 #include "MassNavigationFragments.h"
 #include "MassRepresentationTypes.h"
 
-UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor()
+UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor(): ObstacleQuery()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks;
 	bAutoRegisterWithProcessingPhases = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
 
-void UDynamicObstacleRegProcessor::ConfigureQueries()
+void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+	ObstacleQuery.Initialize(EntityManager);
 	ObstacleQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	ObstacleQuery.AddRequirement<FMassAvoidanceColliderFragment>(EMassFragmentAccess::ReadOnly);
 	// Add a tag requirement if you only want to register specific entities

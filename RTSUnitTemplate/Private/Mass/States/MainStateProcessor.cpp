@@ -7,15 +7,16 @@
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 
-UMainStateProcessor::UMainStateProcessor()
+UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
 }
 
-void UMainStateProcessor::ConfigureQueries()
+void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
 	// Benötigte Fragmente:
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
@@ -29,9 +30,9 @@ void UMainStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UMainStateProcessor::Initialize(UObject& Owner)
+void UMainStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -58,7 +59,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    
+    EntityQuery.ForEachEntityChunk(Context,
         [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -66,7 +68,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable needed
-       
+            //UE_LOG(LogTemp, Warning, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -76,9 +78,9 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
 
 
-            
+           // ChunkContext.GetEntityManagerChecked()
            // if (StatsFrag.TeamId == 7)
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+            UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 

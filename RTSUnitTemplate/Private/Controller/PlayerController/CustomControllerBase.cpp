@@ -184,6 +184,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
     // Now, modify the specific entity's fragment data
+	/*
     MoveTargetFragmentPtr->Center = NewTargetLocation;
     MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Move; // Set the intended action
     MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
@@ -192,7 +193,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     
     // If you need to trigger network replication or specific actions:
     MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
-
+	*/
+	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 	
 	if (AttackT)
@@ -208,7 +211,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
-	EntityManager.Defer().RemoveTag<FMassStateRunTag>(MassEntityHandle);
+	//EntityManager.Defer().RemoveTag<FMassStateRunTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);

@@ -31,10 +31,10 @@ public:
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler
-	virtual void Initialize(UObject& Owner) override;
+	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
+	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
+	
 	virtual void BeginDestroy() override;
-
-	virtual void ConfigureQueries() override;
 private:
 	UPROPERTY(Transient)
 	UWorld* World;

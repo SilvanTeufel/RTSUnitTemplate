@@ -14,14 +14,15 @@
 
 // No Actor includes, no Movement includes needed
 
-UBuildStateProcessor::UBuildStateProcessor()
+UBuildStateProcessor::UBuildStateProcessor(): EntityQuery()
 {
     ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     // No specific execution order dependency for this state logic
 }
 
-void UBuildStateProcessor::ConfigureQueries()
+void UBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Update StateTimer
     // Read-only fragments needed by the external system handling SpawnBuildingRequest signal:
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite); // For BuildAreaPosition
@@ -42,9 +43,9 @@ void UBuildStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UBuildStateProcessor::Initialize(UObject& Owner)
+void UBuildStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -65,7 +66,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     // Use FMassSignalPayload (defined by Mass framework)
     TArray<FMassSignalPayload> PendingSignals;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
@@ -75,7 +76,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
         const int32 NumEntities = Context.GetNumEntities();
 
-            //UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
+            UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& AIState = AIStateList[i];

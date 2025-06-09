@@ -12,7 +12,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 
-UPatrolIdleStateProcessor::UPatrolIdleStateProcessor()
+UPatrolIdleStateProcessor::UPatrolIdleStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -20,8 +20,9 @@ UPatrolIdleStateProcessor::UPatrolIdleStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UPatrolIdleStateProcessor::ConfigureQueries()
+void UPatrolIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::All);
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
@@ -40,9 +41,9 @@ void UPatrolIdleStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UPatrolIdleStateProcessor::Initialize(UObject& Owner)
+void UPatrolIdleStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 

@@ -6,15 +6,16 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 
-UBuildingChaseStateProcessor::UBuildingChaseStateProcessor()
+UBuildingChaseStateProcessor::UBuildingChaseStateProcessor(): EntityQuery()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
 }
 
-void UBuildingChaseStateProcessor::ConfigureQueries()
+void UBuildingChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::All); // Nur Entities im Run-Zustand
 
 	// Benötigte Fragmente:
@@ -27,9 +28,9 @@ void UBuildingChaseStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UBuildingChaseStateProcessor::Initialize(UObject& Owner)
+void UBuildingChaseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	Super::Initialize(Owner);
+	Super::InitializeInternal(Owner, EntityManager);
 	SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 

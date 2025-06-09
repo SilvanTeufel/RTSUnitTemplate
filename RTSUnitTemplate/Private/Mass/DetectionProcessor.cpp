@@ -14,16 +14,16 @@
 #include "Mass/Signals/UnitSignalingProcessor.h"
 
 
-UDetectionProcessor::UDetectionProcessor()
+UDetectionProcessor::UDetectionProcessor(): EntityQuery()
 {
     // Sollte vor der State Machine laufen
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
 }
 
-void UDetectionProcessor::Initialize(UObject& Owner)
+void UDetectionProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     World = Owner.GetWorld();
     if (World)
     {
@@ -68,10 +68,10 @@ void UDetectionProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArray
 
 }
 
-void UDetectionProcessor::ConfigureQueries()
+void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
     // Tell the base class which signal we care about:
-
+    EntityQuery.Initialize(EntityManager);
     // Dieser Prozessor läuft für alle Einheiten, die Ziele erfassen sollen
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel schreiben

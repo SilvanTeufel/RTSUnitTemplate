@@ -26,11 +26,11 @@ public:
 
 protected:
     // Configuration function called during initialization.
-    virtual void ConfigureQueries() override;
+    virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
+    virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 
     // Execute is called during the processing phase and applies the logic on each entity chunk.
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-    virtual void Initialize(UObject& Owner) override; // Falls du es überschreibst
 
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;

@@ -10,7 +10,7 @@
 #include "Mass/UnitNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
 
-UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor()
+UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery()
 {
 
 	//ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
@@ -21,8 +21,10 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor()
 	bAutoRegisterWithProcessingPhases = true;
 }
 
-void UUnitApplyMassMovementProcessor::ConfigureQueries()
+void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+	EntityQuery.Initialize(EntityManager);
+	
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);

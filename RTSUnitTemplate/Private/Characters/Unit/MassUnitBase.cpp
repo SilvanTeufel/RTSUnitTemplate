@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Characters/Unit/MassUnitBase.h"
@@ -123,21 +123,21 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	}
 
 	// Remove all state tags
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateIdleTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateChaseTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateAttackTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePauseTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateDeadTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateRunTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePatrolRandomTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePatrolIdleTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateCastingTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateIsAttackedTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToBaseTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToBuildTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateBuildTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToResourceExtractionTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateResourceExtractionTag::StaticStruct());
+	if (UState != UnitData::Idle) EntityManager->Defer().RemoveTag<FMassStateIdleTag>(EntityHandle);
+	if (UState != UnitData::Chase) EntityManager->Defer().RemoveTag<FMassStateChaseTag>(EntityHandle);
+	if (UState != UnitData::Attack) EntityManager->Defer().RemoveTag<FMassStateAttackTag>(EntityHandle);
+	if (UState != UnitData::Pause) EntityManager->Defer().RemoveTag<FMassStatePauseTag>(EntityHandle);
+	if (UState != UnitData::Dead) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
+	if (UState != UnitData::Run) EntityManager->Defer().RemoveTag<FMassStateRunTag>(EntityHandle);
+	if (UState != UnitData::PatrolRandom) EntityManager->Defer().RemoveTag<FMassStatePatrolRandomTag>(EntityHandle);
+	if (UState != UnitData::PatrolIdle) EntityManager->Defer().RemoveTag<FMassStatePatrolIdleTag>(EntityHandle);
+	if (UState != UnitData::Casting) EntityManager->Defer().RemoveTag<FMassStateCastingTag>(EntityHandle);
+	if (UState != UnitData::IsAttacked) EntityManager->Defer().RemoveTag<FMassStateIsAttackedTag>(EntityHandle);
+	if (UState != UnitData::GoToBase) EntityManager->Defer().RemoveTag<FMassStateGoToBaseTag>(EntityHandle);
+	if (UState != UnitData::GoToBuild) EntityManager->Defer().RemoveTag<FMassStateGoToBuildTag>(EntityHandle);
+	if (UState != UnitData::Build) EntityManager->Defer().RemoveTag<FMassStateBuildTag>(EntityHandle);
+	if (UState != UnitData::GoToResourceExtraction) EntityManager->Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
+	if (UState != UnitData::ResourceExtraction) EntityManager->Defer().RemoveTag<FMassStateResourceExtractionTag>(EntityHandle);
 
 	// Reset state timers
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
@@ -145,7 +145,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	UnitControlTimer = 0.f;
 
 	// Set PlaceholderSignal using UnitStatePlaceholder
-	switch (UnitStatePlaceholder)
+	switch (UStatePlaceholder)
 	{
 	case UnitData::Idle: StateFrag->PlaceholderSignal = UnitSignals::Idle; break;
 	case UnitData::Chase: StateFrag->PlaceholderSignal = UnitSignals::Chase; break;
@@ -167,54 +167,80 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 		break;
 	}
 
-	// Determine tag from UnitState
-	UScriptStruct* NewTag = nullptr;
-	UScriptStruct* SecondTag = nullptr;
-	switch (UnitState)
+	// The EntityManager is now handled within the switch
+	SetUnitState(UState);
+	auto& Defer = EntityManager->Defer();
+
+	switch (UState)
 	{
-	case UnitData::Idle:
-		{
-			NewTag = FMassStateIdleTag::StaticStruct();
-			SecondTag = FMassStateDetectTag::StaticStruct();
-		}
-		break;
-	case UnitData::Chase: NewTag = FMassStateChaseTag::StaticStruct(); break;
-	case UnitData::Attack: NewTag = FMassStateAttackTag::StaticStruct(); break;
-	case UnitData::Pause: NewTag = FMassStatePauseTag::StaticStruct(); break;
-	case UnitData::Dead: NewTag = FMassStateDeadTag::StaticStruct(); break;
-	case UnitData::Run: NewTag = FMassStateRunTag::StaticStruct(); break;
-	case UnitData::PatrolRandom:
-		{
-			NewTag = FMassStatePatrolRandomTag::StaticStruct();
-			SecondTag = FMassStateDetectTag::StaticStruct();
-		}
-		break;
-	case UnitData::PatrolIdle:
-		{
-			NewTag = FMassStatePatrolIdleTag::StaticStruct();
-			SecondTag = FMassStateDetectTag::StaticStruct();
-			
-		}
-		break;
-	case UnitData::Casting: NewTag = FMassStateCastingTag::StaticStruct(); break;
-	case UnitData::IsAttacked: NewTag = FMassStateIsAttackedTag::StaticStruct(); break;
-	case UnitData::GoToBase: NewTag = FMassStateGoToBaseTag::StaticStruct(); break;
-	case UnitData::GoToBuild: NewTag = FMassStateGoToBuildTag::StaticStruct(); break;
-	case UnitData::Build: NewTag = FMassStateBuildTag::StaticStruct(); break;
-	case UnitData::GoToResourceExtraction: NewTag = FMassStateGoToResourceExtractionTag::StaticStruct(); break;
-	case UnitData::ResourceExtraction: NewTag = FMassStateResourceExtractionTag::StaticStruct(); break;
-	default:
-		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Unknown UnitState."), *GetName());
-		return false;
+	    case UnitData::Idle:
+	        Defer.AddTag<FMassStateIdleTag>(EntityHandle);
+	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Chase:
+	        Defer.AddTag<FMassStateChaseTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Attack:
+	        Defer.AddTag<FMassStateAttackTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Pause:
+	        Defer.AddTag<FMassStatePauseTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Dead:
+	        Defer.AddTag<FMassStateDeadTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Run:
+	        Defer.AddTag<FMassStateRunTag>(EntityHandle);
+	        break;
+
+	    case UnitData::PatrolRandom:
+	        Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
+	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	        break;
+
+	    case UnitData::PatrolIdle:
+	        Defer.AddTag<FMassStatePatrolIdleTag>(EntityHandle);
+	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Casting:
+	        Defer.AddTag<FMassStateCastingTag>(EntityHandle);
+	        break;
+
+	    case UnitData::IsAttacked:
+	        Defer.AddTag<FMassStateIsAttackedTag>(EntityHandle);
+	        break;
+
+	    case UnitData::GoToBase:
+	        Defer.AddTag<FMassStateGoToBaseTag>(EntityHandle);
+	        break;
+
+	    case UnitData::GoToBuild:
+	        Defer.AddTag<FMassStateGoToBuildTag>(EntityHandle);
+	        break;
+
+	    case UnitData::Build:
+	        Defer.AddTag<FMassStateBuildTag>(EntityHandle);
+	        break;
+
+	    case UnitData::GoToResourceExtraction:
+	        Defer.AddTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
+	        break;
+
+	    case UnitData::ResourceExtraction:
+	        Defer.AddTag<FMassStateResourceExtractionTag>(EntityHandle);
+	        break;
+
+	    default:
+	        UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Unknown UnitState."), *GetName());
+	        return false; // Or handle error appropriately
 	}
-	
-	SetUnitState(UnitState);
-	
-	EntityManager->AddTagToEntity(EntityHandle, NewTag);
-	if (SecondTag != nullptr)
-	{
-		EntityManager->AddTagToEntity(EntityHandle, SecondTag);
-	}
+		
 
 	if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
 	{
@@ -233,7 +259,6 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 	return true;
 }
-
 
 bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 {
@@ -255,23 +280,23 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	
 	
 	// Remove the tag
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateIdleTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateChaseTag::StaticStruct());
+	if (TagToAdd != FMassStateIdleTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateIdleTag>(EntityHandle);
+	if (TagToAdd != FMassStateChaseTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateChaseTag>(EntityHandle);
 
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateAttackTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePauseTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateDeadTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateRunTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePatrolRandomTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStatePatrolIdleTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateCastingTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateIsAttackedTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToBaseTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToBuildTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateBuildTag::StaticStruct());
+	if (TagToAdd != FMassStateAttackTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateAttackTag>(EntityHandle);
+	if (TagToAdd != FMassStatePauseTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePauseTag>(EntityHandle);
+	if (TagToAdd != FMassStateDeadTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
+	if (TagToAdd != FMassStateRunTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateRunTag>(EntityHandle);
+	if (TagToAdd != FMassStatePatrolRandomTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePatrolRandomTag>(EntityHandle);
+	if (TagToAdd != FMassStatePatrolIdleTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePatrolIdleTag>(EntityHandle);
+	if (TagToAdd != FMassStateCastingTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateCastingTag>(EntityHandle);
+	if (TagToAdd != FMassStateIsAttackedTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateIsAttackedTag>(EntityHandle);
+	if (TagToAdd != FMassStateGoToBaseTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateGoToBaseTag>(EntityHandle);
+	if (TagToAdd != FMassStateGoToBuildTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateGoToBuildTag>(EntityHandle);
+	if (TagToAdd != FMassStateBuildTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateBuildTag>(EntityHandle);
 
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateGoToResourceExtractionTag::StaticStruct());
-	EntityManager->RemoveTagFromEntity(EntityHandle, FMassStateResourceExtractionTag::StaticStruct());
+	if (TagToAdd != FMassStateGoToResourceExtractionTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
+	if (TagToAdd != FMassStateResourceExtractionTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateResourceExtractionTag>(EntityHandle);
 
 
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
@@ -306,24 +331,83 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 		//StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction;
 	
 		
-	if      (TagToAdd == FMassStateIdleTag::StaticStruct())                 SetUnitState(UnitData::Idle);
-	else if (TagToAdd == FMassStateChaseTag::StaticStruct())                SetUnitState(UnitData::Chase);
-	else if (TagToAdd == FMassStateAttackTag::StaticStruct())               SetUnitState(UnitData::Attack);
-	else if (TagToAdd == FMassStatePauseTag::StaticStruct())                SetUnitState(UnitData::Pause);
-	else if (TagToAdd == FMassStateDeadTag::StaticStruct())                 SetUnitState(UnitData::Dead);
-	else if (TagToAdd == FMassStateRunTag::StaticStruct())                  SetUnitState(UnitData::Run);
-	else if (TagToAdd == FMassStatePatrolRandomTag::StaticStruct())         SetUnitState(UnitData::PatrolRandom);
-	else if (TagToAdd == FMassStatePatrolIdleTag::StaticStruct())           SetUnitState(UnitData::PatrolIdle);
-	else if (TagToAdd == FMassStateCastingTag::StaticStruct())              SetUnitState(UnitData::Casting);
-	else if (TagToAdd == FMassStateIsAttackedTag::StaticStruct())           SetUnitState(UnitData::IsAttacked);
-	else if (TagToAdd == FMassStateGoToBaseTag::StaticStruct())             SetUnitState(UnitData::GoToBase);
-	else if (TagToAdd == FMassStateGoToBuildTag::StaticStruct())            SetUnitState(UnitData::GoToBuild);
-	else if (TagToAdd == FMassStateBuildTag::StaticStruct())                SetUnitState(UnitData::Build);
-	else if (TagToAdd == FMassStateGoToResourceExtractionTag::StaticStruct()) SetUnitState(UnitData::GoToResourceExtraction);
-	else if (TagToAdd == FMassStateResourceExtractionTag::StaticStruct())   SetUnitState(UnitData::ResourceExtraction);
+	if      (TagToAdd == FMassStateIdleTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Idle);
+	    EntityManager->Defer().AddTag<FMassStateIdleTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateChaseTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Chase);
+	    EntityManager->Defer().AddTag<FMassStateChaseTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateAttackTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Attack);
+	    EntityManager->Defer().AddTag<FMassStateAttackTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStatePauseTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Pause);
+	    EntityManager->Defer().AddTag<FMassStatePauseTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateDeadTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Dead);
+	    EntityManager->Defer().AddTag<FMassStateDeadTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateRunTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Run);
+	    EntityManager->Defer().AddTag<FMassStateRunTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStatePatrolRandomTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::PatrolRandom);
+	    EntityManager->Defer().AddTag<FMassStatePatrolRandomTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStatePatrolIdleTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::PatrolIdle);
+	    EntityManager->Defer().AddTag<FMassStatePatrolIdleTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateCastingTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Casting);
+	    EntityManager->Defer().AddTag<FMassStateCastingTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateIsAttackedTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::IsAttacked);
+	    EntityManager->Defer().AddTag<FMassStateIsAttackedTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateGoToBaseTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::GoToBase);
+	    EntityManager->Defer().AddTag<FMassStateGoToBaseTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateGoToBuildTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::GoToBuild);
+	    EntityManager->Defer().AddTag<FMassStateGoToBuildTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateBuildTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::Build);
+	    EntityManager->Defer().AddTag<FMassStateBuildTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateGoToResourceExtractionTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::GoToResourceExtraction);
+	    EntityManager->Defer().AddTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
+	}
+	else if (TagToAdd == FMassStateResourceExtractionTag::StaticStruct())
+	{
+	    SetUnitState(UnitData::ResourceExtraction);
+	    EntityManager->Defer().AddTag<FMassStateResourceExtractionTag>(EntityHandle);
+	}
+	//EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
 	
-	
-	EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
 	// Like AddTag, RemoveTag doesn't return status. Assume success if code reached here.
 
 	if (IsWorker)

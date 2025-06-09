@@ -13,7 +13,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 
-UPauseStateProcessor::UPauseStateProcessor()
+UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -21,8 +21,10 @@ UPauseStateProcessor::UPauseStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UPauseStateProcessor::ConfigureQueries()
+void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+    
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::All); // Nur Pause-Entitäten
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer lesen/schreiben, Zustand ändern
@@ -38,9 +40,9 @@ void UPauseStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UPauseStateProcessor::Initialize(UObject& Owner)
+void UPauseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -62,7 +64,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     TArray<FMassSignalPayload> PendingSignals;
 
     
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();

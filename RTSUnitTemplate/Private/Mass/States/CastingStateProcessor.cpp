@@ -8,7 +8,7 @@
 #include "Async/Async.h"
 
 
-UCastingStateProcessor::UCastingStateProcessor()
+UCastingStateProcessor::UCastingStateProcessor(): EntityQuery()
 {
 	// Standard-Einstellungen, können angepasst werden
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
@@ -16,8 +16,9 @@ UCastingStateProcessor::UCastingStateProcessor()
 	bAutoRegisterWithProcessingPhases = true;
 }
 
-void UCastingStateProcessor::ConfigureQueries()
+void UCastingStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::All); // Nur für Entities in diesem Zustand
 
 	// Benötigte Fragmente:
@@ -33,9 +34,9 @@ void UCastingStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UCastingStateProcessor::Initialize(UObject& Owner)
+void UCastingStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	Super::Initialize(Owner);
+	Super::InitializeInternal(Owner, EntityManager);
 	SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 

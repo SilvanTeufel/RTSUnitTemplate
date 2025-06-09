@@ -18,10 +18,7 @@ public:
 	UUnitMassMovingAvoidanceProcessor();
 
 protected:
-	virtual void ConfigureQueries() override;
-	// We might not strictly need to override ConfigureQueries if the base class's is sufficient,
-	// but it's here if you need to adjust requirements later.
-	// virtual void ConfigureQueries() override;
+	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 	// Override Execute to add logging around the base class execution.
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;

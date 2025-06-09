@@ -17,7 +17,7 @@
 // No Actor/Component includes needed in this file anymore
 
 
-UGoToBuildStateProcessor::UGoToBuildStateProcessor()
+UGoToBuildStateProcessor::UGoToBuildStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -25,8 +25,9 @@ UGoToBuildStateProcessor::UGoToBuildStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UGoToBuildStateProcessor::ConfigureQueries()
+void UGoToBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     // NO FMassActorFragment
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
@@ -47,9 +48,9 @@ void UGoToBuildStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UGoToBuildStateProcessor::Initialize(UObject& Owner)
+void UGoToBuildStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -87,6 +88,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
         const int32 NumEntities = Context.GetNumEntities();
 
+            UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -103,6 +105,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // Basic validation of data from fragment (more robust checks should be external)
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
+                UE_LOG(LogTemp, Error, TEXT("SWITCH TO PLACEHOLDER!!!"));
                  PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
                  //StopMovement(MoveTarget, World);
                  continue;
@@ -112,9 +115,13 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
-        
+
+            UE_LOG(LogTemp, Error, TEXT("DistanceToTargetCenter: %f"), DistanceToTargetCenter);
+            UE_LOG(LogTemp, Error, TEXT("WorkerStats.BuildAreaArrivalDistance: %f"), WorkerStats.BuildAreaArrivalDistance);
+            UE_LOG(LogTemp, Error, TEXT("AIState.SwitchingState: %d"), AIState.SwitchingState);
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
             {
+                UE_LOG(LogTemp, Error, TEXT("SWITCH TO BUILD PLEASE!!!"));
                 //AIState.StateTimer = 0.f;
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base

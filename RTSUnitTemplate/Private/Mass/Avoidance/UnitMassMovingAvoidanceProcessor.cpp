@@ -10,7 +10,7 @@
 #include "MassLODFragments.h"
 #include "Steering/MassSteeringFragments.h" // Added for steering fragment
 
-UUnitMassMovingAvoidanceProcessor::UUnitMassMovingAvoidanceProcessor()
+UUnitMassMovingAvoidanceProcessor::UUnitMassMovingAvoidanceProcessor(): DebugLogQuery()
 {
 	// Ensure this runs in the correct group and order, matching the engine default if possible
 	// Or ensuring it runs AFTER your UnitMovementProcessor (Tasks group)
@@ -21,11 +21,11 @@ UUnitMassMovingAvoidanceProcessor::UUnitMassMovingAvoidanceProcessor()
 	bAutoRegisterWithProcessingPhases = false;
 }
 
-void UUnitMassMovingAvoidanceProcessor::ConfigureQueries()
+void UUnitMassMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	// IMPORTANT: Call the base class ConfigureQueries first!
-	Super::ConfigureQueries();
-
+	Super::ConfigureQueries(EntityManager);
+	DebugLogQuery.Initialize(EntityManager);
 	// Now configure OUR DebugLogQuery for logging needs.
 	DebugLogQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadOnly);
 	DebugLogQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);

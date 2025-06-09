@@ -12,7 +12,7 @@
 
 // No Actor includes needed
 
-UGoToBaseStateProcessor::UGoToBaseStateProcessor()
+UGoToBaseStateProcessor::UGoToBaseStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -20,8 +20,9 @@ UGoToBaseStateProcessor::UGoToBaseStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UGoToBaseStateProcessor::ConfigureQueries()
+void UGoToBaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     // NO FMassActorFragment
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // To update movement
@@ -46,9 +47,9 @@ void UGoToBaseStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UGoToBaseStateProcessor::Initialize(UObject& Owner)
+void UGoToBaseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -73,7 +74,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     // Use FMassSignalPayload
     TArray<FMassSignalPayload> PendingSignals;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
@@ -85,6 +86,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
       
         const int32 NumEntities = Context.GetNumEntities();
 
+            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);

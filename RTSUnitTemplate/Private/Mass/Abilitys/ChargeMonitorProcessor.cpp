@@ -8,22 +8,28 @@
 #include "MassNavigationFragments.h" // For EMassMovementAction
 #include "Mass/UnitMassTag.h"
 
-UChargeMonitorProcessor::UChargeMonitorProcessor()
+UChargeMonitorProcessor::UChargeMonitorProcessor(): EntityQuery()
 {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All; // Or GameThread as needed
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior; // Or a custom group
     ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Tasks); // Example: Run after movement intent is set
 }
 
-void UChargeMonitorProcessor::ConfigureQueries()
+void UChargeMonitorProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+
+    //RegisterQuery(EntityQuery);
     EntityQuery.AddRequirement<FMassChargeTimerFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateChargingTag>(EMassFragmentPresence::All); // MUST have charging tag
+
+
     EntityQuery.RegisterWithProcessor(*this);
 }
+
 
 void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
@@ -34,7 +40,7 @@ void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     }
     TimeSinceLastRun -= ExecutionInterval;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
         const TArrayView<FMassChargeTimerFragment> ChargeTimerList = ChunkContext.GetMutableFragmentView<FMassChargeTimerFragment>();
@@ -50,7 +56,7 @@ void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             FMassChargeTimerFragment& ChargeTimer = ChargeTimerList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            FMassAIStateFragment State = StateList[i];
+            FMassAIStateFragment& State = StateList[i];
             State.StateTimer += ExecutionInterval;
             if (State.StateTimer >= ChargeTimer.ChargeEndTime)
             {

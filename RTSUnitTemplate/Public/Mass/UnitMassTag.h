@@ -511,6 +511,7 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 {
 	if (!EntityManager.IsEntityValid(Entity)) // Optional: Check entity validity first
 	{
+		UE_LOG(LogTemp, Warning, TEXT("No EntityManager FOUND!!!!!!"));
 		return false;
 	}
 
@@ -520,6 +521,7 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 
 	if (!ArchetypeHandle.IsValid())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("No ArchetypeHandle FOUND!!!!!!"));
 		return false; // Should not happen for a valid, built entity, but good practice
 	}
 

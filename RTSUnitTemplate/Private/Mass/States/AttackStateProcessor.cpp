@@ -17,7 +17,7 @@
 #include "Async/Async.h"
 
 
-UAttackStateProcessor::UAttackStateProcessor()
+UAttackStateProcessor::UAttackStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -25,15 +25,16 @@ UAttackStateProcessor::UAttackStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UAttackStateProcessor::Initialize(UObject& Owner)
+void UAttackStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
 
-void UAttackStateProcessor::ConfigureQueries()
+void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::All);
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);

@@ -13,7 +13,7 @@
 #include "NavFilters/NavigationQueryFilter.h"
 #include "Async/Async.h"
 
-UUnitMovementProcessor::UUnitMovementProcessor()
+UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
     // Run BEFORE steering, avoidance, and movement integration
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks; // Or potentially Input
@@ -25,14 +25,16 @@ UUnitMovementProcessor::UUnitMovementProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UUnitMovementProcessor::Initialize(UObject& Owner)
+void UUnitMovementProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(Owner.GetWorld());
 }
 
-void UUnitMovementProcessor::ConfigureQueries()
+void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+    
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);        // READ current position
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
     EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity

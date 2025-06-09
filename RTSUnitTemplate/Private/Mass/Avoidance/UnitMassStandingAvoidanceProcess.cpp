@@ -27,12 +27,12 @@ UUnitMassStandingAvoidanceProcess::UUnitMassStandingAvoidanceProcess()
 	bAutoRegisterWithProcessingPhases = false;
 }
 
-void UUnitMassStandingAvoidanceProcess::ConfigureQueries()
+void UUnitMassStandingAvoidanceProcess::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	// IMPORTANT: Call the base class ConfigureQueries first!
 	// This sets up the base class's private EntityQuery.
-	Super::ConfigureQueries();
-
+	Super::ConfigureQueries(EntityManager);
+	DebugLogQuery.Initialize(EntityManager);
 	// Now configure OUR DebugLogQuery for logging needs.
 	// Add fragments you want to LOG (ReadOnly is sufficient).
 	// Standing avoidance primarily reads/writes FMassGhostLocationFragment

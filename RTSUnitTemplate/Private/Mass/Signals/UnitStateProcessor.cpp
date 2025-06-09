@@ -29,16 +29,16 @@
 #include "Mass/States/ChaseStateProcessor.h"
 #include "Async/Async.h"
 
-UUnitStateProcessor::UUnitStateProcessor()
+UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
     ProcessingPhase = EMassProcessingPhase::PostPhysics; // Run fairly late
 	bRequiresGameThreadExecution = true;
     bAutoRegisterWithProcessingPhases = true; // Don't need ticking execute
 }
 
-void UUnitStateProcessor::Initialize(UObject& Owner)
+void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     // Get subsystems
 	World = Owner.GetWorld();
 
@@ -47,8 +47,14 @@ void UUnitStateProcessor::Initialize(UObject& Owner)
     SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
     EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 
+	if (EntitySubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EntitySubsystem FOUND!!!!!!"));
+	}
+	
     if (SignalSubsystem)
     {
+    	UE_LOG(LogTemp, Warning, TEXT("SignalSubsystem FOUND!!!!!!"));
         // List of signal names that should trigger ChangeUnitState
 
         // Register the same handler function for each signal in the list
@@ -315,8 +321,9 @@ void UUnitStateProcessor::BeginDestroy()
     Super::BeginDestroy();
 }
 
-void UUnitStateProcessor::ConfigureQueries()
+void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+	EntityQuery.Initialize(EntityManager);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -332,6 +339,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 	        // Check entity validity *on the game thread*
             if (!EntityManager.IsEntityValid(Entity)) 
             {
+            	UE_LOG(LogTemp, Error, TEXT("Entity or Manager is not Valid!"));
                 return;
             }
             // Get fragments and actors *on the game thread*
@@ -340,7 +348,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
 	
 			//FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
-			//if (CombatStatsFrag->TeamId == 3) UE_LOG(LogTemp, Error, TEXT("SwitchState! %s"), *SignalName.ToString());
+			//if (CombatStatsFrag->TeamId == 3)
+			//UE_LOG(LogTemp, Error, TEXT("SwitchState! %s"), *SignalName.ToString());
 	
 	
             if (ActorFragPtr)
@@ -356,22 +365,22 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
                         // --- Remove old tags ---
                         // Note: Using EntityManager directly here, NOT a separate command buffer object usually.
-                        EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
-                        EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                        EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
+                        if (SignalName != UnitSignals::Idle)EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+                        if (SignalName != UnitSignals::Chase)EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+                        if (SignalName != UnitSignals::Attack)EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
+                        if (SignalName != UnitSignals::Pause)EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
+                        if (SignalName != UnitSignals::Dead)EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
+                        if (SignalName != UnitSignals::Run)EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+                        if (SignalName != UnitSignals::PatrolRandom)EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                        if (SignalName != UnitSignals::PatrolIdle)EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                        if (SignalName != UnitSignals::Casting)EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
+                    	if (SignalName != UnitSignals::Attack)EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
 
-                    	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                    	if (SignalName != UnitSignals::GoToBase) EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
+                    	if (SignalName != UnitSignals::GoToBuild) EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
+                    	if (SignalName != UnitSignals::Build) EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
+                    	if (SignalName != UnitSignals::GoToResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    	if (SignalName != UnitSignals::ResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
                     	
                         // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
@@ -449,8 +458,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
                         }
-
-
+                    	
                     	if (SignalName == UnitSignals::Idle) { UnitBase->SetUnitState(UnitData::Idle); }
                         else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
                         else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
@@ -483,7 +491,10 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     		UnitBase->SetUnitState(UnitData::GoToBuild);
                     		UpdateUnitMovement(Entity , UnitBase);
                     	}
-                    	else if (SignalName == UnitSignals::Build){ UnitBase->SetUnitState(UnitData::Build); }
+                    	else if (SignalName == UnitSignals::Build)
+                    	{
+                    		UnitBase->SetUnitState(UnitData::Build);
+                    	}
                     	else if (SignalName == UnitSignals::GoToResourceExtraction)
                     	{
                     		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
@@ -505,7 +516,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
              {
 	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
              }
-
+	
 	//if (CombatStatsFrag->TeamId == 3)UE_LOG(LogTemp, Error, TEXT("Set StateFragment->SwitchingState to FALSE!"));
 	StateFragment->SwitchingState = false;
 }
@@ -876,7 +887,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     // --- Vorab-Checks außerhalb des AsyncTasks ---
     if (!EntitySubsystem)
     {
-        //UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState: EntitySubsystem ist null!"));
+        UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState: EntitySubsystem ist null!"));
         return;
     }
 
@@ -932,7 +943,8 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     				State->StateTimer = 0.f;
     				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
     			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-					State->StateTimer = 0.f;
+    				UE_LOG(LogTemp, Error, TEXT("SYNC TO BUILD!"));
+    				State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
@@ -2530,6 +2542,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,
 	TArray<FMassEntityHandle>& Entities)
 {
+	UE_LOG(LogTemp, Warning, TEXT("HandleUnitSpawnedSignal"));
 	const float Now = World->GetTimeSeconds();
 	
 	if (!EntitySubsystem) { return; }

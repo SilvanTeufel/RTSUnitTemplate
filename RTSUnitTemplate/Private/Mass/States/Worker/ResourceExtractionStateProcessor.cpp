@@ -16,7 +16,7 @@
 // struct FMassSignalPayload { ... }; // No need to redefine if included via UnitFragments.h
 
 
-UResourceExtractionStateProcessor::UResourceExtractionStateProcessor()
+UResourceExtractionStateProcessor::UResourceExtractionStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
@@ -24,8 +24,9 @@ UResourceExtractionStateProcessor::UResourceExtractionStateProcessor()
     bRequiresGameThreadExecution = false;
 }
 
-void UResourceExtractionStateProcessor::ConfigureQueries()
+void UResourceExtractionStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     // Query for entities that are in the Resource Extraction state
     EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::All);
 
@@ -50,9 +51,9 @@ void UResourceExtractionStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UResourceExtractionStateProcessor::Initialize(UObject& Owner)
+void UResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
@@ -72,7 +73,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager)); // Optional pre-allocation
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this,  &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -82,7 +83,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         //const auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 
-            //UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

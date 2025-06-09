@@ -8,7 +8,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 
-UUnitSightProcessor::UUnitSightProcessor()
+UUnitSightProcessor::UUnitSightProcessor(): EntityQuery()
 {
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -16,9 +16,9 @@ UUnitSightProcessor::UUnitSightProcessor()
     bRequiresGameThreadExecution = true;
 }
 
-void UUnitSightProcessor::Initialize(UObject& Owner)
+void UUnitSightProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     World = Owner.GetWorld();
     if (World)
     {
@@ -43,8 +43,9 @@ void UUnitSightProcessor::Initialize(UObject& Owner)
     }
 }
 
-void UUnitSightProcessor::ConfigureQueries()
+void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     // Query all entities with transform, combat stats, and our AI state fragment
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);

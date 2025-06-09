@@ -22,8 +22,10 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     // Optional ExecutionOrder settings...
 }
 
-void UActorTransformSyncProcessor::ConfigureQueries()
+void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+    
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -90,7 +92,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context,
+    EntityQuery.ForEachEntityChunk(Context,
         [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -102,6 +104,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             
             const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
+            //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
 
@@ -159,7 +162,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                         FinalLocation.Z = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
                 }
             }
-            
+
+            UE_LOG(LogTemp, Warning, TEXT("MoveFrag.Center: %s"), *MoveFrag.Center.ToString());
             FVector Dir =  (MoveFrag.Center - FinalLocation)*1000.f;
             Dir.Z = 0.f;  // LookAt in XY plane
             if (!Dir.Normalize())
@@ -188,7 +192,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             
             
             FTransform FinalActorTransform  = FTransform (NewQuat, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-            
+
+            UE_LOG(LogTemp, Warning, TEXT("FinalLocation: %s"), *FinalLocation.ToString());
             //FTransform FinalActorTransform(TargetRotation, FinalLocation,  MassTransform.GetScale3D())
             MassTransform.SetRotation(FinalActorTransform.GetRotation());
             MassTransform.SetLocation(FinalLocation);

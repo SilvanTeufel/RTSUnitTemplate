@@ -1103,7 +1103,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
 
 		//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
-		
+		/*
 		if(SpawnParameter.UnitControllerBaseClass)
 		{
 			AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
@@ -1113,7 +1113,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			{
 				UnitController->Possess(PawnBase);
 			}
-		}
+		}*/
 	
 		if (UnitBase != nullptr)
 		{

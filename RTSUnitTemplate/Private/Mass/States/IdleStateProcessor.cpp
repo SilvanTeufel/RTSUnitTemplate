@@ -14,15 +14,16 @@
 
 // ...
 
-UIdleStateProcessor::UIdleStateProcessor()
+UIdleStateProcessor::UIdleStateProcessor(): EntityQuery()
 {
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
 }
 
-void UIdleStateProcessor::ConfigureQueries()
+void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::All);
 
     // Benötigte Fragmente:
@@ -42,9 +43,9 @@ void UIdleStateProcessor::ConfigureQueries()
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UIdleStateProcessor::Initialize(UObject& Owner)
+void UIdleStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    Super::Initialize(Owner);
+    Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 

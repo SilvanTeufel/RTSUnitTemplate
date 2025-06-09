@@ -24,7 +24,7 @@ public:
 
 protected:
 	// Override ConfigureQueries to setup our debug query
-	virtual void ConfigureQueries() override;
+	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 	// Override Execute to add logging around the base class execution.
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;

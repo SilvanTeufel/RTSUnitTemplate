@@ -734,12 +734,12 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 
 			
-
+			/*
 			if (SpawnParameter.UnitControllerBaseClass)
 			{
 				AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
 				ControllerBase->Possess(UnitBase);
-			}
+			}*/
 
 			
 			if (UnitBase != nullptr)

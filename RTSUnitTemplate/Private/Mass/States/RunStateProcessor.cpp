@@ -7,15 +7,17 @@
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 
-URunStateProcessor::URunStateProcessor()
+URunStateProcessor::URunStateProcessor(): EntityQuery()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
 }
 
-void URunStateProcessor::ConfigureQueries()
+void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
+    EntityQuery.Initialize(EntityManager);
+    
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::All); // Nur Entities im Run-Zustand
 
 	// Benötigte Fragmente:
@@ -30,9 +32,9 @@ void URunStateProcessor::ConfigureQueries()
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
-void URunStateProcessor::Initialize(UObject& Owner)
+void URunStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	Super::Initialize(Owner);
+	Super::InitializeInternal(Owner, EntityManager);
 	SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
