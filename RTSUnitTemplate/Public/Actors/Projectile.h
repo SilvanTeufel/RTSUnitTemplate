@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "GameplayEffect.h"
 #include "NiagaraComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Projectile.generated.h"
 
 UCLASS()
@@ -20,7 +21,7 @@ public:
 	// OnConstruction is the ideal place to create the instance
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "Components")
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	UInstancedStaticMeshComponent* ISMComponent;
 
 	UPROPERTY(Replicated)
