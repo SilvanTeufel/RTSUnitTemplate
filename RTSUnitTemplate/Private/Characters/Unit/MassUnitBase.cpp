@@ -37,7 +37,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, Niagara_A_Start_Transform);
 	DOREPLIFETIME(AMassUnitBase, Niagara_B_Start_Transform);
 }
-
+/*
 bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
 {
     if (!TagToAdd || !TagToAdd->IsChildOf(FMassTag::StaticStruct()))
@@ -64,12 +64,13 @@ bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
 
     // Add the tag
     EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
+	EntityManager->Defer().AddTag<FMassStateChargingTag>(EntityHandle);
     //UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to add tag '%s' to entity %s."), *GetName(), *TagToAdd->GetName(), *EntityHandle.DebugGetDescription());
 
     // AddTagToEntity doesn't return success/failure, but we assume it worked if we got this far.
     // If you need strict confirmation, you'd check HasTag afterwards, but that adds overhead.
     return true;
-}
+}*/
 
 bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 {
@@ -742,5 +743,6 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
 	StateFrag->StateTimer = 0.f;
 	StatsFrag->RunSpeed = ChargeSpeed;
 
-    EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct());
+    //EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct());
+	EntityManager->Defer().AddTag<FMassStateChargingTag>(EntityHandle);
 }

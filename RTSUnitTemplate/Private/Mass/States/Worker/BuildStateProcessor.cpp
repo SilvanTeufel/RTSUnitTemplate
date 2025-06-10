@@ -84,7 +84,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
             // --- Pre-checs ---
             // Basic validation of essential build parameter. More robust validation assumed external.
-            if (WorkerStats.BuildingAvailable && !AIState.SwitchingState) // Check if Building is allready set
+            if (WorkerStats.BuildingAvailable) // Check if Building is allready set  && !AIState.SwitchingState
             {
                 AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName

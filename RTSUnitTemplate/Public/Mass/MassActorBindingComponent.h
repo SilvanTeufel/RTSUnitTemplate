@@ -35,12 +35,12 @@ protected:
 	UPROPERTY() // Don't save this pointer
 	UMassEntitySubsystem* MassEntitySubsystemCache;
 
-
-	UPROPERTY()
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bNeedsMassUnitSetup = false;
 
 
-	UPROPERTY()
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bNeedsMassBuildingSetup = false;
 	
 public:
@@ -112,5 +112,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float AvoidanceDistance = 75.f;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float ObstacleSeparationStiffness = 2000.f;
 };

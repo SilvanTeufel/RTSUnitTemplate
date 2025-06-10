@@ -1127,7 +1127,24 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		{
 			// If they are not overlapping, set the state to 'GoToBuild'
 			Worker->SetUnitState(UnitData::GoToBuild);
+			Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
 			Worker->SetUEPathfinding = true;
+
+			// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
+			FMassEntityManager*   EM;
+			FMassEntityHandle     Handle;
+			if (Worker->GetMassEntityData(EM, Handle))
+			{
+				// pull down the fragments
+				auto* MoveTarget = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(Handle);
+				auto* Stats      = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(Handle);
+				if (MoveTarget && Stats && GetWorld())
+				{
+					// Compute the *immediate* destination:
+					const FVector Dest = Worker->BuildArea->GetActorLocation();
+					UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
+				}
+			}
 		}
 	
 
@@ -1725,12 +1742,12 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 			// pull down the fragments
 			auto* MoveTarget = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(Handle);
 			auto* Stats      = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(Handle);
-			if (MoveTarget && Stats && GetWorld())
-			{
-				// Compute the *immediate* destination:
-				const FVector Dest = WorkArea->GetActorLocation();
-				UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
-			}
+             			if (MoveTarget && Stats && GetWorld())
+             			{
+             				// Compute the *immediate* destination:
+             				const FVector Dest = WorkArea->GetActorLocation();
+             				UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
+             			}
 		}
 
 	}

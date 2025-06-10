@@ -34,8 +34,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
 	bool bUseSkeletalMovement = true;
 
-	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool AddTagToEntity(UScriptStruct* TagToAdd);
+	//UFUNCTION(BlueprintCallable, Category = Mass)
+	//bool AddTagToEntity(UScriptStruct* TagToAdd);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);

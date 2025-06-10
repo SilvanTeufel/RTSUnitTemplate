@@ -61,7 +61,7 @@ void UMassActorBindingComponent::BeginPlay()
 
 void UMassActorBindingComponent::SetupMassOnUnit()
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!SetupMassOnUnit!!!!!!!!!!!!"));
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!START SetupMassOnUnit!!!!!!!!!!!!"));
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
@@ -69,6 +69,7 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	if (!World)
 	{
 		UE_LOG(LogTemp, Error, TEXT("World not FOUND!"));
+		return;
 	}
 	
 	if(!MassEntitySubsystemCache)
@@ -101,7 +102,7 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
-
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!TRY CreateAndLinkOwnerToMassEntity!!!!!!!!!!!!"));
 	UWorld* World = GetWorld();
 	
 	if (MassEntityHandle.IsValid())
@@ -141,6 +142,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassUnitSetup = false;
 			bIsMassUnit = true;
+			UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED SetupMassOnUnit!!!!!!!!!!!!"));
 		}
     }
 	
@@ -253,7 +255,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// (you can also tweak stiffness if desired)
 	// --- INCREASE THESE FOR STRONGER PUSHING ---
 	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance + 50.f; // Or a fixed larger value like 100.f or 125.f
-	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 2000.f; // Significantly increase this for a stronger push
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 2000.f; // ObstacleSeparationStiffness; // Significantly increase this for a stronger push
 
 	
 	//MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
@@ -398,6 +400,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
 			bIsMassUnit = true;
+			UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED SetupMassOnUnit Building!!!!!!!!!!!!"));
 		}
 	}
 	

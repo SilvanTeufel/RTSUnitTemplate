@@ -921,6 +921,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         // --- Code in dieser Lambda läuft jetzt im GameThread ---
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
+    	if (!StrongUnitActor) return;
     	if (!StrongUnitActor->IsWorker) return;
     		
         if (!EntitySubsystem)
@@ -943,7 +944,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     				State->StateTimer = 0.f;
     				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
     			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-    				UE_LOG(LogTemp, Error, TEXT("SYNC TO BUILD!"));
     				State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
@@ -2400,7 +2400,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-						//UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
+						UE_LOG(LogTemp, Error, TEXT("A PlaceholderSignal = %s"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
