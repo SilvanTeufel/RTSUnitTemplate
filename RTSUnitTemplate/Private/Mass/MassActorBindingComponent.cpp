@@ -255,7 +255,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// (you can also tweak stiffness if desired)
 	// --- INCREASE THESE FOR STRONGER PUSHING ---
 	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance + 50.f; // Or a fixed larger value like 100.f or 125.f
-	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 2000.f; // ObstacleSeparationStiffness; // Significantly increase this for a stronger push
+	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = ObstacleSeparationStiffness; // Significantly increase this for a stronger push
 
 	
 	//MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
