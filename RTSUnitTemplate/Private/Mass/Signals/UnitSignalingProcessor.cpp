@@ -1,107 +1,152 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Signals/UnitSignalingProcessor.h"
-
-#include "MassSignalSubsystem.h"
+#include "MassSimulationSubsystem.h" // IMPORTANT: Include for the delegate system
+#include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
-#include "MassCommonFragments.h"
-#include "Mass/UnitMassTag.h" // Assuming you have a tag identifying your units
-#include "Mass/Signals/MySignals.h" // Include the signal definition
-#include "MassStateTreeFragments.h" // For FMassStateDeadTag
-#include "MassNavigationFragments.h" // Assuming FMassAgentCharacteristicsFragment might be here or similar
+#include "Characters/Unit/UnitBase.h"
+#include "Mass/MassActorBindingComponent.h"
 
-
-const FName UUnitSignalingProcessor::UnitPresenceSignalName = FName("UnitPresence");
-
-UUnitSignalingProcessor::UUnitSignalingProcessor(): EntityQuery()
+UUnitSignalingProcessor::UUnitSignalingProcessor()
 {
+    // This flag is essential to ensure Execute() runs even with zero entities.
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     bAutoRegisterWithProcessingPhases = true;
-}
-
-void UUnitSignalingProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
-{
-    Super::InitializeInternal(Owner, EntityManager);
-    SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>();
+    bRequiresGameThreadExecution = true;
 }
 
 void UUnitSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
     EntityQuery.Initialize(EntityManager);
-    // Query entities that should announce their presence
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-
-    // Ensure it's one of our units (optional, but good practice)
-    EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All); // Adjust tag if needed
-
-    // Don't signal for dead units
-    EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
     EntityQuery.RegisterWithProcessor(*this);
 }
 
-void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+void UUnitSignalingProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    // 1. Zeit akkumulieren
-    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    Super::InitializeInternal(Owner, EntityManager);
+    UWorld* World = GetWorld();
 
-    // 2. Prüfen, ob das Intervall erreicht wurde
-    if (TimeSinceLastRun < ExecutionInterval)
+    if (!World) return;
+    
+    UMassSimulationSubsystem* SimSubsystem = World->GetSubsystem<UMassSimulationSubsystem>();
+    if (SimSubsystem)
     {
-        // Noch nicht Zeit, diesen Frame überspringen
-        return;
+        UE_LOG(LogTemp, Log, TEXT("[UUnitSignalingProcessor] INITIALIZE STARTING..."));
+        // Bind our function to the delegate that fires after our processing phase is done.
+        PhaseFinishedDelegateHandle = SimSubsystem->GetOnProcessingPhaseFinished(ProcessingPhase).AddUObject(this, &UUnitSignalingProcessor::CreatePendingEntities);
     }
 
-    // 3. Timer zurücksetzen (Interval abziehen ist genauer als auf 0 setzen)
-    TimeSinceLastRun -= ExecutionInterval;
-     //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!!"));
-    if (!SignalSubsystem)
-    {
-        return;
-    }
-
-    EntityQuery.ForEachEntityChunk(Context,
-        [&](FMassExecutionContext& ChunkContext)
-    {
-        //const int32 NumEntities = ChunkContext.GetNumEntities();
-
-            /*
-            //UE_LOG(LogTemp, Log, TEXT("UUnitSignalingProcessor!!! NumEntities: %d"), NumEntities);
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-            
-            const FMassEntityHandle CurrentEntity = ChunkContext.GetEntity(i);
-            const FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentEntity);
-            const FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentEntity);
-            
-           const float Now = GetWorld()->GetTimeSeconds();
-           if ((Now - StateFrag->BirthTime) < 1.0f )
-           {
-               continue;  // this entity is not yet “1 second old”
-           }
-            //if (TargetStatsFrag->Health > 0.f)
-            {
-                if (!SignalSubsystem)
-                {
-                     continue; // Handle missing subsystem
-                }
-
-                if (!DoesEntityHaveFragment<FTransformFragment>(EntityManager, CurrentEntity) ||
-                !DoesEntityHaveFragment<FMassCombatStatsFragment>(EntityManager, CurrentEntity) ||
-                !DoesEntityHaveFragment<FMassAIStateFragment>(EntityManager, CurrentEntity) ||
-                !DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EntityManager, CurrentEntity))
-                    continue;
-                
-                SignalSubsystem->SignalEntityDeferred(
-                ChunkContext,
-                UnitSignals::UnitInDetectionRange,
-                CurrentEntity);
-            }
-        }
-            */
-    });
+    SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>();
 }
 
+void UUnitSignalingProcessor::BeginDestroy()
+{
+    Super::BeginDestroy();
+    UWorld* World = GetWorld();
+
+    if (!World) return;
+    
+    if (UMassSimulationSubsystem* SimSubsystem = World->GetSubsystem<UMassSimulationSubsystem>())
+    {
+        SimSubsystem->GetOnProcessingPhaseFinished(ProcessingPhase).Remove(PhaseFinishedDelegateHandle);
+    }
+}
+
+void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    //UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
+    UWorld* World = GetWorld();
+
+    if (!World) return;
+    
+    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+    if (TimeSinceLastRun < ExecutionInterval)
+    {
+        return; 
+    }
+    TimeSinceLastRun -= ExecutionInterval;
+    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
+    // On the first run, get a pointer to our spawner subsystem.
+    if (!SpawnerSubsystem)
+    {
+        SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>();
+        if (!SpawnerSubsystem)
+        {
+            return; 
+        }
+    }
+
+    TArray<AUnitBase*> PendingActors;
+    SpawnerSubsystem->GetAndClearPendingUnits(PendingActors);
+
+    if (!PendingActors.IsEmpty())
+    {
+        UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute222222!!!!!!!"));
+        // Add the newly spawned actors to our internal queue.
+        ActorsToCreateThisFrame.Append(PendingActors);
+    }
+}
+
+// This function is called by the delegate system at a safe time.
+void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
+{
+/*
+    // On the first run, get a pointer to our spawner subsystem.
+    if (!SpawnerSubsystem)
+    {
+        SpawnerSubsystem = GetWorld()->GetSubsystem<UMassUnitSpawnerSubsystem>();
+        if (!SpawnerSubsystem)
+        {
+            return; 
+        }
+    }
+
+    
+    TArray<AUnitBase*> PendingActors;
+    SpawnerSubsystem->GetAndClearPendingUnits(PendingActors);
+
+    if (!PendingActors.IsEmpty())
+    {
+        UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!CreatePendingEntities000!!!!!!!"));
+        // Add the newly spawned actors to our internal queue.
+        ActorsToCreateThisFrame.Append(PendingActors);
+    }
+    */
+   // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!CreatePendingEntities!!!!!!!"));
+    if (ActorsToCreateThisFrame.IsEmpty())
+    {
+        // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Found ActorsToCreateThisFrame!!!!!!!"));
+    // It is now SAFE to call synchronous creation functions.
+    for (AUnitBase* Unit : ActorsToCreateThisFrame)
+    {
+        if (IsValid(Unit))
+        {
+            UMassActorBindingComponent* BindingComp = Unit->MassActorBindingComponent;
+
+            if (BindingComp)
+            {
+                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FOUND BindingComp!!!!!!!")); 
+            }
+            
+            if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
+                // We call your original, working function from the binding component.
+                BindingComp->CreateAndLinkOwnerToMassEntity();
+            } else   if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
+                // We call your original, working function from the binding component.
+                BindingComp->CreateAndLinkBuildingToMassEntity();
+            }
+        }
+    }
+
+    // Clear the queue for the next frame.
+    ActorsToCreateThisFrame.Empty();
+}

@@ -18,7 +18,7 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Editor);
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
     // Optional ExecutionOrder settings...
 }
 

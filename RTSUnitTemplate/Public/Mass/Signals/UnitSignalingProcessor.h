@@ -1,15 +1,13 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
-#include "MassSignalSubsystem.h"
 #include "UnitSignalingProcessor.generated.h"
 
+// Forward declarations
+class UMassUnitSpawnerSubsystem;
+class AUnitBase;
 
-/**
- * 
- */
 UCLASS()
 class RTSUNITTEMPLATE_API UUnitSignalingProcessor : public UMassProcessor
 {
@@ -21,19 +19,27 @@ public:
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
+	virtual void BeginDestroy() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
-	// Static name for the signal type for consistency
-	static const FName UnitPresenceSignalName;
-
+	FMassEntityQuery EntityQuery;
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float ExecutionInterval = 0.2f;
+	float ExecutionInterval = 0.5f;
 	
 private:
-	FMassEntityQuery EntityQuery;
-
 	float TimeSinceLastRun = 0.0f;
+    
+	
+	// This function will be bound to the "end of phase" delegate.
+	void CreatePendingEntities(const float DeltaTime);
+
+	// This array will hold the actors gathered during the Execute phase.
+	TArray<TObjectPtr<AUnitBase>> ActorsToCreateThisFrame;
+
+	// This handle manages our subscription to the OnProcessingPhaseFinished delegate.
+	FDelegateHandle PhaseFinishedDelegateHandle;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+	TObjectPtr<UMassUnitSpawnerSubsystem> SpawnerSubsystem;
 };

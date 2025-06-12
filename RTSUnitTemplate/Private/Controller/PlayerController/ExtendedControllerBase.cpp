@@ -1129,7 +1129,7 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 			Worker->SetUnitState(UnitData::GoToBuild);
 			Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
 			Worker->SetUEPathfinding = true;
-
+			/*
 			// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
 			FMassEntityManager*   EM;
 			FMassEntityHandle     Handle;
@@ -1144,7 +1144,7 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 					const FVector Dest = Worker->BuildArea->GetActorLocation();
 					UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
 				}
-			}
+			}*/
 		}
 	
 
@@ -1694,7 +1694,7 @@ void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBa
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 	Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
 
-	
+	/*
 	// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
 	FMassEntityManager*   EM;
 	FMassEntityHandle     Handle;
@@ -1709,7 +1709,7 @@ void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBa
 			const FVector Dest = WorkArea->GetActorLocation();
 			UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
 		}
-	}
+	} */
 
 
 }
@@ -1735,6 +1735,7 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 
 	
 		// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
+		/*
 		FMassEntityManager*   EM;
 		FMassEntityHandle     Handle;
 		if (Worker->GetMassEntityData(EM, Handle))
@@ -1749,7 +1750,7 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
              				UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
              			}
 		}
-
+		*/
 	}
 }
 

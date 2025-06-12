@@ -63,6 +63,8 @@ namespace UnitSignals
 	const FName UpdateFogMask(TEXT("SetFogParameter"));
 
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
+
+	const FName InitUnit(TEXT("InitUnit"));
 }
 
 USTRUCT()

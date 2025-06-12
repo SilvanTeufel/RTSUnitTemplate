@@ -19,6 +19,7 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery(
 	ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 	bAutoRegisterWithProcessingPhases = true;
+	bRequiresGameThreadExecution = true;
 }
 
 void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

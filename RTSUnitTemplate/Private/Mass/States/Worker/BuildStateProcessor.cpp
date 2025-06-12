@@ -82,6 +82,7 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             FMassAIStateFragment& AIState = AIStateList[i];
             const FMassEntityHandle Entity = Context.GetEntity(i);
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
+            
             // --- Pre-checs ---
             // Basic validation of essential build parameter. More robust validation assumed external.
             if (WorkerStats.BuildingAvailable) // Check if Building is allready set  && !AIState.SwitchingState

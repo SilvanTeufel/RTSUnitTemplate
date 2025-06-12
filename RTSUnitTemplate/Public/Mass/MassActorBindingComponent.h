@@ -34,16 +34,15 @@ protected:
 	// Caches the Entity Subsystem pointer
 	UPROPERTY() // Don't save this pointer
 	UMassEntitySubsystem* MassEntitySubsystemCache;
-
 	
+public:
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bNeedsMassUnitSetup = false;
 
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bNeedsMassBuildingSetup = false;
-	
-public:
 
 	UPROPERTY()
 	bool bIsMassUnit = false;
@@ -62,6 +61,9 @@ public:
 	AActor* MyOwner;
 	// Set by your spawner when binding the actor to a Mass entity.
 	//void SetMassEntityHandle(FMassEntityHandle InHandle) { MassEntityHandle = InHandle; }
+
+	void ConfigureNewEntity(FMassEntityManager& EntityManager, FMassEntityHandle Entity);
+	
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 	
 	FMassEntityHandle CreateAndLinkBuildingToMassEntity();

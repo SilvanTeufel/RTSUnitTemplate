@@ -29,6 +29,7 @@
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 
 
@@ -96,9 +97,37 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	{
 		return; // World might not be valid yet
 	}
+
+
+	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
+	{
+		// THIS IS THE KEY LINE:
+		// Register this unit with the subsystem. The processor will handle the rest.
+		UE_LOG(LogTemp, Log, TEXT("Registering %s for Mass entity creation."), *UnitBase->GetName());
+		SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
+	}
 }
 
 
+void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityManager, FMassEntityHandle Entity)
+{
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!Try Configuring New Entity!!!!!!!!!!!!"));
+	if (!EntityManager.IsEntityValid(Entity))
+	{
+		return;
+	}
+
+	// This function contains all the logic that used to be in CreateAndLinkOwnerToMassEntity
+	// AFTER the entity was created.
+	MassEntityHandle = Entity;
+	InitTransform(EntityManager, Entity);
+	InitMovementFragments(EntityManager, Entity);
+	InitAIFragments(EntityManager, Entity);
+	InitRepresentation(EntityManager, Entity);
+	bNeedsMassUnitSetup = false;
+	bIsMassUnit = true;
+	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED Configuring New Entity!!!!!!!!!!!!"));
+}
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
@@ -122,7 +151,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
 	FMassEntityHandle NewMassEntityHandle;
 	
-	if (!EM.IsProcessing())
+	//if (!EM.IsProcessing())
 	{
 		
 		FMassArchetypeHandle Archetype;
@@ -136,6 +165,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		if (NewMassEntityHandle.IsValid())
 		{
 			// Perform synchronous initializations
+			MassEntityHandle = NewMassEntityHandle;
 			InitTransform(EM, NewMassEntityHandle);
 			InitMovementFragments(EM, NewMassEntityHandle);
 			InitAIFragments(EM, NewMassEntityHandle);
@@ -357,6 +387,14 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 	{
 		return; // World might not be valid yet
 	}
+
+	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
+	{
+		// THIS IS THE KEY LINE:
+		// Register this unit with the subsystem. The processor will handle the rest.
+		UE_LOG(LogTemp, Log, TEXT("Registering %s for Mass entity creation."), *UnitBase->GetName());
+		SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
+	}
 }
 
 
@@ -382,7 +420,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
 	FMassEntityHandle NewMassEntityHandle;
 	
-	if (!EM.IsProcessing())
+	//if (!EM.IsProcessing())
 	{
 		FMassArchetypeHandle Archetype;
 		FMassArchetypeSharedFragmentValues SharedValues;
@@ -395,6 +433,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 
 		if (NewMassEntityHandle.IsValid())
 		{
+			MassEntityHandle = NewMassEntityHandle;
 			InitTransform(EM, NewMassEntityHandle);
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
@@ -666,7 +705,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-		
+	/*	
 	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassUnitSetup)
 	{
 		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
@@ -676,7 +715,7 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	{
 		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
 	}
-	
+	*/
 }
 
 

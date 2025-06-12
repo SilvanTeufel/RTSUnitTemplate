@@ -13,7 +13,7 @@ public class RTSUnitTemplate : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "RenderCore", "Engine", "Niagara", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape"});
 		
 		// Mass dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSpawner", "MassMovement", "MassNavigation", "MassCommon", "MassActors", "MassSignals", "MassRepresentation", "MassReplication", "MassAIReplication", "MassAIBehavior", "NavigationSystem", "StructUtils", "MassLOD", "ZoneGraph",
+		PublicDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSimulation", "MassSpawner", "MassMovement", "MassNavigation", "MassCommon", "MassActors", "MassSignals", "MassRepresentation", "MassReplication", "MassAIReplication", "MassAIBehavior", "NavigationSystem", "StructUtils", "MassLOD", "ZoneGraph",
 			"ZoneGraphAnnotations", "MassGameplayDebug"  });
 		
 		// Gameplay Ability System

@@ -830,6 +830,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
 						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+100.f;
+            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -842,6 +843,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
+            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
 
             		WorkerStats->ResourceAvailable = StrongUnitActor->ResourcePlace? true : false;
@@ -856,7 +858,9 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						StrongUnitActor->ResourcePlace->GetActorBounds(false, Origin, BoxExtent);
             			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+50.f;
             			WorkerStats->ResourcePosition = StrongUnitActor->ResourcePlace->GetActorLocation();
+            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
+            		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             	}
 
@@ -937,20 +941,28 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				CapturedEntitys.Emplace(CapturedEntity);
 				//HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 				//UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
-    			UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+    			//UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
     			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
+    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
     				State->StateTimer = 0.f;
     				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
+    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
     				State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
+    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
+    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
-				}
+    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+    			}
+
+
+    			UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
 
     	/*
 				if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
@@ -2717,6 +2729,7 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 	{
 		FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity);
 		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+		FMassAIStateFragment* StateFraggPtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 		const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
 
 		if (!WorkerStatsFrag || !MoveTargetPtr || !StatsFragPtr) return;
@@ -2728,15 +2741,18 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
+			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
 			TArray<FMassEntityHandle> CapturedEntitys;
 			CapturedEntitys.Emplace(Entity);
 			HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
 			UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
+			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition,  StatsFrag.RunSpeed, World);
 		}
 	}

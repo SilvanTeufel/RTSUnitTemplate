@@ -22,7 +22,7 @@ UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
     //ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
     //ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void UUnitMovementProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)

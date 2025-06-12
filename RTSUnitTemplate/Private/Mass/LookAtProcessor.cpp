@@ -17,6 +17,7 @@ ULookAtProcessor::ULookAtProcessor(): EntityQuery()
 	bAutoRegisterWithProcessingPhases = true;
 	// Normalerweise nicht auf GameThread beschränkt, es sei denn, es gibt spezifische Gründe
 	// bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
