@@ -140,6 +140,11 @@ void ACustomControllerBase::AgentInit_Implementation()
 
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
+	if (!Unit) return;
+
+	if (!Unit->IsInitialized) return;
+	if (!Unit->CanMove) return;
+
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
@@ -222,7 +227,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-
 }
 
 
@@ -399,6 +403,9 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 
+				if (!SelectedUnits[i]->IsInitialized) return;
+				if (!SelectedUnits[i]->CanMove) return;
+				
 				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
 				{
 					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
@@ -412,9 +419,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 
+				if (!SelectedUnits[i]->IsInitialized) return;
+				if (!SelectedUnits[i]->CanMove) return;
+				
 				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
 				{
 					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
@@ -430,6 +439,9 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			else {
 				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+
+				if (!SelectedUnits[i]->IsInitialized) return;
+				if (!SelectedUnits[i]->CanMove) return;
 				
 				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
 				{

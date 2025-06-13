@@ -758,10 +758,17 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             FMassCombatStatsFragment* CombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
         	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
 			FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
+			FMassAIStateFragment* AIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
+        	//FMassAgentCharacteristicsFragment* CharFragment = 
         	// Das Attribute Set holen (erneut auf Gültigkeit prüfen)
             // Ersetze 'Attributes', falls dein Member anders heißt
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
+        	if (StrongUnitActor && AIStateFragment)
+        	{
+        		AIStateFragment->CanMove = StrongUnitActor->CanMove;
+        		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
+        	}
         	
             // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
             if (CombatStatsFrag && AttributeSet)
@@ -942,14 +949,14 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				//HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 				//UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
     			//UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
-    			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
+    			if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
+    			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
     				State->StateTimer = 0.f;
     				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
+    			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
     				State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
@@ -960,7 +967,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}
-
 
     			UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
 
@@ -2615,6 +2621,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
 				}
 
+				StateFrag.CanMove = Unit->CanMove;
+				StateFrag.IsInitialized = Unit->IsInitialized;
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 

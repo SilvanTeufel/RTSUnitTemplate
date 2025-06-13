@@ -224,7 +224,11 @@ struct FMassAIStateFragment : public FMassFragment
 	float DeathTime = TNumericLimits<float>::Max();
 	/** How many overlaps this target has *per team* (any overlap). */
 
-	
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool CanMove = true;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool IsInitialized = true;
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
 };
@@ -386,6 +390,12 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float DespawnTime = 5.f;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	bool RotatesToMovement = true;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	bool RotatesToEnemy = true;
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
 };

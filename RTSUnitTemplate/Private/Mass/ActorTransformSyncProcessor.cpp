@@ -115,8 +115,9 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
             if (!UnitBase->IsNetVisible() && AccumulatedTimeB <= 0.5f) continue;
             if (UnitBase->IsNetVisible() || AccumulatedTimeB > 0.5f) bResetVisibilityTimer = true;
-
+            
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
+            
             
             FVector CurrentActorLocation = Actor->GetActorLocation();
             float HeightOffset;
@@ -135,7 +136,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 FVector InstanceScale = ActorTransform.GetScale3D();
                 HeightOffset = InstanceScale.Z/2;
             }
-
             
             FVector FinalLocation = MassTransform.GetLocation();
 
@@ -175,26 +175,33 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             // --- Interpolation ---
             const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
 
+            FTransform FinalActorTransform;
             
-                
-            const FQuat CurrentQuat = MassTransform.GetRotation();
-            
-            FQuat NewQuat;
-            if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
+            if (CharList[i].RotatesToMovement)
             {
-                NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
-            }
-            else // Instant rotation if speed is zero/negligible
-            {
-                NewQuat = DesiredQuat;
-            }
+                const FQuat CurrentQuat = MassTransform.GetRotation();
             
-            
-            FTransform FinalActorTransform  = FTransform (NewQuat, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-            
-            MassTransform.SetRotation(FinalActorTransform.GetRotation());
-            MassTransform.SetLocation(FinalLocation);
+                FQuat NewQuat;
+                if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
+                {
+                    NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
+                }
+                else // Instant rotation if speed is zero/negligible
+                {
+                    NewQuat = DesiredQuat;
+                }
 
+                FinalActorTransform  = FTransform (NewQuat, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
+            
+                  MassTransform.SetRotation(FinalActorTransform.GetRotation());
+                  MassTransform.SetLocation(FinalLocation);
+            }else
+            {
+                FinalActorTransform  = FTransform (FQuat(FRotator::ZeroRotator), FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
+                 MassTransform.SetRotation(FQuat(FRotator::ZeroRotator));
+                 MassTransform.SetLocation(FinalLocation);
+            }
+            
             /*
             DrawDebugDirectionalArrow(
             GetWorld(),

@@ -39,7 +39,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
     EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
     EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite); // Keep for managing path state
-
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly); 
     // Optionally Read Velocity if needed for decisions (but don't write it here)
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -93,16 +93,20 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         const TConstArrayView<FMassMoveTargetFragment> TargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FUnitNavigationPathFragment> PathList = ChunkContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
         const TArrayView<FMassSteeringFragment> SteeringList = ChunkContext.GetMutableFragmentView<FMassSteeringFragment>();
-
+        const TConstArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         //UE_LOG(LogTemp, Log, TEXT("MovementProcessor::Execute started NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FMassMoveTargetFragment& MoveTarget = TargetList[i];
+            const FMassAIStateFragment& AIState = AIStateList[i];
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             FMassSteeringFragment& Steering = SteeringList[i];
 
+
+            if (!AIState.CanMove || !AIState.IsInitialized) return;
+            
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
             const FVector FinalDestination = MoveTarget.Center;
             const float DesiredSpeed = MoveTarget.DesiredSpeed.Get();

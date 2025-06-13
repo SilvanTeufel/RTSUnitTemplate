@@ -433,8 +433,14 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 
 		if (NewMassEntityHandle.IsValid())
 		{
+			
 			MassEntityHandle = NewMassEntityHandle;
 			InitTransform(EM, NewMassEntityHandle);
+
+			if (AUnitBase* Unit = Cast<AUnitBase>(MyOwner))
+				if (Unit->CanMove)
+					InitMovementFragments(EM, NewMassEntityHandle);
+			
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
@@ -445,17 +451,130 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	
 	return NewMassEntityHandle;
 }
-
-
+/*
 bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassArchetypeHandle& OutArchetype,
                                                                FMassArchetypeSharedFragmentValues& OutSharedValues)
 {
+	UE_LOG(LogTemp, Warning, TEXT("BuildArchetypeAndSharedValuesForBuilding!"));
     AActor* Owner = GetOwner();
     if (!Owner) return false;
+
+    AUnitBase* UnitBase = Cast<AUnitBase>(Owner);
+    if (!UnitBase) return false;
 
     UWorld* World = Owner->GetWorld();
     if (!World) return false;
 
+    FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+
+    // Start with the base fragments that all buildings will have
+    TArray<const UScriptStruct*> FragmentsAndTags = {
+        // Core Components
+        FTransformFragment::StaticStruct(),
+        FAgentRadiusFragment::StaticStruct(),
+        FMassAvoidanceColliderFragment::StaticStruct(), // Needed even for static objects to be avoided
+        FMassGhostLocationFragment::StaticStruct(),
+
+        // Your Custom Logic & Stats
+        FUnitMassTag::StaticStruct(),
+        FMassPatrolFragment::StaticStruct(),
+        FMassAIStateFragment::StaticStruct(),
+        FMassSightFragment::StaticStruct(),
+        FMassAITargetFragment::StaticStruct(),
+        FMassCombatStatsFragment::StaticStruct(),
+        FMassAgentCharacteristicsFragment::StaticStruct(),
+
+        // Actor Representation & Sync
+        FMassActorFragment::StaticStruct(),
+        FMassRepresentationFragment::StaticStruct(),
+        FMassRepresentationLODFragment::StaticStruct(),
+    };
+
+    FMassArchetypeSharedFragmentValues SharedValues;
+
+    // If the building can move, add all necessary movement and avoidance components.
+    if(UnitBase->CanMove)
+    {
+
+    	UE_LOG(LogTemp, Warning, TEXT("CanMove is True!"));
+        // 1. Add movement-specific FRAGMENTS to the list before creating the archetype
+        FragmentsAndTags.Append({
+           FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
+           FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
+           FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
+           FMassSteeringFragment::StaticStruct(),          // Output of Movement, Input for Avoidance
+           FMassNavigationEdgesFragment::StaticStruct(),
+           FUnitNavigationPathFragment::StaticStruct(),    // Used by your custom movement
+           FMassChargeTimerFragment::StaticStruct(),
+           FMassWorkerStatsFragment::StaticStruct()
+        });
+
+        // 2. Define and add movement-specific SHARED FRAGMENTS
+        // Movement Parameters
+        FMassMovementParameters MovementParamsInstance;
+        MovementParamsInstance.MaxSpeed = UnitBase->Attributes->GetRunSpeed() * 20;
+        MovementParamsInstance.MaxAcceleration = 4000.0f;
+        MovementParamsInstance.DefaultDesiredSpeed = UnitBase->Attributes->GetRunSpeed();
+        SharedValues.Add(EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance));
+
+        // Steering Parameters
+        FMassMovingSteeringParameters MovingSteeringParamsInstance;
+        MovingSteeringParamsInstance.ReactionTime = 0.0f;
+        MovingSteeringParamsInstance.LookAheadTime = 0.25f;
+        SharedValues.Add(EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance));
+        
+        FMassStandingSteeringParameters StandingSteeringParamsInstance;
+        SharedValues.Add(EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance));
+        
+        // Avoidance Parameters
+        FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
+        MovingAvoidanceParamsInstance.ObstacleSeparationDistance = AvoidanceDistance + 50.f;
+        MovingAvoidanceParamsInstance.ObstacleSeparationStiffness = ObstacleSeparationStiffness;
+        MovingAvoidanceParamsInstance.EnvironmentSeparationDistance = AvoidanceDistance;
+        MovingAvoidanceParamsInstance.PredictiveAvoidanceTime = 2.5f;
+        MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance = AvoidanceDistance;
+        SharedValues.Add(EntityManager.GetOrCreateConstSharedFragment(MovingAvoidanceParamsInstance.GetValidated()));
+
+        FMassStandingAvoidanceParameters StandingAvoidanceParamsInstance;
+        StandingAvoidanceParamsInstance.GhostSeparationDistance = 20.f;
+        StandingAvoidanceParamsInstance.GhostSeparationStiffness = 200.f;
+        SharedValues.Add(EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated()));
+    }
+
+    // Now, create the archetype with the final list of fragments
+    FMassArchetypeCreationParams Params;
+    Params.ChunkMemorySize = 0;
+    Params.DebugName = FName("UMassActorBindingComponent_Building");
+
+    OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
+    if (!OutArchetype.IsValid()) return false;
+
+    // Sort and assign the shared values (will be empty if CanMove was false)
+    SharedValues.Sort();
+    OutSharedValues = SharedValues;
+
+    return true;
+}*/
+
+bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassArchetypeHandle& OutArchetype,
+                                                               FMassArchetypeSharedFragmentValues& OutSharedValues)
+{
+
+    AActor* Owner = GetOwner();
+    if (!Owner) return false;
+
+	AUnitBase* UnitBase = Cast<AUnitBase>(Owner);
+	if (!UnitBase) return false;
+
+    UWorld* World = Owner->GetWorld();
+    if (!World) return false;
+
+	if(UnitBase->CanMove)
+	{
+		return BuildArchetypeAndSharedValues(OutArchetype, OutSharedValues);
+	}
+
+	
     FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 
     TArray<const UScriptStruct*> FragmentsAndTags = {
@@ -502,8 +621,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 
     OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
     if (!OutArchetype.IsValid()) return false;
-
-
+	
 	FMassArchetypeSharedFragmentValues SharedValues;
 
 	
@@ -606,6 +724,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->bCanBeInvisible = UnitOwner->bCanBeInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
         	CharFrag->DespawnTime = DespawnTime;
+			CharFrag->RotatesToMovement = RotatesToMovement;
+        	CharFrag->RotatesToEnemy = RotatesToEnemy;
         }
         else // Use default values
         {

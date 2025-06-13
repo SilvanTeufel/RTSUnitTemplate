@@ -20,18 +20,11 @@ UCLASS()
 class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 {
 	GENERATED_BODY()
-
-protected:
-	FTimerHandle NavigationUpdateTimer; 
-	
-private:
-	FTimerHandle CollisionCooldownTimer;
-
-
 	
 public:
-	
-	bool bCanProcessCollision = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool CanMove = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* UnitIcon;

@@ -27,6 +27,7 @@ ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
 	SnapMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap);  // PhysicsBody: Overlap
 	SnapMesh->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Overlap);      // Vehicle: Overlap
 	SnapMesh->SetCollisionResponseToChannel(ECC_Destructible, ECR_Overlap);   // Destructible: Overlap
+	CanMove = false;
 }
 
 void ABuildingBase::Tick(float DeltaTime)

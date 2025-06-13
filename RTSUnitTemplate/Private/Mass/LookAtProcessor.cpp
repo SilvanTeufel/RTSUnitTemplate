@@ -86,6 +86,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
                 continue;
             }
 
+            if (!CharList[i].RotatesToEnemy) continue;
             // --- Determine Target Location ---
             FVector TargetLocation = TargetFrag.LastKnownLocation;
             const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;

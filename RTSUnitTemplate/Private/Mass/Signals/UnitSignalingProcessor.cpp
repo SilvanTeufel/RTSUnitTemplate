@@ -66,7 +66,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
-    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
     // On the first run, get a pointer to our spawner subsystem.
     if (!SpawnerSubsystem)
     {
@@ -131,19 +130,22 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
             if (BindingComp)
             {
                 UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FOUND BindingComp!!!!!!!")); 
+                //BindingComp->CreateAndLinkOwnerToMassEntity();
             }
-            
-            if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
-            {
+
+        
+           if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
+           {
                 UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
                 // We call your original, working function from the binding component.
                 BindingComp->CreateAndLinkOwnerToMassEntity();
-            } else   if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
+           } else   if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
             {
                 UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
                 // We call your original, working function from the binding component.
                 BindingComp->CreateAndLinkBuildingToMassEntity();
             }
+            
         }
     }
 

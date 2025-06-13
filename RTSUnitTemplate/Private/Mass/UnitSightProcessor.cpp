@@ -108,7 +108,7 @@ void UUnitSightProcessor::Execute(
             // skip super-young or long-dead
             const float Age   = World->GetTimeSeconds() - State.BirthTime;
             const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
-            if (Age < 1.f || SinceDeath > 4.f)
+            if (Age < 1.f || SinceDeath > 4.f || !State.IsInitialized)
             {
                 continue;
             }

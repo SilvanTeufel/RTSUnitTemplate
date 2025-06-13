@@ -1054,6 +1054,7 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 	UnitBase->SetUnitState(UnitData::Idle);
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->CancelCurrentAbility();
+	//Sleep(100.f);
 	UnitBase->DespawnCurrentAbilityIndicator();
 }
 

@@ -117,4 +117,11 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	float ObstacleSeparationStiffness = 2000.f;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	bool RotatesToMovement = true;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	bool RotatesToEnemy = true;
 };
