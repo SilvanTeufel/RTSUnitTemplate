@@ -62,7 +62,6 @@ void UMassActorBindingComponent::BeginPlay()
 
 void UMassActorBindingComponent::SetupMassOnUnit()
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!START SetupMassOnUnit!!!!!!!!!!!!"));
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
@@ -89,7 +88,7 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
 	{
 		bNeedsMassUnitSetup = true;
-		UE_LOG(LogTemp, Warning, TEXT("MassActorBindingComponent on %s: Flagged for Mass unit setup."), *MyOwner->GetName());
+		//UE_LOG(LogTemp, Log, TEXT("MassActorBindingComponent on %s: Flagged for Mass unit setup."), *MyOwner->GetName());
 	}
 
 
@@ -101,9 +100,6 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 
 	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 	{
-		// THIS IS THE KEY LINE:
-		// Register this unit with the subsystem. The processor will handle the rest.
-		UE_LOG(LogTemp, Log, TEXT("Registering %s for Mass entity creation."), *UnitBase->GetName());
 		SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
 	}
 }
@@ -111,7 +107,6 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 
 void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityManager, FMassEntityHandle Entity)
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!Try Configuring New Entity!!!!!!!!!!!!"));
 	if (!EntityManager.IsEntityValid(Entity))
 	{
 		return;
@@ -126,12 +121,10 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	InitRepresentation(EntityManager, Entity);
 	bNeedsMassUnitSetup = false;
 	bIsMassUnit = true;
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED Configuring New Entity!!!!!!!!!!!!"));
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
-	UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!TRY CreateAndLinkOwnerToMassEntity!!!!!!!!!!!!"));
 	UWorld* World = GetWorld();
 	
 	if (MassEntityHandle.IsValid())
@@ -172,7 +165,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassUnitSetup = false;
 			bIsMassUnit = true;
-			UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED SetupMassOnUnit!!!!!!!!!!!!"));
 		}
     }
 	
@@ -390,9 +382,6 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 
 	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 	{
-		// THIS IS THE KEY LINE:
-		// Register this unit with the subsystem. The processor will handle the rest.
-		UE_LOG(LogTemp, Log, TEXT("Registering %s for Mass entity creation."), *UnitBase->GetName());
 		SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
 	}
 }
@@ -445,7 +434,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
 			bIsMassUnit = true;
-			UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FINISHED SetupMassOnUnit Building!!!!!!!!!!!!"));
 		}
 	}
 	

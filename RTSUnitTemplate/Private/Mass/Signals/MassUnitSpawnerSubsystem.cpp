@@ -6,7 +6,6 @@
 
 void UMassUnitSpawnerSubsystem::RegisterUnitForMassCreation(AUnitBase* NewUnit)
 {
-	UE_LOG(LogTemp, Log, TEXT("RegisterUnitForMassCreation!!!1"));
 	if (NewUnit) { PendingUnits.Add(NewUnit); }
 }
 

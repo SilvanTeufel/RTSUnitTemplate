@@ -81,7 +81,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
     if (!PendingActors.IsEmpty())
     {
-        UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute222222!!!!!!!"));
         // Add the newly spawned actors to our internal queue.
         ActorsToCreateThisFrame.Append(PendingActors);
     }
@@ -119,7 +118,6 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         return;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Found ActorsToCreateThisFrame!!!!!!!"));
     // It is now SAFE to call synchronous creation functions.
     for (AUnitBase* Unit : ActorsToCreateThisFrame)
     {
@@ -129,19 +127,16 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 
             if (BindingComp)
             {
-                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!FOUND BindingComp!!!!!!!")); 
                 //BindingComp->CreateAndLinkOwnerToMassEntity();
             }
 
         
            if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
            {
-                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
                 // We call your original, working function from the binding component.
                 BindingComp->CreateAndLinkOwnerToMassEntity();
            } else   if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!CreateAndLinkOwnerToMassEntity!!!!!!!"));
                 // We call your original, working function from the binding component.
                 BindingComp->CreateAndLinkBuildingToMassEntity();
             }
