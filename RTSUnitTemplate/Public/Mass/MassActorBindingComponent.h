@@ -124,4 +124,7 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool RotatesToEnemy = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	float RotationSpeed = 15.f;
 };

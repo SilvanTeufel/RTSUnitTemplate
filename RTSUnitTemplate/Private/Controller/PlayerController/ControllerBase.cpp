@@ -1050,11 +1050,9 @@ void AControllerBase::DeQueAbility_Implementation(AUnitBase* UnitBase, int Butto
 
 void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 {
-	UE_LOG(LogTemp, Warning, TEXT("CancelCurrentAbility_Implementation!"));
 	UnitBase->SetUnitState(UnitData::Idle);
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->CancelCurrentAbility();
-	//Sleep(100.f);
 	UnitBase->DespawnCurrentAbilityIndicator();
 }
 

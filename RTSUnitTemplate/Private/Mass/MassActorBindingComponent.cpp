@@ -726,6 +726,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->DespawnTime = DespawnTime;
 			CharFrag->RotatesToMovement = RotatesToMovement;
         	CharFrag->RotatesToEnemy = RotatesToEnemy;
+        	CharFrag->RotationSpeed = RotationSpeed;
         }
         else // Use default values
         {

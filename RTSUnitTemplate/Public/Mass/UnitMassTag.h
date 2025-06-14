@@ -396,6 +396,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	bool RotatesToEnemy = true;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float RotationSpeed = 15.f;
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
 };

@@ -173,7 +173,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             const FQuat DesiredQuat = Dir.ToOrientationQuat();
 
             // --- Interpolation ---
-            const float RotationSpeedDeg = StatsList[i].RotationSpeed * 15.f; // Consider renaming Stat or clarifying multiplier
+            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed; //15.f; // Consider renaming Stat or clarifying multiplier
 
             FTransform FinalActorTransform;
             

@@ -145,6 +145,16 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	if (!Unit->IsInitialized) return;
 	if (!Unit->CanMove) return;
 
+	if (Unit->CurrentSnapshot.AbilityClass)
+	{
+
+		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		
+		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+		CancelCurrentAbility(Unit);
+	}
+	
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
