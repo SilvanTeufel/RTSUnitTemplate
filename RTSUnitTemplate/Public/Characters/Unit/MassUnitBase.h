@@ -76,7 +76,7 @@ public:
 	FTransform Niagara_B_Start_Transform;
 protected:
 	virtual void BeginPlay() override;
-	
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
 	void InitializeUnitMode();

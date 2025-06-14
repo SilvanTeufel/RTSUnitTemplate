@@ -464,31 +464,35 @@ void AMassUnitBase::BeginPlay()
 	InitializeUnitMode();
 }
 
+void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Remove our specific instance from the component when the actor is destroyed
+	if (InstanceIndex != INDEX_NONE && ISMComponent)
+	{
+		ISMComponent->RemoveInstance(InstanceIndex);
+		InstanceIndex = INDEX_NONE; // Reset the index
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void AMassUnitBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
 	// Only add once (or whenever mesh/flag changes)
+	/*
 	if (!bUseSkeletalMovement 
 		&& ISMComponent 
-		&& ISMComponent->GetStaticMesh() 
+		&& ISMComponent->GetStaticMesh()
+		&& ISMComponent->IsValidLowLevel()
 		&& InstanceIndex == INDEX_NONE)
 	{
 		// This is still early enough that the ISM data manager
 		// will allow an append from INDEX_NONE
 		ISMComponent->ClearInstances();
-		InstanceIndex = ISMComponent->AddInstance(Transform, /*bWorldSpace=*/true);
-
-		if (Niagara_A)
-		{
-			Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
-		}
-
-		if (Niagara_B)
-		{
-			Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
-		}
-	}
+		InstanceIndex = ISMComponent->AddInstance(Transform, true);
+	}*/
 }
 
 void AMassUnitBase::InitializeUnitMode()
@@ -502,6 +506,27 @@ void AMassUnitBase::InitializeUnitMode()
 	{
 		GetMesh()->SetVisibility(false);
 		ISMComponent->SetVisibility(true);
+	}
+
+	if (Niagara_A)
+	{
+		Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
+	}
+
+	if (Niagara_B)
+	{
+		Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
+	}
+
+	// Add the instance when the actor is ready and in the world
+	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
+	{
+		// Ensure we only add an instance if we haven't already
+		if (InstanceIndex == INDEX_NONE)
+		{
+			// Add the instance using the actor's starting transform
+			InstanceIndex = ISMComponent->AddInstance(GetActorTransform(), /*bWorldSpace=*/true);
+		}
 	}
 }
 
