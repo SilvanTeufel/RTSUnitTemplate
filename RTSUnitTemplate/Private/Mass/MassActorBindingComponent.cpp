@@ -390,9 +390,9 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity()
 {
-	return CreateAndLinkOwnerToMassEntity();
+	//return CreateAndLinkOwnerToMassEntity();
 
-	/*
+
 	UWorld* World = GetWorld();
 	
 	if (MassEntityHandle.IsValid())
@@ -416,7 +416,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	{
 		FMassArchetypeHandle Archetype;
 		FMassArchetypeSharedFragmentValues SharedValues;
-		if (!BuildArchetypeAndSharedValuesForBuilding(Archetype, SharedValues))
+		if (!BuildArchetypeAndSharedValues(Archetype, SharedValues)) // BuildArchetypeAndSharedValuesForBuilding
 		{
 			return {};
 		}
@@ -441,7 +441,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	}
 	
 	return NewMassEntityHandle;
-	*/
+	
 }
 
 
@@ -458,7 +458,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
     UWorld* World = Owner->GetWorld();
     if (!World) return false;
 
-	if(UnitBase->CanMove)
+	if(UnitBase->CanMove) 
 	{
 		return BuildArchetypeAndSharedValues(OutArchetype, OutSharedValues);
 	}
@@ -524,8 +524,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager,
 	FMassEntityHandle EntityHandle, AActor* OwnerActor)
 {
-
-	UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!InitializeMassEntityStatsFromOwner!!!!!!!"));
 	 // --- Get Owner References (Replace Placeholders) ---
     // We assume OwnerActor is valid as it's checked before calling this function
     AUnitBase* UnitOwner = Cast<AUnitBase>(OwnerActor); // <<< REPLACE AUnitBase

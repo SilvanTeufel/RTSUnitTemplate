@@ -2427,7 +2427,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
 
-						UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal!"));
+						//UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal!"));
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}

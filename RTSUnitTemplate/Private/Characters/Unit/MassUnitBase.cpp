@@ -106,7 +106,6 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
-	UE_LOG(LogTemp, Warning, TEXT("!!!SwitchEntityTagByState!!! %d"), UState);
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
