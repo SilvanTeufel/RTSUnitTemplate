@@ -56,16 +56,16 @@ void UUnitSignalingProcessor::BeginDestroy()
 void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     //UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
-    UWorld* World = GetWorld();
-
-    if (!World) return;
-    
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
+    
+    UWorld* World = GetWorld();
+
+    if (!World) return;
     // On the first run, get a pointer to our spawner subsystem.
     if (!SpawnerSubsystem)
     {
@@ -89,29 +89,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 // This function is called by the delegate system at a safe time.
 void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 {
-/*
-    // On the first run, get a pointer to our spawner subsystem.
-    if (!SpawnerSubsystem)
-    {
-        SpawnerSubsystem = GetWorld()->GetSubsystem<UMassUnitSpawnerSubsystem>();
-        if (!SpawnerSubsystem)
-        {
-            return; 
-        }
-    }
-
-    
-    TArray<AUnitBase*> PendingActors;
-    SpawnerSubsystem->GetAndClearPendingUnits(PendingActors);
-
-    if (!PendingActors.IsEmpty())
-    {
-        UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!CreatePendingEntities000!!!!!!!"));
-        // Add the newly spawned actors to our internal queue.
-        ActorsToCreateThisFrame.Append(PendingActors);
-    }
-    */
-   // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!CreatePendingEntities!!!!!!!"));
     if (ActorsToCreateThisFrame.IsEmpty())
     {
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));

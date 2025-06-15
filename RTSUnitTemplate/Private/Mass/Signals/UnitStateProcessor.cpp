@@ -374,7 +374,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         if (SignalName != UnitSignals::PatrolRandom)EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                         if (SignalName != UnitSignals::PatrolIdle)EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
                         if (SignalName != UnitSignals::Casting)EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
-                    	if (SignalName != UnitSignals::Attack)EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
+                    	if (SignalName != UnitSignals::IsAttacked)EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(Entity);
 
                     	if (SignalName != UnitSignals::GoToBase) EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
                     	if (SignalName != UnitSignals::GoToBuild) EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
@@ -385,7 +385,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                    		if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                    		
                     		EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
                     		StateFragment->PlaceholderSignal = UnitSignals::Idle;
                     		UnitBase->UnitStatePlaceholder = UnitData::Idle;
@@ -393,12 +394,14 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     	}
                         else if (SignalName == UnitSignals::Chase)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	
 	                        EntityManager.Defer().AddTag<FMassStateChaseTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Attack)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	
 	                        EntityManager.Defer().AddTag<FMassStateAttackTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Dead)
@@ -408,14 +411,16 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	
 	                        EntityManager.Defer().AddTag<FMassStatePatrolIdleTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
                         	UnitBase->UnitStatePlaceholder = UnitData::PatrolIdle;
                         }
                         else if (SignalName == UnitSignals::PatrolRandom)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+
                         	EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
                         	UnitBase->UnitStatePlaceholder = UnitData::PatrolRandom;
@@ -424,7 +429,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	//if (!UnitBase->bUseSkeletalMovement) return;
                         	
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+
                         	EntityManager.Defer().AddTag<FMassStatePauseTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Run)
@@ -436,7 +442,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
                         else if (SignalName == UnitSignals::IsAttacked)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	if (StateFragment->CanDetect && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+
                         	EntityManager.Defer().AddTag<FMassStateIsAttackedTag>(Entity);
                         }else if (SignalName == UnitSignals::GoToBase)
                         {
@@ -767,6 +774,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	if (StrongUnitActor && AIStateFragment)
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
+        		AIStateFragment->CanDetect = StrongUnitActor->CanDetect;
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
         	}
         	
@@ -1241,7 +1249,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                     	
 
                     	
-							GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
+							if (TargetAIStateFragment->CanDetect && TargetAIStateFragment->IsInitialized) GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
 
 							UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
 			
@@ -2418,6 +2426,8 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
+
+						UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal!"));
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2620,6 +2630,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				}
 
 				StateFrag.CanMove = Unit->CanMove;
+				StateFrag.CanDetect = Unit->CanDetect;
 				StateFrag.IsInitialized = Unit->IsInitialized;
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);

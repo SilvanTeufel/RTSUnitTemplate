@@ -229,6 +229,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool IsInitialized = true;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool CanDetect = true;
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
 };

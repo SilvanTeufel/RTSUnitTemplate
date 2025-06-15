@@ -106,6 +106,7 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
+	UE_LOG(LogTemp, Warning, TEXT("!!!SwitchEntityTagByState!!! %d"), UState);
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -149,7 +150,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	switch (UStatePlaceholder)
 	{
 	case UnitData::Idle: StateFrag->PlaceholderSignal = UnitSignals::Idle; break;
-	case UnitData::Chase: StateFrag->PlaceholderSignal = UnitSignals::Chase; break;
+	//case UnitData::Chase: StateFrag->PlaceholderSignal = UnitSignals::Chase; break;
 	case UnitData::Attack: StateFrag->PlaceholderSignal = UnitSignals::Attack; break;
 	case UnitData::Pause: StateFrag->PlaceholderSignal = UnitSignals::Pause; break;
 	case UnitData::Dead: StateFrag->PlaceholderSignal = UnitSignals::Dead; break;
@@ -167,7 +168,8 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Invalid UnitStatePlaceholder."), *GetName());
 		break;
 	}
-
+	
+	
 	// The EntityManager is now handled within the switch
 	SetUnitState(UState);
 	auto& Defer = EntityManager->Defer();
@@ -175,8 +177,10 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	switch (UState)
 	{
 	    case UnitData::Idle:
-	        Defer.AddTag<FMassStateIdleTag>(EntityHandle);
-	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    {
+			    Defer.AddTag<FMassStateIdleTag>(EntityHandle);
+	    		if (StateFrag->CanDetect && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    }
 	        break;
 
 	    case UnitData::Chase:
@@ -200,13 +204,17 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	        break;
 
 	    case UnitData::PatrolRandom:
-	        Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
-	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    {
+			    Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
+	    		if (StateFrag->CanDetect && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    }
 	        break;
 
 	    case UnitData::PatrolIdle:
-	        Defer.AddTag<FMassStatePatrolIdleTag>(EntityHandle);
-	        Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    {
+			    Defer.AddTag<FMassStatePatrolIdleTag>(EntityHandle);
+	    		if (StateFrag->CanDetect && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+		    }
 	        break;
 
 	    case UnitData::Casting:

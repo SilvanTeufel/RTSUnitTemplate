@@ -6,6 +6,7 @@
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
 #include "MassSignalTypes.h"
+#include "UnitMassTag.h"
 #include "Signals/UnitSignalingProcessor.h"
 #include "DetectionProcessor.generated.h"
 
@@ -14,7 +15,26 @@ struct FTransformFragment;
 struct FMassAITargetFragment;
 struct FMassCombatStatsFragment;
 struct FMassAgentCharacteristicsFragment;
-
+struct FTargetUnitInfo
+{
+	FMassEntityHandle                          Entity;
+	FVector                                    Location;
+	FMassAIStateFragment*                      State;
+	//FMassAITargetFragment*                     TargetFrag;
+	//FMassMoveTargetFragment*                   MoveFrag;
+	const FMassCombatStatsFragment*            Stats;
+	const FMassAgentCharacteristicsFragment*   Char;
+};
+struct FDetectorUnitInfo
+{
+	FMassEntityHandle                          Entity;
+	FVector                                    Location;
+	FMassAIStateFragment*                      State;
+	FMassAITargetFragment*                     TargetFrag;
+	//FMassMoveTargetFragment*                   MoveFrag;
+	const FMassCombatStatsFragment*            Stats;
+	const FMassAgentCharacteristicsFragment*   Char;
+};
 
 UCLASS()
 class RTSUNITTEMPLATE_API UDetectionProcessor : public UMassProcessor
@@ -41,7 +61,9 @@ private:
 	UWorld* World;
 
 	void HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities);
-	
+
+	void InjectCurrentTargetIfMissing(const FDetectorUnitInfo& DetectorInfo, TArray<FTargetUnitInfo>& InOutTargetUnits, FMassEntityManager& EntityManager);
+
 	FMassEntityQuery EntityQuery;
 
 	// Timer, um diesen Prozessor nicht jeden Frame laufen zu lassen

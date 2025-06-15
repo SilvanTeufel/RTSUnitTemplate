@@ -138,6 +138,12 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
             {
                 // Queue signal instead of sending directly
+                UpdateMoveTarget(
+                 MoveTarget,
+                 StateFrag.StoredLocation,
+                 Stats.RunSpeed,
+                 World);
+                
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 // Potentially clear MoveTarget here too if needed when losing target

@@ -85,6 +85,13 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
+                UpdateMoveTarget(
+                 MoveTarget,
+                 StateFrag.StoredLocation,
+                 Stats.RunSpeed,
+                 World);
+
+                
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 continue;

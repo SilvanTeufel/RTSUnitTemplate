@@ -175,7 +175,7 @@ void UUnitSightProcessor::Execute(
             //UE_LOG(LogTemp, Log, TEXT("SightCount: %d"), SightCount);
             if (SightCount > 0)
             {
-                PendingSignals.Emplace(Target.Entity, /* detector= */ Detector.Entity, UnitSignals::UnitEnterSight);
+                PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
             }
             else
             {
@@ -212,11 +212,7 @@ void UUnitSightProcessor::Execute(
     if (SignalSubsystem && PendingSignals.Num() > 0)
     {
 
-        /*
-        UE_LOG(LogTemp, Log, TEXT(
-            "UUnitSightProcessor: saw %d detectors, queued %d sight-signals."),
-            AllEntities.Num(), PendingSignals.Num());
-            */
+
         TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;
         AsyncTask(ENamedThreads::GameThread,
             [SubPtr, Signals = MoveTemp(PendingSignals)]()
@@ -235,6 +231,34 @@ void UUnitSightProcessor::Execute(
         });
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*

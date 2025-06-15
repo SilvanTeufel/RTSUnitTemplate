@@ -91,6 +91,13 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             // --- Target Lost ---
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
+                  // Queue signal instead of sending directly
+                  UpdateMoveTarget(
+                   MoveTarget,
+                   StateFrag.StoredLocation,
+                   Stats.RunSpeed,
+                   World);
+                
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct
                 continue;

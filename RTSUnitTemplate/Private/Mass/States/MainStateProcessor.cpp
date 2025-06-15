@@ -79,8 +79,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
 
             // ChunkContext.GetEntityManagerChecked()
-            // if (StatsFrag.TeamId == 7)
-            //UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+            // if (StatsFrag.TeamId == 3)
+            // UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
