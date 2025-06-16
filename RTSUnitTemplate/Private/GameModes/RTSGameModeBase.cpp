@@ -15,7 +15,6 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Controller/AIController/BuildingControllerBase.h"
-#include "Controller/AIController/UnitMovementManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 

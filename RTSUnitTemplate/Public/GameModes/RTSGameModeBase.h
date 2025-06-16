@@ -10,7 +10,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameplayEffect.h"
 #include "Characters/Unit/SpeakingUnit.h"
-#include "Controller/AIController/UnitMovementManager.h"
 #include "Developer/GraphColor/Private/appconst.h"
 #include "RTSGameModeBase.generated.h"
 

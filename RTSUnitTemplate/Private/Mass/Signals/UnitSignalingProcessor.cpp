@@ -89,6 +89,18 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 // This function is called by the delegate system at a safe time.
 void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 {
+
+    UWorld* World = GetWorld();
+
+    if (!World) return;
+    
+    const float Now = World->GetTimeSeconds();
+
+    if (Now <= 2.f) return;
+
+    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+    if (!NavSys) return;
+    
     if (ActorsToCreateThisFrame.IsEmpty())
     {
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));

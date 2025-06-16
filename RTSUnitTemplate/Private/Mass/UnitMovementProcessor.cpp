@@ -78,7 +78,10 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
     UWorld* World = GetWorld(); // Get World from Processor's context
     if (!World) return;
+    
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
 
+    if (!NavSystem) return;
     //UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!EntitySubsystem) return; // Needed for async result application
 
