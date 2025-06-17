@@ -65,7 +65,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	}
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
-	SelectedIconBaseClass = ASelectedIcon::StaticClass();
+	//SelectedIconBaseClass = ASelectedIcon::StaticClass();
 
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
@@ -185,7 +185,7 @@ void AUnitBase::BeginPlay()
 		SetupTimerWidget();
 
 
-		SpawnSelectedIcon();
+		//SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;
 		
 		if(IsFlying)
@@ -253,6 +253,8 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, IsFlying);
 	DOREPLIFETIME(AUnitBase, FlyHeight)
 
+	DOREPLIFETIME(AUnitBase, CanMove)
+	DOREPLIFETIME(AUnitBase, bIsMassUnit)
 }
 
 
@@ -548,24 +550,24 @@ void AUnitBase::IncreaseExperience()
 
 void AUnitBase::SetSelected()
 {
-	if(SelectedIcon)
-		SelectedIcon->IconMesh->bHiddenInGame = false;
+	//if(SelectedIcon)
+		//SelectedIcon->IconMesh->bHiddenInGame = false;
 
 	Selected();
 }
 
 void AUnitBase::SetDeselected()
 {
-	if (SelectedIcon)
-	{
-		SelectedIcon->IconMesh->bHiddenInGame = true;
-		SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
-	}
+	//if (SelectedIcon)
+	//{
+		//SelectedIcon->IconMesh->bHiddenInGame = true;
+		//SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
+	//}
 
 	Deselected();
 }
 
-
+/*
 void AUnitBase::SpawnSelectedIcon()
 {
 	if (SelectedIconBaseClass)
@@ -585,6 +587,7 @@ void AUnitBase::SpawnSelectedIcon()
 		}
 	}
 }
+*/
 
 void AUnitBase::SetupTimerWidget()
 {

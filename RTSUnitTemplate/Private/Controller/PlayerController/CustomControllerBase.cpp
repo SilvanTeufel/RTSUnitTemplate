@@ -14,6 +14,7 @@
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
 #include "Actors/FogActor.h"
+#include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
@@ -142,10 +143,11 @@ void ACustomControllerBase::AgentInit_Implementation()
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
 	if (!Unit) return;
-
+	
 	if (!Unit->IsInitialized) return;
+	
 	if (!Unit->CanMove) return;
-
+	
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
 
@@ -290,7 +292,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 						UnitsToLoad[i]->RunLocation = Transporter->GetActorLocation();
 					}
 					
-					if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+					if (SelectedUnits[i]->bIsMassUnit)
 					{
 						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
 						CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], UnitsToLoad[i]->RunLocation, Speed, 40.f);
@@ -413,11 +415,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
 				
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-
+				
 				if (!SelectedUnits[i]->IsInitialized) return;
 				if (!SelectedUnits[i]->CanMove) return;
-				
-				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+		
+				if (SelectedUnits[i]->bIsMassUnit)
 				{
 					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 					SetUnitState_Replication(SelectedUnits[i], 1);
@@ -431,11 +433,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			}else if(UseUnrealEnginePathFinding)
 			{
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-
+				
 				if (!SelectedUnits[i]->IsInitialized) return;
 				if (!SelectedUnits[i]->CanMove) return;
-				
-				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+
+				if (SelectedUnits[i]->bIsMassUnit)
 				{
 					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 					SetUnitState_Replication(SelectedUnits[i], 1);
@@ -454,7 +456,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 				if (!SelectedUnits[i]->IsInitialized) return;
 				if (!SelectedUnits[i]->CanMove) return;
 				
-				if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+				if (SelectedUnits[i]->bIsMassUnit)
 				{
 					CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], RunLocation, Speed, 40.f);
 					SetUnitState_Replication(SelectedUnits[i], 1);
@@ -527,7 +529,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 				}else
 				{
 					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-					if (SelectedUnits[i]->MassActorBindingComponent->bIsMassUnit)
+					if (SelectedUnits[i]->bIsMassUnit)
 					{
 						LeftClickAttackMass(SelectedUnits[i], RunLocation, AttackToggled);
 					}else
@@ -684,6 +686,21 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	//MoveToLocationUEPathFinding(Unit, Location);
 }
 
+void ACustomControllerBase::LeftClickReleasedMass()
+{
+	LeftClickIsPressed = false;
+	HUDBase->bSelectFriendly = false;
+	SelectedUnits = HUDBase->SelectedUnits;
+	DropUnitBase();
+	int BestIndex = GetHighestPriorityWidgetIndex();
+	CurrentUnitWidgetIndex = BestIndex;
+	UpdateSelectionCircles();
+	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled)
+	{
+		SetWidgets(BestIndex);
+	}
+}
+
 void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
 {
     UWorld* World = GetWorld();
@@ -731,21 +748,40 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
     }
 }
 
-/*
- void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)
+void ACustomControllerBase::UpdateSelectionCircles()
 {
 	UWorld* World = GetWorld();
-	if (!World) return;
+	if (!ensure(World)) return;
 
-	for (TActorIterator<AFogActor> It(World); It; ++It)
+	TArray<FVector_NetQuantize> Positions;
+	TArray<float> WorldRadii;
+    
+	if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
-		AFogActor* FogActor = *It;
-		//UE_LOG(LogTemp, Warning, TEXT("FogActor->TeamId! %d"), FogActor->TeamId);
-		//UE_LOG(LogTemp, Warning, TEXT("SelectableTeamId! %d"), SelectableTeamId);
-		//if (FogActor && FogActor->TeamId == SelectableTeamId)
+		FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+
+		for (AUnitBase* SelectedUnit : SelectedUnits)
 		{
-			FogActor->Multicast_UpdateFogMaskWithCircles(Entities);
+			if (!SelectedUnit) continue;
+
+			FMassEntityHandle Entity = SelectedUnit->MassActorBindingComponent->GetEntityHandle();
+			if (!EM.IsEntityValid(Entity)) continue;
+            
+			const FTransformFragment* TransformFragment = EM.GetFragmentDataPtr<FTransformFragment>(Entity);
+			if (!TransformFragment) continue;
+
+			// Use a default or calculated radius for the selection circle
+			float SelectionRadius = 50.f; // Example radius, adjust as needed
+
+			Positions.Add(FVector_NetQuantize(TransformFragment->GetTransform().GetLocation()));
+			WorldRadii.Add(SelectionRadius);
 		}
 	}
+    
+	// Multicast to all SelectionCircleActors
+	for (TActorIterator<ASelectionCircleActor> It(World); It; ++It)
+	{
+		if (It->TeamId == SelectableTeamId)
+			It->Multicast_UpdateSelectionCircles(Positions, WorldRadii);
+	}
 }
-*/

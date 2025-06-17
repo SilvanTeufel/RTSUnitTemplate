@@ -108,6 +108,7 @@ void ARTSGameModeBase::NavInitialisation()
                 FPathFindingResult PathResult = NavSystem->FindPathSync(DummyQuery);
                 UE_LOG(LogTemp, Log, TEXT("Dummy pathfinding complete. Success: %s"), 
                        PathResult.IsSuccessful() ? TEXT("Yes") : TEXT("No"));
+            	
             }
             else
             {

@@ -30,6 +30,7 @@ protected:
 private:
 	float TimeSinceLastRun = 0.0f;
     
+	//bool bIsNavigationReady = false;
 	
 	// This function will be bound to the "end of phase" delegate.
 	void CreatePendingEntities(const float DeltaTime);

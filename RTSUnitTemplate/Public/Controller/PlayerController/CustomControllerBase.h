@@ -11,6 +11,7 @@
 #include "MassCommandBuffer.h"
 #include "MassNavigationFragments.h"
 #include "MassMovementFragments.h"
+#include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
 
@@ -77,10 +78,16 @@ public:
 
 	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
 	void Server_ReportUnitVisibility(APerformanceUnit* Unit, bool bVisible);
-	
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LeftClickReleasedMass();
 	// Updates the Fog Mask using visible units
 	UFUNCTION()
 	void UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
-
+	UPROPERTY()
+	ASelectionCircleActor* SelectionCircleActor;
+	
+	UFUNCTION()
+	void UpdateSelectionCircles();
 };

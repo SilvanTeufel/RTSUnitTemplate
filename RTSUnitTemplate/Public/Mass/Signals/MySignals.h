@@ -60,7 +60,8 @@ namespace UnitSignals
 	// FOG OF WAR
 	const FName UnitEnterSight(TEXT("UnitEnterSight"));
 	const FName UnitExitSight(TEXT("UnitExitSight"));
-	const FName UpdateFogMask(TEXT("SetFogParameter"));
+	const FName UpdateFogMask(TEXT("UpdateFogMask"));
+	const FName UpdateSelectionCircle(TEXT("UpdateSelectionCircle"));
 
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 

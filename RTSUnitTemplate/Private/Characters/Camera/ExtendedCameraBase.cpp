@@ -388,7 +388,7 @@ void AExtendedCameraBase::Input_LeftClick_Released(const FInputActionValue& Inpu
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->LeftClickReleased();
+		CameraControllerBase->LeftClickReleasedMass();
 	}
 }
 

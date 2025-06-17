@@ -82,6 +82,8 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFogMask));
 
+    	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
+			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateSelectionCircle));
     	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
@@ -176,6 +178,16 @@ void UUnitStateProcessor::BeginDestroy()
             
 		FogParametersDelegateHandle.Reset();
 	}
+
+	if (SignalSubsystem && SelectionCircleDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
+		.Remove(SelectionCircleDelegateHandle);
+            
+		SelectionCircleDelegateHandle.Reset();
+	}
+
+
 	
 	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
 	{
@@ -1568,7 +1580,8 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
         }
 
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-
+    	
+    	
         for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
         {
             // Check entity validity *on the game thread*
@@ -1576,7 +1589,8 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
             {
                 continue;
             }
-            
+
+        	
             // Get fragments and actors *on the game thread*
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
         	FMassAgentCharacteristicsFragment* CharFragPtr = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
@@ -1603,7 +1617,6 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
 							}
 	
                     	UnitBase->SpawnPickupsArray();
-                    	
                     }
                 }
             }
@@ -2544,6 +2557,25 @@ void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEnti
 	AsyncTask(ENamedThreads::GameThread, [CustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
 	{
 		CustomPC->UpdateFogMaskWithCircles(CopiedEntities);
+	});
+}
+
+
+void UUnitStateProcessor::HandleUpdateSelectionCircle(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem || !World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController(); // Local controller
+	if (!PC) return;
+
+	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+	if (!CustomPC) return;
+
+
+
+	AsyncTask(ENamedThreads::GameThread, [CustomPC]()
+	{
+		CustomPC->UpdateSelectionCircles();
 	});
 }
 /*

@@ -4,6 +4,7 @@
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
 #include "Characters/Unit/UnitBase.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Mass/MassActorBindingComponent.h"
 
 UUnitSignalingProcessor::UUnitSignalingProcessor()
@@ -98,6 +99,7 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 
     if (Now <= 2.f) return;
 
+    
     UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
     if (!NavSys) return;
     
@@ -106,7 +108,25 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));
         return;
     }
-
+    /*
+    if (!bIsNavigationReady)
+    {
+        // Getting a valid default NavData instance is a much better indicator 
+        // that the system is ready for pathfinding queries.
+        if (NavSys->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate) != nullptr)
+        {
+            // It's ready! Set the flag so we don't check again.
+            bIsNavigationReady = true;
+        }
+        else
+        {
+            // Nav system exists, but NavData isn't available yet. 
+            // This is common at game start. Abort this frame's execution and try again next time.
+            UE_LOG(LogTemp, Log, TEXT("UUnitMovementProcessor: Waiting for Navigation Data to become available..."));
+            return; 
+        }
+    }
+    */
     // It is now SAFE to call synchronous creation functions.
     for (AUnitBase* Unit : ActorsToCreateThisFrame)
     {

@@ -6,6 +6,9 @@
 #include "MassCommonTypes.h"
 #include "MassNavigationFragments.h"
 #include "MassRepresentationTypes.h"
+#include "Mass/UnitMassTag.h"
+#include "Mass/UnitNavigationFragments.h"
+#include "Steering/MassSteeringFragments.h"
 
 UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor(): ObstacleQuery()
 {
@@ -19,6 +22,11 @@ void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 	ObstacleQuery.Initialize(EntityManager);
 	ObstacleQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	ObstacleQuery.AddRequirement<FMassAvoidanceColliderFragment>(EMassFragmentAccess::ReadOnly);
+	ObstacleQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
+	ObstacleQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
+	ObstacleQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite);
+	ObstacleQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+
 	// Add a tag requirement if you only want to register specific entities
 	// ObstacleQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	ObstacleQuery.RegisterWithProcessor(*this);
@@ -33,7 +41,7 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 	}
 
 	UMassNavigationSubsystem* NavSys = World->GetSubsystem<UMassNavigationSubsystem>();
-	if (!NavSys)
+	if (!ensure(NavSys!= nullptr))
 	{
 		return;
 	}
@@ -41,7 +49,7 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 	static constexpr float InitialCellSize = 100.f;
 
 	// Re-initialize (clear + configure) the hash‐grid
-	NavSys->GetObstacleGridMutable().Initialize(InitialCellSize);
+	//NavSys->GetObstacleGridMutable().Initialize(InitialCellSize);
 
 	ObstacleQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
 	{

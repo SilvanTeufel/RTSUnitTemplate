@@ -120,7 +120,8 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	InitAIFragments(EntityManager, Entity);
 	InitRepresentation(EntityManager, Entity);
 	bNeedsMassUnitSetup = false;
-	bIsMassUnit = true;
+	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+	UnitBase->bIsMassUnit = true;
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
@@ -164,7 +165,8 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassUnitSetup = false;
-			bIsMassUnit = true;
+			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+			UnitBase->bIsMassUnit = true;
 		}
     }
 	
@@ -436,7 +438,8 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 			bNeedsMassBuildingSetup = false;
-			bIsMassUnit = true;
+			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+			UnitBase->bIsMassUnit = true;
 		}
 	}
 	
@@ -871,39 +874,33 @@ void UMassActorBindingComponent::SpawnMassUnitIsm(
 
 void UMassActorBindingComponent::CleanupMassEntity()
 {
-	AActor* Owner = GetOwner(); // Get owner for logging clarity
-
-	// Check if the entity handle we stored is valid
+	AActor* Owner = GetOwner(); 
+	
 	if (MassEntityHandle.IsValid())
 	{
-		// Also check if the Mass Entity Subsystem we cached is still accessible.
+		
+		// Ensure our cached subsystem pointer is still valid
 		if (MassEntitySubsystemCache)
 		{
 			FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 
-			// Double check the entity is still considered valid by the EntityManager itself
 			if (EntityManager.IsEntityValid(MassEntityHandle))
 			{
-				// --- REMOVED SECTION: Attempting to modify FMassActorFragment directly ---
-				// It appears there's no standard public API to explicitly clear the Actor reference
-				// within the fragment before destruction. We will rely on DestroyEntity
-				// to handle the necessary cleanup within the Mass framework.
-				// --- END REMOVED SECTION ---
+				UE_LOG(LogTemp, Warning, TEXT("MASS CLEANUP: Actor '%s' queueing destruction for Entity %d:%d"), *GetNameSafe(Owner), MassEntityHandle.Index, MassEntityHandle.SerialNumber);
 
-				// Destroy the Mass entity. The Mass framework should handle unlinking
-				// the Actor reference stored in FMassActorFragment and associated subsystem maps.
+				// 1. Queue the destruction command as normal.
 				EntityManager.Defer().DestroyEntity(MassEntityHandle);
-	
+    
+				// 2. NEW STEP: Immediately tell the SUBSYSTEM to flush all queued commands.
+				EntityManager.FlushCommands();
+				//MassEntitySubsystemCache->FlushCommands();
+				UE_LOG(LogTemp, Warning, TEXT("MASS CLEANUP: Flushed command buffer for %s."), *GetNameSafe(Owner));
 			}
 		}
-		
-		// Reset the handle in this component regardless of success/failure of subsystem access.
+       
 		MassEntityHandle.Reset();
 	}
-	else
-	{
-		 // Optional Log: UE_LOG(LogTemp, Log, TEXT("UMassActorBindingComponent::CleanupMassEntity: No valid MassEntityHandle to clean up for Actor %s."), *GetNameSafe(Owner));
-	}
+	
 }
 // --- END ADDED ---
 

@@ -33,11 +33,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
 //protected:
+
 	public:
-
-	// Override pawn spawning to support custom Pawn classes from the PlayerStart.
-	//virtual void RestartPlayer(AController* NewPlayer) override;
-
+	
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void ApplyCustomizationsFromPlayerStart(APlayerController* PC, const APlayerStartBase* CustomStart);
 	
@@ -52,10 +50,6 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DisableSpawn = true;
-//public:
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	//int GatherUnitsTimer = 5.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int GatherControllerTimer = 2.f;

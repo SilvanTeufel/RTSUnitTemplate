@@ -1,5 +1,4 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-
 #include "RTSUnitTemplate.h"
 
 #define LOCTEXT_NAMESPACE "FRTSUnitTemplateModule"

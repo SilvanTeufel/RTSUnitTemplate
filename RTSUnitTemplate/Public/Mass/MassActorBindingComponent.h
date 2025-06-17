@@ -43,9 +43,6 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bNeedsMassBuildingSetup = false;
-
-	UPROPERTY()
-	bool bIsMassUnit = false;
 	
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }
 	// Called every frame

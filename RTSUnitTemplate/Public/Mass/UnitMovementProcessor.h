@@ -38,12 +38,12 @@ protected:
    // void RequestPathfindingAsync(FMassEntityHandle Entity, const FVector& StartLocation, const FVector& EndLocation, ANavigationData* NavData, TSharedPtr<const FNavigationQueryFilter> QueryFilter); // Verwende TSharedPtr für Filter
     void RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation);
 
-    void ResetPathfindingFlag(FMassEntityHandle Entity);
+    void ResetPathfindingFlagDeferred(FMassEntityHandle Entity);
+    //void ResetPathfindingFlag(FMassEntityHandle Entity);
 private:
     FMassEntityQuery EntityQuery;
 
     float TimeSinceLastRun = 0.0f;
-	
 
     // Add Acceptance Radius if not using the one from MoveTarget
     UPROPERTY(EditDefaultsOnly, Category = "Movement")

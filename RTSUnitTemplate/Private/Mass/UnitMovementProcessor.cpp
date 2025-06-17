@@ -81,7 +81,12 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
     
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
 
-    if (!NavSystem) return;
+    if (!NavSystem)
+    {
+        // Nav system doesn't even exist yet, definitely wait.
+        return;
+    }
+
     //UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!EntitySubsystem) return; // Needed for async result application
 
@@ -108,7 +113,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             FMassSteeringFragment& Steering = SteeringList[i];
 
 
-            if (!AIState.CanMove || !AIState.IsInitialized) return;
+            if (!AIState.CanMove || !AIState.IsInitialized) continue;
             
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
             const FVector FinalDestination = MoveTarget.Center;
@@ -206,7 +211,103 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
     }); // End ForEachEntityChunk
 }
 
+void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation)
+{
+    UWorld* World = GetWorld();
+    if (!World) return;
 
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+    if (!NavSystem)
+    {
+        // Use the deferred command pattern for the helper function as well
+        ResetPathfindingFlagDeferred(Entity);
+        return;
+    }
+
+    ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate);
+    if (!NavData)
+    {
+        ResetPathfindingFlagDeferred(Entity);
+        return;
+    }
+    
+    FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
+
+    AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
+        [NavSystem, NavData, QueryFilter, Entity, StartLocation, EndLocation, World] () mutable
+    {
+        // --- Runs on a Background Thread ---
+        FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, QueryFilter);
+        Query.SetAllowPartialPaths(true);
+
+        FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
+        
+        AsyncTask(ENamedThreads::GameThread,
+            [Entity, PathResult, EndLocation, World]() mutable
+        {
+            // --- Runs back on the Game Thread ---
+            if (!World) return;
+
+            UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+            if (!EntitySubsystem) return;
+
+            FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+            if (!EntityManager.IsEntityValid(Entity))
+            {
+                return;
+            }
+
+            // =================================================================
+            // VVVV CRITICAL CHANGE HERE VVVV
+            // =================================================================
+            // Instead of modifying the pointer directly, push a deferred command.
+            EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
+                [Entity, PathResult, EndLocation](FMassEntityManager& System)
+                {
+                    // This lambda now runs at a safe time.
+                    if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
+                    {
+                        PathFrag->bIsPathfindingInProgress = false; // Reset flag regardless of success/failure
+
+                        if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
+                        {
+                            PathFrag->CurrentPath = PathResult.Path;
+                            PathFrag->CurrentPathPointIndex = 1; 
+                            PathFrag->PathTargetLocation = EndLocation;
+                        }
+                        else
+                        {
+                            PathFrag->ResetPath();
+                        }
+                    }
+                });
+            // =================================================================
+            // ^^^^ CRITICAL CHANGE HERE ^^^^
+            // =================================================================
+        });
+    });
+}
+
+// Create a new deferred version of your helper function
+void UUnitMovementProcessor::ResetPathfindingFlagDeferred(FMassEntityHandle Entity)
+{
+     if (!EntitySubsystem) return; // Make sure EntitySubsystem is valid
+     
+     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+     if (!EntityManager.IsEntityValid(Entity)) return;
+
+     EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
+         [Entity](FMassEntityManager& System)
+         {
+             if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
+             {
+                 PathFrag->bIsPathfindingInProgress = false;
+             }
+         });
+}
+
+/*
 
 void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation)
 {
@@ -321,3 +422,4 @@ void UUnitMovementProcessor::ResetPathfindingFlag(FMassEntityHandle Entity)
           PathFrag->bIsPathfindingInProgress = false;
       }
 }
+*/

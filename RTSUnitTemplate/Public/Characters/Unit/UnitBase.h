@@ -23,11 +23,14 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 	
 public:
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanDetect = true;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
+	bool bIsMassUnit = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* UnitIcon;
@@ -290,6 +293,7 @@ public:
 /////////////////////////////
 
 // SelectedIcon related /////////
+	/*
 protected:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedCharacterIcon", Keywords = "RTSUnitTemplate SelectedCharacterIcon"), Category = TopDownRTSTemplate)
 	class ASelectedIcon* SelectedIcon;
@@ -299,6 +303,7 @@ protected:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SpawnSelectedIcon", Keywords = "RTSUnitTemplate SpawnSelectedIcon"), Category = TopDownRTSTemplate)
 	void SpawnSelectedIcon();
+	*/
 //////////////////////////////////////
 
 

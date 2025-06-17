@@ -6,6 +6,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 {
@@ -36,16 +37,47 @@ void UMainStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
+void UMainStateProcessor::HandleUpdateSelectionCircle()
+{
+    UWorld* World = GetWorld();
+    
+    if (!World) return;
+
+    APlayerController* PC = World->GetFirstPlayerController(); // Local controller
+    if (!PC) return;
+
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+    if (!CustomPC) return;
+
+
+
+    AsyncTask(ENamedThreads::GameThread, [CustomPC]()
+    {
+        CustomPC->UpdateSelectionCircles();
+    });
+}
+
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Throttling Check ---
-    TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-    if (TimeSinceLastRun < ExecutionInterval)
+
+    
+    TimeSinceLastRunA += Context.GetDeltaTimeSeconds();
+    TimeSinceLastRunB += Context.GetDeltaTimeSeconds();
+    // --- Handle Update Selection Circle Logic ---
+    if (TimeSinceLastRunB >= UpdateCircleInterval)
+    {
+        HandleUpdateSelectionCircle();
+        // Reset timer B. Subtracting the interval prevents time drift.
+        TimeSinceLastRunB -= UpdateCircleInterval;
+    }
+    
+    if (TimeSinceLastRunA < ExecutionInterval)
     {
         return; // Skip execution this frame
     }
     // Interval reached, reset timer
-    TimeSinceLastRun -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
+    TimeSinceLastRunA -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
 
     // --- Get World and Signal Subsystem (only if interval was met) ---
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World consistently
@@ -53,8 +85,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
     if (!SignalSubsystem) return;
     // Make a weak pointer copy for safe capture in the async task
-
-
+    
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
     // PendingSignals.Reserve(ExpectedSignalCount); // Optional
@@ -82,6 +113,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // if (StatsFrag.TeamId == 3)
             // UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
+           // PendingSignals.Emplace(Entity, UnitSignals::UpdateSelectionCircle);
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
 
