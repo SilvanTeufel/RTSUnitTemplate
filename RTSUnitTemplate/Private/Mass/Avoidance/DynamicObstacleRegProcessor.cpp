@@ -15,6 +15,7 @@ UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor(): ObstacleQuery()
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks;
 	bAutoRegisterWithProcessingPhases = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
+	bRequiresGameThreadExecution = true;
 }
 
 void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -57,6 +58,7 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 		const auto& Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
 		const auto& Colliders = ChunkContext.GetFragmentView<FMassAvoidanceColliderFragment>();
 
+		// UE_LOG(LogTemp, Warning, TEXT("UDynamicObstacleRegProcessor NumEntities: %d"), NumEntities);
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
 			FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -71,4 +73,6 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 			NavSys->GetObstacleGridMutable().Add(Item, Bounds);
 		}
 	});
+
+	
 }

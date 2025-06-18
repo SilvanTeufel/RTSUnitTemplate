@@ -55,6 +55,12 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	int GatherControllerTimer = 2.f;
 	
 	virtual void BeginPlay() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool PathfindingIsRdy = false;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsPathfindingRdy(){ return PathfindingIsRdy; };
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void NavInitialisation();
@@ -147,5 +153,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <ASpeakingUnit*> SpeakingUnits;
+
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	
 };

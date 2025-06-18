@@ -28,6 +28,8 @@ protected:
 	virtual void BeginPlay() override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 	
 	FMassEntityHandle MassEntityHandle;
 
@@ -86,15 +88,7 @@ public:
 
 	// Getter for the handle
 	FMassEntityHandle GetMassEntityHandle() const { return MassEntityHandle; }
-
-	FStaticMeshInstanceVisualizationDescHandle RegisterIsmDesc(UWorld* World, UStaticMesh* UnitStaticMesh);
 	
-	void SpawnMassUnitIsm(
-	FMassEntityManager& EntityManager,
-	UStaticMesh* UnitStaticMesh,
-	const FVector SpawnLocation,
-	UWorld* World);
-
 	void CleanupMassEntity();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")

@@ -31,7 +31,7 @@ void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& En
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-
+    
     // ← HERE: steering + avoidance forces as inputs
     //EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
     //EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadOnly);

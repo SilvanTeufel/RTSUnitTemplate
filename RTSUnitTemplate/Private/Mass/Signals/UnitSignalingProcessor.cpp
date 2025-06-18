@@ -3,6 +3,7 @@
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
+#include "Avoidance/MassAvoidanceFragments.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Mass/MassActorBindingComponent.h"
@@ -33,7 +34,6 @@ void UUnitSignalingProcessor::InitializeInternal(UObject& Owner, const TSharedRe
     UMassSimulationSubsystem* SimSubsystem = World->GetSubsystem<UMassSimulationSubsystem>();
     if (SimSubsystem)
     {
-        UE_LOG(LogTemp, Log, TEXT("[UUnitSignalingProcessor] INITIALIZE STARTING..."));
         // Bind our function to the delegate that fires after our processing phase is done.
         PhaseFinishedDelegateHandle = SimSubsystem->GetOnProcessingPhaseFinished(ProcessingPhase).AddUObject(this, &UUnitSignalingProcessor::CreatePendingEntities);
     }
@@ -99,6 +99,15 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 
     if (Now <= 2.f) return;
 
+    ARTSGameModeBase* GameMode = World->GetAuthGameMode<ARTSGameModeBase>();
+    if (!GameMode)
+    {
+        // GameMode doesn't exist yet, wait.
+        //UE_LOG(LogTemp, Log, TEXT("Waiting for pathfinding readiness signal from GameMode..."));
+        return;
+    }
+
+    if (!GameMode->IsPathfindingRdy()) return;
     
     UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
     if (!NavSys) return;
@@ -108,24 +117,12 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));
         return;
     }
+
     /*
-    if (!bIsNavigationReady)
-    {
-        // Getting a valid default NavData instance is a much better indicator 
-        // that the system is ready for pathfinding queries.
-        if (NavSys->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate) != nullptr)
-        {
-            // It's ready! Set the flag so we don't check again.
-            bIsNavigationReady = true;
-        }
-        else
-        {
-            // Nav system exists, but NavData isn't available yet. 
-            // This is common at game start. Abort this frame's execution and try again next time.
-            UE_LOG(LogTemp, Log, TEXT("UUnitMovementProcessor: Waiting for Navigation Data to become available..."));
-            return; 
-        }
-    }
+    // Get the EntityManager once to use inside the loop.
+    UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+    if (!EntitySubsystem) return;
+    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     */
     // It is now SAFE to call synchronous creation functions.
     for (AUnitBase* Unit : ActorsToCreateThisFrame)
@@ -139,16 +136,16 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
                 //BindingComp->CreateAndLinkOwnerToMassEntity();
             }
 
-        
+
            if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
            {
                 // We call your original, working function from the binding component.
-                BindingComp->CreateAndLinkOwnerToMassEntity();
-           } else   if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
-            {
+              BindingComp->CreateAndLinkOwnerToMassEntity();
+           }else if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
+           {
                 // We call your original, working function from the binding component.
-                BindingComp->CreateAndLinkBuildingToMassEntity();
-            }
+              BindingComp->CreateAndLinkBuildingToMassEntity();
+           }
             
         }
     }

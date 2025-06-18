@@ -41,10 +41,10 @@ public:
 
 	// FPS thresholds for interpolation range
 	UPROPERTY(EditAnywhere, Category = "Performance Throttling", meta = (ClampMin = "1.0", UIMin="1.0"))
-	float LowFPSThreshold = 40.0f; // Below this FPS, use MaxTickInterval
+	float LowFPSThreshold = 30.0f; // Below this FPS, use MaxTickInterval
 
 	UPROPERTY(EditAnywhere, Category = "Performance Throttling", meta = (ClampMin = "1.0", UIMin="1.0"))
-	float HighFPSThreshold = 80.0f; // Above this FPS, use MinTickInterval
+	float HighFPSThreshold = 60.0f; // Above this FPS, use MinTickInterval
 	
 	
 protected:

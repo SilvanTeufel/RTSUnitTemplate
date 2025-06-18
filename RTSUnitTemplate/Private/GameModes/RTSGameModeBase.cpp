@@ -30,6 +30,7 @@
 
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/Signals/RTSMassEntitySubsystem.h"
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -108,6 +109,11 @@ void ARTSGameModeBase::NavInitialisation()
                 FPathFindingResult PathResult = NavSystem->FindPathSync(DummyQuery);
                 UE_LOG(LogTemp, Log, TEXT("Dummy pathfinding complete. Success: %s"), 
                        PathResult.IsSuccessful() ? TEXT("Yes") : TEXT("No"));
+
+            	if (PathResult.IsSuccessful())
+            	{
+            		PathfindingIsRdy = true;
+            	}
             	
             }
             else
@@ -941,4 +947,23 @@ FVector ARTSGameModeBase::CalcLocation(FVector Offset, FVector MinRange, FVector
 	const float Z = RandomOffsetZ+Offset.Z;
 				
 	return FVector(X, Y, Z);
+}
+
+void ARTSGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	/*
+	#if WITH_EDITOR
+		// Get the world context
+		if (UWorld* World = GetWorld())
+		{
+			// Get your custom subsystem
+			if (URTSMassEntitySubsystem* MassSubsystem = World->GetSubsystem<URTSMassEntitySubsystem>())
+			{
+				// Call the reset function we created
+				MassSubsystem->ForceResetForPIE();
+			}
+		}
+	#endif
+	*/
 }

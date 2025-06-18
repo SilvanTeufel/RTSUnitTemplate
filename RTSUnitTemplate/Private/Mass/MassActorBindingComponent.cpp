@@ -173,6 +173,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	return NewMassEntityHandle;
 }
 
+
 bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
                                                                FMassArchetypeSharedFragmentValues& OutSharedValues)
 {
@@ -196,7 +197,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		// Steering & Avoidance
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
 		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
-
+    	
 		FMassGhostLocationFragment::StaticStruct(),
 		FMassNavigationEdgesFragment::StaticStruct(),
 		//FMassStandingAvoidanceParameters::StaticStruct(),
@@ -223,7 +224,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	
         //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
-
+	
     FMassArchetypeCreationParams Params;
 	Params.ChunkMemorySize=0;
 	Params.DebugName=FName("UMassActorBindingComponent");
@@ -246,7 +247,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 
 	// Get the const shared fragment handle for this specific set of parameter values
 	FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
-
+	
 	// Package the shared fragments
 	FMassArchetypeSharedFragmentValues SharedValues;
 	SharedValues.Add(MovementParamSharedFragment);
@@ -255,7 +256,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// 2. Steering Parameters (Using default values initially)
 	FMassMovingSteeringParameters MovingSteeringParamsInstance;
 	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
-	MovingSteeringParamsInstance.ReactionTime = 0.0f; // Faster reaction (Default 0.3) // 0.05f;
+	MovingSteeringParamsInstance.ReactionTime = 0.05f; // Faster reaction (Default 0.3) // 0.05f;
 	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
 
 	FConstSharedStruct MovingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovingSteeringParamsInstance);
@@ -265,7 +266,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// You can modify defaults here if needed
 	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
 	SharedValues.Add(StandingSteeringParamSharedFragment);
-
+	
 	// 3. Avoidance Parameters (Now explicitly initialized)
 	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
 	// Core detection radius
@@ -280,7 +281,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// --- INCREASE THESE FOR STRONGER PUSHING ---
 	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance + 50.f; // Or a fixed larger value like 100.f or 125.f
 	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = ObstacleSeparationStiffness; // Significantly increase this for a stronger push
-
 	
 	//MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
 	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
@@ -304,7 +304,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	SharedValues.Add(StandingAvoidanceParamSharedFragment);
 	// ***** --- ADD THIS LINE --- *****
 	// ***** --- END ADDED LINE --- *****
-	
 	
     SharedValues.Sort();
 
@@ -731,149 +730,9 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	*/
 }
 
-
-// Example helper: Create and register a static mesh description, returning a handle.
-// (The actual function and signature may differ. Consult UE5.5 documentation for the correct API.)
-FStaticMeshInstanceVisualizationDescHandle UMassActorBindingComponent::RegisterIsmDesc(UWorld* World, UStaticMesh* UnitStaticMesh)
-{
-	// 1. Construct the VisualizationDesc
-	FStaticMeshInstanceVisualizationDesc VisDesc;
-
-	// Create a mesh description for the unit static mesh.
-	FMassStaticMeshInstanceVisualizationMeshDesc MeshDesc;
-	MeshDesc.Mesh = UnitStaticMesh;
-	MeshDesc.Mobility = EComponentMobility::Movable;
-	MeshDesc.bCastShadows = true;
-	// (Optionally set other properties such as MaterialOverrides or LOD significance.)
-
-	// Add the mesh description to the Meshes array.
-	VisDesc.Meshes.Add(MeshDesc);
-
-	// (Optional) Set up a collision profile if needed:
-	// VisDesc.SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
-	// 2. Access the updated subsystem.
-	if (UMassRepresentationSubsystem* RepresentationSubsystem = World->GetSubsystem<UMassRepresentationSubsystem>())
-	{
-		FStaticMeshInstanceVisualizationDescHandle Handle = RepresentationSubsystem->FindOrAddStaticMeshDesc(VisDesc);
-		return Handle;
-	}
-
-	// Return an invalid handle if the subsystem could not be retrieved.
-	return FStaticMeshInstanceVisualizationDescHandle();
-}
-
-void UMassActorBindingComponent::SpawnMassUnitIsm(
-    FMassEntityManager& EntityManager,
-    UStaticMesh* UnitStaticMesh,
-    const FVector SpawnLocation,
-    UWorld* World)
-{
-
-    if (!UnitStaticMesh)
-    {
-        UE_LOG(LogTemp, Error, TEXT("SpawnMassUnit: UnitStaticMesh is null!"));
-        return;
-    }
-
-    // 1. Fragments for basic representation + transform
-    TArray<const UScriptStruct*> FragmentsAndTags = {
-        FTransformFragment::StaticStruct(),
-        FMassRepresentationFragment::StaticStruct(),
-        FMassRepresentationLODFragment::StaticStruct(),
-
-    	// --- ADD YOUR CUSTOM FRAGMENTS TO THE ARCHETYPE DEFINITION ---
-		FMassCombatStatsFragment::StaticStruct(),      // Add stats
-    	FUnitStateFragment::StaticStruct(),      // Add state
-
-    	// --- Add other fragments needed for RTS units potentially ---
-	    FMassMoveTargetFragment::StaticStruct(), // For pathfinding/movement commands
-	    FMassVelocityFragment::StaticStruct(),   // For current movement physics
-	   // FTeamMemberFragment::StaticStruct(),    // Example if you have teams
-	   // FSelectableTag::StaticStruct()          // Example if units can be selected
-    };
-
-    FMassArchetypeHandle ArchetypeHandle = EntityManager.CreateArchetype(FragmentsAndTags);
-    if (!ArchetypeHandle.IsValid())
-    {
-        UE_LOG(LogTemp, Error, TEXT("SpawnMassUnitISM: Failed to create archetype!"));
-        return;
-    }
-
-    // 2. Create the entity
-    FMassEntityHandle NewEntityHandle = EntityManager.CreateEntity(ArchetypeHandle);
-    if (!NewEntityHandle.IsValid())
-    {
-        UE_LOG(LogTemp, Error, TEXT("SpawnMassUnitISM: Failed to create entity!"));
-        return;
-    }
-
-    // 3. Initialize Fragments
-    // Transform
-    FTransformFragment& TransformFrag = EntityManager.GetFragmentDataChecked<FTransformFragment>(NewEntityHandle);
-    TransformFrag.GetMutableTransform().SetLocation(SpawnLocation);
-
-	FTransform& Transform = TransformFrag.GetMutableTransform();
-	Transform.SetLocation(SpawnLocation);
-	Transform.SetRotation(FQuat::Identity);
-	Transform.SetScale3D(FVector(1.0f, 1.0f, 1.0f)); // Ensure proper scale
-	
-    // Representation LOD
-    FMassRepresentationLODFragment& RepLODFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationLODFragment>(NewEntityHandle);
-    RepLODFrag.LOD = EMassLOD::High;
-    RepLODFrag.PrevLOD = EMassLOD::Max;
-
-    // Representation
-    FMassRepresentationFragment& RepFrag = EntityManager.GetFragmentDataChecked<FMassRepresentationFragment>(NewEntityHandle);
-
-    // For purely instanced mesh usage, set these to INDEX_NONE
-    RepFrag.HighResTemplateActorIndex = INDEX_NONE;
-    RepFrag.LowResTemplateActorIndex  = INDEX_NONE;
-
-    // 4. Register the StaticMesh desc and store the handle
-    FStaticMeshInstanceVisualizationDescHandle MeshDescHandle = RegisterIsmDesc(World, UnitStaticMesh);
-	
-    if (!MeshDescHandle.IsValid())
-    {
-        UE_LOG(LogTemp, Error, TEXT("SpawnMassUnitISM: Failed to register static mesh description!"));
-        return;
-    }
-
-    // Store it in the fragment
-    RepFrag.StaticMeshDescHandle = MeshDescHandle;
-
-	
-	if (RepFrag.StaticMeshDescHandle.IsValid())
-	{
-		UE_LOG(LogTemp, Log, TEXT("SpawnMassUnitIsm: Valid StaticMeshDescHandle, Index: %d"), RepFrag.StaticMeshDescHandle.ToIndex());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SpawnMassUnitIsm: Invalid StaticMeshDescHandle in Representation Fragment."));
-	}
-	
-	// --- 4. INITIALIZE YOUR CUSTOM FRAGMENTS ---
-	FMassCombatStatsFragment& StatsFrag = EntityManager.GetFragmentDataChecked<FMassCombatStatsFragment>(NewEntityHandle);
-	StatsFrag.Health = StatsFrag.MaxHealth; // Set current health to max health initially
-
-	FUnitStateFragment& StateFrag = EntityManager.GetFragmentDataChecked<FUnitStateFragment>(NewEntityHandle);
-	StateFrag.TargetEntity.Reset();                // Ensure no initial target
-	
-	FMassMoveTargetFragment& MoveTargetFrag = EntityManager.GetFragmentDataChecked<FMassMoveTargetFragment>(NewEntityHandle);
-	MoveTargetFrag.Center = SpawnLocation; // Target is current location initially
-	MoveTargetFrag.DistanceToGoal = 0.f;
-	MoveTargetFrag.DesiredSpeed.Set(0.f);
-	MoveTargetFrag.IntentAtGoal = EMassMovementAction::Stand;
-	MoveTargetFrag.Forward = TransformFrag.GetTransform().GetRotation().GetForwardVector();
-	
-	
-	FMassVelocityFragment& VelocityFrag = EntityManager.GetFragmentDataChecked<FMassVelocityFragment>(NewEntityHandle);
-	VelocityFrag.Value = FVector::ZeroVector;
-	DrawDebugSphere(World, SpawnLocation, 25.0f, 12, FColor::Green, false, 15.0f);
-    UE_LOG(LogTemp, Log, TEXT("SpawnMassUnitISM: Created Entity %d with ISM representation."), NewEntityHandle.Index);
-}
-
 void UMassActorBindingComponent::CleanupMassEntity()
 {
+
 	AActor* Owner = GetOwner(); 
 	
 	if (MassEntityHandle.IsValid())
@@ -886,15 +745,8 @@ void UMassActorBindingComponent::CleanupMassEntity()
 
 			if (EntityManager.IsEntityValid(MassEntityHandle))
 			{
-				UE_LOG(LogTemp, Warning, TEXT("MASS CLEANUP: Actor '%s' queueing destruction for Entity %d:%d"), *GetNameSafe(Owner), MassEntityHandle.Index, MassEntityHandle.SerialNumber);
-
 				// 1. Queue the destruction command as normal.
 				EntityManager.Defer().DestroyEntity(MassEntityHandle);
-    
-				// 2. NEW STEP: Immediately tell the SUBSYSTEM to flush all queued commands.
-				EntityManager.FlushCommands();
-				//MassEntitySubsystemCache->FlushCommands();
-				UE_LOG(LogTemp, Warning, TEXT("MASS CLEANUP: Flushed command buffer for %s."), *GetNameSafe(Owner));
 			}
 		}
        
@@ -914,4 +766,10 @@ void UMassActorBindingComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 
     // IMPORTANT: Call the base class implementation LAST.
     Super::EndPlay(EndPlayReason);
+}
+
+void UMassActorBindingComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
+{
+	// CleanupMassEntity();
+	Super::OnComponentDestroyed(bDestroyingHierarchy);
 }

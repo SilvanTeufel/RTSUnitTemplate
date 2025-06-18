@@ -18,6 +18,7 @@ public:
 	void RegisterUnitForMassCreation(AUnitBase* NewUnit);
 	void GetAndClearPendingUnits(TArray<AUnitBase*>& OutPendingUnits);
 
+	void ResetSystem();
 private:
 	UPROPERTY()
 	TArray<TObjectPtr<AUnitBase>> PendingUnits;

@@ -39,7 +39,8 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
     EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
     EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite); // Keep for managing path state
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly); 
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+
     // Optionally Read Velocity if needed for decisions (but don't write it here)
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -106,6 +107,8 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            if (!EntityManager.IsEntityValid(Entity)) continue;
+            
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FMassMoveTargetFragment& MoveTarget = TargetList[i];
             const FMassAIStateFragment& AIState = AIStateList[i];

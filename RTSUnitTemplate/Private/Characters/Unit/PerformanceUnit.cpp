@@ -90,8 +90,8 @@ void APerformanceUnit::BeginPlay()
 
 void APerformanceUnit::Destroyed()
 {
+	// MassActorBindingComponent->CleanupMassEntity();
 	Super::Destroyed();
-
 	//DestroyFogManager();
 }
 /*
