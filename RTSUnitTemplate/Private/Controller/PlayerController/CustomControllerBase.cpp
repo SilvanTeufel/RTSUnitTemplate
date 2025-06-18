@@ -13,11 +13,14 @@
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "NavModifierVolume.h"
 #include "Actors/FogActor.h"
 #include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
+#include "NavAreas/NavArea_Null.h"
+#include "NavMesh/RecastNavMesh.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -382,6 +385,7 @@ void ACustomControllerBase::RightClickPressedMass()
 
 void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 {
+	
 	int32 NumUnits = SelectedUnits.Num();
 	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 	const int32 GridSize = ComputeGridSize(NumUnits);
@@ -785,3 +789,5 @@ void ACustomControllerBase::UpdateSelectionCircles()
 			It->Multicast_UpdateSelectionCircles(Positions, WorldRadii);
 	}
 }
+
+

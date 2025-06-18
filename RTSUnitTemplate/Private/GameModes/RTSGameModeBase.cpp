@@ -23,14 +23,8 @@
 #include "NavFilters/NavigationQueryFilter.h" // Für UNavigationQueryFilter
 #include "AI/Navigation/NavigationTypes.h" // Für FPathFindingResult
 
-#include "Engine/Canvas.h"
-#include "CanvasItem.h"           // for FCanvasCircleItem
-#include "CanvasTypes.h"          // for FCanvasTextItem, etc.
-#include "Engine/CanvasRenderTarget2D.h"
-
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
-#include "Mass/Signals/RTSMassEntitySubsystem.h"
 
 
 void ARTSGameModeBase::BeginPlay()

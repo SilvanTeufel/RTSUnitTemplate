@@ -42,7 +42,7 @@ public:
 	
 	UFUNCTION(Client, Reliable)
 	void AgentInit();
-
+	
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTarget(
 		UObject* WorldContextObject,
