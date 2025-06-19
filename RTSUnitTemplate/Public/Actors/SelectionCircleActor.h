@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DecalActor.h"
 #include "GameFramework/Actor.h"
 #include "SelectionCircleActor.generated.h"
 

@@ -135,13 +135,6 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bCanBeInvisible = false;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		bool IsFlying = false;
-	
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float FlyHeight = 500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool UEPathfindingUsed = false;
@@ -257,7 +250,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void IncreaseExperience();
-
+	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void Selected();
 

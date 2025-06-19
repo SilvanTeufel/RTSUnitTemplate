@@ -93,40 +93,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	GetCapsuleComponent()->SetIsReplicated(false);
 	GetMesh()->SetIsReplicated(false);
 }
-/*
-void AUnitBase::NotifyHit(class UPrimitiveComponent* MyComp, class AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
-{
-	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
-	
-	// If collisions can be processed, handle the logic
-	if (bCanProcessCollision)
-	{
-		AUnitBase* OtherUnit = Cast<AUnitBase>(Other);
-		if (OtherUnit)
-		{
-			//CollisionManager->RegisterCollision();
-			// Handle collision with another AUnitBase
-			CollisionUnit = OtherUnit;
-			CollisionLocation = GetActorLocation();
 
-			SetCollisionCooldown();
-		}
-	}
-}
-
-
-void AUnitBase::SetCollisionCooldown()
-{
-	// Re-enable collision processing
-	bCanProcessCollision = false;
-	GetWorld()->GetTimerManager().SetTimer(CollisionCooldownTimer, this, &AUnitBase::ResetCollisionCooldown, CollisionCooldown, false);
-}
-
-void AUnitBase::ResetCollisionCooldown()
-{
-	bCanProcessCollision = true;
-}
-*/
 void AUnitBase::CreateHealthWidgetComp()
 {
 	// Check if the HealthWidgetComp is already created
@@ -203,6 +170,7 @@ void AUnitBase::BeginPlay()
 	//SetCollisionCooldown();
 
 	InitHealthbarOwner();
+	
 }
 
 
@@ -250,8 +218,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CanAttack);
 	DOREPLIFETIME(AUnitBase, IsInvisible);
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
-	DOREPLIFETIME(AUnitBase, IsFlying);
-	DOREPLIFETIME(AUnitBase, FlyHeight)
 
 	DOREPLIFETIME(AUnitBase, CanMove)
 	DOREPLIFETIME(AUnitBase, bIsMassUnit)
@@ -550,44 +516,39 @@ void AUnitBase::IncreaseExperience()
 
 void AUnitBase::SetSelected()
 {
-	//if(SelectedIcon)
-		//SelectedIcon->IconMesh->bHiddenInGame = false;
+	
+	if (SelectionIcon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SelectionDecal pointer is VALID. Calling ShowSelection."));
+		if (!bUseSkeletalMovement)
+		{
+			FTransform InstanceXform;
+			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+			FVector NewLocation = InstanceXform.GetLocation();
+			if (IsFlying)
+				NewLocation.Z = NewLocation.Z-FlyHeight;
+			
+			SelectionIcon->SetWorldLocation(NewLocation);
+		}
 
+		SelectionIcon->ShowSelection();
+	}
+	else
+	{
+		// Diese Nachricht wirst du wahrscheinlich im Log sehen
+		UE_LOG(LogTemp, Error, TEXT("SelectionDecal pointer is NULLPTR!"));
+	}
+	
 	Selected();
 }
 
 void AUnitBase::SetDeselected()
 {
-	//if (SelectedIcon)
-	//{
-		//SelectedIcon->IconMesh->bHiddenInGame = true;
-		//SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
-	//}
-
+	if (SelectionIcon)
+		SelectionIcon->HideSelection();
+		
 	Deselected();
 }
-
-/*
-void AUnitBase::SpawnSelectedIcon()
-{
-	if (SelectedIconBaseClass)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.bNoFail = true;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		FTransform SpellTransform;
-		SpellTransform.SetLocation(FVector(500, 0, 0));
-		SpellTransform.SetRotation(FQuat(FRotator::ZeroRotator));
-	
-		SelectedIcon = GetWorld()->SpawnActor<ASelectedIcon>(SelectedIconBaseClass, SpellTransform, SpawnParams);
-		if (SelectedIcon) {
-			SelectedIcon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("rootSocket"));
-			SelectedIcon->ChangeMaterialColour(FVector4d(5.f, 40.f, 30.f, 0.5f));
-		}
-	}
-}
-*/
 
 void AUnitBase::SetupTimerWidget()
 {

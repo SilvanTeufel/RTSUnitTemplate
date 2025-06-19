@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "AbilityUnit.h"
 #include "NiagaraComponent.h"
+#include "Actors/SelectionDecalComponent.h"
 #include "MassUnitBase.generated.h"
 
 /**
@@ -34,8 +35,15 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
 	bool bUseSkeletalMovement = true;
 
-	//UFUNCTION(BlueprintCallable, Category = Mass)
-	//bool AddTagToEntity(UScriptStruct* TagToAdd);
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsFlying = false;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float FlyHeight = 500.f;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	USelectionDecalComponent* SelectionIcon;
+	
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);

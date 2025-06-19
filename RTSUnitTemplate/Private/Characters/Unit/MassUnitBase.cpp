@@ -23,6 +23,14 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 		ISMComponent->SetVisibility(false);
 		ISMComponent->SetIsReplicated(true);
 	}
+
+	
+	SelectionIcon = CreateDefaultSubobject<USelectionDecalComponent>(TEXT("SelectionIcon"));
+
+	if (SelectionIcon)
+	{
+		SelectionIcon->SetupAttachment(RootComponent);
+	}
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -36,41 +44,10 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(AMassUnitBase, Niagara_A_Start_Transform);
 	DOREPLIFETIME(AMassUnitBase, Niagara_B_Start_Transform);
+
+	DOREPLIFETIME(AMassUnitBase, IsFlying);
+	DOREPLIFETIME(AMassUnitBase, FlyHeight)
 }
-/*
-bool AMassUnitBase::AddTagToEntity(UScriptStruct* TagToAdd)
-{
-    if (!TagToAdd || !TagToAdd->IsChildOf(FMassTag::StaticStruct()))
-    {
-        UE_LOG(LogTemp, Error, TEXT("ASpawnerUnit (%s): AddTagToEntity failed - Invalid Tag ScriptStruct provided."), *GetName());
-        return false;
-    }
-
-    FMassEntityManager* EntityManager;
-    FMassEntityHandle EntityHandle;
-
-    if (!GetMassEntityData(EntityManager, EntityHandle))
-    {
-        // Error already logged in GetMassEntityData
-        return false;
-    }
-
-    // Check if entity is still valid before attempting modification
-    if (!EntityManager->IsEntityValid(EntityHandle))
-    {
-         UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): AddTagToEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
-         return false;
-    }
-
-    // Add the tag
-    EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
-	EntityManager->Defer().AddTag<FMassStateChargingTag>(EntityHandle);
-    //UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to add tag '%s' to entity %s."), *GetName(), *TagToAdd->GetName(), *EntityHandle.DebugGetDescription());
-
-    // AddTagToEntity doesn't return success/failure, but we assume it worked if we got this far.
-    // If you need strict confirmation, you'd check HasTag afterwards, but that adds overhead.
-    return true;
-}*/
 
 bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
 {
@@ -255,15 +232,6 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 		SignalSubsystem->SignalEntity(UnitSignals::SyncUnitBase, EntityHandle);
 	}
-	/*
-	if (IsWorker)
-	{
-		if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("!!SEND SIGNAL!!!"));
-			SignalSubsystem->SignalEntity(UnitSignals::UpdateWorkerMovement, EntityHandle);
-		}
-	}*/
 
 	return true;
 }
@@ -321,22 +289,6 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 		StateFrag->PlaceholderSignal = UnitSignals::PatrolIdle;
 	else if (GetUnitState() == UnitData::GoToResourceExtraction)
 		StateFrag->PlaceholderSignal = UnitSignals::GoToResourceExtraction;
-	//else if (GetUnitState() == UnitData::Chase)
-		//StateFrag->PlaceholderSignal = UnitSignals::Chase;
-	//else if (GetUnitState() == UnitData::Attack)
-		//StateFrag->PlaceholderSignal = UnitSignals::Attack;
-	//else if (GetUnitState() == UnitData::Pause)
-		//StateFrag->PlaceholderSignal = UnitSignals::Pause;
-	//else if (GetUnitState() == UnitData::Dead)
-		//StateFrag->PlaceholderSignal = UnitSignals::Dead;
-	//else if (GetUnitState() == UnitData::GoToBase)
-		//StateFrag->PlaceholderSignal = UnitSignals::GoToBase;
-	//else if (GetUnitState() == UnitData::GoToBuild)
-		//StateFrag->PlaceholderSignal = UnitSignals::GoToBuild;
-	//else if (GetUnitState() == UnitData::Build)
-		//StateFrag->PlaceholderSignal = UnitSignals::Build;
-	//else if (GetUnitState() == UnitData::ResourceExtraction)
-		//StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction;
 	
 		
 	if      (TagToAdd == FMassStateIdleTag::StaticStruct())
@@ -414,9 +366,6 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	    SetUnitState(UnitData::ResourceExtraction);
 	    EntityManager->Defer().AddTag<FMassStateResourceExtractionTag>(EntityHandle);
 	}
-	//EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
-	
-	// Like AddTag, RemoveTag doesn't return status. Assume success if code reached here.
 
 	if (IsWorker)
 	{
@@ -486,20 +435,6 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AMassUnitBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-
-	// Only add once (or whenever mesh/flag changes)
-	/*
-	if (!bUseSkeletalMovement 
-		&& ISMComponent 
-		&& ISMComponent->GetStaticMesh()
-		&& ISMComponent->IsValidLowLevel()
-		&& InstanceIndex == INDEX_NONE)
-	{
-		// This is still early enough that the ISM data manager
-		// will allow an append from INDEX_NONE
-		ISMComponent->ClearInstances();
-		InstanceIndex = ISMComponent->AddInstance(Transform, true);
-	}*/
 }
 
 void AMassUnitBase::InitializeUnitMode()
@@ -620,15 +555,9 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 	if (ISMComponent && ISMComponent->IsValidInstance(InstIndex))
 	{
 		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, false, false);
-		//ISMComponent->MarkRenderStateDirty();
 	}
-
-
-	//SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-
-	// Manually move Niagara_A to the new location
-
-	if (Niagara_A)
+	
+	if (Niagara_A && !Niagara_A->bHiddenInGame)
 	{
 		// Get the local offset vector (e.g., FVector(-750, 0, 0)) from the start transform
 		const FVector LocalOffset = Niagara_A_Start_Transform.GetLocation();
@@ -650,7 +579,7 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 	}
 
 	// Manually move Niagara_B to the new location
-	if (Niagara_B)
+	if (Niagara_B && !Niagara_B->bHiddenInGame)
 	{
 		// Get the local offset vector (e.g., FVector(-750, 0, 0)) from the start transform
 		const FVector LocalOffset = Niagara_B_Start_Transform.GetLocation();
@@ -669,6 +598,19 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 
 		// Set the final transform on the Niagara component
 		Niagara_B->SetWorldTransform(FinalWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	
+	if (SelectionIcon && !SelectionIcon->bHiddenInGame)
+	{
+		// Setze die Welt-Position des Decals auf die neue Welt-Position der Instanz.
+		// Die Rotation des Decals muss nicht geändert werden, da es immer nach unten projiziert.
+		FVector NewLocation = NewTransform.GetLocation();
+	
+		if (IsFlying)
+			NewLocation.Z = NewLocation.Z-FlyHeight;
+		
+		SelectionIcon->SetWorldLocation(NewLocation);
 	}
 }
 
