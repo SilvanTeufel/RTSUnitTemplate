@@ -519,7 +519,6 @@ void AUnitBase::SetSelected()
 	
 	if (SelectionIcon)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SelectionDecal pointer is VALID. Calling ShowSelection."));
 		if (!bUseSkeletalMovement)
 		{
 			FTransform InstanceXform;
@@ -533,12 +532,7 @@ void AUnitBase::SetSelected()
 
 		SelectionIcon->ShowSelection();
 	}
-	else
-	{
-		// Diese Nachricht wirst du wahrscheinlich im Log sehen
-		UE_LOG(LogTemp, Error, TEXT("SelectionDecal pointer is NULLPTR!"));
-	}
-	
+
 	Selected();
 }
 

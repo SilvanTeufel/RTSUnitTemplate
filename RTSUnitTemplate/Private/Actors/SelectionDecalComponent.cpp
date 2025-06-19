@@ -38,7 +38,6 @@ void USelectionDecalComponent::BeginPlay()
 
 void USelectionDecalComponent::ShowSelection()
 {
-	UE_LOG(LogTemp, Warning, TEXT("ShowSelection!"));
 	if (DynamicDecalMaterial)
 	{
 		// Setze einen Vektor-Parameter im Material namens "SelectionColor".
