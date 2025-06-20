@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "MassEntityTypes.h"
+#include "Components/PostProcessComponent.h"
 #include "GameFramework/Actor.h"
 #include "FogActor.generated.h"
 
@@ -26,8 +27,11 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 TeamId = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
-	UStaticMeshComponent* FogMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FogOfWar")
+	UPostProcessComponent* PostProcessComponent;
+	
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	//UStaticMeshComponent* FogMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* FogMaterial;
@@ -36,7 +40,9 @@ public:
 	void InitFogMaskTexture();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex);
+	void InitializeFogPostProcess();
+	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	//void ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
@@ -68,8 +74,8 @@ public:
 private:
 	FTimerHandle FogUpdateTimerHandle;
 	
-	UFUNCTION(NetMulticast, Unreliable, Category = RTSUnitTemplate)
-	void Multicast_ApplyFogMask(); // Helper to get controller and call ApplyFogMaskToMesh
+	//UFUNCTION(NetMulticast, Unreliable, Category = RTSUnitTemplate)
+	//void Multicast_ApplyFogMask(); // Helper to get controller and call ApplyFogMaskToMesh
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	UTexture2D* FogMaskTexture;

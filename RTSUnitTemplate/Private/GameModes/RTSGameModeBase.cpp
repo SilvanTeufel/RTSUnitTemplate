@@ -19,6 +19,7 @@
 #include "Net/UnrealNetwork.h"
 
 #include "NavigationSystem.h"
+#include "Actors/FogActor.h"
 #include "NavMesh/NavMeshPath.h" // Für FPathFindingQuery, FNavPathPoint etc.
 #include "NavFilters/NavigationQueryFilter.h" // Für UNavigationQueryFilter
 #include "AI/Navigation/NavigationTypes.h" // Für FPathFindingResult
@@ -343,7 +344,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
 			CameraControllerBase->Multi_HideEnemyWaypoints();
-
+			CameraControllerBase->Multi_InitFogOfWar();
 			//UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!"));
 			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
 	
@@ -356,7 +357,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	}
 
 	NavInitialisation();
-	//SpawnAIFogManager();
+	
 }
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)

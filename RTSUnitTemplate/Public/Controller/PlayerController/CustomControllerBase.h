@@ -38,6 +38,8 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_HideEnemyWaypoints();
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_InitFogOfWar();
 
 	
 	UFUNCTION(Client, Reliable)

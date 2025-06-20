@@ -11,13 +11,30 @@ AFogActor::AFogActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
-	// Mesh setup
-	FogMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FogMesh"));
-	RootComponent = FogMesh;
 
-	FogMesh->SetHiddenInGame(true);  // Hidden by default
-	FogMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
+	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent")));
+
+	// --- 1. CREATE THE COMPONENT ---
+	PostProcessComponent = CreateDefaultSubobject<UPostProcessComponent>(TEXT("PostProcessComponent"));
+	PostProcessComponent->SetupAttachment(RootComponent); // Attach it to our root
+
+	// --- 2. SET ITS CORE PROPERTIES ---
+    
+	// Set a high priority to ensure it overrides other volumes in the scene.
+	PostProcessComponent->Priority = 100.0f;
+
+	// Make the volume affect the entire world, not just a box area.
+	PostProcessComponent->bUnbound = true;
+    
+	// We initially disable it. The code will enable it for the correct player.
+	PostProcessComponent->bEnabled = false; 
+	// Mesh setup
+	//FogMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FogMesh"));
+	//RootComponent = FogMesh;
+
+	//FogMesh->SetHiddenInGame(true);  // Hidden by default
+	//FogMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	//FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 }
@@ -26,8 +43,9 @@ void AFogActor::BeginPlay()
 {
 	Super::BeginPlay();
 	InitFogMaskTexture();
+	//InitializeFogPostProcess();
 	// Start timer to apply material every 0.2 seconds
-	GetWorldTimerManager().SetTimer(FogUpdateTimerHandle, this, &AFogActor::Multicast_ApplyFogMask, FogUpdateRate, true);
+	//GetWorldTimerManager().SetTimer(FogUpdateTimerHandle, this, &AFogActor::Multicast_ApplyFogMask, FogUpdateRate, true);
 }
 
 void AFogActor::Tick(float DeltaTime)
@@ -39,13 +57,14 @@ void AFogActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFogActor, TeamId);
+	//DOREPLIFETIME(AFogActor, PostProcessComponent);
 }
 
 
 void AFogActor::InitFogMaskTexture()
 {
 
-	FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
+	//FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 	
@@ -54,15 +73,48 @@ void AFogActor::InitFogMaskTexture()
 
 	FogMaskTexture->SRGB = false;
 	FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
-//#if WITH_EDITORONLY_DATA
-	//FogMaskTexture->MipGenSettings = TMGS_NoMipmaps;
-//#endif
+
 	FogMaskTexture->AddToRoot();
 	FogMaskTexture->UpdateResource();
 
 	FogPixels.SetNumUninitialized(FogTexSize * FogTexSize);
 }
 
+void AFogActor::InitializeFogPostProcess()
+{
+
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+
+	if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+	{
+		// Check if this fog actor belongs to the local player's team
+		if (CustomPC->SelectableTeamId == TeamId)
+		{
+			if (FogMaterial && FogMaskTexture)
+			{
+				if (FogMaterial && FogMaskTexture && PostProcessComponent)
+				{
+					// Create the Dynamic Material Instance
+					UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(FogMaterial, this);
+					MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
+
+					FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
+					MID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
+
+					// --- 3. APPLY THE MATERIAL DIRECTLY TO OUR COMPONENT ---
+					// This is much cleaner than finding the camera manager.
+					PostProcessComponent->Settings.AddBlendable(MID, 1.0f);
+					PostProcessComponent->bEnabled = true; // Enable the effect!
+				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("FogMaterial, Texture, or PPComponent is missing!"));
+				}
+			}
+		}
+	}
+}
+/*
 void AFogActor::ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial,
 	int32 MaterialIndex)
 {
@@ -75,7 +127,8 @@ void AFogActor::ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMateria
 		MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
 	}
 }
-
+*/
+/*
 void AFogActor::Multicast_ApplyFogMask_Implementation()
 {
 	UWorld* World = GetWorld();
@@ -94,6 +147,7 @@ void AFogActor::Multicast_ApplyFogMask_Implementation()
 		}
 	}
 }
+*/
 
 void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 {

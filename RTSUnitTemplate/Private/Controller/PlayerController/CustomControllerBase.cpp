@@ -120,6 +120,19 @@ void ACustomControllerBase::Multi_HideEnemyWaypoints_Implementation()
 }
 
 
+void ACustomControllerBase::Multi_InitFogOfWar_Implementation()
+{
+	for (TActorIterator<AFogActor> It(GetWorld()); It; ++It)
+	{
+		AFogActor* FogActor = *It;
+		if (FogActor)
+		{
+			// We call this now to ensure all Player Controllers have their Team Ids assigned first.
+			FogActor->InitializeFogPostProcess();
+		}
+	}
+}
+
 void ACustomControllerBase::AgentInit_Implementation()
 {
 	// Only execute for the local controller
