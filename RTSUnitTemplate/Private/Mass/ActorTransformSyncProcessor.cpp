@@ -33,7 +33,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
@@ -100,7 +100,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
             const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
              const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
-            const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+            TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
             
             const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
@@ -153,13 +153,22 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
             {
                 AActor* HitActor = Hit.GetActor();
+                
                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset)
                 {
+                    CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
+                    
                     if (!CharList[i].bIsFlying)
                         FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
                     else
                         FinalLocation.Z = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
+                }else
+                {
+                    if (!CharList[i].bIsFlying)
+                        FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
+                    else
+                        FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
                 }
             }
             

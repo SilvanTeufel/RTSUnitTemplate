@@ -1327,9 +1327,16 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
 {
     FVector StartLocation = Unit->GetActorLocation();
+
+	if (!Unit->bUseSkeletalMovement)
+	{
+		FTransform InstanceXform;
+		Unit->ISMComponent->GetInstanceTransform( Unit->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+		StartLocation = InstanceXform.GetLocation();
+	}
     FVector EndLocation = DestinationLocation;
 
-	EndLocation.Z = StartLocation.Z;
+	EndLocation.Z = StartLocation.Z - 1500.f;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(Unit); // Ignore the unit itself
 	QueryParams.AddIgnoredActor(Unit->UnitToChase);

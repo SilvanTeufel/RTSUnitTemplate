@@ -418,8 +418,10 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 			FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
 
-			RunLocation = TraceRunLocation(RunLocation);
-
+			bool HitNavModifier;
+			RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+			if (HitNavModifier) continue;
+			
 			float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
 		
 			
@@ -538,7 +540,10 @@ void ACustomControllerBase::LeftClickPressedMass()
 				int32 Col = i % GridSize;     // Column index
 				
 				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
-				RunLocation = TraceRunLocation(RunLocation);
+
+				bool HitNavModifier;
+				RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+				if (HitNavModifier) continue;
 				
 				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 				{

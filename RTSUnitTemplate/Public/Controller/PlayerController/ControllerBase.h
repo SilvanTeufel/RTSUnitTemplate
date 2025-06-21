@@ -174,7 +174,7 @@ public:
 	void DrawDebugCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	FVector TraceRunLocation(FVector RunLocation);
+	FVector TraceRunLocation(FVector RunLocation, bool& HitNavModifier);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypoints(FHitResult Hit);

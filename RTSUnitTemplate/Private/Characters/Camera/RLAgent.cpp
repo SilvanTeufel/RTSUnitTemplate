@@ -363,7 +363,10 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 			FVector RunLocation = Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
-		    RunLocation = ExtendedController->TraceRunLocation(RunLocation);
+		    bool HitNavModifier;
+            RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
+		    if (HitNavModifier) continue;
+		    
 			if(ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
 				//PlayWaypointSound = true;
@@ -441,7 +444,10 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 int32 Col = i % GridSize;     // Column index
 
                 FVector RunLocation = HitResult.Location + ExtendedController->CalculateGridOffset(Row, Col);
-                RunLocation = ExtendedController->TraceRunLocation(RunLocation);
+                bool HitNavModifier;
+                RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
+                if (HitNavModifier) continue;
+                
                 if (ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
                 {
                     // Do Nothing

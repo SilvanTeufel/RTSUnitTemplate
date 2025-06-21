@@ -8,6 +8,7 @@
 #include "AIController.h"
 #include "EngineUtils.h"
 #include "Landscape.h"
+#include "NavModifierVolume.h"
 #include "Actors/EffectArea.h"
 #include "Actors/MissileRain.h"
 #include "Actors/UnitSpawnPlatform.h"
@@ -728,18 +729,87 @@ void AControllerBase::DrawDebugCircleAtLocation(UWorld* World, const FVector& Lo
 	);
 }
 
-FVector AControllerBase::TraceRunLocation(FVector RunLocation)
+#define COLLISION_NAVMODIFIER ECC_GameTraceChannel1
+FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModifier)
+{
+    // Setup trace start and end positions. A 2000-unit trace (1000 up, 1000 down) is robust.
+    FVector TraceStart = RunLocation + FVector(0, 0, 1000.0f);
+    FVector TraceEnd = RunLocation - FVector(0, 0, 1000.0f);
+
+    // --- SETUP FOR OBJECT QUERY ---
+    // This is the core change. We specify WHICH KINDS of objects we want to hit.
+    FCollisionObjectQueryParams ObjectQueryParams;
+    ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);          // For Landscape, static meshes, etc.
+   // ObjectQueryParams.AddObjectTypesToQuery(COLLISION_NAVMODIFIER);   // For our custom NavModifier volumes.
+    // ---
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.bTraceComplex = true; // Use complex collision for landscapes
+
+    // --- ACTOR IGNORING LOGIC (Unchanged from your original code) ---
+    // Add all AWorkArea actors to the ignore list.
+    for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+    {
+       QueryParams.AddIgnoredActor(*It);
+    }
+
+    // Add all AUnitBase actors to the ignore list.
+    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+    {
+       QueryParams.AddIgnoredActor(*It);
+    }
+    // ---
+
+    FHitResult HitResult;
+
+    // Perform the trace using LineTraceSingleByObject with our combined object query.
+    if (GetWorld()->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams))
+    {
+        // The trace hit something. Set the location to the impact point.
+        RunLocation = HitResult.ImpactPoint;
+
+        // Now, we must identify WHAT we hit.
+        ANavModifierVolume* NavModifierVolume = Cast<ANavModifierVolume>(HitResult.GetActor());
+        if (NavModifierVolume)
+        {
+           // SUCCESS: We hit our specific volume.
+           //UE_LOG(LogTemp, Warning, TEXT("TraceRunLocation successfully hit a NavModifierVolume: %s"), *NavModifierVolume->GetName());
+           HitNavModifier = true;
+        }
+        else
+        {
+           // The cast failed, so it must be a WorldStatic object (Landscape, etc.).
+           //UE_LOG(LogTemp, Log, TEXT("TraceRunLocation hit a WorldStatic object: %s"), *HitResult.GetActor()->GetName());
+           HitNavModifier = false;
+        }
+
+        // Optional: Draw a debug line to see the successful trace
+        //DrawDebugLine(GetWorld(), TraceStart, HitResult.ImpactPoint, FColor::Green, false, 4.0f, 0, 1.0f);
+    }
+    else
+    {
+        // The trace hit nothing (e.g., traced into an empty sky or pit).
+        // The original RunLocation is returned, and HitNavModifier is false.
+        HitNavModifier = false;
+        //UE_LOG(LogTemp, Warning, TEXT("TraceRunLocation failed to hit any valid object."));
+
+        // Optional: Draw a debug line to see the failed trace
+        //DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Red, false, 4.0f, 0, 1.0f);
+    }
+
+    return RunLocation;
+}
+
+/*
+FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModifier)
 {
 	// Setup trace start and end positions (adjust as needed).
 	FVector TraceStart = RunLocation + FVector(0, 0, 1000);
 	FVector TraceEnd = RunLocation - FVector(0, 0, 1000);
 
 	FCollisionQueryParams QueryParams;
-	// Ignore the building actor itself.
 	
-
 	// Add all AWorkArea actors to the ignore list.
-
 	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
 	{
 		QueryParams.AddIgnoredActor(*It);
@@ -752,14 +822,29 @@ FVector AControllerBase::TraceRunLocation(FVector RunLocation)
 	}
 
 	FHitResult HitResult;
+	QueryParams.bTraceComplex = true;
+	
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
 	{
 		// Set NewWPLocation to the impact point from the trace.
 		RunLocation = HitResult.ImpactPoint;
+
+		ANavModifierVolume* NavModifierVolume = Cast<ANavModifierVolume>(HitResult.GetActor());
+		if (NavModifierVolume)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Successfully hit a NavModifierVolume"));
+			HitNavModifier = true;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Hit actor is not a NavModifierVolume"));
+			HitNavModifier = false;
+		}
 	}
 
 	return RunLocation;
 }
+*/
 
 void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 {
@@ -782,7 +867,9 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
 			FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
 
-			RunLocation = TraceRunLocation(RunLocation);
+			bool HitNavModifier;
+			RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+			if (HitNavModifier) continue;
 			
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{

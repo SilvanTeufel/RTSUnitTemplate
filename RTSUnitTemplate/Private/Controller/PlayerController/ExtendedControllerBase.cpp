@@ -1382,7 +1382,10 @@ void AExtendedControllerBase::LeftClickPressed()
 				int32 Col = i % GridSize;     // Column index
 				
 				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
-				RunLocation = TraceRunLocation(RunLocation);
+
+				bool HitNavModifier;
+				RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+				if (HitNavModifier) continue;
 				
 				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 				{
