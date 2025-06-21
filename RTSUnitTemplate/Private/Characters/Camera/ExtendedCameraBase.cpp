@@ -44,19 +44,24 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
 	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 
+	MinimapWidget= ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("MinimapWidget"));
+	MinimapWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
+	
 	ControlWidgetComp->SetOnlyOwnerSee(true);
 	TalentChooser->SetOnlyOwnerSee(true);
 	AbilityChooser->SetOnlyOwnerSee(true);
 	WidgetSelector->SetOnlyOwnerSee(true);
 	TaggedSelector->SetOnlyOwnerSee(true);
 	ResourceWidget->SetOnlyOwnerSee(true);
-
+	MinimapWidget->SetOnlyOwnerSee(true);
+	
 	ControlWidgetComp->SetIsReplicated(false);
 	TalentChooser->SetIsReplicated(false);
 	AbilityChooser->SetIsReplicated(false);
 	WidgetSelector->SetIsReplicated(false);
 	TaggedSelector->SetIsReplicated(false);
 	ResourceWidget->SetIsReplicated(false);
+	MinimapWidget->SetIsReplicated(false);
 	
 		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
 		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
@@ -98,7 +103,7 @@ void AExtendedCameraBase::BeginPlay()
 	if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
 	if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
 	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
-	
+	if (MinimapWidget) MinimapWidget->SetHiddenInGame(true);
 	//HideWidgetsWhenNoControl();
 	
 	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
@@ -159,6 +164,7 @@ void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 		if (WidgetSelector) WidgetSelector->SetHiddenInGame(false, true);
 		if (TaggedSelector) TaggedSelector->SetHiddenInGame(false, true);
 		if (ResourceWidget) ResourceWidget->SetHiddenInGame(false, true);
+		if (MinimapWidget) MinimapWidget->SetHiddenInGame(false, true);
 	}
 }
 

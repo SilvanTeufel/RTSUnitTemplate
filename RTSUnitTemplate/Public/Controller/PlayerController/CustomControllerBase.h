@@ -87,9 +87,15 @@ public:
 	UFUNCTION()
 	void UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
+	UFUNCTION()
+	void UpdateMinimap(const TArray<FMassEntityHandle>& Entities);
+	
 	UPROPERTY()
 	ASelectionCircleActor* SelectionCircleActor;
 	
 	UFUNCTION()
 	void UpdateSelectionCircles();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetupPlayerMiniMap();
 };

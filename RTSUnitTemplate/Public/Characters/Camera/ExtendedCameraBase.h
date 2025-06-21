@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "CameraBase.h" // Include the header file for ACameraBase
+#include "Widgets/MinimapWidget.h" 
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -85,6 +86,12 @@ public:
 	/** Handles Enhanced Keyboard Inputs */
 
 	bool IsOwnedByLocalPlayer();
+
+
+	/** The class of Minimap Widget to create. Assign this in the Blueprint editor for this camera pawn. */
+	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
+	class UWidgetComponent* MinimapWidget;
+	
 	// Abilitys + Talents /////
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
 	class UWidgetComponent* TalentChooser;

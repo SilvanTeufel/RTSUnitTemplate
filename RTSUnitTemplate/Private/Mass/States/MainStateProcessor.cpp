@@ -67,7 +67,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     // --- Handle Update Selection Circle Logic ---
     if (TimeSinceLastRunB >= UpdateCircleInterval)
     {
-        HandleUpdateSelectionCircle();
+        //HandleUpdateSelectionCircle();
         // Reset timer B. Subtracting the interval prevents time drift.
         TimeSinceLastRunB -= UpdateCircleInterval;
     }
