@@ -771,13 +771,15 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
     }
 }
 
+// In CustomControllerBase.cpp
 
 void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entities)
 {
     UWorld* World = GetWorld();
     if (!ensure(World)) return;
 
-    // Prepare four parallel arrays for the minimap
+    // Bereite die Arrays vor. NEU: Ein Array für die Aktor-Referenzen.
+    TArray<AUnitBase*>             ActorRefs;
     TArray<FVector_NetQuantize> Positions;
     TArray<float>               UnitRadii;
     TArray<float>               FogRadii;
@@ -789,45 +791,48 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 
        for (const FMassEntityHandle& E : Entities)
        {
-          if (!EM.IsEntityValid(E))
-             continue;
+          if (!EM.IsEntityValid(E)) continue;
 
-          // Get the necessary data fragments from the entity
-          const FTransformFragment* TF       = EM.GetFragmentDataPtr<FTransformFragment>(E);
-          const FMassCombatStatsFragment* StateFrag= EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
-          const FMassAIStateFragment* AI       = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
+          // Hole alle notwendigen Fragmente
+          FMassActorFragment* ActorFrag = EM.GetFragmentDataPtr<FMassActorFragment>(E);
+          const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
+          const FMassCombatStatsFragment* StateFrag = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+          const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
           const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
 
-          if (!TF || !StateFrag || !AI || !CharFrag)
-             continue;
+          // Wir brauchen den Aktor, also ist das ActorFragment jetzt zwingend erforderlich
+          if (!ActorFrag || !TF || !StateFrag || !AI || !CharFrag) continue;
+          if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
 
-          // Skip dead or despawned units
-          if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime)
-             continue;
-
-          // --- Populate the arrays ---
+       	AActor* UnitActor = ActorFrag->GetMutable();
+       	if (!UnitActor) continue;
+       	// --- NEUE LOGIK ZUR ERMITTLUNG DES DYNAMISCHEN RADIUS ---
+       	float CapsuleRadius = 150.f; // Wir verwenden 150.f als Fallback-Wert.
           
-          // 1) World location
+       	// Wir casten zum ACharacter, da dieser standardmäßig eine Kapsel hat.
+       	// Wenn Ihre AUnitBase von ACharacter erbt, ist dies der richtige Weg.
+       	AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
+       	if (Unit && Unit->GetCapsuleComponent())
+       	{
+       		// GetScaledCapsuleRadius() berücksichtigt die Skalierung des Aktors.
+       		CapsuleRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*3.f;
+       	}
+       	
+       	if (!Unit) continue;
+       	// --- ENDE DER NEUEN LOGIK ---
+          // --- Fülle die Arrays ---
+          ActorRefs.Add(Unit); // NEU: Füge den Aktor-Pointer hinzu
           Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
-
-          // 2) Unit icon radius (using a fixed value as you requested)
-          // This represents the size of the unit's icon on the minimap in world units.
-          // You can adjust this value to make icons larger or smaller.
-          UnitRadii.Add(150.f); 
-
-          // 3) Fog vision radius
+          UnitRadii.Add(CapsuleRadius); 
           FogRadii.Add(StateFrag->SightRadius);
-
-          // 4) Unit's team ID
           UnitTeamIds.Add(StateFrag->TeamId);
        }
     }
 
-    // Call the multicast on ALL MinimapActors in the world.
-    // Each MinimapActor will then filter this data internally for its specific team.
+    // Rufe den Multicast auf allen MinimapActors auf und sende ALLE Arrays.
     for (TActorIterator<AMinimapActor> It(World); It; ++It)
     {
-       It->Multicast_UpdateMinimap(Positions, UnitRadii, FogRadii, UnitTeamIds);
+       It->Multicast_UpdateMinimap(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
     }
 }
 
@@ -872,6 +877,7 @@ void ACustomControllerBase::UpdateSelectionCircles()
 
 void ACustomControllerBase::Multi_SetupPlayerMiniMap_Implementation()
 {
+	
 	if (!CameraBase)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SetupPlayerUI: Could not get AExtendedCameraBase pawn."));
@@ -889,7 +895,6 @@ void ACustomControllerBase::Multi_SetupPlayerMiniMap_Implementation()
 	UMinimapWidget* Minimap = Cast<UMinimapWidget>(ExtendedCameraBase->MinimapWidget->GetUserWidgetObject());
 	if (Minimap)
 	{
-		// Call the new initialization function on the widget, passing the now-valid TeamId.
 		Minimap->InitializeForTeam(SelectableTeamId);
 	}
 	else

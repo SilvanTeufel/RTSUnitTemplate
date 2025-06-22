@@ -89,7 +89,7 @@ public:
 
 
 	/** The class of Minimap Widget to create. Assign this in the Blueprint editor for this camera pawn. */
-	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* MinimapWidget;
 	
 	// Abilitys + Talents /////

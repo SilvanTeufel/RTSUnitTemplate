@@ -35,6 +35,8 @@ protected:
 	 */
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
 	/** The Image component from the UMG Designer that will display the minimap.
 	 * The name "MinimapImage" MUST match the name of the Image widget in your UMG Blueprint.
 	 */
@@ -49,6 +51,8 @@ private:
 	 */
 	void MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry);
 
+	UPROPERTY()
+	float CurrentMapAngle = -90.f;
 	/** A cached pointer to the MinimapActor this widget is displaying. */
 	UPROPERTY()
 	AMinimapActor* MinimapActorRef;

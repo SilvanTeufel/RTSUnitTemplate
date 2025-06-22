@@ -345,7 +345,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
 			CameraControllerBase->Multi_HideEnemyWaypoints();
 			CameraControllerBase->Multi_InitFogOfWar();
-			CameraControllerBase->Multi_SetupPlayerMiniMap_Implementation();
+			CameraControllerBase->Multi_SetupPlayerMiniMap();
 			//UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!"));
 			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
 	

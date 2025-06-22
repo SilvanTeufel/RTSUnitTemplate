@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Characters/Unit/UnitBase.h"
 #include "GameFramework/Actor.h"
 #include "MinimapActor.generated.h"
 
@@ -17,7 +18,24 @@ protected:
     virtual void BeginPlay() override;
     virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const override;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+    USceneCaptureComponent2D* SceneCaptureComponent;
+
+    /** Die Textur, in die das "Foto" der Karte gerendert wird. */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+    UTextureRenderTarget2D* TopographyRenderTarget;
 public:
+
+    UFUNCTION(BlueprintCallable, Category = "Minimap")
+    void CaptureMapTopography();
+
+    // Getter-Funktionen, damit das Widget die Texturen sicher abrufen kann
+    UFUNCTION(BlueprintPure, Category = "Minimap")
+    UTexture2D* GetDynamicDataTexture() const { return MinimapTexture; } // Die Textur für Nebel/Einheiten
+
+    UFUNCTION(BlueprintPure, Category = "Minimap")
+    UTextureRenderTarget2D* GetTopographyTexture() const { return TopographyRenderTarget; } // Die neue Textur für die Karte
+
     /** The team this minimap belongs to. Only this team's fog will be revealed. */
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     int32 TeamId = 0;
@@ -54,16 +72,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Minimap")
     FVector2D MinimapMaxBounds = FVector2D(10000, 10000);
 
-    /**
-     * Updates the minimap texture with current fog and unit positions.
-     * This should be called from a central manager that has all unit information.
-     * @param Positions - World positions of all units (friendly and enemy).
-     * @param UnitRadii - The radius for the icon of each unit on the minimap.
-     * @param FogRadii - The vision radius for each unit, used to reveal the fog.
-     * @param UnitTeamIds - The team ID for each unit.
-     */
     UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = "Minimap")
     void Multicast_UpdateMinimap(
+        const TArray<AUnitBase*>& UnitRefs, // NEUER PARAMETER
         const TArray<FVector_NetQuantize>& Positions,
         const TArray<float>& UnitRadii,
         const TArray<float>& FogRadii,
