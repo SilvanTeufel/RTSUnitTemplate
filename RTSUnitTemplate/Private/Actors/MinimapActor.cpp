@@ -28,6 +28,10 @@ AMinimapActor::AMinimapActor()
 void AMinimapActor::BeginPlay()
 {
     Super::BeginPlay();
+
+    MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
+    MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
+    
     InitMinimapTexture();
 
     CaptureMapTopography();

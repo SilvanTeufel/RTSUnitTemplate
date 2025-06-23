@@ -64,13 +64,15 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor EnemyUnitColor = FColor(255, 0, 0, 255);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    float Size = 250.f;
     /** World-space bounds for the minimap. Should match your FogActor's bounds. */
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Minimap")
-    FVector2D MinimapMinBounds = FVector2D(-10000, -10000);
+    FVector2D MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
 
     /** World-space bounds for the minimap. Should match your FogActor's bounds. */
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Minimap")
-    FVector2D MinimapMaxBounds = FVector2D(10000, 10000);
+    FVector2D MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
 
     UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = "Minimap")
     void Multicast_UpdateMinimap(
