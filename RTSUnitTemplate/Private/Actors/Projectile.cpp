@@ -24,13 +24,6 @@ AProjectile::AProjectile()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot); // Set it as the root component
 
-	// Create all components and attach them to the SceneRoot
-	//Mesh_A = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	//Mesh_A->SetupAttachment(SceneRoot); // Attach to the new root
-	
-	//Mesh_B = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh_B"));
-	//Mesh_B->SetupAttachment(SceneRoot);
-
 	ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
 	ISMComponent->SetupAttachment(RootComponent);
 	ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Disable collision on the ISM
@@ -53,13 +46,6 @@ AProjectile::AProjectile()
 
 	bReplicates = true;
 	InstanceIndex = INDEX_NONE; // Initialize the instance index
-	/*
-	if (HasAuthority())
-	{
-		bReplicates = true;
-		SetReplicates(true);
-		SetReplicateMovement(true);
-	}*/
 }
 
 void AProjectile::OnConstruction(const FTransform& Transform)
@@ -109,13 +95,6 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	{
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
-			/*
-			if (UnitTarget->GetUnitState() == UnitData::Dead)
-			{
-				DestroyProjectile();
-				return;
-			}
-			*/
 			if (UnitTarget->bUseSkeletalMovement)
 			{
 				// Aim at the actor’s root location
@@ -130,15 +109,6 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 			}
 		}
 	}
-	/*
-	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
-	if (!FlyDir.IsNearlyZero())
-	{
-		// assume you have a FRotator ProjectileRotationOffset member
-		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
-		SetActorRotation(AimRot);
-	}
-	*/
 	
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);

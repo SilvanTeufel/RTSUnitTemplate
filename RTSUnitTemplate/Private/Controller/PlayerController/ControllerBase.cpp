@@ -21,9 +21,6 @@
 #include "NavMesh/NavMeshPath.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
-//#include "Engine/Engine.h"
-//#include "Engine/EngineTypes.h"    // For FOverlapResult and related collision types
-//#include "Engine/OverlapResult.h"
 
 
 AControllerBase::AControllerBase() {

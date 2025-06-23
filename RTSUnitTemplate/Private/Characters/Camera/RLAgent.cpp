@@ -12,7 +12,6 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 {
     // Enable ticking for continuous RL decision processing.
     PrimaryActorTick.bCanEverTick = true;
-    //SharedMemoryManager = new FSharedMemoryManager(TEXT("UnrealRLSharedMemory"), sizeof(SharedData));
 }
 
 void ARLAgent::BeginPlay()
@@ -531,8 +530,7 @@ void ARLAgent::Client_ReceiveGameState_Implementation(const FGameStateData& Game
     {
         UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
     }
-
-
+    
     // Check for new actions
     CheckForNewActions();
 }

@@ -95,12 +95,8 @@ void ACustomControllerBase::Multi_HideEnemyWaypoints_Implementation()
 	{
 		return;
 	}
-	//if (!IsLocalController()) return;
+
 	UE_LOG(LogTemp, Log, TEXT("Multi_HideEnemyWaypoints_Implementation - TeamId is now: %d"), SelectableTeamId);
-	// Try to get all AWaypoints* Waypoint with TArray from Map
-	// Compare Waypoint->TeamId with SelectableTeamId (from this Class)
-	// If Unequal please hide
-	// If TeamId == 0 dont hide
 
 	// Retrieve all waypoints from the world
 	TArray<AActor*> FoundWaypoints;
@@ -142,15 +138,6 @@ void ACustomControllerBase::AgentInit_Implementation()
 		return;
 	}
 
-	if (GetWorld() && GetWorld()->IsNetMode(ENetMode::NM_Client))
-	{
-		//UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!ACustomControllerBase!!!!!!!!!!AgentInitialization on Client!!!!!!!!!!!!!!!!!!!!!!!!"));
-	}else
-	{
-		//UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!ACustomControllerBase!!!!!!!!!!!AgentInitialization on Server!!!!!!!!!!!!!!!!!!!!!!!!"));
-	}
-	
-	
 	ARLAgent* Camera = Cast<ARLAgent>(CameraBase);
 	if (Camera)
 		Camera->AgentInitialization();
@@ -205,30 +192,13 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	
     if (!MoveTargetFragmentPtr || !AiStatePtr)
     {
-        // If the entity doesn't have the fragment yet, you might need to add it.
-        // Depending on your setup, it might be added by an Archetype or Trait already.
-        // If you need to add it manually:
-        // EntityManager.AddFragmentData<FMassMoveTargetFragment>(InEntity);
-        // MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(InEntity);
-
-        // Alternatively, if it's an error that it's missing:
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-    // Now, modify the specific entity's fragment data
-	/*
-    MoveTargetFragmentPtr->Center = NewTargetLocation;
-    MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Move; // Set the intended action
-    MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
-    MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-    MoveTargetFragmentPtr->Forward = FVector::ForwardVector; // Or calculate based on direction to target if needed
-    
-    // If you need to trigger network replication or specific actions:
-    MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Move, *World); // Resets action state, marks dirty
-	*/
+
 	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
 	
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
@@ -246,7 +216,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
-	//EntityManager.Defer().RemoveTag<FMassStateRunTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
@@ -699,14 +668,9 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 	}
 
 	float Speed = Unit->Attributes->GetBaseRunSpeed();
-	//FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
-	
+
 	SetUnitState_Replication(Unit,1);
 	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f, AttackT);
-
-	//Unit->SetUnitState(UnitData::Run);
-	//SetUnitState_Multi(Unit, 1);
-	//MoveToLocationUEPathFinding(Unit, Location);
 }
 
 void ACustomControllerBase::LeftClickReleasedMass()

@@ -15,7 +15,7 @@ ASelectedIcon::ASelectedIcon()
     IconMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SphereMesh"));
     RootComponent = IconMesh;
     IconMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // QueryAndPhysics
-    //IconMesh->SetupAttachment(RootComponent);
+
     static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(*SphereMeshAssetPath);
     if (SphereMeshAsset.Succeeded())
     {

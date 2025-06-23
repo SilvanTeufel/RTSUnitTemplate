@@ -104,12 +104,6 @@ void AExtendedCameraBase::BeginPlay()
 	if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
 	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
 	if (MinimapWidget) MinimapWidget->SetHiddenInGame(true);
-	//HideWidgetsWhenNoControl();
-	
-	// Delay the execution of HideWidgetsWhenNoControl by 3 seconds
-	//FTimerHandle SetupResourceWidgetTimerHandle;
-	//GetWorldTimerManager().SetTimer(SetupResourceWidgetTimerHandle, this, &AExtendedCameraBase::SetupResourceWidget, 1.0f, false);
-	// Delay the execution of HideWidgetsWhenNoControl
 }
 
 void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserWidget> NewWidgetSelector, TSubclassOf<UUserWidget> NewTaggedSelector, TSubclassOf<UUserWidget> NewResourceWidget)
@@ -119,7 +113,7 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserW
 		WidgetSelector->SetWidget(nullptr);
 		WidgetSelector->SetWidgetClass(NewWidgetSelector);
 		WidgetSelector->InitWidget();
-		UE_LOG(LogTemp, Log, TEXT("Client: Updated WidgetSelector"));
+		//UE_LOG(LogTemp, Log, TEXT("Client: Updated WidgetSelector"));
 	}
 
 	if (TaggedSelector && NewTaggedSelector)
@@ -127,7 +121,7 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserW
 		TaggedSelector->SetWidget(nullptr);
 		TaggedSelector->SetWidgetClass(NewTaggedSelector);
 		TaggedSelector->InitWidget();
-		UE_LOG(LogTemp, Log, TEXT("Client: Updated TaggedSelector"));
+		//UE_LOG(LogTemp, Log, TEXT("Client: Updated TaggedSelector"));
 	}
 
 	if (ResourceWidget && NewResourceWidget)
@@ -135,25 +129,13 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserW
 		ResourceWidget->SetWidget(nullptr);
 		ResourceWidget->SetWidgetClass(NewResourceWidget);
 		ResourceWidget->InitWidget();
-		UE_LOG(LogTemp, Log, TEXT("Client: Updated ResourceWidget"));
+		//UE_LOG(LogTemp, Log, TEXT("Client: Updated ResourceWidget"));
 	}
 }
 
 void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 {
-	UE_LOG(LogTemp, Log, TEXT("HideWidgetsWhenNoControl!"));
-	
-	/*
-	if (!IsLocallyControlled())
-	{
-		UE_LOG(LogTemp, Error, TEXT("HIDING!!"));
-		if (ControlWidgetComp)ControlWidgetComp->SetHiddenInGame(true);
-		if (TalentChooser) TalentChooser->SetHiddenInGame(true);
-		if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
-		if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
-		if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
-		if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
-	}*/
+	//UE_LOG(LogTemp, Log, TEXT("HideWidgetsWhenNoControl!"));
 	
 	if (IsLocallyControlled())
 	{
@@ -170,19 +152,18 @@ void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
 
 void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
-	UE_LOG(LogTemp, Log, TEXT("Try SetupResourceWidget"));
+	//UE_LOG(LogTemp, Log, TEXT("Try SetupResourceWidget"));
 	if(!ResourceWidget) return;
 	
 		ResourceWidget->SetVisibility(true);
 		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-		UE_LOG(LogTemp, Log, TEXT("Found ResourceWidget"));
+		//UE_LOG(LogTemp, Log, TEXT("Found ResourceWidget"));
 		if(ResourceBar)
 		{
-			//ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-			UE_LOG(LogTemp, Log, TEXT("Found ResourceBar"));
+			//UE_LOG(LogTemp, Log, TEXT("Found ResourceBar"));
 			if(CameraControllerBase)
 			{
-				UE_LOG(LogTemp, Log, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
+				//UE_LOG(LogTemp, Log, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
 				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
 				ResourceBar->StartUpdateTimer();
 			}
@@ -516,15 +497,6 @@ void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActio
 		HideControlWidget();
 		
 		SetUserWidget(nullptr);
-
-		/*
-		if (ResourceWidget)
-		{
-			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-			if(ResourceBar) ResourceBar->StopTimer();
-			ResourceWidget->SetVisibility(false);
-		}
-		*/
 	}
 }
 

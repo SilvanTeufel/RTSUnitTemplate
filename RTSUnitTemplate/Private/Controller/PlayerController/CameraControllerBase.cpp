@@ -1065,36 +1065,6 @@ void ACameraControllerBase::MoveCameraUnit()
         	
 	}
 }
-/*
-void ACameraControllerBase::SetCameraUnitPosition()
-{
-
-	if (!CameraUnitWithTag) return;
-	
-	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
-	SpringArmForwardVector.Z = 0.f;
-	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
-	SpringArmRightVector.Z = 0.f;
-        	
-	FVector MoveDirection = FVector::ZeroVector;
-
-	if (WIsPressedState == 1)
-	{
-		MoveDirection += SpringArmForwardVector;
-	}
-	if (AIsPressedState == 1)
-	{
-		MoveDirection += -SpringArmRightVector;
-	}
-	if (SIsPressedState == 1)
-	{
-		MoveDirection += -SpringArmForwardVector;
-	}
-	if (DIsPressedState == 1)
-	{
-		MoveDirection += SpringArmRightVector;
-	}
-}*/
 
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {

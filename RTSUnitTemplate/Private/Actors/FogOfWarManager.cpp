@@ -56,14 +56,6 @@ void AFogOfWarManager::CheckForCollisions()
     }
 }
 
-/*
-void AFogOfWarManager::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-    
-}
-*/
-
 
 void AFogOfWarManager::AddUnitToChase(AActor* OtherActor)
 {
@@ -129,15 +121,7 @@ void AFogOfWarManager::HandleBeginOverlapDetection(AActor* OtherActor)
         
         Unit->IsVisibleEnemy = true;
         Unit->FogManagerOverlaps++;
-
-        /*
-        // Delay adding the unit to allow its TeamId to be set
-        FTimerHandle TimerHandle;
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, Unit]()
-        {
-            AddUnitToChase(Unit);
-        }, 0.1f, false);
-        */
+        
     }
     
 }
@@ -145,7 +129,6 @@ void AFogOfWarManager::HandleBeginOverlapDetection(AActor* OtherActor)
 void AFogOfWarManager::OnMeshBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     HandleBeginOverlapDetection(OtherActor);
-   // AddUnitToChase(OtherActor);
 }
 
 
@@ -202,14 +185,4 @@ void AFogOfWarManager::HandleEndOverlapDetection(AActor* OtherActor)
 void AFogOfWarManager::OnMeshEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
     HandleEndOverlapDetection(OtherActor);
-
-    /*
-    FTimerHandle TimerHandle;
- 
-    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, OtherActor]() {
-  
-        RemoveUnitToChase(OtherActor);
-    }, 1.5f, false);
-
-    */
 }

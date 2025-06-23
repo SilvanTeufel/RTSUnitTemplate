@@ -292,9 +292,6 @@ void AGASUnit::ActivateNextQueuedAbility()
 		if (bDequeued && AbilitySystemComponent)
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Successfully dequeued ability: %s"), *Next.AbilityClass->GetName());
-
-			//CancelCurrentAbility();
-			//CurrentSnapshot = Next;
 			QueSnapshot.Remove(Next);
 			ActivatedAbilityInstance = nullptr;
 			AbilityQueueSize--;
@@ -349,46 +346,6 @@ void AGASUnit::ActivateNextQueuedAbility()
 		CancelCurrentAbility();
 	}
 }
-/*
-void AGASUnit::ActivateNextQueuedAbility()
-{
-	// 1) Check if there's something waiting in the queue
-	if (!AbilityQueue.IsEmpty())
-	{
-		FQueuedAbility Next;
-		bool bDequeued = AbilityQueue.Dequeue(Next);
-		if (bDequeued && AbilitySystemComponent)
-		{
-
-			CurrentSnapshot = Next;
-			QueSnapshot.Remove(Next);
-			ActivatedAbilityInstance = nullptr;
-			// 2) Activate the next queued ability
-			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
-			
-			if (bIsActivated && Next.HitResult.IsValidBlockingHit())
-			{
-				
-				if (ActivatedAbilityInstance)
-				{
-					FireMouseHitAbility(Next.HitResult);
-				}
-			}
-			else
-			{
-				ActivatedAbilityInstance = nullptr;
-				CurrentSnapshot = FQueuedAbility();
-				// Optionally: If we fail again (cooldown, cost, or still "busy"), 
-				// do you want to re-queue it or just discard?
-				// AbilityQueue.Enqueue(Next); // if you want to retry
-			}
-		}
-	}else
-	{
-		ActivatedAbilityInstance = nullptr;
-		CurrentSnapshot = FQueuedAbility();
-	}
-}*/
 
 TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

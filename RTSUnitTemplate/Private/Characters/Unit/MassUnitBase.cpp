@@ -632,24 +632,8 @@ void AMassUnitBase::StartAcceleratingTowardsDestination(const FVector& NewDestin
 	{
 		return;
 	}
-    
-	// Compute the direction to the destination.
-	//const FVector Direction = (NewDestination - CurrentLocation).GetSafeNormal();
-
-	//FVector ActorLocation = GetActorLocation();
-	//FVector NewActorLocation = ActorLocation + Direction * NewAccelerationRate;
-	//SetActorLocation(NewActorLocation);
-	//SetTranslationLocation(NewActorLocation);
-
+	
 	Attributes->SetRunSpeed(Attributes->GetRunSpeed()*10);
-	// Here we use LaunchCharacter to give the unit an instantaneous impulse.
-	// The impulse magnitude is based on the provided acceleration rate.
-	// The second and third parameters ensure our launch overrides any existing velocity in the XY and Z axes.
-	//LaunchCharacter(Direction * NewAccelerationRate, true, false);
-	//SetTranslationLocation(NewPosition);
-	//SyncTranslation();
-	// Optionally, if you need to use NewTargetVelocity at some point (for example, to set a maximum speed),
-	// you can consider blending that in based on your game design.
 }
 
 void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration)

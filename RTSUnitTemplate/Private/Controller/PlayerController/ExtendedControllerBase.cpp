@@ -1700,24 +1700,6 @@ void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBa
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 	Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
 
-	/*
-	// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
-	FMassEntityManager*   EM;
-	FMassEntityHandle     Handle;
-	if (Worker->GetMassEntityData(EM, Handle))
-	{
-		// pull down the fragments
-		auto* MoveTarget = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(Handle);
-		auto* Stats      = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(Handle);
-		if (MoveTarget && Stats && GetWorld())
-		{
-			// Compute the *immediate* destination:
-			const FVector Dest = WorkArea->GetActorLocation();
-			UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
-		}
-	} */
-
-
 }
 
 void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
@@ -1738,25 +1720,6 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 		// If they are not overlapping, set the state to 'GoToBuild'
 		Worker->SetUnitState(UnitData::GoToBuild);
 		Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
-
-	
-		// 2) Immediately kick off a path‐update *right now*, on the Game Thread:
-		/*
-		FMassEntityManager*   EM;
-		FMassEntityHandle     Handle;
-		if (Worker->GetMassEntityData(EM, Handle))
-		{
-			// pull down the fragments
-			auto* MoveTarget = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(Handle);
-			auto* Stats      = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(Handle);
-             			if (MoveTarget && Stats && GetWorld())
-             			{
-             				// Compute the *immediate* destination:
-             				const FVector Dest = WorkArea->GetActorLocation();
-             				UpdateMoveTarget(*MoveTarget, Dest, Stats->RunSpeed, GetWorld());
-             			}
-		}
-		*/
 	}
 }
 
@@ -1918,13 +1881,11 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 
 	// Ensure this logic runs only on the server
 	if (!UnitBase->HasAuthority()) return;
-
-	//if (UnitBase->TeamId == SelectableTeamId){
+	
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		if (UnitBase->ActivatedAbilityInstance)
 		{
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
 		}
-	//}
 }

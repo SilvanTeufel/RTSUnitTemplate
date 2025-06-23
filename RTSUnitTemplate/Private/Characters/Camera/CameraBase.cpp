@@ -201,7 +201,6 @@ bool ACameraBase::RotateFree(FVector MouseLocation)
 	FVector Direction = Delta.GetSafeNormal();
 	// Determine rotation direction based on mouse movement
 	// Here, I assume horizontal rotation. You might need to adjust for vertical rotation
-	//RotateSpringArm(false);
 	float MindDelta = 100.f;
 	
 	if (Delta.Y > MindDelta) {
@@ -281,8 +280,6 @@ bool ACameraBase::RotateCamRight(float Add, bool stopCam) // CamRotationOffset
 		SpringArmRotator.Yaw = floor(SpringArmRotator.Yaw+0.5);
 
 	SpringArm->SetRelativeRotation(SpringArmRotator);
-
-	//SetControlWidgetLocation();
 	
 	if (SpringArmRotator.Yaw <= -1) SpringArmRotator.Yaw = 359.f;
 
@@ -413,10 +410,6 @@ void ACameraBase::LockOnActor(AActor* Actor)
 {
 	if (Actor) {
 		FVector ActorLocation = Actor->GetActorLocation();
-
-		float ZLocation = GetActorLocation().Z;
-
-		//if(abs(ZLocation-ActorLocation.Z) >= 100.f) ZLocation = ActorLocation.Z;
 		
 		SetActorLocation(FVector(ActorLocation.X, ActorLocation.Y, GetActorLocation().Z));
 	}else
@@ -474,51 +467,8 @@ void ACameraBase::ShowControlWidget()
 	if (ControlWidgetComp)
 	{
 		ControlWidgetComp->SetVisibility(true);
-		//SetControlWidgetLocation();
 	}
 }
-/*
-void ACameraBase::SetControlWidgetLocation()
-{
-	if (!ControlWidgetComp || !GetWorld()) return;
-
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if (!PlayerController) return;
-	
-	FVector2d ScreenPosition = ControlWidgetLocation;
-	
-	FIntPoint ViewportSize;
-	PlayerController->GetViewportSize(ViewportSize.X, ViewportSize.Y);
-
-	// Ensure ScreenPosition is in the range [0, 1] representing percentage of screen width and height.
-	FVector2D ClampedScreenPosition = FMath::Clamp(ScreenPosition, FVector2D(0, 0), FVector2D(1, 1));
-    
-	// Convert it to actual screen pixel coordinates
-	FVector2D PixelPosition = FVector2D(ViewportSize.X * ClampedScreenPosition.X, ViewportSize.Y * ClampedScreenPosition.Y);
-
-
-
-	
-	FVector WorldPosition;
-	FVector WorldDirection;
-
-	// Convert screen position to a world space ray
-	PlayerController->DeprojectScreenPositionToWorld(PixelPosition.X, PixelPosition.Y, WorldPosition, WorldDirection);
-    
-	// Set the widget position in front of the camera by a fixed distance, say 200 units.
-	FVector NewLocation = WorldPosition + WorldDirection*1000.f; //  + WorldDirection * SpringArm->TargetArmLength*WidgetDistance
-	ControlWidgetComp->SetWorldLocation(NewLocation);
-	
-	// Optionally, make the TalentChooser face the camera.
-	FVector CameraLocation = this->GetActorLocation();
-	FVector DirectionToCamera = (CameraLocation - NewLocation).GetSafeNormal();
-	FRotator NewRotation = DirectionToCamera.Rotation();
-
-	FRotator OffsetRotation(180.0f, 0.0f, 180.0f);  // 90-degree pitch
-	FQuat CombinedQuat = NewRotation.Quaternion() * OffsetRotation.Quaternion();
-	
-	ControlWidgetComp->SetWorldRotation(CombinedQuat.Rotator()); // NewRotation
-}*/
 
 void ACameraBase::DeSpawnLoadingWidget()
 {
@@ -564,69 +514,6 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 
 	SetActorLocation(NewPawnLocation);
 }
-
-/*
-void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
-{
-    // Calculate movement direction based on the camera's yaw.
-    const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180);
-    const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180);
-    const FVector NewPawnLocation = FVector(0.3f * CosYaw, 0.3f * SinYaw, 0);
-
-    // Accelerate the camera's speed until it reaches the maximum speed,
-    // or decelerate it if required.
-    if (!Decelerate && CurrentCamSpeed.X < CamSpeed)
-    {
-        CurrentCamSpeed.X += AccelerationRate * DeltaTime;
-        CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
-    }
-    else if (Decelerate && CurrentCamSpeed.X > 0.f)
-    {
-        CurrentCamSpeed.X -= DecelerationRate * DeltaTime;
-        CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
-    }
-    else if (Decelerate)
-    {
-        CurrentCamSpeed.X = 0.f;
-    }
-
-    // Calculate the proposed new location based on current speed.
-    FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
-
-    // Perform a line trace to get the correct Z location.
-    // Define start and end for the trace - here we use 1000 units above and below.
-    const float TraceVerticalRange = 3000.f;
-    const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
-    const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
-
-    FHitResult HitResult;
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
-
-    bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
-    if (bHit)
-    {
-        // If the camera's proposed Z is lower than the hit location's Z, update it.
-        if (ProposedLocation.Z < HitResult.Location.Z)
-        {
-            // Optionally you may add an extra offset if needed.
-            ProposedLocation.Z = HitResult.Location.Z;
-        }
-    }
-
-    // Check if the proposed location is within the defined horizontal bounds.
-    if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
-        ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
-    {
-        // Out of bounds: move the camera in the opposite direction as a corrective measure.
-        AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime * -5.f);
-        return;
-    }
-
-    // Finally, move the actor to the new, possibly adjusted, location.
-    // You could use either SetActorLocation or continue using AddActorWorldOffset:
-    SetActorLocation(ProposedLocation);
-}*/
 
 void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 {
@@ -687,7 +574,6 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 	}
 	
 	SetActorLocation(ProposedLocation);
-	//AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
 }
 
 void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
@@ -745,7 +631,6 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 	}
 	
 	SetActorLocation(ProposedLocation);
-	//AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime);
 }
 
 void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
@@ -805,7 +690,6 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 	}
 
 	SetActorLocation(ProposedLocation);
-	//AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime);
 }
 
 void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
@@ -864,5 +748,4 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 	}
 
 	SetActorLocation(ProposedLocation);
-	//AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
 }

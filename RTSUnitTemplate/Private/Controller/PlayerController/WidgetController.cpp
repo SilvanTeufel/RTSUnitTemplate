@@ -44,7 +44,6 @@ void AWidgetController::LoadLevel_Implementation(const FString& SlotName)
 	{
 		if (SelectedUnits[i] && IsLocalController())
 		{
-			//SelectedUnits[i]->LoadLevelDataAndAttributes(SlotName);
 			SelectedUnits[i]->LoadAbilityAndLevelData(SlotName);
 		}
 	}
@@ -56,7 +55,6 @@ void AWidgetController::SaveLevel_Implementation(const FString& SlotName)
 	{
 		if (SelectedUnits[i] && IsLocalController())
 		{
-			//SelectedUnits[i]->SaveLevelDataAndAttributes(SlotName);
 			SelectedUnits[i]->SaveAbilityAndLevelData(SlotName);
 		}
 	}
@@ -160,7 +158,6 @@ void AWidgetController::LoadLevelUnit_Implementation(const int32 UnitIndex, cons
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
 		if(Unit && Unit->UnitIndex == UnitIndex && IsLocalController())
-			//Unit->LoadLevelDataAndAttributes(SlotName);
 			Unit->LoadAbilityAndLevelData(SlotName);
 	}
 }

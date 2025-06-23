@@ -65,7 +65,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	}
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
-	//SelectedIconBaseClass = ASelectedIcon::StaticClass();
 
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
@@ -166,11 +165,8 @@ void AUnitBase::BeginPlay()
 	{
 		SetMeshRotationServer();
 	}
-
-	//SetCollisionCooldown();
-
-	InitHealthbarOwner();
 	
+	InitHealthbarOwner();
 }
 
 
@@ -625,9 +621,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 				);
 				AimLocation = InstXf.GetLocation();
 			}
-
-			// if (UnitTarget->GetUnitState() == UnitData::Dead) return;
-			// otherwise we just leave AimLocation == actor root
+			
 		}
 		
 		FVector Direction = (AimLocation - ShootingUnitLocation).GetSafeNormal();
@@ -642,17 +636,10 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 							(this, ProjectileBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 		if (MyProjectile != nullptr)
 		{
-			//MyProjectile->TargetLocation = Target->GetActorLocation();
 			MyProjectile->Init(Target, Attacker);
-			
-			//MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
-			
-			//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-
 			MyProjectile->SetProjectileVisibility();
 			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
 			MyProjectile->SetReplicates(true);
-			//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
 		}
 	}
 }
@@ -778,66 +765,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
         }
     }
 }
-/*
-void AUnitBase::SpawnProjectileFromClass_Implementation(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset, float Scale) // FVector TargetLocation
-{
-
-	if(!Aim || !Attacker || !ProjectileClass)
-		return;
-
-	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
-	AUnitBase* TargetUnit = Cast<AUnitBase>(Aim);
-	
-
-	FVector TargetBoxSize = TargetUnit->GetComponentsBoundingBox().GetSize();
-	
-	for(int Count = 0; Count < ProjectileCount; Count++){
-		
-		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
-		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(ShootingUnit->GetActorLocation(), TargetUnit->GetActorLocation());
-		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
-		
-		FVector LocationToShoot = Aim->GetActorLocation()+ShootOffset*Spread;
-		
-		if(!DisableAutoZOffset)LocationToShoot.Z += TargetBoxSize.Z/2;
-		
-		LocationToShoot.Z += ZOffset;
-		
-		if(ShootingUnit)
-		{
-			FTransform Transform;
-			Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
-
-			FVector Direction = (LocationToShoot - GetActorLocation()).GetSafeNormal(); // Target->GetActorLocation()
-			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
-
-			Transform.SetRotation(FQuat(InitialRotation));
-			Transform.SetScale3D(ShootingUnit->ProjectileScale*Scale);
-			
-			const auto MyProjectile = Cast<AProjectile>
-								(UGameplayStatics::BeginDeferredActorSpawnFromClass
-								(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-			if (MyProjectile != nullptr)
-			{
-
-				MyProjectile->TargetLocation = LocationToShoot;
-				MyProjectile->InitForAbility(Aim, Attacker);
-				MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
-				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
-				MyProjectile->FollowTarget = FollowTarget;
-				MyProjectile->IsBouncingNext = IsBouncingNext;
-				MyProjectile->IsBouncingBack = IsBouncingBack;
-
-				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-				MyProjectile->SetProjectileVisibility();
-				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-				MyProjectile->SetReplicates(true);
-				//ShootingUnit->ProjectileAndEffectsVisibility(MyProjectile);
-			}
-		}
-	}
-}*/
-
 
 void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     FVector Aim,
@@ -929,63 +856,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
         }
     }
 }
-
-/*
-void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(FVector Aim,
-	TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread,
-	bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale)
-{
-
-	if( !ProjectileClass)
-		return;
-
-
-	for(int Count = 0; Count < ProjectileCount; Count++){
-		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
-		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(GetActorLocation(), Aim);
-		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
-		
-		FVector LocationToShoot = Aim+ShootOffset*Spread;
-		
-		LocationToShoot.Z += GetActorLocation().Z;
-		LocationToShoot.Z += ZOffset;
-		
-	
-			FTransform Transform;
-			Transform.SetLocation(GetActorLocation() + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
-
-
-			FVector Direction = (LocationToShoot - GetActorLocation()).GetSafeNormal(); // Target->GetActorLocation()
-			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
-
-			Transform.SetRotation(FQuat(InitialRotation));
-			Transform.SetScale3D(ProjectileScale*Scale);
-			
-			const auto MyProjectile = Cast<AProjectile>
-								(UGameplayStatics::BeginDeferredActorSpawnFromClass
-								(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-			if (MyProjectile != nullptr)
-			{
-
-				MyProjectile->TargetLocation = LocationToShoot;
-				MyProjectile->InitForLocationPosition(LocationToShoot, this);
-			
-				MyProjectile->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProjectile, &AProjectile::OnOverlapBegin);
-				MyProjectile->MaxPiercedTargets = MaxPiercedTargets;
-				MyProjectile->IsBouncingNext = IsBouncingNext;
-				MyProjectile->IsBouncingBack = IsBouncingBack;
-
-				//if(!MyProjectile->IsOnViewport) MyProjectile->SetProjectileVisibility(false);
-				MyProjectile->SetProjectileVisibility();
-				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-				MyProjectile->SetReplicates(true);
-				// Set a timer to delay the visibility update until the next tick
-				//ProjectileAndEffectsVisibility(MyProjectile);
-			}
-		
-	}
-}
-*/
 
 bool AUnitBase::SetNextUnitToChase()
 {

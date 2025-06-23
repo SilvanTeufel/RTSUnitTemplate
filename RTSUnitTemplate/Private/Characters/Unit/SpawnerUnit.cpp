@@ -46,12 +46,6 @@ void ASpawnerUnit::CreateSpawnDataFromDataTable()
 
 APickup* ASpawnerUnit::SpawnPickup(FVector Location, FSpawnData Data)
 {
-	// Spawn a new instance of the ASelectable class
-	//ASelectable* NewSelectable = GetWorld()->SpawnActor<ASelectable>(SelectableClass, Location, FRotator::ZeroRotator);
-
-	//return NewSelectable;
-
-	// Spawn a new instance of the ASelectable class with deferred spawn method
 	APickup* NewPickup = GetWorld()->SpawnActorDeferred<APickup>(Data.PickupBlueprint, FTransform(FRotator::ZeroRotator, Location));
 
 	if (NewPickup)
@@ -134,12 +128,7 @@ void ASpawnerUnit::DespawnCurrentAbilityIndicator()
 {
 	if (CurrentDraggedAbilityIndicator)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Despawning current dragged ability indicator for actor: %s."), *GetName());
 		CurrentDraggedAbilityIndicator->Destroy(true, true);
 		CurrentDraggedAbilityIndicator = nullptr;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No current dragged ability indicator to despawn for actor: %s."), *GetName());
 	}
 }

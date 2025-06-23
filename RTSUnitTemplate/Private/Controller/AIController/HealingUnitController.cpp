@@ -45,12 +45,7 @@ void AHealingUnitController::HealingUnitControlStateMachine(AUnitBase* Unit, flo
 		break;
 	case UnitData::Patrol:
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("Patrol"));
-			//DetectUnits(UnitBase, DeltaSeconds, false);
-			//LoseUnitToChase(UnitBase);
-	
 			DetectAndLoseUnits();
-		
 			
 			if(UnitBase->UsingUEPathfindingPatrol)
 				HealPatrolUEPathfinding(UnitBase, DeltaSeconds);

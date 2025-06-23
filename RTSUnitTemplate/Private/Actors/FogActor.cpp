@@ -28,13 +28,7 @@ AFogActor::AFogActor()
     
 	// We initially disable it. The code will enable it for the correct player.
 	PostProcessComponent->bEnabled = false; 
-	// Mesh setup
-	//FogMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FogMesh"));
-	//RootComponent = FogMesh;
 
-	//FogMesh->SetHiddenInGame(true);  // Hidden by default
-	//FogMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	//FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 }
@@ -43,9 +37,6 @@ void AFogActor::BeginPlay()
 {
 	Super::BeginPlay();
 	InitFogMaskTexture();
-	//InitializeFogPostProcess();
-	// Start timer to apply material every 0.2 seconds
-	//GetWorldTimerManager().SetTimer(FogUpdateTimerHandle, this, &AFogActor::Multicast_ApplyFogMask, FogUpdateRate, true);
 }
 
 void AFogActor::Tick(float DeltaTime)
@@ -114,40 +105,6 @@ void AFogActor::InitializeFogPostProcess()
 		}
 	}
 }
-/*
-void AFogActor::ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial,
-	int32 MaterialIndex)
-{
-	if (!MeshComponent || !BaseMaterial || !FogMaskTexture) return;
-
-	MeshComponent->SetMaterial(MaterialIndex, BaseMaterial);
-	UMaterialInstanceDynamic* MID = MeshComponent->CreateDynamicMaterialInstance(MaterialIndex, BaseMaterial);
-	if (MID)
-	{
-		MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
-	}
-}
-*/
-/*
-void AFogActor::Multicast_ApplyFogMask_Implementation()
-{
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	APlayerController* PC = World->GetFirstPlayerController();
-	if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
-	{
-		if (CustomPC->SelectableTeamId == TeamId)
-		{
-			if (FogMesh && FogMaterial)
-			{
-				FogMesh->SetHiddenInGame(false);
-				ApplyFogMaskToMesh(FogMesh, FogMaterial, 0);
-			}
-		}
-	}
-}
-*/
 
 void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 {

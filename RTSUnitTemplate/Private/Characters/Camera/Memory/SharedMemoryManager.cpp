@@ -64,7 +64,7 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
         return false;
     }
 
-   // UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] WriteGameState called. GameStateJSON Length: %d"), GameStateJSON.Len());
+	//UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] WriteGameState called. GameStateJSON Length: %d"), GameStateJSON.Len());
     //UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Address of SharedDataPtr->GameState: %p"), SharedDataPtr->GameState);
 
     int32 StringLength = GameStateJSON.Len();
@@ -94,29 +94,6 @@ bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
     SharedDataPtr->bNewGameStateAvailable = true;
     return true;
 }
-/*
-bool FSharedMemoryManager::WriteGameState(const FString& GameStateJSON)
-{
-    if (!SharedDataPtr || !SharedDataPtr->GameState)
-    {
-       UE_LOG(LogTemp, Error, TEXT("[FSharedMemoryManager] SharedDataPtr is null in WriteGameState."));
-       return false;
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] GameStateJSON Length: %d"), GameStateJSON.Len());
-    UE_LOG(LogTemp, Log, TEXT("[FSharedMemoryManager] Address of SharedDataPtr->GameState: %p"), SharedDataPtr->GameState); // Add this line
-
-    if (GameStateJSON.Len() >= 256)
-    {
-       UE_LOG(LogTemp, Warning, TEXT("[FSharedMemoryManager] GameStateJSON length exceeds buffer size. Truncating."));
-       // Consider truncating the string or increasing buffer size
-    }
-
-    // Copy the JSON string to the shared memory buffer
-    FCString::Strcpy(SharedDataPtr->GameState, 256, *GameStateJSON);
-    SharedDataPtr->bNewGameStateAvailable = true;
-    return true;
-}*/
 
 FString FSharedMemoryManager::ReadAction()
 {

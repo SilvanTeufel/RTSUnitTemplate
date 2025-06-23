@@ -204,14 +204,6 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
-	/*
-	if (CurrentSnapshot.AbilityClass)
-	{
-		UGameplayAbilityBase* AbilityCDO = CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled && NewUnitState != UnitData::Casting && NewUnitState != UnitData::Dead) return;
-	}
-	*/
-	
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||
@@ -261,40 +253,6 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		}
 
 		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-		// Define a member variable for the timer handle if needed
-		/*
-		// Create a delegate that safely captures a weak reference to 'this'
-		FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([WeakThis = TWeakObjectPtr<AAbilityUnit>(this)]()
-		{
-			if (AAbilityUnit* StrongThis = WeakThis.Get())
-			{
-				if (StrongThis->GetCapsuleComponent())
-				{
-					StrongThis->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-				}
-				else
-				{
-					//UE_LOG(LogTemp, Warning, TEXT("TimerDelegate: GetCapsuleComponent() returned nullptr."));
-				}
-			}
-			else
-			{
-				//UE_LOG(LogTemp, Warning, TEXT("TimerDelegate: 'this' is no longer valid."));
-			}
-		});
-
-		if (UWorld* World = GetWorld())
-		{
-			// Set the timer with that delegate
-			
-			World->GetTimerManager().SetTimer(
-				CollisionTimerHandle,  // Ensure CollisionTimerHandle is a member variable if you need to manage it
-				TimerDelegate,
-				5.0f,  // Delay in seconds
-				false  // One-shot
-			);
-		}*/
-		
 	}
 	
 	UnitState = NewUnitState;

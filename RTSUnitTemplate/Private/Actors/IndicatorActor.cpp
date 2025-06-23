@@ -14,13 +14,6 @@ AIndicatorActor::AIndicatorActor(const FObjectInitializer& ObjectInitializer):Su
 	DamageIndicatorComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("DamageIndicator"));
 	RootComponent = DamageIndicatorComp;
 
-	/*
-	if (HasAuthority())
-	{
-		bReplicates = true;
-		SetReplicateMovement(true);
-	}*/
-
 	if (HasAuthority())
 	{
 		bReplicates = false;
@@ -46,7 +39,6 @@ void AIndicatorActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 void AIndicatorActor::BeginPlay()
 {
 	Super::BeginPlay();
-	//SpawnDamageIndicator(555.f);
 }
 
 // Called every frame

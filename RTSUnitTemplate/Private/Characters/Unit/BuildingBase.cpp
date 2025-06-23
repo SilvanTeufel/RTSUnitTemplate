@@ -152,7 +152,7 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 			UnitBase->ResourcePlace = NewResourcePlace;
 		}else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("No WorkAreas, set to Idle!"));
+			//UE_LOG(LogTemp, Warning, TEXT("No WorkAreas, set to Idle!"));
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Idle);
 			return;
