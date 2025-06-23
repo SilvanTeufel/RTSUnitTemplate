@@ -145,6 +145,9 @@ struct FMassWorkerStatsFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool UpdateMovement = true;
+
+	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
+	bool AutoMining = true;
 };
 
 USTRUCT()

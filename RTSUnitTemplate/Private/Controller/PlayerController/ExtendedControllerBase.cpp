@@ -735,7 +735,8 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
                     		OverlappedMesh = OverlappedWorkArea->Mesh;
                     		if(OverlappedWorkArea->IsNoBuildZone)
                     		{
-                    			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			//SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			DraggedWorkArea->TemporarilyChangeMaterial();
                     			break;
                     		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
                     			OverlappedWorkArea->Type == WorkAreaData::Secondary ||
@@ -914,7 +915,8 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
                     		
                     		if(OverlappedWorkArea->IsNoBuildZone)
                     		{
-                    			SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			//SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
+                    			DraggedWorkArea->TemporarilyChangeMaterial();
                     			break;
                     		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
 								OverlappedWorkArea->Type == WorkAreaData::Secondary ||
@@ -1087,6 +1089,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
 
+	UE_LOG(LogTemp, Warning, TEXT("!!!SendWorkerToWork!!!"));
 	if (!Worker)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Worker is null! Cannot proceed."));
@@ -1214,7 +1217,7 @@ bool AExtendedControllerBase::DropWorkArea()
 			}*/
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			SelectedUnits[0]->BuildArea = nullptr;
-
+			SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
 			CancelCurrentAbility(SelectedUnits[0]);
 			SendWorkerToBase(SelectedUnits[0]);
 			return true;
@@ -1230,8 +1233,8 @@ bool AExtendedControllerBase::DropWorkArea()
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
 		}
-		//CurrentDraggedWorkArea = nullptr;
 	}
+	//SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
 	return false;
 }
 

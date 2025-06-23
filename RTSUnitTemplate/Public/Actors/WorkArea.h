@@ -192,4 +192,22 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_SetScale(FVector NewScale);
+
+	// -- NEW TIMER HANDLE & PROPERTIES --
+	/** Timer handle for reverting the material change. */
+	FTimerHandle ChangeMaterialTimerHandle;
+
+	/** Material to apply temporarily for 3 seconds when TemporarilyChangeMaterial is called. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInterface* TemporaryHighlightMaterial;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void TemporarilyChangeMaterial();
+	
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInterface* OriginalMaterial;
+    
+	/** Called by a timer to revert the material back to its original state. */
+	void RevertMaterial();
 };

@@ -889,6 +889,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		}
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
+            		WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
             	}
 
             	/*
@@ -962,13 +963,17 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         }
         FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
     	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
-
+    	FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 
 				TArray<FMassEntityHandle> CapturedEntitys;
 				CapturedEntitys.Emplace(CapturedEntity);
-				//HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
-				//UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
-    			//UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
+
+    			if (WorkerStats && WorkerStats->AutoMining
+						   && StrongUnitActor->GetUnitState() == UnitData::Idle
+						   && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
+    				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
+				}
+    	
     			if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
@@ -989,27 +994,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     			}
 
     			UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
-
-    	/*
-				if(StrongUnitActor->GetUnitState() == UnitData::PatrolIdle && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())){
-					SwitchState(UnitSignals::PatrolIdle, CapturedEntity, GTEntityManager);
-				}
-				else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
-				   SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-					State->StateTimer = 0.f;
-					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
-					State->StateTimer = 0.f;
-				   SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
-				}
-    	*/
-			//}
-        //}
     }); // Ende AsyncTask Lambda
 }
 

@@ -438,3 +438,60 @@ void AWorkArea::Multicast_SetScale_Implementation(FVector NewScale)
 	SetActorScale3D(NewScale);
 }
 
+void AWorkArea::TemporarilyChangeMaterial()
+{
+    // Ensure the Mesh component and the temporary material are valid
+    if (!Mesh || !TemporaryHighlightMaterial)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AWorkArea::TemporarilyChangeMaterial: Mesh or TemporaryHighlightMaterial is not set."));
+        return;
+    }
+
+    // If a revert timer is already active, clear it. This handles rapidly calling the function.
+    GetWorld()->GetTimerManager().ClearTimer(ChangeMaterialTimerHandle);
+
+    // If we haven't stored the original material yet, store it now.
+    // This prevents overwriting the true original material if the function is called multiple times.
+    if (!OriginalMaterial)
+    {
+        // We assume the material is on element index 0.
+        OriginalMaterial = Mesh->GetMaterial(0); 
+    }
+    
+    // Apply the temporary material
+    Mesh->SetMaterial(0, TemporaryHighlightMaterial);
+
+    // Set a timer to call the RevertMaterial function after 3.0 seconds
+    const float RevertDelay = 0.25f;
+    GetWorld()->GetTimerManager().SetTimer(
+        ChangeMaterialTimerHandle,      // The handle to manage this timer
+        this,                           // The object to call the function on
+        &AWorkArea::RevertMaterial,     // The function to call
+        RevertDelay,                    // The delay in seconds
+        false                           // Do not loop
+    );
+}
+
+/**
+ * Reverts the material back to the one stored in OriginalMaterial.
+ */
+void AWorkArea::RevertMaterial()
+{
+    // Ensure the Mesh and the stored OriginalMaterial are still valid
+    if (Mesh && OriginalMaterial)
+    {
+        // Apply the original material back to the mesh
+        Mesh->SetMaterial(0, OriginalMaterial);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("AWorkArea::RevertMaterial: Could not revert material as Mesh or OriginalMaterial is no longer valid."));
+    }
+    
+    // Clear the stored material pointer now that we are done with it.
+    // This makes the logic in TemporarilyChangeMaterial correct for the next time it's called.
+    OriginalMaterial = nullptr;
+
+    // It's good practice to clear the handle after the timer has finished its job.
+    GetWorld()->GetTimerManager().ClearTimer(ChangeMaterialTimerHandle);
+}

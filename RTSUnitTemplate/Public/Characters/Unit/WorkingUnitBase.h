@@ -56,6 +56,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float ResourceExtractionTime = 2.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	bool AutoMining = true;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;
 	
