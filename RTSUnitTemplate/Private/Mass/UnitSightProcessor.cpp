@@ -129,8 +129,7 @@ void UUnitSightProcessor::Execute(
     TArray<FMassSightSignalPayload>   PendingSignals;
     FogEntities.Reserve(AllEntities.Num());
     PendingSignals.Reserve(AllEntities.Num() * 2);
-
-    const float Now = World->GetTimeSeconds();
+    
     for (int32 i = 0; i < AllEntities.Num(); ++i)
     {
         const auto& Det = AllEntities[i];
@@ -170,8 +169,6 @@ void UUnitSightProcessor::Execute(
             if (Target.Stats->TeamId == Detector.Stats->TeamId) continue;
             
             const int32 SightCount = Target.Sight->TeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
-   
-        
             //UE_LOG(LogTemp, Log, TEXT("SightCount: %d"), SightCount);
             if (SightCount > 0)
             {
@@ -211,8 +208,6 @@ void UUnitSightProcessor::Execute(
     // 6) Dispatch sight signals once
     if (SignalSubsystem && PendingSignals.Num() > 0)
     {
-
-
         TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;
         AsyncTask(ENamedThreads::GameThread,
             [SubPtr, Signals = MoveTemp(PendingSignals)]()

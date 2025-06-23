@@ -314,7 +314,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
 {
  
-    AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
+    ACustomControllerBase* ExtendedController = Cast<ACustomControllerBase>(GetController());
     if (!ExtendedController)
     {
         UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformRightClickAction."));
@@ -330,7 +330,8 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
         {
             if (!ExtendedController->CheckClickOnWorkArea(HitResult))
             {
-                RunUnitsAndSetWaypoints(HitResult, ExtendedController);
+                ExtendedController->RunUnitsAndSetWaypointsMass(HitResult);
+                // RunUnitsAndSetWaypoints(HitResult, ExtendedController);
             }
         }
     }
@@ -408,83 +409,83 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled)
 {
     
-    AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
-    if (!ExtendedController)
+    ACustomControllerBase* CustomControllerBase = Cast<ACustomControllerBase>(GetController());
+    if (!CustomControllerBase)
     {
         UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformLeftClickAction."));
         return;
     }
     
-    ExtendedController->AbilityArrayIndex = 0;
+    CustomControllerBase->AbilityArrayIndex = 0;
 
-    if (!ExtendedController->CameraBase || ExtendedController->CameraBase->TabToggled) return;
+    if (!CustomControllerBase->CameraBase || CustomControllerBase->CameraBase->TabToggled) return;
 
-    if (ExtendedController->AltIsPressed)
+    if (CustomControllerBase->AltIsPressed)
     {
-        ExtendedController->DestroyWorkArea();
-        for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
+        CustomControllerBase->DestroyWorkArea();
+        for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
-            ExtendedController->CancelAbilitiesIfNoBuilding(ExtendedController->SelectedUnits[i]);
+            CustomControllerBase->CancelAbilitiesIfNoBuilding(CustomControllerBase->SelectedUnits[i]);
         }
     }
     else if (AttackToggled)
     {
-        int32 NumUnits = ExtendedController->SelectedUnits.Num();
-        const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
+        int32 NumUnits = CustomControllerBase->SelectedUnits.Num();
+        const int32 GridSize = CustomControllerBase->ComputeGridSize(NumUnits);
         AWaypoint* BWaypoint = nullptr;
 
         bool PlayWaypointSound = false;
         bool PlayAttackSound = false;
 
-        for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
+        for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
-            if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag && !ExtendedController->SelectedUnits[i]->IsWorker)
+            if (CustomControllerBase->SelectedUnits[i] != CustomControllerBase->CameraUnitWithTag && !CustomControllerBase->SelectedUnits[i]->IsWorker)
             {
                 int32 Row = i / GridSize;     // Row index
                 int32 Col = i % GridSize;     // Column index
 
-                FVector RunLocation = HitResult.Location + ExtendedController->CalculateGridOffset(Row, Col);
+                FVector RunLocation = HitResult.Location + CustomControllerBase->CalculateGridOffset(Row, Col);
                 bool HitNavModifier;
-                RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
+                RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;
                 
-                if (ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
+                if (CustomControllerBase->SetBuildingWaypoint(RunLocation, CustomControllerBase->SelectedUnits[i], BWaypoint, PlayWaypointSound))
                 {
                     // Do Nothing
                 }
                 else
                 {
-                    ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-                    ExtendedController->LeftClickAttack(ExtendedController->SelectedUnits[i], RunLocation);
+                    CustomControllerBase->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+                    CustomControllerBase->LeftClickAttackMass(CustomControllerBase->SelectedUnits[i], RunLocation, AttackToggled);
                     PlayAttackSound = true;
                 }
             }
 
-            if (ExtendedController->SelectedUnits[i])
-                ExtendedController->FireAbilityMouseHit(ExtendedController->SelectedUnits[i], HitResult);
+            if (CustomControllerBase->SelectedUnits[i])
+                CustomControllerBase->FireAbilityMouseHit(CustomControllerBase->SelectedUnits[i], HitResult);
         }
 
-        if (ExtendedController->WaypointSound && PlayWaypointSound)
+        if (CustomControllerBase->WaypointSound && PlayWaypointSound)
         {
-            UGameplayStatics::PlaySound2D(this, ExtendedController->WaypointSound);
+            UGameplayStatics::PlaySound2D(this, CustomControllerBase->WaypointSound);
         }
 
-        if (ExtendedController->AttackSound && PlayAttackSound)
+        if (CustomControllerBase->AttackSound && PlayAttackSound)
         {
-            UGameplayStatics::PlaySound2D(this, ExtendedController->AttackSound);
+            UGameplayStatics::PlaySound2D(this, CustomControllerBase->AttackSound);
         }
     } else {
-        for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++)
+        for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
-            if (ExtendedController->SelectedUnits[i] && !ExtendedController->SelectedUnits[i]->IsWorker && ExtendedController->SelectedUnits[i]->CurrentSnapshot.AbilityClass && ExtendedController->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
+            if (CustomControllerBase->SelectedUnits[i] && !CustomControllerBase->SelectedUnits[i]->IsWorker && CustomControllerBase->SelectedUnits[i]->CurrentSnapshot.AbilityClass && CustomControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
             {
-                ExtendedController->FireAbilityMouseHit(ExtendedController->SelectedUnits[i], HitResult);
+                CustomControllerBase->FireAbilityMouseHit(CustomControllerBase->SelectedUnits[i], HitResult);
 
             }
         }
     }
 
-    ExtendedController->LeftClickIsPressed = false; // Reset the pressed state
+    CustomControllerBase->LeftClickIsPressed = false; // Reset the pressed state
 }
 void ARLAgent::AddWorkerToResource(EResourceType ResourceType, int TeamId)
 {
