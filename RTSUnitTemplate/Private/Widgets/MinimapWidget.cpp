@@ -6,6 +6,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h" // Change this path to match your file structure
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Texture2D.h"
 
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
 {

@@ -34,6 +34,5 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=RTSUnitTemplate)
 	float LastResetTime = 0.0f;
-	;
 
 };
