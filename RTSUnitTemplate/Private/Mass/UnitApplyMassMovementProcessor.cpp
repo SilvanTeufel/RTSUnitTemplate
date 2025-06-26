@@ -34,6 +34,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	
 	// Input from the steering/pathfinding processor
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); // <<< ADDED (ReadOnly)
+	//EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);     // Execute if this tag is present...
 	EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
@@ -58,6 +59,77 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
+void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
+    if (DeltaTime <= 0.0f) // Avoid division by zero or no-op
+    {
+        return;
+    }
+
+    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& Context)
+    {
+        const int32 NumEntities = Context.GetNumEntities();
+        if (NumEntities == 0) return;
+        
+        // --- Get required data ---
+        const FMassMovementParameters& MovementParams = Context.GetConstSharedFragment<FMassMovementParameters>();
+        const TConstArrayView<FMassSteeringFragment> SteeringList = Context.GetFragmentView<FMassSteeringFragment>(); // Get Steering
+        const TArrayView<FTransformFragment> LocationList = Context.GetMutableFragmentView<FTransformFragment>();
+        const TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
+        const TArrayView<FMassVelocityFragment> VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
+
+        for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
+        {
+            FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
+            const FMassSteeringFragment& Steering = SteeringList[EntityIndex]; 
+            FMassForceFragment& Force = ForceList[EntityIndex];
+            FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+
+            // --- NEU: Vertikale Geschwindigkeit sichern und alle Berechnungen in 2D durchführen ---
+
+            // 1. Sichere die aktuelle Z-Geschwindigkeit. Diese wollen wir unberührt lassen.
+            const float OriginalZVelocity = Velocity.Value.Z;
+
+            // --- Core Movement Logic (modifiziert für 2D) ---
+            const FVector DesiredVelocity = Steering.DesiredVelocity;
+            const FVector AvoidanceForce = Force.Value; 
+            const float MaxSpeed = MovementParams.MaxSpeed; 
+            const float Acceleration = MovementParams.MaxAcceleration;
+
+            // 2. Erstelle 2D-Versionen der Vektoren für eine saubere horizontale Berechnung.
+            const FVector CurrentHorizontalVelocity = FVector(Velocity.Value.X, Velocity.Value.Y, 0.f);
+            const FVector DesiredHorizontalVelocity = FVector(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
+            const FVector HorizontalAvoidanceForce = FVector(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
+
+            // 3. Führe die Beschleunigungs- und Kraftberechnung ausschließlich auf der X/Y-Ebene durch.
+            FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
+            AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
+            
+            FVector HorizontalVelocityDelta = (AccelInput + HorizontalAvoidanceForce) * DeltaTime * 4.f;
+
+            // Update der horizontalen Geschwindigkeit
+            FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
+
+            // Begrenze die horizontale Geschwindigkeit
+            NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
+            
+            // --- NEU: FINALE GESCHWINDIGKEIT ZUSAMMENSETZEN ---
+            
+            // 4. Kombiniere die neue horizontale Geschwindigkeit mit der ursprünglichen vertikalen Geschwindigkeit.
+            Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+
+            // --- Apply final velocity to position (unverändert) ---
+            FVector CurrentLocation = CurrentTransform.GetLocation();
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            CurrentTransform.SetTranslation(NewLocation);
+
+            // Reset force for the next frame
+            Force.Value = FVector::ZeroVector;
+        }
+    });
+}
+/*
 void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
@@ -121,4 +193,4 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             Force.Value = FVector::ZeroVector;
         }
     });
-}
+}*/

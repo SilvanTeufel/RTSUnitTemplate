@@ -954,6 +954,12 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
     	if (!StrongUnitActor) return;
+
+    	FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+    	if( StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
+			StrongUnitActor->SetUnitState(UnitData::Idle);
+		}
+    	
     	if (!StrongUnitActor->IsWorker) return;
     		
         if (!EntitySubsystem)
@@ -961,7 +967,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
             //UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState (GameThread): EntitySubsystem wurde null!"));
             return;
         }
-        FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+        
     	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
     	FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 
@@ -992,6 +998,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
     				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}
+
 
     			UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
     }); // Ende AsyncTask Lambda

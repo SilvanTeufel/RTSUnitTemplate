@@ -25,6 +25,18 @@ UCLASS()
 class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 {
 	GENERATED_BODY()
+protected:
+	// /** If true, the formation will be recalculated on the next move command, even if the selection hasn't changed. */
+	// UPROPERTY(BlueprintReadWrite, Category = "RTS")
+	bool bForceFormationRecalculation = true;
+	// 
+	// /** Stores the calculated offset for each unit from the formation's center point. This preserves the formation shape. */
+	TMap<AUnitBase*, FVector> UnitFormationOffsets;
+	// 
+	// /** A snapshot of the last group of units for which a formation was calculated. Used to detect changes in selection. */
+	TArray<TWeakObjectPtr<AUnitBase>> LastFormationUnits;
+
+	
 public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);

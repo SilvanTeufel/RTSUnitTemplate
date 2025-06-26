@@ -365,17 +365,738 @@ void ACustomControllerBase::RightClickPressedMass()
 	
 }
 
+void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
+{
+    // --- 1. INITIAL SETUP & VALIDATION ---
+    int32 NumUnits = SelectedUnits.Num();
+    if (NumUnits == 0) return;
 
+    AWaypoint* BWaypoint = nullptr;
+    bool PlayWaypointSound = false;
+    bool PlayRunSound = false;
+
+    // Helper lambda to get a unit's world location, whether it's a regular actor or an ISM instance.
+    auto GetUnitWorldLocation = [](const AUnitBase* Unit) -> FVector
+    {
+        if (!Unit) return FVector::ZeroVector;
+        if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
+        {
+            return Unit->GetActorLocation();
+        }
+        else
+        {
+            FTransform InstanceTransform;
+            if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
+            {
+                return InstanceTransform.GetLocation();
+            }
+        }
+        return FVector::ZeroVector; // Fallback
+    };
+    
+    // --- 2. CHECK IF FORMATION NEEDS RECALCULATION ---
+    bool bShouldRecalculate = bForceFormationRecalculation;
+    if (!bShouldRecalculate)
+    {
+        // Check if the number of units has changed.
+        if (SelectedUnits.Num() != LastFormationUnits.Num())
+        {
+            bShouldRecalculate = true;
+        }
+        else
+        {
+            // If the count is the same, check if the actual units are different.
+            TSet<TWeakObjectPtr<AUnitBase>> CurrentUnitSet;
+            for(AUnitBase* Unit : SelectedUnits) CurrentUnitSet.Add(Unit);
+
+        	TSet<TWeakObjectPtr<AUnitBase>> LastUnitSet(LastFormationUnits);
+        	for (AUnitBase* CurrentUnit : SelectedUnits)
+        	{
+        		if (!LastUnitSet.Contains(CurrentUnit))
+        		{
+        			bShouldRecalculate = true;
+        			break; // Found a difference, no need to check further.
+        		}
+        	}
+        }
+    }
+    
+    // --- 3. RECALCULATE FORMATION (IF REQUIRED) ---
+    if (bShouldRecalculate)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Recalculating Formation..."));
+
+        UnitFormationOffsets.Empty();
+        LastFormationUnits.Empty();
+        
+        const int32 GridSize = ComputeGridSize(NumUnits);
+        const float GridHalfSize = (GridSize - 1) * GridSpacing / 2.0f;
+        const FVector GridCenterOffset = FVector(GridHalfSize, GridHalfSize, 0.f);
+
+        // Calculate the centroid of the current unit positions to use as a reference.
+        FVector CurrentCentroid = FVector::ZeroVector;
+        int32 ValidUnitCount = 0;
+        for (AUnitBase* Unit : SelectedUnits)
+        {
+            if (Unit)
+            {
+                CurrentCentroid += GetUnitWorldLocation(Unit);
+                ValidUnitCount++;
+            }
+        }
+        if(ValidUnitCount > 0) CurrentCentroid /= ValidUnitCount;
+
+        // Create a list of ideal grid slot positions, centered around (0,0,0)
+        TArray<FVector> TargetGridOffsets;
+        TargetGridOffsets.Reserve(NumUnits);
+        for (int32 i = 0; i < NumUnits; ++i)
+        {
+            const int32 Row = i / GridSize;
+            const int32 Col = i % GridSize;
+            FVector SlotOffset = FVector(Col * GridSpacing, Row * GridSpacing, 0.f) - GridCenterOffset;
+            TargetGridOffsets.Add(SlotOffset);
+        }
+        
+        // To assign units to the formation slots intelligently, we sort both lists.
+        // This attempts to keep units that are already on the left, on the left of the new formation.
+        TArray<AUnitBase*> SortedUnits = SelectedUnits;
+        SortedUnits.Sort([&](const AUnitBase& A, const AUnitBase& B)
+        {
+            FVector PosA = GetUnitWorldLocation(&A) - CurrentCentroid;
+            FVector PosB = GetUnitWorldLocation(&B) - CurrentCentroid;
+            if (FMath::Abs(PosA.Y - PosB.Y) > KINDA_SMALL_NUMBER) return PosA.Y < PosB.Y;
+            return PosA.X < PosB.X;
+        });
+
+        // Assign each sorted unit to an ideal grid offset and save it for future moves.
+        for (int32 i = 0; i < SortedUnits.Num(); ++i)
+        {
+            if (SortedUnits[i] && TargetGridOffsets.IsValidIndex(i))
+            {
+                UnitFormationOffsets.Add(SortedUnits[i], TargetGridOffsets[i]);
+            }
+        }
+
+        // Update the state for the next command.
+        for(AUnitBase* Unit : SelectedUnits) LastFormationUnits.Add(Unit);
+        bForceFormationRecalculation = false; // Reset the flag
+    }
+
+    // --- 4. GENERATE FINAL ASSIGNMENTS USING THE STORED FORMATION ---
+    TMap<AUnitBase*, FVector> FinalAssignments;
+    FVector TargetCentroid = Hit.Location; // The new center of the formation is the click location.
+
+    for (AUnitBase* Unit : SelectedUnits)
+    {
+        if (Unit)
+        {
+            // Find the unit's stored offset. If it doesn't exist (edge case), use a zero offset.
+            const FVector* Offset = UnitFormationOffsets.Find(Unit);
+            const FVector FinalLocation = TargetCentroid + (Offset ? *Offset : FVector::ZeroVector);
+            FinalAssignments.Add(Unit, FinalLocation);
+        }
+    }
+    
+    // --- 5. ISSUE MOVE COMMANDS (UNCHANGED LOGIC) ---
+    for (const TPair<AUnitBase*, FVector>& Assignment : FinalAssignments)
+    {
+        AUnitBase* Unit = Assignment.Key;
+        FVector RunLocation = Assignment.Value;
+
+        if (Unit && Unit != CameraUnitWithTag && Unit->UnitState != UnitData::Dead)
+        {
+            bool HitNavModifier;
+            RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+            if (HitNavModifier) continue;
+            
+            float Speed = Unit->Attributes->GetBaseRunSpeed();
+       
+            if(SetBuildingWaypoint(RunLocation, Unit, BWaypoint, PlayWaypointSound))
+            {
+                PlayWaypointSound = true;
+            }
+            else if (IsShiftPressed)
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+       
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else
+                {
+                    RightClickRunShift(Unit, RunLocation);
+                }
+                PlayRunSound = true;
+            }
+            else
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else if (UseUnrealEnginePathFinding)
+                {
+                    RightClickRunUEPF(Unit, RunLocation, true);
+                }
+                else
+                {
+                    RightClickRunDijkstraPF(Unit, RunLocation, -1);
+                }
+                PlayRunSound = true;
+            }
+        }
+    }
+    
+    // --- 6. SOUND LOGIC (UNCHANGED) ---
+    if (WaypointSound && PlayWaypointSound)
+    {
+       UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+
+    if (RunSound && PlayRunSound)
+    {
+       const float CurrentTime = GetWorld()->GetTimeSeconds();
+       if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime)
+       {
+          UGameplayStatics::PlaySound2D(this, RunSound);
+          LastRunSoundTime = CurrentTime;
+       }
+    }
+}
+
+/*
+void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
+{
+    int32 NumUnits = SelectedUnits.Num();
+    if (NumUnits == 0) return;
+
+    const int32 GridSize = ComputeGridSize(NumUnits);
+    AWaypoint* BWaypoint = nullptr;
+    bool PlayWaypointSound = false;
+    bool PlayRunSound = false;
+
+    // 1. Hilfs-Lambda, um die korrekte Weltposition einer Einheit zu erhalten
+    auto GetUnitWorldLocation = [](const AUnitBase* Unit) -> FVector
+    {
+        if (Unit)
+        {
+            if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
+            {
+                return Unit->GetActorLocation();
+            }
+            else
+            {
+                FTransform InstanceTransform;
+                if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
+                {
+                    return InstanceTransform.GetLocation();
+                }
+            }
+        }
+        return FVector::ZeroVector;
+    };
+
+    // 2. Berechne den Mittelpunkt der aktuellen Formation als Referenzpunkt
+    FVector CurrentFormationCentroid = FVector::ZeroVector;
+    int32 ValidUnitCount = 0;
+    for (AUnitBase* Unit : SelectedUnits)
+    {
+        if (Unit)
+        {
+            CurrentFormationCentroid += GetUnitWorldLocation(Unit);
+            ValidUnitCount++;
+        }
+    }
+    if (ValidUnitCount > 0)
+    {
+        CurrentFormationCentroid /= ValidUnitCount;
+    }
+
+    // 3. Berechne alle Zielpunkte im Gitter
+    const float GridHalfSize = (GridSize - 1) * GridSpacing / 2.0f;
+    const FVector GridCenterOffset = FVector(GridHalfSize, GridHalfSize, 0.f);
+    TArray<FVector> TargetGridLocations;
+    TargetGridLocations.Reserve(NumUnits);
+    for (int32 i = 0; i < NumUnits; ++i)
+    {
+        const int32 Row = i / GridSize;
+        const int32 Col = i % GridSize;
+        FVector TargetLoc = (Hit.Location - GridCenterOffset) + CalculateGridOffset(Row, Col);
+        TargetGridLocations.Add(TargetLoc);
+    }
+
+    // 4. Sortiere die Einheiten nach ihrer Nähe zum ZIELPUNKT (aufsteigend)
+    // Die Einheiten, die am nächsten am Klick sind, stehen am Anfang der Liste.
+    TArray<AUnitBase*> SortedUnits = SelectedUnits; // Kopie erstellen, um sie zu sortieren
+    SortedUnits.Sort([&](const AUnitBase& A, const AUnitBase& B)
+    {
+        return FVector::DistSquared(GetUnitWorldLocation(&A), Hit.Location) < FVector::DistSquared(GetUnitWorldLocation(&B), Hit.Location);
+    });
+
+    // 5. Sortiere die ZIELPLÄTZE nach ihrer Entfernung vom STARTPUNKT (absteigend)
+    // Die Gitterplätze, die am weitesten von der aktuellen Formation entfernt sind, stehen am Anfang der Liste.
+    TargetGridLocations.Sort([&](const FVector& A, const FVector& B)
+    {
+        // Beachte das > Zeichen für eine absteigende Sortierung (DESCENDING)
+        return FVector::DistSquared(A, CurrentFormationCentroid) > FVector::DistSquared(B, CurrentFormationCentroid);
+    });
+
+    // 6. Weise die sortierten Listen 1-zu-1 zu
+    TMap<AUnitBase*, FVector> FinalAssignments;
+    for (int32 i = 0; i < NumUnits; ++i)
+    {
+        if (SortedUnits.IsValidIndex(i) && TargetGridLocations.IsValidIndex(i))
+        {
+            // Die nächste Einheit bekommt den weitesten freien Platz
+            FinalAssignments.Add(SortedUnits[i], TargetGridLocations[i]);
+        }
+    }
+    
+    // 7. Erteile die Bewegungsbefehle
+    for (const TPair<AUnitBase*, FVector>& Assignment : FinalAssignments)
+    {
+        AUnitBase* Unit = Assignment.Key;
+        FVector RunLocation = Assignment.Value;
+
+        if (Unit != CameraUnitWithTag && Unit && Unit->UnitState != UnitData::Dead)
+        {
+            bool HitNavModifier;
+            RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+            if (HitNavModifier) continue;
+            
+            float Speed = Unit->Attributes->GetBaseRunSpeed();
+       
+            if(SetBuildingWaypoint(RunLocation, Unit, BWaypoint, PlayWaypointSound))
+            {
+                PlayWaypointSound = true;
+            }
+            else if (IsShiftPressed)
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+       
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else
+                {
+                    RightClickRunShift(Unit, RunLocation);
+                }
+                PlayRunSound = true;
+            }
+            else
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else if (UseUnrealEnginePathFinding)
+                {
+                    RightClickRunUEPF(Unit, RunLocation, true);
+                }
+                else
+                {
+                    RightClickRunDijkstraPF(Unit, RunLocation, -1);
+                }
+                PlayRunSound = true;
+            }
+        }
+    }
+    
+    // Sound-Logik
+    if (WaypointSound && PlayWaypointSound)
+    {
+       UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+
+    if (RunSound && PlayRunSound)
+    {
+       const float CurrentTime = GetWorld()->GetTimeSeconds();
+       if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime)
+       {
+          UGameplayStatics::PlaySound2D(this, RunSound);
+          LastRunSoundTime = CurrentTime;
+       }
+    }
+}
+
+/*
+void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
+{
+    int32 NumUnits = SelectedUnits.Num();
+    if (NumUnits == 0) return;
+
+    // --- LÖSUNG 1: BEFEHLS-PRÜFUNG ---
+    // Wenn der neue Klick sehr nah am letzten Befehl ist, ignoriere ihn, um ein Neuanordnen zu verhindern.
+    if (FVector::DistSquared(Hit.Location, LastGroupMoveLocation) < SameLocationToleranceSq)
+    {
+        return;
+    }
+
+    const int32 GridSize = ComputeGridSize(NumUnits);
+    AWaypoint* BWaypoint = nullptr;
+    bool PlayWaypointSound = false;
+    bool PlayRunSound = false;
+
+    auto GetUnitWorldLocation = [](const AUnitBase* Unit) -> FVector
+    {
+        if (Unit)
+        {
+            if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
+            {
+                return Unit->GetActorLocation();
+            }
+            else
+            {
+                FTransform InstanceTransform;
+                if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
+                {
+                    return InstanceTransform.GetLocation();
+                }
+            }
+        }
+        return FVector::ZeroVector;
+    };
+
+    FVector CurrentFormationCentroid = FVector::ZeroVector;
+    int32 ValidUnitCount = 0;
+    for (AUnitBase* Unit : SelectedUnits)
+    {
+        if (Unit)
+        {
+            CurrentFormationCentroid += GetUnitWorldLocation(Unit);
+            ValidUnitCount++;
+        }
+    }
+    if (ValidUnitCount > 0)
+    {
+        CurrentFormationCentroid /= ValidUnitCount;
+    }
+
+    // --- LÖSUNG 2: FORMATIONSERHALTENDE ZUWEISUNG (KORRIGIERT) ---
+
+    // 1. Definiere ein lokales Koordinatensystem basierend auf der Bewegungsrichtung
+    FVector MoveDirection = Hit.Location - CurrentFormationCentroid;
+    MoveDirection.Z = 0;
+    
+    FVector RightDirection;
+    if (!MoveDirection.Normalize())
+    {
+        MoveDirection = GetControlRotation().Vector();
+        RightDirection = FRotationMatrix(GetControlRotation()).GetScaledAxis(EAxis::Y);
+    }
+    else
+    {
+        RightDirection = FVector::CrossProduct(FVector::UpVector, MoveDirection).GetSafeNormal();
+    }
+    
+    // 2. Berechne die relative Position jeder Einheit zu ihrem Formationszentrum
+    TArray<TTuple<AUnitBase*, FVector>> UnitRelativeOffsets;
+    UnitRelativeOffsets.Reserve(NumUnits);
+    for (AUnitBase* Unit : SelectedUnits)
+    {
+        if (Unit)
+        {
+            FVector OffsetFromCentroid = GetUnitWorldLocation(Unit) - CurrentFormationCentroid;
+            // Projiziere diesen Offset auf unser neues Koordinatensystem
+            float ForwardOffset = FVector::DotProduct(OffsetFromCentroid, MoveDirection);
+            float RightOffset = FVector::DotProduct(OffsetFromCentroid, RightDirection);
+            UnitRelativeOffsets.Emplace(Unit, FVector(RightOffset, ForwardOffset, 0));
+        }
+    }
+
+    // 3. Wende diese relativen Offsets auf den neuen Ziel-Mittelpunkt an
+    TMap<AUnitBase*, FVector> FinalAssignments;
+    for (const auto& Pair : UnitRelativeOffsets)
+    {
+        AUnitBase* Unit = Pair.Key;
+        const FVector RelativeOffset = Pair.Value;
+
+        // Rotiere den relativen Offset der Einheit, um der neuen Bewegungsrichtung zu entsprechen
+        FVector RotatedOffset = RightDirection * RelativeOffset.X + MoveDirection * RelativeOffset.Y;
+        FVector FinalLocation = Hit.Location + RotatedOffset;
+        FinalAssignments.Add(Unit, FinalLocation);
+    }
+    
+    // 4. Erteile die Bewegungsbefehle
+    for (const TPair<AUnitBase*, FVector>& Assignment : FinalAssignments)
+    {
+        AUnitBase* Unit = Assignment.Key;
+        FVector RunLocation = Assignment.Value;
+
+        if (Unit != CameraUnitWithTag && Unit && Unit->UnitState != UnitData::Dead)
+        {
+            bool HitNavModifier;
+            RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+            if (HitNavModifier) continue;
+            
+            float Speed = Unit->Attributes->GetBaseRunSpeed();
+       
+            if(SetBuildingWaypoint(RunLocation, Unit, BWaypoint, PlayWaypointSound))
+            {
+                PlayWaypointSound = true;
+            }
+            else if (IsShiftPressed)
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+       
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else
+                {
+                    RightClickRunShift(Unit, RunLocation);
+                }
+                PlayRunSound = true;
+            }
+            else
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else if (UseUnrealEnginePathFinding)
+                {
+                    RightClickRunUEPF(Unit, RunLocation, true);
+                }
+                else
+                {
+                    RightClickRunDijkstraPF(Unit, RunLocation, -1);
+                }
+                PlayRunSound = true;
+            }
+        }
+    }
+
+    // --- FINALE AKTION NACH ERFOLGREICHEM BEFEHL ---
+    // Speichere die Position des erfolgreichen Befehls, um die Prüfung am Anfang zu ermöglichen.
+    LastGroupMoveLocation = Hit.Location;
+    
+    // Sound-Logik
+    if (WaypointSound && PlayWaypointSound)
+    {
+       UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+    if (RunSound && PlayRunSound)
+    {
+       const float CurrentTime = GetWorld()->GetTimeSeconds();
+       if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime)
+       {
+          UGameplayStatics::PlaySound2D(this, RunSound);
+          LastRunSoundTime = CurrentTime;
+       }
+    }
+}
+
+/*
+void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
+{
+    int32 NumUnits = SelectedUnits.Num();
+    if (NumUnits == 0) return;
+
+    const int32 GridSize = ComputeGridSize(NumUnits);
+    AWaypoint* BWaypoint = nullptr;
+    bool PlayWaypointSound = false;
+    bool PlayRunSound = false;
+
+    // --- NEUE, ROBUSTE LÖSUNG ZUR ZIELZUWWEISUNG ---
+
+    // 1. Hilfs-Lambda, um die korrekte Weltposition einer Einheit zu erhalten (egal ob Skeletal oder ISM)
+    auto GetUnitWorldLocation = [](const AUnitBase* Unit) -> FVector
+    {
+        if (Unit)
+        {
+            if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
+            {
+                return Unit->GetActorLocation();
+            }
+            else
+            {
+                FTransform InstanceTransform;
+                if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
+                {
+                    return InstanceTransform.GetLocation();
+                }
+            }
+        }
+        return FVector::ZeroVector; // Fallback
+    };
+    
+    // 2. Berechne zuerst ALLE Zielpunkte im Gitter
+    const float GridHalfSize = (GridSize - 1) * GridSpacing / 2.0f;
+    const FVector GridCenterOffset = FVector(GridHalfSize, GridHalfSize, 0.f);
+    TArray<FVector> TargetGridLocations;
+    TargetGridLocations.Reserve(NumUnits);
+    for (int32 i = 0; i < NumUnits; ++i)
+    {
+        const int32 Row = i / GridSize;
+        const int32 Col = i % GridSize;
+        FVector TargetLoc = (Hit.Location - GridCenterOffset) + CalculateGridOffset(Row, Col);
+        TargetGridLocations.Add(TargetLoc);
+    }
+
+    // 3. Führe eine intelligente Zuweisung durch: Jede Einheit bekommt den nächstgelegenen freien Gitterplatz
+    TArray<AUnitBase*> UnassignedUnits = SelectedUnits;
+    TMap<AUnitBase*, FVector> FinalAssignments;
+
+    for (const FVector& TargetPoint : TargetGridLocations)
+    {
+        if (UnassignedUnits.IsEmpty()) break;
+
+        float ClosestDistSq = FLT_MAX;
+        int32 ClosestUnitIndex = -1;
+
+        // Finde die beste (nächste) Einheit für diesen Gitterpunkt
+        for (int32 i = 0; i < UnassignedUnits.Num(); ++i)
+        {
+            if (UnassignedUnits[i])
+            {
+                const float DistSq = FVector::DistSquared(GetUnitWorldLocation(UnassignedUnits[i]), TargetPoint);
+                if (DistSq < ClosestDistSq)
+                {
+                    ClosestDistSq = DistSq;
+                    ClosestUnitIndex = i;
+                }
+            }
+        }
+
+        // Weise die gefundene Einheit dem Gitterpunkt zu und entferne sie aus dem Pool
+        if (ClosestUnitIndex != -1)
+        {
+            AUnitBase* AssignedUnit = UnassignedUnits[ClosestUnitIndex];
+            FinalAssignments.Add(AssignedUnit, TargetPoint);
+            UnassignedUnits.RemoveAtSwap(ClosestUnitIndex);
+        }
+    }
+
+    // 4. Gehe die finalen Zuweisungen durch und erteile die Bewegungsbefehle
+    for (const TPair<AUnitBase*, FVector>& Assignment : FinalAssignments)
+    {
+        AUnitBase* Unit = Assignment.Key;
+        FVector RunLocation = Assignment.Value;
+
+        if (Unit != CameraUnitWithTag && Unit && Unit->UnitState != UnitData::Dead)
+        {
+            bool HitNavModifier;
+            RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
+            if (HitNavModifier) continue;
+            
+            float Speed = Unit->Attributes->GetBaseRunSpeed();
+       
+            if(SetBuildingWaypoint(RunLocation, Unit, BWaypoint, PlayWaypointSound))
+            {
+                // ...
+            }
+            else if (IsShiftPressed)
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+       
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else
+                {
+                    RightClickRunShift(Unit, RunLocation);
+                }
+                PlayRunSound = true;
+            }
+            else // Default-Verhalten (UseUnrealEnginePathFinding oder Dijkstra)
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+                if (!Unit->IsInitialized || !Unit->CanMove) continue;
+
+                if (Unit->bIsMassUnit)
+                {
+                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
+                    SetUnitState_Replication(Unit, 1);
+                }
+                else if (UseUnrealEnginePathFinding)
+                {
+                    RightClickRunUEPF(Unit, RunLocation, true);
+                }
+                else
+                {
+                    // Dein Index 'i' ist hier nicht mehr verfügbar, da wir über eine Map iterieren.
+                    // Wenn DijkstraPF einen Index benötigt, musst du ihn anders übergeben oder die Logik anpassen.
+                    // Fürs Erste lasse ich den Index weg, da er wahrscheinlich nicht kritisch ist.
+                    RightClickRunDijkstraPF(Unit, RunLocation, -1); // -1 als Indikator für einen unbekannten Index
+                }
+                PlayRunSound = true;
+            }
+        }
+    }
+
+    // Sound-Logik
+    if (WaypointSound && PlayWaypointSound)
+    {
+       UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+
+    if (RunSound && PlayRunSound)
+    {
+       const float CurrentTime = GetWorld()->GetTimeSeconds();
+       if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime)
+       {
+          UGameplayStatics::PlaySound2D(this, RunSound);
+          LastRunSoundTime = CurrentTime;
+       }
+    }
+}
+*/
+
+/*
 void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 {
 	
 	int32 NumUnits = SelectedUnits.Num();
+	if (NumUnits == 0) return; 
 	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 	const int32 GridSize = ComputeGridSize(NumUnits);
 	AWaypoint* BWaypoint = nullptr;
 
 	bool PlayWaypointSound = false;
 	bool PlayRunSound = false;
+
+	
+	// 2. Sortiere die Einheiten basierend auf ihrer Entfernung zum Ziel.
+	// Einheiten, die bereits näher am Ziel sind, kommen in der Liste nach vorne.
+	// Dies stellt sicher, dass die vorderen Einheiten die vorderen Plätze im Gitter bekommen.
+	SelectedUnits.Sort([&Hit](const AUnitBase& A, const AUnitBase& B)
+	{
+		// Wir vergleichen die quadrierten Distanzen, da dies schneller ist als die Wurzel zu ziehen.
+		return FVector::DistSquared(A.GetActorLocation(), Hit.Location) < FVector::DistSquared(B.GetActorLocation(), Hit.Location);
+	});
+	// --- ENDE DES NEUEN CODES ---
+
+	
+	// --- ADD THIS CODE ---
+	// Calculate the total offset required to center the grid.
+	const float GridHalfSize = (GridSize - 1) * GridSpacing / 2.0f;
+	const FVector GridCenterOffset = FVector(GridHalfSize, GridHalfSize, 0.f);
+	// --- END OF ADDED CODE ---
 	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] != CameraUnitWithTag)
@@ -386,8 +1107,10 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			int32 Col = i % GridSize;     // Column index
 
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-			FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
+			//FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
 
+			FVector RunLocation = (Hit.Location - GridCenterOffset) + CalculateGridOffset(Row, Col);
+			
 			bool HitNavModifier;
 			RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
 			if (HitNavModifier) continue;
@@ -474,7 +1197,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		}
 	}
 }
-
+*/
 
 void ACustomControllerBase::LeftClickPressedMass()
 {
