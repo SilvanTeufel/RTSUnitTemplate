@@ -29,6 +29,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
 	float ActorRotationSpeed = 10*360.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Characteristics", meta = (EditCondition = "bIsFlying"))
+	float VerticalInterpSpeed = 10.f;
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
 	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
 	float MinMovementDistanceForRotation = 1.0f;

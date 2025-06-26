@@ -10,6 +10,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/Actor.h"
 #include "Async/Async.h"
+#include "NavigationSystem.h"
 
 UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here
@@ -27,6 +28,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
     EntityQuery.Initialize(EntityManager);
     
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
     
     // Use FMassActorFragment to get the linked actor
@@ -54,19 +56,9 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
     EntityQuery.RegisterWithProcessor(*this); // Important!
 
 }
-/*
-struct FActorTransformUpdatePayload
-{
-    TWeakObjectPtr<AActor> ActorPtr;
-    FTransform NewTransform;
-    int32 InstanceIndex = INDEX_NONE;
-    bool bUseSkeletal = true;
 
-    FActorTransformUpdatePayload(AActor* InActor, const FTransform& InTransform, bool bInUseSkeletal, int32 InInstanceIndex = INDEX_NONE)
-        : ActorPtr(InActor), NewTransform(InTransform), InstanceIndex(InInstanceIndex), bUseSkeletal(bInUseSkeletal)
-    {}
-};
-*/
+
+
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
@@ -92,6 +84,15 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
 
+    /*
+    // --- NEU: Holen Sie sich das Navigationssystem einmal zu Beginn ---
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+    if (!NavSystem) return;
+
+    // Definieren Sie hier oder als Klassenvariable (UPROPERTY), wie weit projiziert werden soll
+    const FVector NavMeshProjectionCorrectionExtent(100.f, 100.f, 1000.f); 
+    */    
+ //  NavSystem, NavMeshProjectionCorrectionExtent,
     EntityQuery.ForEachEntityChunk(Context,
         [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {
@@ -101,7 +102,10 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
              const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
             TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
-            
+
+            // --- Get the Velocity fragment view ---
+            const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
+
             const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
 
             //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor NumEntities: %d"), NumEntities);
@@ -120,6 +124,37 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             
             
             FVector CurrentActorLocation = Actor->GetActorLocation();
+            /*
+            // --- NEUER CODE: NAVMESH-KORREKTUR VOR ALLEM ANDEREN ---
+            FVector SimulatedLocation = MassTransform.GetLocation();
+
+            // Diese Logik nur für Bodeneinheiten anwenden. Fliegende Einheiten ignorieren das NavMesh.
+            if (!CharList[i].bIsFlying)
+            {
+                FNavLocation ProjectedLocation;
+                // Versuche, die simulierte Position auf das NavMesh zu projizieren.
+                if (NavSystem->ProjectPointToNavigation(SimulatedLocation, ProjectedLocation, NavMeshProjectionCorrectionExtent))
+                {
+                    // Erfolg! Die Position war auf oder nahe dem NavMesh.
+                    // Wir setzen die simulierte Position auf den nächstgelegenen gültigen Punkt auf dem NavMesh.
+                    // Dies verhindert, dass die Einheit über Kanten "geschoben" wird.
+                    SimulatedLocation.X = ProjectedLocation.Location.X;
+                    SimulatedLocation.Y = ProjectedLocation.Location.Y;
+                    // Die Z-Koordinate wird später durch den Line-Trace sowieso korrigiert.
+                }
+                else
+                {
+                    // Fehler: Die Einheit wurde weit vom NavMesh weggeschoben (z.B. in eine Schlucht).
+                    // Als Fallback setzen wir die Einheit auf ihre letzte bekannte gültige Position (die des Actors) zurück,
+                    // um zu verhindern, dass sie weiter in den ungültigen Bereich driftet.
+                    SimulatedLocation.X = CurrentActorLocation.X;
+                    SimulatedLocation.Y = CurrentActorLocation.Y;
+                }
+            }
+            // --- ENDE DES NEUEN CODES ---
+            */    
+
+            
             float HeightOffset;
 
             if (UnitBase->bUseSkeletalMovement)
@@ -136,7 +171,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 FVector InstanceScale = ActorTransform.GetScale3D();
                 HeightOffset = InstanceScale.Z/2;
             }
-            
+
+           // FVector FinalLocation = SimulatedLocation; 
             FVector FinalLocation = MassTransform.GetLocation();
 
         
@@ -147,8 +183,43 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
 
             FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, CurrentActorLocation.Z + 500.0f);
-            FVector TraceEnd = TraceStart - FVector(0, 0, 1000.0f);
+            FVector TraceEnd = TraceStart - FVector(0, 0, 2000.0f);
 
+
+            FHitResult Hit;
+            
+             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+             {
+                 AActor* HitActor = Hit.GetActor();
+                    
+                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
+                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset && !CharList[i].bIsFlying)
+                 {
+                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
+
+                     FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                 }else if (!CharList[i].bIsFlying)
+                 {
+                     FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
+                 }else if (IsValid(HitActor) && CharList[i].bIsFlying)
+                 {
+                     //if (!UnitBase->bUseSkeletalMovement)
+                     //{
+                     float CurrentZ = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
+                     float TargetZ = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
+                     FinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed);
+         
+                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
+                 }
+               }else
+               {
+                   UE_LOG(LogTemp, Warning, TEXT("TRUE!"));
+                   if (CharList[i].bIsFlying)
+                        FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
+                   else
+                       FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
+               }
+            /*
             FHitResult Hit;
             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
             {
@@ -170,20 +241,29 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                     else
                         FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
                 }
-            }
+            }*/
             
-            FVector Dir =  (MoveFrag.Center - FinalLocation)*1000.f;
-            Dir.Z = 0.f;  // LookAt in XY plane
-            if (!Dir.Normalize())
-            {
-                continue; // Avoid issues with zero direction
-            }
-            
-            const FQuat DesiredQuat = Dir.ToOrientationQuat();
+            // --- VVVV ROTATION LOGIC CHANGE VVVV ---
 
+           // Get the current velocity for this entity.
+           const FVector& CurrentVelocity = VelocityList[i].Value;
+           FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation if not moving
+
+           // Only update rotation if the character is actually moving.
+           if (!CurrentVelocity.IsNearlyZero(0.1f))
+           {
+               FVector LookAtDir = CurrentVelocity;
+               LookAtDir.Z = 0.f; // LookAt in XY plane
+                    
+               // Check if the direction is valid before creating a quaternion from it
+               if(LookAtDir.Normalize())
+               {
+                   DesiredQuat = LookAtDir.ToOrientationQuat();
+               }
+           }
+            
             // --- Interpolation ---
             const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed; //15.f; // Consider renaming Stat or clarifying multiplier
-
             FTransform FinalActorTransform;
             
             if (CharList[i].RotatesToMovement)
@@ -211,19 +291,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                  MassTransform.SetLocation(FinalLocation);
             }
             
-            /*
-            DrawDebugDirectionalArrow(
-            GetWorld(),
-            FinalLocation,
-            FinalLocation + DesiredQuat.GetForwardVector() * 100.0f,
-            20.0f, FColor::Red, false, 1.0f);
-
-            DrawDebugDirectionalArrow(
-            GetWorld(),
-            FinalLocation,
-            FinalLocation + DesiredQuat.GetForwardVector() * 100.0f,
-            20.0f, FColor::Green, false, 1.0f);
-            */
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
             {
                 PendingActorUpdates.Emplace(Actor, FinalActorTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);

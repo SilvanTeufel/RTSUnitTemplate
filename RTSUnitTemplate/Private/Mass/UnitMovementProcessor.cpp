@@ -36,11 +36,14 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.Initialize(EntityManager);
     
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);        // READ current position
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);  // READ the target location/speed
     EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
     EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite); // Keep for managing path state
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
 
+    // VVVV --- ADD THIS LINE --- VVVV
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    // ^^^^ --- ADD THIS LINE --- ^^^^
     // Optionally Read Velocity if needed for decisions (but don't write it here)
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -70,28 +73,18 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+
+
 void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    // 1. Time accumulation (optional, depending if you want interval execution)
-    // TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-    // if (TimeSinceLastRun < ExecutionInterval) return;
-    // TimeSinceLastRun -= ExecutionInterval;
-
-    UWorld* World = GetWorld(); // Get World from Processor's context
+    UWorld* World = GetWorld();
     if (!World) return;
     
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+    if (!NavSystem) return;
 
-    if (!NavSystem)
-    {
-        // Nav system doesn't even exist yet, definitely wait.
-        return;
-    }
+    if (!EntitySubsystem) return;
 
-    //UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-    if (!EntitySubsystem) return; // Needed for async result application
-
-    // --- Path Following & Steering Logic ---
     EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
@@ -99,120 +92,137 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         if (NumEntities == 0) return;
 
         const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const TConstArrayView<FMassMoveTargetFragment> TargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+        const TArrayView<FMassMoveTargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FUnitNavigationPathFragment> PathList = ChunkContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
         const TArrayView<FMassSteeringFragment> SteeringList = ChunkContext.GetMutableFragmentView<FMassSteeringFragment>();
         const TConstArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
-        //UE_LOG(LogTemp, Log, TEXT("MovementProcessor::Execute started NumEntities: %d"), NumEntities);
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             if (!EntityManager.IsEntityValid(Entity)) continue;
+
+            FMassSteeringFragment& Steering = SteeringList[i];
+            Steering.DesiredVelocity = FVector::ZeroVector; // Default to stopped for this frame
+
+            const FMassAIStateFragment& AIState = AIStateList[i];
+            if (!AIState.CanMove || !AIState.IsInitialized)
+            {
+                continue;
+            }
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
-            const FMassMoveTargetFragment& MoveTarget = TargetList[i];
-            const FMassAIStateFragment& AIState = AIStateList[i];
+            FMassMoveTargetFragment& MoveTarget = TargetList[i];
             FUnitNavigationPathFragment& PathFrag = PathList[i];
-            FMassSteeringFragment& Steering = SteeringList[i];
-
-
-            if (!AIState.CanMove || !AIState.IsInitialized) continue;
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
-            const FVector FinalDestination = MoveTarget.Center;
+            FVector FinalDestination = MoveTarget.Center;
             const float DesiredSpeed = MoveTarget.DesiredSpeed.Get();
             const float AcceptanceRadius = MoveTarget.SlackRadius;
-            const float AcceptanceRadiusSq = FMath::Square(AcceptanceRadius);
 
-            // Reset steering for this frame
-            Steering.DesiredVelocity = FVector::ZeroVector;
 
-            // 1. Check if already at the final destination
-            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= AcceptanceRadiusSq)
+            
+            if (CharFrag.bIsFlying)
             {
-                if (PathFrag.HasValidPath() || PathFrag.bIsPathfindingInProgress) // Also reset if pathfinding was in progress
+                // --- FLYING UNIT LOGIC ---
+                // Flying units ignore navmesh and move directly to the target.
+                if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadius))
                 {
-                     PathFrag.ResetPath();
-                     PathFrag.bIsPathfindingInProgress = false; // Ensure flag is cleared
+                    //FinalDestination.Z += CharFrag.FlyHeight;
+                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
                 }
-
-                // Signal Idle only if not already Idle potentially
-                /*
-                UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-                if (SignalSubsystem)
-                {
-                     SignalSubsystem->SignalEntity(UnitSignals::Idle, Entity); // Use your actual signal name
-                }
-                */
-                continue; // Stop processing movement for this entity
+                // Pathing and ground logic is skipped entirely for flying units.
+                continue; 
             }
 
-            // 2. Manage Path Request
-            // Need a new path if: No valid path exists AND path target is wrong AND no pathfinding is currently running
-            bool bNeedsNewPath = (!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress;
 
-            if (bNeedsNewPath)
+            // --- GROUND UNIT LOGIC (existing code) ---
+            // State 1: Unit has arrived at its destination.
+            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
             {
-                // Set the flag immediately to prevent requests on subsequent frames
+                PathFrag.ResetPath();
+                PathFrag.bIsPathfindingInProgress = false;
+                // Steering is already zero, so unit will stop.
+            }
+            // State 2: Unit needs a new path.
+            else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
+            {
                 PathFrag.bIsPathfindingInProgress = true;
-                PathFrag.PathTargetLocation = FinalDestination; // Store intended target
-                // Request pathfinding asynchronously
-                RequestPathfindingAsync(Entity, CurrentLocation, FinalDestination); // Pass necessary info
-            }
+                PathFrag.PathTargetLocation = FinalDestination;
 
-            // 3. Follow Existing Path (if available)
-            FVector CurrentTargetPoint = FinalDestination; // Default to final goal if no path points
-            if (PathFrag.HasValidPath())
+                FNavLocation ProjectedDestinationLocation;
+                if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
+                {
+                    // The destination is on the navmesh. Now check if our current location is.
+                    FNavLocation ProjectedStartLocation;
+                    if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
+                    {
+                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
+                    }
+                    else
+                    {
+                        FVector MoveDir = (ProjectedDestinationLocation.Location - CurrentLocation).GetSafeNormal();
+                        Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                        PathFrag.bIsPathfindingInProgress = false; // We are not pathfinding, just steering.
+                    }
+                }
+                else
+                {
+                    // SUGGESTION: Add a log here to confirm this code is running!
+                    //UE_LOG(LogTemp, Warning, TEXT("Entity %d: Target %s is unreachable."), Entity.Index, *FinalDestination.ToString());
+                    
+                    MoveTarget.Center = CurrentLocation;
+                    PathFrag.bIsPathfindingInProgress = false;
+                    PathFrag.ResetPath();
+                }
+            }
+            // State 3: Unit is waiting for a path to be generated.
+            else if (PathFrag.bIsPathfindingInProgress)
             {
-                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
-                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex)) // Check if index is valid
-                 {
-                     CurrentTargetPoint = PathPoints[PathFrag.CurrentPathPointIndex].Location;
-
-                     // Check if the current waypoint is reached
-                     const float WaypointAcceptanceRadiusSq = FMath::Square(PathWaypointAcceptanceRadius); // Use defined radius
-                     if (FVector::DistSquared(CurrentLocation, CurrentTargetPoint) <= WaypointAcceptanceRadiusSq)
-                     {
-                         PathFrag.CurrentPathPointIndex++;
-                         // Check if we reached the end of the path points
-                         if (!PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
-                         {
-                             // Reached end of calculated path points, but maybe not final destination yet
-                             // Continue towards final destination. A new path might be requested next frame if needed.
-                             CurrentTargetPoint = FinalDestination;
-                              PathFrag.ResetPath(); // Reset path progress, keep PathTargetLocation
-                                                    // Keep bIsPathfindingInProgress as is (should be false here)
-                         }
-                         else
-                         {
-                             // Move to next point
-                             CurrentTargetPoint = PathPoints[PathFrag.CurrentPathPointIndex].Location;
-                         }
-                     }
-                 }
-                 else // Invalid index, path is broken somehow
-                 {
-                    PathFrag.ResetPath(); // Reset path progress
-                    CurrentTargetPoint = FinalDestination;
-                    // Keep bIsPathfindingInProgress as is
-                 }
+                // Do nothing. Unit stands still while waiting.
             }
-            // If !PathFrag.HasValidPath(), CurrentTargetPoint remains FinalDestination
-
-            // 4. Calculate Steering towards CurrentTargetPoint
-            FVector MoveDir = CurrentTargetPoint - CurrentLocation;
-            if (!MoveDir.IsNearlyZero(0.1f)) // Use a small tolerance
+            // State 4: Unit has a valid path and is following it.
+            else if (PathFrag.HasValidPath())
             {
-                MoveDir.Normalize();
-                Steering.DesiredVelocity = MoveDir * DesiredSpeed;
-            }
+                const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
+                
+                if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
+                {
+                    if (FVector::DistSquared(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
+                    {
+                        PathFrag.CurrentPathPointIndex++;
+                    }
+                }
 
-            //UE_LOG(LogTemp, Log, TEXT("Entity [%d] MovementIntent: DesiredVelocity = %s"),
-              //Entity.Index, *Steering.DesiredVelocity.ToString());
-            // If MoveDir is zero (e.g., exactly at CurrentTargetPoint), DesiredVelocity remains ZeroVector
-        } // End loop through entities
-    }); // End ForEachEntityChunk
+                if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
+                {
+                    FVector MoveDir = (PathPoints[PathFrag.CurrentPathPointIndex].Location - CurrentLocation).GetSafeNormal();
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                }
+                else
+                {
+                    PathFrag.ResetPath();
+                    // Fall through to the final 'else' which will handle the last leg of the journey.
+                }
+            }
+            
+            // FINAL FIX: This is now the FINAL 'else', ensuring it only runs if ALL other conditions fail.
+            // State 5: Fallback - No path and not waiting, so move directly to the destination.
+            else
+            {
+                 FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
+                 if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
+                 {
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                 }
+            }
+        }
+    });
 }
+
 
 void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation)
 {
@@ -222,7 +232,6 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     if (!NavSystem)
     {
-        // Use the deferred command pattern for the helper function as well
         ResetPathfindingFlagDeferred(Entity);
         return;
     }
@@ -246,7 +255,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, EndLocation, World]() mutable
+            [Entity, PathResult, World]() mutable // Note: EndLocation is no longer needed in this capture list
         {
             // --- Runs back on the Game Thread ---
             if (!World) return;
@@ -261,12 +270,8 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                 return;
             }
 
-            // =================================================================
-            // VVVV CRITICAL CHANGE HERE VVVV
-            // =================================================================
-            // Instead of modifying the pointer directly, push a deferred command.
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation](FMassEntityManager& System)
+                [Entity, PathResult](FMassEntityManager& System) // Note: EndLocation is no longer needed in this capture list
                 {
                     // This lambda now runs at a safe time.
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
@@ -276,8 +281,11 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
                         {
                             PathFrag->CurrentPath = PathResult.Path;
-                            PathFrag->CurrentPathPointIndex = 1; 
-                            PathFrag->PathTargetLocation = EndLocation;
+                            PathFrag->CurrentPathPointIndex = 1;
+
+                            // CRITICAL FIX: DO NOT UPDATE PathTargetLocation HERE.
+                            // Updating it to the projected location was causing an infinite loop
+                            // because it would no longer match the original target from the MoveTargetFragment.
                         }
                         else
                         {
@@ -285,9 +293,6 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         }
                     }
                 });
-            // =================================================================
-            // ^^^^ CRITICAL CHANGE HERE ^^^^
-            // =================================================================
         });
     });
 }
@@ -309,120 +314,3 @@ void UUnitMovementProcessor::ResetPathfindingFlagDeferred(FMassEntityHandle Enti
              }
          });
 }
-
-/*
-
-void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation)
-{
-    UWorld* World = GetWorld(); // Get World from Processor context
-    if (!World) return;
-
-    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
-    if (!NavSystem)
-    {
-        // Failed to get NavSystem, need to reset the flag on the entity
-        ResetPathfindingFlag(Entity);
-        return;
-    }
-
-    ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate);
-    if (!NavData)
-    {
-        // Failed to get NavData, need to reset the flag on the entity
-        ResetPathfindingFlag(Entity);
-        return;
-    }
-
-    // Consider caching the filter if it's static or retrieving it based on entity type
-    FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
-    // --- Capture necessary data for the async task ---
-    // Capture by value where possible, especially for data used across threads.
-    // Shared pointers (like QueryFilter, NavPath) are thread-safe reference counted.
-    // Entity handle is just an ID.
-
-    AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, // Or another appropriate thread pool
-        [NavSystem, NavData, QueryFilter, Entity, StartLocation, EndLocation, World] () mutable // Capture necessary vars
-    {
-        // --- Runs on a Background Thread ---
-        FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, QueryFilter);
-        Query.SetAllowPartialPaths(true); // Or false, depending on requirements
-
-        // FindPathSync will block THIS background thread, not the game thread
-        FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
-        //FPathFindingResult PathResult = NavSystem->FindPathSync(Query);
-        // --- Pathfinding Complete - Schedule result application back on Game Thread ---
-        AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, EndLocation, World]() mutable // Capture result and entity handle
-        {
-            // --- Runs back on the Game Thread ---
-            if (!World) return; // World might become invalid
-
-                UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-                if (!EntitySubsystem) 
-                {
-                    return; // Subsystem missing
-                }
-
-
-             FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-
-                if (!EntityManager.IsEntityValid(Entity))
-                {
-                    // Entity is no longer valid, nothing to do
-                    return; 
-                }
-                
-             FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity);
-
-             if (!PathFrag)
-             {
-                 // Fragment removed, nothing to do
-                 return;
-             }
-
-            // --- Apply Path Result ---
-            PathFrag->bIsPathfindingInProgress = false; // Reset flag regardless of success/failure
-
-            if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
-            {
-                PathFrag->CurrentPath = PathResult.Path;
-                PathFrag->CurrentPathPointIndex = 1; // Start moving towards the second point
-                PathFrag->PathTargetLocation = EndLocation; // Confirm the target this path was for
-                 // UE_LOG(LogTemp, Log, TEXT("Entity %d: Async path found successfully."), Entity.Index);
-            }
-            else
-            {
-                // Pathfinding failed or resulted in an invalid path
-                PathFrag->ResetPath(); // Clear any old path data
-                 // Keep PathTargetLocation as it might be used to retry pathfinding
-                 // UE_LOG(LogTemp, Warning, TEXT("Entity %d: Async pathfinding failed or path invalid."), Entity.Index);
-                 // Maybe signal a specific state here if needed
-            }
-        }); // End Game Thread AsyncTask Lambda
-    }); // End Background Thread AsyncTask Lambda
-}
-
-// Helper function to reset the flag if async task cannot even start
-void UUnitMovementProcessor::ResetPathfindingFlag(FMassEntityHandle Entity)
-{
-     UWorld* World = GetWorld();
-     if (!World) return;
-     //UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-      if (!EntitySubsystem) return;
-
-      FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-
-
-        if (!EntityManager.IsEntityValid(Entity))
-        {
-            // Entity is no longer valid, nothing to do
-            return; 
-        }
-    
-      FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity);
-      if (PathFrag)
-      {
-          PathFrag->bIsPathfindingInProgress = false;
-      }
-}
-*/

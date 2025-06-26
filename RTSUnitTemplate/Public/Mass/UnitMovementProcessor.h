@@ -32,6 +32,9 @@ protected:
     // Execute is called during the processing phase and applies the logic on each entity chunk.
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
+    UPROPERTY(EditAnywhere, Category = "Navigation")
+    FVector NavMeshProjectionExtent = FVector(100.0f, 100.0f, 500.0f);
+    
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
 

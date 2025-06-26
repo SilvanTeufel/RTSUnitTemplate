@@ -107,7 +107,7 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         return;
     }
 
-    if (!GameMode->IsPathfindingRdy()) return;
+    //if (!GameMode->IsPathfindingRdy()) return;
     
     UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
     if (!NavSys) return;

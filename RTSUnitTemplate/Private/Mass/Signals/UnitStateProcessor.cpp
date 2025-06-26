@@ -2642,8 +2642,11 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
 					if (!NavSys) { continue; }
 
-					PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
-					SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+					if (IsValid(Unit->NextWaypoint))
+					{
+						PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
+						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+					}
 				}
 
 				StateFrag.CanMove = Unit->CanMove;
