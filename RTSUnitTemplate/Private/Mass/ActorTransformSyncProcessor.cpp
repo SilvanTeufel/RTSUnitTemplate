@@ -52,7 +52,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
     //EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
     //EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
-    
+
+    EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
@@ -101,7 +102,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
-
             // The Mass simulation continues even for off-screen entities. 
             // We trust the simulation and just sync the result, regardless of visibility.
             // The IsNetVisible() check and timer logic have been removed as they were causing the issue.

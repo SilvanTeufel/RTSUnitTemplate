@@ -786,6 +786,13 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	if (StrongUnitActor && AIStateFragment)
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
+        		if (AIStateFragment->CanMove)
+        		{
+        			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
+        		}else if(!AIStateFragment->CanMove)
+        		{
+        			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
+        		}
         		AIStateFragment->CanDetect = StrongUnitActor->CanDetect;
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
         	}

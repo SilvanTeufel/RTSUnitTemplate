@@ -51,6 +51,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 	// Tag requirements
 	//EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< Only Moves on Screen
+	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
@@ -86,7 +87,6 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
             const FMassSteeringFragment& Steering = SteeringList[EntityIndex]; 
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
-
             // --- NEU: Vertikale Geschwindigkeit sichern und alle Berechnungen in 2D durchführen ---
 
             // 1. Sichere die aktuelle Z-Geschwindigkeit. Diese wollen wir unberührt lassen.
