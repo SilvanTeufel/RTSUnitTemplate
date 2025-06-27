@@ -324,9 +324,16 @@ void UMassActorBindingComponent::InitMovementFragments(FMassEntityManager& Entit
     FMassVelocityFragment& Vel = EntityManager.GetFragmentDataChecked<FMassVelocityFragment>(Handle);
     Vel.Value = GetOwner()->GetVelocity();
 
+	AUnitBase* Unit = Cast<AUnitBase>(MyOwner);
     // MoveTarget
+	
     FMassMoveTargetFragment& MT = EntityManager.GetFragmentDataChecked<FMassMoveTargetFragment>(Handle);
     MT.Center = GetOwner()->GetActorLocation();
+
+	if (Unit)
+	{
+		MT.SlackRadius = Unit->StopRunTolerance;
+	}
     MT.DistanceToGoal = 0.f;
     MT.DesiredSpeed.Set(0.f);
     MT.IntentAtGoal = EMassMovementAction::Stand;

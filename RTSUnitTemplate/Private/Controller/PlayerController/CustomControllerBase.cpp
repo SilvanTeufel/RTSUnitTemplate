@@ -610,262 +610,6 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     bool bShouldRecalculate = bForceFormationRecalculation;
     if (!bShouldRecalculate)
     {
-        if (SelectedUnits.Num() != LastFormationUnits.Num())
-        {
-            bShouldRecalculate = true;
-        }
-        else
-        {
-            TSet<TWeakObjectPtr<AUnitBase>> LastSet(LastFormationUnits);
-            for (AUnitBase* Unit : SelectedUnits)
-            {
-                if (!LastSet.Contains(Unit))
-                {
-                    bShouldRecalculate = true;
-                    break;
-                }
-            }
-        }
-    }
-    
-    // --- 3. RECALCULATE FORMATION (IF REQUIRED) ---
-    if (bShouldRecalculate)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Recalculating Formation with Hungarian assignment..."));
-
-        UnitFormationOffsets.Empty();
-        LastFormationUnits.Empty();
-        
-        const int32 GridSize = ComputeGridSize(NumUnits);
-        const float GridHalfSize = (GridSize - 1) * GridSpacing / 2.0f;
-        const FVector GridCenterOffset = FVector(GridHalfSize, GridHalfSize, 0.f);
-
-        // Compute ideal slot offsets
-        TArray<FVector> SlotOffsets;
-        SlotOffsets.Reserve(NumUnits);
-        for (int32 i = 0; i < NumUnits; ++i)
-        {
-            int32 Row = i / GridSize;
-            int32 Col = i % GridSize;
-            FVector Off = FVector(Col * GridSpacing, Row * GridSpacing, 0.f) - GridCenterOffset;
-            SlotOffsets.Add(Off);
-        }
-        
-        // Gather current unit positions
-        TArray<FVector> UnitPositions;
-        UnitPositions.Reserve(NumUnits);
-        for (AUnitBase* Unit : SelectedUnits)
-        {
-            UnitPositions.Add(GetUnitWorldLocation(Unit));
-        }
-        
-        // Build cost matrix (squared distances)
-        const int32 N = NumUnits;
-        TArray<TArray<float>> Cost;
-        Cost.SetNum(N);
-        for (int32 i = 0; i < N; ++i)
-        {
-            Cost[i].SetNum(N);
-            for (int32 j = 0; j < N; ++j)
-            {
-                FVector TargetPos = Hit.Location + SlotOffsets[j];
-                Cost[i][j] = FVector::DistSquared(UnitPositions[i], TargetPos);
-            }
-        }
-
-        // Hungarian algorithm to solve min-cost assignment
-        auto Hungarian = [&](const TArray<TArray<float>>& matrix)
-        {
-            int n = matrix.Num();
-            TArray<float> u; u.Init(0.0f, n+1);
-            TArray<float> v; v.Init(0.0f, n+1);
-            TArray<int32> p; p.Init(0, n+1);
-            TArray<int32> way; way.Init(0, n+1);
-
-            for (int i = 1; i <= n; ++i)
-            {
-                p[0] = i;
-                float j0 = 0;
-                TArray<float> minv; minv.Init(FLT_MAX, n+1);
-                TArray<bool> used; used.Init(false, n+1);
-                do
-                {
-                    used[j0] = true;
-                    int i0 = p[j0];
-                    float delta = FLT_MAX;
-                    float j1 = 0;
-                    for (int j = 1; j <= n; ++j)
-                    {
-                        if (!used[j])
-                        {
-                            float cur = matrix[i0-1][j-1] - u[i0] - v[j];
-                            if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
-                            if (minv[j] < delta) { delta = minv[j]; j1 = j; }
-                        }
-                    }
-                    for (int j = 0; j <= n; ++j)
-                    {
-                        if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
-                        else { minv[j] -= delta; }
-                    }
-                    j0 = j1;
-                }
-                while (p[j0] != 0);
-
-                do
-                {
-                    int j1 = way[j0];
-                    p[j0] = p[j1];
-                    j0 = j1;
-                }
-                while (j0);
-            }
-
-            TArray<int32> assignment; assignment.SetNum(n);
-            for (int j = 1; j <= n; ++j)
-            {
-                if (p[j] > 0)
-                    assignment[p[j]-1] = j-1;
-            }
-            return assignment;
-        };
-
-        // Compute assignment and store offsets
-        TArray<int32> Assignment = Hungarian(Cost);
-        for (int32 i = 0; i < N; ++i)
-        {
-            AUnitBase* Unit = SelectedUnits[i];
-            int32 SlotIndex = Assignment[i];
-            UnitFormationOffsets.Add(Unit, SlotOffsets[SlotIndex]);
-            LastFormationUnits.Add(Unit);
-        }
-
-        bForceFormationRecalculation = false;
-    }
-
-    // --- 4. GENERATE FINAL ASSIGNMENTS USING THE STORED FORMATION ---
-    TMap<AUnitBase*, FVector> FinalAssignments;
-    FVector TargetCentroid = Hit.Location;
-
-    for (AUnitBase* Unit : SelectedUnits)
-    {
-        if (Unit)
-        {
-            const FVector* Offset = UnitFormationOffsets.Find(Unit);
-            FinalAssignments.Add(Unit, TargetCentroid + (Offset ? *Offset : FVector::ZeroVector));
-        }
-    }
-    
-    // --- 5. ISSUE MOVE COMMANDS ---
-    for (const TPair<AUnitBase*, FVector>& AssignmentPair : FinalAssignments)
-    {
-        AUnitBase* Unit = AssignmentPair.Key;
-        FVector RunLocation = AssignmentPair.Value;
-
-        if (Unit && Unit != CameraUnitWithTag && Unit->UnitState != UnitData::Dead)
-        {
-            bool HitNavModifier;
-            RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
-            if (HitNavModifier) continue;
-            
-            float Speed = Unit->Attributes->GetBaseRunSpeed();
-       
-            if (SetBuildingWaypoint(RunLocation, Unit, BWaypoint, PlayWaypointSound))
-            {
-                PlayWaypointSound = true;
-            }
-            else if (IsShiftPressed)
-            {
-                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-                if (!Unit->IsInitialized || !Unit->CanMove) continue;
-       
-                if (Unit->bIsMassUnit)
-                {
-                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
-                    SetUnitState_Replication(Unit, 1);
-                }
-                else
-                {
-                    RightClickRunShift(Unit, RunLocation);
-                }
-                PlayRunSound = true;
-            }
-            else
-            {
-                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-                if (!Unit->IsInitialized || !Unit->CanMove) continue;
-
-                if (Unit->bIsMassUnit)
-                {
-                    CorrectSetUnitMoveTarget(GetWorld(), Unit, RunLocation, Speed, 40.f);
-                    SetUnitState_Replication(Unit, 1);
-                }
-                else if (UseUnrealEnginePathFinding)
-                {
-                    RightClickRunUEPF(Unit, RunLocation, true);
-                }
-                else
-                {
-                    RightClickRunDijkstraPF(Unit, RunLocation, -1);
-                }
-                PlayRunSound = true;
-            }
-        }
-    }
-    
-    // --- 6. SOUND LOGIC ---
-    if (WaypointSound && PlayWaypointSound)
-    {
-       UGameplayStatics::PlaySound2D(this, WaypointSound);
-    }
-
-    if (RunSound && PlayRunSound)
-    {
-       const float CurrentTime = GetWorld()->GetTimeSeconds();
-       if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime)
-       {
-          UGameplayStatics::PlaySound2D(this, RunSound);
-          LastRunSoundTime = CurrentTime;
-       }
-    }
-}
-*/
-
-
-/*
-void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
-{
-    // --- 1. INITIAL SETUP & VALIDATION ---
-    int32 NumUnits = SelectedUnits.Num();
-    if (NumUnits == 0) return;
-
-    AWaypoint* BWaypoint = nullptr;
-    bool PlayWaypointSound = false;
-    bool PlayRunSound = false;
-
-    // Helper lambda to get a unit's world location, whether it's a regular actor or an ISM instance.
-    auto GetUnitWorldLocation = [](const AUnitBase* Unit) -> FVector
-    {
-        if (!Unit) return FVector::ZeroVector;
-        if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
-        {
-            return Unit->GetActorLocation();
-        }
-        else
-        {
-            FTransform InstanceTransform;
-            if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
-            {
-                return InstanceTransform.GetLocation();
-            }
-        }
-        return FVector::ZeroVector; // Fallback
-    };
-    
-    // --- 2. CHECK IF FORMATION NEEDS RECALCULATION ---
-    bool bShouldRecalculate = bForceFormationRecalculation;
-    if (!bShouldRecalculate)
-    {
         // Check if the number of units has changed.
         if (SelectedUnits.Num() != LastFormationUnits.Num())
         {
@@ -1332,6 +1076,148 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
 void ACustomControllerBase::LeftClickPressedMass()
 {
+    LeftClickIsPressed = true;
+    AbilityArrayIndex = 0;
+
+    if (!CameraBase || CameraBase->TabToggled) return;
+
+    // --- ALT: cancel / destroy area ---
+    if (AltIsPressed)
+    {
+        DestroyWorkArea();
+        for (AUnitBase* U : SelectedUnits)
+        {
+            CancelAbilitiesIfNoBuilding(U);
+        }
+    }
+    // --- ATTACK GRID MODE ---
+    else if (AttackToggled)
+    {
+        // 1) get world hit under cursor
+        FHitResult Hit;
+        GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+        int32 NumUnits = SelectedUnits.Num();
+        if (NumUnits == 0) return;
+
+        // 2) precompute grid offsets
+        TArray<FVector> Offsets = ComputeSlotOffsets(NumUnits);
+
+        AWaypoint* BWaypoint = nullptr;
+        bool PlayWaypointSound = false;
+        bool PlayAttackSound   = false;
+
+        // 3) issue each unit
+        for (int32 i = 0; i < NumUnits; ++i)
+        {
+            AUnitBase* U = SelectedUnits[i];
+            if (U == nullptr || U == CameraUnitWithTag) continue;
+
+            // apply the same slot-by-index approach
+            FVector RunLocation = Hit.Location + Offsets[i];
+
+            bool bNavMod;
+            RunLocation = TraceRunLocation(RunLocation, bNavMod);
+            if (bNavMod) continue;
+
+            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+            {
+                // waypoint placed
+            }
+            else
+            {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+
+                if (U->bIsMassUnit)
+                {
+                    LeftClickAttackMass(U, RunLocation, AttackToggled);
+                }
+                else
+                {
+                    LeftClickAttack(U, RunLocation);
+                }
+
+                PlayAttackSound = true;
+            }
+
+            // still fire any dragged ability on each unit
+            FireAbilityMouseHit(U, Hit);
+        }
+
+        AttackToggled = false;
+
+        // 4) play sounds
+        if (WaypointSound && PlayWaypointSound)
+        {
+            UGameplayStatics::PlaySound2D(this, WaypointSound);
+        }
+        if (AttackSound && PlayAttackSound)
+        {
+            UGameplayStatics::PlaySound2D(this, AttackSound);
+        }
+    }
+    // --- NORMAL CLICK / SELECTION / ABILITIES ---
+    else
+    {
+        DropWorkArea();
+
+        // handle any ability under the cursor
+        FHitResult HitPawn;
+        GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+
+        bool AbilityFired   = false;
+        bool AbilityUnSynced = false;
+        for (AUnitBase* U : SelectedUnits)
+        {
+            if (U && U->CurrentSnapshot.AbilityClass && U->CurrentDraggedAbilityIndicator)
+            {
+                FireAbilityMouseHit(U, HitPawn);
+                AbilityFired = true;
+            }
+            else
+            {
+                AbilityUnSynced = true;
+            }
+        }
+        if (AbilityFired && !AbilityUnSynced)
+        {
+            return;
+        }
+
+        // if we hit a pawn, try to select it
+        if (HitPawn.bBlockingHit && HUDBase)
+        {
+            AActor* HitActor = HitPawn.GetActor();
+            if (!HitActor->IsA(ALandscape::StaticClass()))
+                ClickedActor = HitActor;
+            else
+                ClickedActor = nullptr;
+
+            AUnitBase* HitUnit = Cast<AUnitBase>(HitActor);
+            ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
+
+            if (HitUnit && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
+            {
+                HUDBase->DeselectAllUnits();
+                HUDBase->SetUnitSelected(HitUnit);
+                DragUnitBase(HitUnit);
+
+                if (CameraBase->AutoLockOnSelect)
+                    LockCameraToUnit = true;
+            }
+            else
+            {
+                HUDBase->InitialPoint = HUDBase->GetMousePos2D();
+                HUDBase->bSelectFriendly = true;
+            }
+        }
+    }
+}
+
+
+/*
+void ACustomControllerBase::LeftClickPressedMass()
+{
 	LeftClickIsPressed = true;
 	AbilityArrayIndex = 0;
 	
@@ -1458,7 +1344,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 	}
 	
 }
-
+*/
 void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerformanceUnit* Unit, bool bVisible)
 {
 	if (IsValid(Unit))

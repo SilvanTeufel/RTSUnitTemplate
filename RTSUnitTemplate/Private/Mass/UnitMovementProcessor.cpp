@@ -56,7 +56,8 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
     EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
     EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
-
+    EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
+    
     //EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
     //EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any); 
     //EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::Any);
@@ -172,8 +173,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 else
                 {
                     // SUGGESTION: Add a log here to confirm this code is running!
-                    //UE_LOG(LogTemp, Warning, TEXT("Entity %d: Target %s is unreachable."), Entity.Index, *FinalDestination.ToString());
-                    
+                    UE_LOG(LogTemp, Warning, TEXT("Entity %d: Target %s is unreachable."), Entity.Index, *FinalDestination.ToString());
                     MoveTarget.Center = CurrentLocation;
                     PathFrag.bIsPathfindingInProgress = false;
                     PathFrag.ResetPath();
@@ -204,6 +204,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 }
                 else
                 {
+                    UE_LOG(LogTemp, Warning, TEXT("Reset Path."));
                     PathFrag.ResetPath();
                     // Fall through to the final 'else' which will handle the last leg of the journey.
                 }
