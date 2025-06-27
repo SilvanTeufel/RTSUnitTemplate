@@ -128,35 +128,49 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             // Use a wider search area for the trace start to be more robust
             FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, FinalLocation.Z + 1000.0f);
             FVector TraceEnd = FVector(FinalLocation.X, FinalLocation.Y, FinalLocation.Z - 2000.0f);
-            
-            if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+
+
+       
+            FVector CurrentActorLocation = UnitBase->GetActorLocation();
+
+            if (!UnitBase->bUseSkeletalMovement)
             {
-                if (!CharList[i].bIsFlying)
-                {
-                    CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
-                    FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
-                }
-                else // Flying unit logic
-                {
-                    float TargetZ = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
-                    // Smoothly interpolate to the new target flight height
-                    FinalLocation.Z = FMath::FInterpTo(FinalLocation.Z, TargetZ, ActualDeltaTime, VerticalInterpSpeed);
-                    CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
-                }
-            }
-            else
-            {
-                // If trace fails, fallback to last known good location to prevent falling through the world
-                if (!CharList[i].bIsFlying)
-                {
-                    FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
-                }
-                else
-                {
-                    FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
-                }
+                FTransform InstanceTransform;
+                UnitBase->ISMComponent->GetInstanceTransform(UnitBase->InstanceIndex, InstanceTransform, true);
+                CurrentActorLocation = InstanceTransform.GetLocation();
             }
             
+             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+             {
+                 AActor* HitActor = Hit.GetActor();
+                    
+                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
+                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset && !CharList[i].bIsFlying)
+                 {
+                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
+
+                     FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+                 }else if (!CharList[i].bIsFlying)
+                 {
+                     FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
+                 }else if (IsValid(HitActor) && CharList[i].bIsFlying)
+                 {
+                     //if (!UnitBase->bUseSkeletalMovement)
+                     //{
+                     float CurrentZ = CurrentActorLocation.Z; //CharList[i].LastGroundLocation + CharList[i].FlyHeight;
+                     float TargetZ = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
+                     FinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed*100.f);
+         
+                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
+                 }
+               }else
+               {
+                   if (CharList[i].bIsFlying)
+                        FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
+                   else
+                       FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
+               }
+
             // --- Rotation Logic ---
             const FVector& CurrentVelocity = VelocityList[i].Value;
             FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation

@@ -77,6 +77,29 @@ public:
 	void RightClickPressedMass();
 
 
+	/** Returns the world location of a unit, handling Actor vs. ISM-instance. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	FVector GetUnitWorldLocation(const AUnitBase* Unit) const;
+	
+	/** Computes offsets for an N-unit grid formation centered at (0,0). */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	TArray<FVector> ComputeSlotOffsets(int32 NumUnits) const;
+	/** Builds an N×N cost matrix of squared distances from unitsto slots. */
+	TArray<TArray<float>> BuildCostMatrix(
+		const TArray<FVector>& UnitPositions,
+		const TArray<FVector>& SlotOffsets,
+		const FVector& TargetCenter) const;
+	
+	/** Solves the assignment problem (Hungarian) on the given cost matrix. */
+	TArray<int32> SolveHungarian(const TArray<TArray<float>>& Matrix) const;
+	/** Determines if the formation needs to be recalculated. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool ShouldRecalculateFormation() const;
+	
+	/** Recalculates and stores unit formation offsets around TargetCenter. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RecalculateFormation(const FVector& TargetCenter);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypointsMass(FHitResult Hit);
 
