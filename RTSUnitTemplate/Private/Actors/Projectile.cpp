@@ -59,7 +59,7 @@ void AProjectile::OnConstruction(const FTransform& Transform)
 
 		// Create a new transform based on the actor's spawn transform, but with our custom scale.
 		FTransform NewInstanceTransform = Transform;
-		NewInstanceTransform.SetScale3D(ProjectileScale); // Use the scale variable
+		NewInstanceTransform.SetScale3D(ScaleISM); // Use the scale variable
 
 		
 		InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, /*bWorldSpace=*/true);
@@ -326,7 +326,7 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 		const FQuat FinalWorldRotation = NewTransform.GetRotation() * Niagara_A_Start_Transform.GetRotation();
        
 		// Create the final transform
-		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, NewTransform.GetScale3D());
+		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, Niagara_A_Start_Transform.GetScale3D());
 
 		// Set the final transform on the Niagara component
 		Niagara_A->SetWorldTransform(FinalWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
@@ -348,7 +348,7 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 		const FQuat FinalWorldRotation = NewTransform.GetRotation() * Niagara_B_Start_Transform.GetRotation();
        
 		// Create the final transform
-		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, NewTransform.GetScale3D());
+		const FTransform FinalWorldTransform(FinalWorldRotation, FinalWorldLocation, Niagara_B_Start_Transform.GetScale3D());
 
 		// Set the final transform on the Niagara component
 		Niagara_B->SetWorldTransform(FinalWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);

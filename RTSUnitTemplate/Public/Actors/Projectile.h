@@ -31,7 +31,7 @@ public:
 	float TickInterval = 0.025f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector ProjectileScale = FVector(0.5, 0.5, 0.5);
+	FVector ScaleISM = FVector(0.5, 0.5, 0.5);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;
@@ -115,6 +115,7 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_B_Start_Transform;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraSystem* ImpactVFX;
 	

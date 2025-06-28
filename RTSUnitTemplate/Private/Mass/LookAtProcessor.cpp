@@ -36,6 +36,8 @@ void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& En
     //EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
     //EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadOnly);
 
+    //EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);

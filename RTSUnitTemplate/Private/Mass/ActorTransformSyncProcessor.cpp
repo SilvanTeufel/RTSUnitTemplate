@@ -89,7 +89,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
+        [this, ActualDeltaTime, &PendingActorUpdates, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
@@ -176,37 +176,44 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                        FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
                }
 
-            // --- Rotation Logic ---
-            const FVector& CurrentVelocity = VelocityList[i].Value;
-            FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation
-
-            if (CharList[i].RotatesToMovement && !CurrentVelocity.IsNearlyZero(0.1f))
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            if (!DoesEntityHaveTag(EntityManager,Entity, FMassStateAttackTag::StaticStruct()) &&
+                !DoesEntityHaveTag(EntityManager,Entity, FMassStatePauseTag::StaticStruct()))
             {
-                FVector LookAtDir = CurrentVelocity;
-                LookAtDir.Z = 0.f; // Flatten to XY plane for ground units
-                if (LookAtDir.Normalize())
-                {
-                    DesiredQuat = LookAtDir.ToOrientationQuat();
-                }
-            }
-            
-            // --- Interpolation and Transform Update ---
-            const float RotationSpeedRad = FMath::DegreesToRadians(StatsList[i].RotationSpeed * CharList[i].RotationSpeed);
-            FQuat NewQuat = MassTransform.GetRotation();
+                // --- Rotation Logic ---
+                const FVector& CurrentVelocity = VelocityList[i].Value;
+                FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation
 
-            if (CharList[i].RotatesToMovement)
-            {
-                if (RotationSpeedRad > KINDA_SMALL_NUMBER)
+                if (CharList[i].RotatesToMovement && !CurrentVelocity.IsNearlyZero(0.1f))
                 {
-                    NewQuat = FMath::QInterpConstantTo(MassTransform.GetRotation(), DesiredQuat, ActualDeltaTime, RotationSpeedRad);
+                    FVector LookAtDir = CurrentVelocity;
+                    LookAtDir.Z = 0.f; // Flatten to XY plane for ground units
+                    if (LookAtDir.Normalize())
+                    {
+                        DesiredQuat = LookAtDir.ToOrientationQuat();
+                    }
                 }
-                else
-                {
-                    NewQuat = DesiredQuat; // Instant rotation
-                }
-            }
             
-            MassTransform.SetRotation(NewQuat);
+                // --- Interpolation and Transform Update ---
+                const float RotationSpeedRad = FMath::DegreesToRadians(StatsList[i].RotationSpeed * CharList[i].RotationSpeed);
+                FQuat NewQuat = MassTransform.GetRotation();
+
+                if (CharList[i].RotatesToMovement)
+                {
+                    if (RotationSpeedRad > KINDA_SMALL_NUMBER)
+                    {
+                        NewQuat = FMath::QInterpConstantTo(MassTransform.GetRotation(), DesiredQuat, ActualDeltaTime, RotationSpeedRad);
+                    }
+                    else
+                    {
+                        NewQuat = DesiredQuat; // Instant rotation
+                    }
+                }
+          
+                MassTransform.SetRotation(NewQuat);
+            }
+
+            
             MassTransform.SetLocation(FinalLocation);
             
             // The FinalActorTransform is now the same as the MassTransform we just calculated
