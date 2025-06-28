@@ -44,18 +44,19 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
     EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
     EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
     EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
     
     EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 
-    //EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
-    //EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
+    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
 
     EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
-    EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
-    EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
+    //EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 
     EntityQuery.RegisterWithProcessor(*this); // Important!

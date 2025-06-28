@@ -155,7 +155,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	    case UnitData::Idle:
 		    {
 			    Defer.AddTag<FMassStateIdleTag>(EntityHandle);
-	    		if (StateFrag->CanDetect && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	    		if (StateFrag->CanAttack && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
 
@@ -182,14 +182,14 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	    case UnitData::PatrolRandom:
 		    {
 			    Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
-	    		if (StateFrag->CanDetect && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	    		if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
 
 	    case UnitData::PatrolIdle:
 		    {
 			    Defer.AddTag<FMassStatePatrolIdleTag>(EntityHandle);
-	    		if (StateFrag->CanDetect && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+	    		if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
 

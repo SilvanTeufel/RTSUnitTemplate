@@ -13,7 +13,10 @@ UCLASS()
 class RTSUNITTEMPLATE_API AExtendedControllerBase : public AWidgetController
 {
 	GENERATED_BODY()
-
+private:
+	/** Handle for the timer that logs entity tags after BeginPlay. */
+	FTimerHandle LogTagsTimerHandle;
+	
 public:
 
 	virtual void BeginPlay() override;
@@ -21,7 +24,11 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool LogSelectedEntity = false;
 	
+	void LogSelectedUnitsTags();
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

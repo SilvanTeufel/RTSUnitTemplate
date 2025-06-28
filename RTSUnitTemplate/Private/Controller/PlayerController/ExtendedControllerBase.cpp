@@ -13,11 +13,23 @@
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/MassActorBindingComponent.h"
 
 
 void AExtendedControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (LogSelectedEntity)
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+		  LogTagsTimerHandle, 
+		  this, 
+		  &AExtendedControllerBase::LogSelectedUnitsTags, 
+		  0.5f, 
+		  true 
+	  );
+	}
 }
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
@@ -27,6 +39,70 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Implementation(DeltaSeconds);
 	MoveAbilityIndicator_Implementation(DeltaSeconds);
+}
+
+void AExtendedControllerBase::LogSelectedUnitsTags()
+{
+	if (!LogSelectedEntity) return;
+    // Get the world, which is the entry point to all engine subsystems.
+    const UWorld* World = GetWorld();
+    if (!IsValid(World))
+    {
+        UE_LOG(LogTemp, Error, TEXT("LogSelectedUnitsTags: World is not valid."));
+        return;
+    }
+
+    // Access the Mass Entity Subsystem, which is the main manager for Mass entities.
+    const UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+    if (!EntitySubsystem)
+    {
+        UE_LOG(LogTemp, Error, TEXT("LogSelectedUnitsTags: UMassEntitySubsystem could not be found. Is the Mass plugin enabled and configured?"));
+        return;
+    }
+
+    // Get a reference to the EntityManager. This is used to interact with the underlying entity data.
+    const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
+
+    if (SelectedUnits.IsEmpty())
+    {
+        // It can be useful to know when the function runs but there's nothing to process.
+        // UE_LOG(LogTemp, Verbose, TEXT("LogSelectedUnitsTags: Called, but SelectedUnits array is empty."));
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("--- Logging Tags for %d Selected Units ---"), SelectedUnits.Num());
+
+    // Iterate over each pointer in the SelectedUnits array.
+    for (int32 Index = 0; Index < SelectedUnits.Num(); ++Index)
+    {
+        AUnitBase* SelectedUnit = SelectedUnits[Index];
+        if (!IsValid(SelectedUnit))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit at index %d is not valid."), Index);
+            continue; // Skip to the next element in the array.
+        }
+
+        // Each actor that is part of the Mass simulation should have a MassActorBindingsComponent.
+        const UMassActorBindingComponent* BindingsComponent = SelectedUnit->FindComponentByClass<UMassActorBindingComponent>();
+        if (!BindingsComponent)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit '%s' does not have a UMassActorBindingsComponent."), *SelectedUnit->GetName());
+            continue;
+        }
+
+        // Get the actual Mass Entity handle from the component.
+        const FMassEntityHandle Entity = BindingsComponent->GetMassEntityHandle();
+        if (!Entity.IsSet())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit '%s' has a binding component but does not have a valid Mass Entity."), *SelectedUnit->GetName());
+            continue;
+        }
+
+        // This is the core debug utility that prints the entity's tags.
+        UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("--- Finished Logging Tags ---"));
 }
 
 void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

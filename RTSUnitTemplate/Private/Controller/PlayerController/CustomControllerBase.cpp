@@ -205,7 +205,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	
 	if (AttackT)
 	{
-		if (AiStatePtr->CanDetect && AiStatePtr->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+		if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 	}else
 	{
 		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);

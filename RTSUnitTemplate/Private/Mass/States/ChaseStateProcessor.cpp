@@ -160,6 +160,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
+                StopMovement(MoveTarget, World);
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
                 // StopMovement modifies fragment directly, keep it here
@@ -170,11 +171,11 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             // --- Still Chasing (Out of Range) ---
             // **** NEW CODE: Calculate Offset ****
            // You might want to adjust Min/Max Radius based on unit size or target.
-           FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 300.0f);
+           FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
            FVector SlottedTargetLocation = TargetFrag.LastKnownLocation + ChaseOffset;
            // **********************************
-
-            UpdateMoveTarget(MoveTarget, SlottedTargetLocation, Stats.RunSpeed, World);
+            //SlottedTargetLocation
+            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
             // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
         }
     }); // End ForEachEntityChunk

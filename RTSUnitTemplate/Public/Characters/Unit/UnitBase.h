@@ -26,9 +26,6 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool CanDetect = true;
-
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool bIsMassUnit = false;
 	
@@ -181,7 +178,7 @@ public:
 	void SetWalkSpeed(float Speed);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunTolerance", Keywords = "RTSUnitTemplate StopRunTolerance"), Category = RTSUnitTemplate)
-		float StopRunTolerance = 50.f;
+		float StopRunTolerance = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunToleranceY", Keywords = "RTSUnitTemplate StopRunToleranceY"), Category = RTSUnitTemplate)
 		float StopRunToleranceForFlying = 100.f;

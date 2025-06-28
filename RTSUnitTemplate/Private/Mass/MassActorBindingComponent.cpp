@@ -594,7 +594,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             CombatStatsFrag->LoseSightRadius = LoseSightRadius;// We need to add this to Attributes i guess;
             CombatStatsFrag->PauseDuration = UnitOwner->PauseDuration;// We need to add this to Attributes i guess;
         	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
-        	CombatStatsFrag->bCanAttack = UnitOwner->CanAttack; // Assuming CanAttack() on Attributes
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
         	CombatStatsFrag->IsAttackedDuration = IsAttackedDuration;
         	CombatStatsFrag->CastTime = UnitOwner->CastTime;

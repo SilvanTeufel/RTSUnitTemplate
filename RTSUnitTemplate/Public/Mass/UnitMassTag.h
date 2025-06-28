@@ -235,7 +235,7 @@ struct FMassAIStateFragment : public FMassFragment
 	bool IsInitialized = true;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	bool CanDetect = true;
+	bool CanAttack = true;
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
 };
@@ -356,10 +356,6 @@ struct FMassCombatStatsFragment : public FMassFragment
     /** Dauer der Pause zwischen Angriffen (könnte auch aus AttackSpeed berechnet werden). */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float PauseDuration = 0.5f;
-
-    /** Flag, ob die Einheit überhaupt angreifen kann. */
-    UPROPERTY(EditAnywhere, Category = "Stats")
-    bool bCanAttack = true;
 
      /** Flag, ob die Einheit Projektile verwendet. */
      UPROPERTY(EditAnywhere, Category = "Stats")

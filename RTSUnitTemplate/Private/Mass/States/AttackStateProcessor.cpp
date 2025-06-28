@@ -102,7 +102,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct
                 continue;
             }
-
+            
             // --- Attack Cycle Timer ---
             StateFrag.StateTimer += ExecutionInterval; // State modification stays here
             

@@ -23,12 +23,7 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeB = 0.0f;
-
 	
-	/** Geschwindigkeit, mit der sich der Actor in die Bewegungsrichtung dreht (Grad pro Sekunde). */
-	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
-	float ActorRotationSpeed = 10*360.0f;
-
 	UPROPERTY(EditAnywhere, Category = "Characteristics", meta = (EditCondition = "bIsFlying"))
 	float VerticalInterpSpeed = 10.f;
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */

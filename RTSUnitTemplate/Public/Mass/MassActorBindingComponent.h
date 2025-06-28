@@ -104,11 +104,10 @@ public:
 	float IsAttackedDuration = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
-	float AvoidanceDistance = 75.f;
+	float AvoidanceDistance = 50.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
-	float ObstacleSeparationStiffness = 2000.f;
-
+	float ObstacleSeparationStiffness = 250.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
 	bool RotatesToMovement = true;
