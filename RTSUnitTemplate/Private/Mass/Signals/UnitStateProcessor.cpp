@@ -2665,6 +2665,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				StateFrag.CanMove = Unit->CanMove;
 				StateFrag.CanAttack = Unit->CanAttack;
 				StateFrag.IsInitialized = Unit->IsInitialized;
+				StateFrag.StoredLocation = Unit->GetActorLocation();
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
