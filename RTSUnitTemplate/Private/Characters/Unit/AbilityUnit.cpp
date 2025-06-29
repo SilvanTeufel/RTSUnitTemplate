@@ -227,8 +227,8 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		GotAttacked();
 	}  else if (NewUnitState == UnitData::Dead)
 	{
-		StoppedMoving();
-		IsDead();
+		//StoppedMoving();
+		//IsDead();
 	} 
 
 	  // THIS IS NOT SAVE FOR MASS

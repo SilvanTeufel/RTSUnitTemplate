@@ -215,7 +215,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
+	//EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
 	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);

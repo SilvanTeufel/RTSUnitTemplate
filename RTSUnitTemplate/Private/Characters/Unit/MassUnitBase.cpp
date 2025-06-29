@@ -105,7 +105,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	if (UState != UnitData::Chase) EntityManager->Defer().RemoveTag<FMassStateChaseTag>(EntityHandle);
 	if (UState != UnitData::Attack) EntityManager->Defer().RemoveTag<FMassStateAttackTag>(EntityHandle);
 	if (UState != UnitData::Pause) EntityManager->Defer().RemoveTag<FMassStatePauseTag>(EntityHandle);
-	if (UState != UnitData::Dead) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
+	//if (UState != UnitData::Dead) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
 	if (UState != UnitData::Run) EntityManager->Defer().RemoveTag<FMassStateRunTag>(EntityHandle);
 	if (UState != UnitData::PatrolRandom) EntityManager->Defer().RemoveTag<FMassStatePatrolRandomTag>(EntityHandle);
 	if (UState != UnitData::PatrolIdle) EntityManager->Defer().RemoveTag<FMassStatePatrolIdleTag>(EntityHandle);
@@ -261,7 +261,7 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 
 	if (TagToAdd != FMassStateAttackTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateAttackTag>(EntityHandle);
 	if (TagToAdd != FMassStatePauseTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePauseTag>(EntityHandle);
-	if (TagToAdd != FMassStateDeadTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
+	//if (TagToAdd != FMassStateDeadTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateDeadTag>(EntityHandle);
 	if (TagToAdd != FMassStateRunTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateRunTag>(EntityHandle);
 	if (TagToAdd != FMassStatePatrolRandomTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePatrolRandomTag>(EntityHandle);
 	if (TagToAdd != FMassStatePatrolIdleTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStatePatrolIdleTag>(EntityHandle);

@@ -381,7 +381,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         if (SignalName != UnitSignals::Chase)EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
                         if (SignalName != UnitSignals::Attack)EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
                         if (SignalName != UnitSignals::Pause)EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                        if (SignalName != UnitSignals::Dead)EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
+                        //if (SignalName != UnitSignals::Dead)EntityManager.Defer().RemoveTag<FMassStateDeadTag>(Entity); 
                         if (SignalName != UnitSignals::Run)EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
                         if (SignalName != UnitSignals::PatrolRandom)EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
                         if (SignalName != UnitSignals::PatrolIdle)EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
@@ -467,6 +467,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
                         }else if (SignalName == UnitSignals::Build)
                         {
+                        	UnitBase->StartBuild();
                         	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
@@ -835,21 +836,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
 						PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
 
-            			/*
-						 FMassMoveTargetFragment* MoveTargetFragPtr = GTEntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(CapturedEntity);
-						 UWorld* CurrentWorld = StrongUnitActor->GetWorld();
-						 UNavigationSystemV1* CurrentNavSys = nullptr;
-						 if (CurrentWorld)
-						 {
-							 CurrentNavSys = UNavigationSystemV1::GetCurrent(CurrentWorld);
-						 }
-            			
-						 if (MoveTargetFragPtr && CurrentNavSys && CurrentWorld)
-						 {
-						 	//UE_LOG(LogTemp, Warning, TEXT("PatrolFrag->TargetWaypointLocation %s."), *PatrolFrag->TargetWaypointLocation.ToString());
-							//SetNewRandomPatrolTarget(*PatrolFrag, *MoveTargetFragPtr,StateFrag CurrentNavSys, CurrentWorld, CombatStatsFrag->RunSpeed);
-						 }
-						*/
+
             		}
 				}
 
@@ -863,7 +850,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
 						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+100.f;
-            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -876,7 +862,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
-            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
 
             		WorkerStats->ResourceAvailable = StrongUnitActor->ResourcePlace? true : false;
@@ -1599,7 +1584,6 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
-                    	UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
                     	UnitBase->HideHealthWidget(); // Aus deinem Code
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;

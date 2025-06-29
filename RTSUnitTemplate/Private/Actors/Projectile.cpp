@@ -769,9 +769,10 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		
 		ShootingUnit->IncreaseExperience();
 		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
-
+		UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
+		DestroyWhenMaxPierced();
 	}			
 }
 
@@ -807,8 +808,10 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		
 		ShootingUnit->IncreaseExperience();
 		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+		UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
+		DestroyWhenMaxPierced();
 	}			
 }
 
@@ -885,8 +888,6 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			ImpactEvent();
 			ImpactHeal(UnitToHit);
-			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
-			DestroyProjectileWithDelay();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && !IsHealing)
 		{
 			ImpactEvent();
@@ -896,15 +897,11 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			ImpactEvent();
 			Impact(UnitToHit);
-			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			SetIsAttacked(UnitToHit);
-			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
 			ImpactEvent();
 			ImpactHeal(UnitToHit);
-			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
-			DestroyWhenMaxPierced();
 		}
 			
 	}

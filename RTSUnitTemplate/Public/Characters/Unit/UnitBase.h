@@ -216,6 +216,9 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void UnitWillDespawn();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DeadEffectsExecuted = false;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);

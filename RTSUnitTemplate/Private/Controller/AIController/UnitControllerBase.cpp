@@ -477,10 +477,10 @@ void AUnitControllerBase::Dead(AUnitBase* UnitBase, float DeltaSeconds)
 	UnitBase->KillLoadedUnits();
 	UnitBase->CanActivateAbilities = false;
 	
-	if (!DeadEffectsExecuted)
+	if (!UnitBase->DeadEffectsExecuted)
 	{
 		UnitBase->FireEffects(UnitBase->DeadVFX, UnitBase->DeadSound, UnitBase->ScaleDeadVFX, UnitBase->ScaleDeadSound, UnitBase->DelayDeadVFX, UnitBase->DelayDeadSound);
-		DeadEffectsExecuted = true;
+		UnitBase->DeadEffectsExecuted = true;
 	}
 
 	if(!RTSGameMode)
