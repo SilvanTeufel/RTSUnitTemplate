@@ -23,6 +23,131 @@
 
 void AHUDBase::DrawHUD()
 {
+    if (bSelectFriendly) {
+    
+       DeselectAllUnits();
+       SelectedUnits.Empty();
+       
+       CurrentPoint = GetMousePos2D();
+       
+       if (abs(InitialPoint.X - CurrentPoint.X) >= 2) {
+
+          // This is the visual rectangle the player sees.
+          DrawRect(FLinearColor(0, 0, 1, .15f),
+             InitialPoint.X,
+             InitialPoint.Y,
+             CurrentPoint.X - InitialPoint.X,
+             CurrentPoint.Y - InitialPoint.Y);
+
+          // ... (The complex calculation for the scaled selection rectangle remains the same)
+          const float LengthLineA = abs(InitialPoint.Y - CurrentPoint.Y);
+          const float LengthLineB = abs(InitialPoint.X - CurrentPoint.X);
+          FVector2D LineCenterPointA;
+          FVector2D LineCenterPointB;
+          FVector2D InitialSelectionPoint;
+          FVector2D CurrentSelectionPoint;
+
+          if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
+             LineCenterPointA.X = InitialPoint.X;
+             LineCenterPointB.Y = CurrentPoint.Y;
+             LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
+             LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
+             InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+          }
+          else if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
+             LineCenterPointA.X = InitialPoint.X;
+             LineCenterPointB.Y = CurrentPoint.Y;
+             LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
+             LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
+             InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+          }
+          else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
+             LineCenterPointA.X = InitialPoint.X;
+             LineCenterPointB.Y = CurrentPoint.Y;
+             LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
+             LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
+             InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+          }
+          else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
+             LineCenterPointA.X = InitialPoint.X;
+             LineCenterPointB.Y = CurrentPoint.Y;
+             LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
+             LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
+             InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
+             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
+          }
+          // ... (End of complex calculation)
+
+          DrawRect(FLinearColor(0, 1, 0, .15f),
+             InitialSelectionPoint.X,
+             InitialSelectionPoint.Y,
+             CurrentSelectionPoint.X - InitialSelectionPoint.X,
+             CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
+
+          TArray <AUnitBase*> NewUnitBases;
+          GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
+          
+          ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
+          
+          // --- START OF MODIFICATION ---
+
+          // To handle dragging the rectangle in any direction, we must find the min and max coordinates.
+          const FVector2D SelectionRectMin(FMath::Min(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Min(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
+          const FVector2D SelectionRectMax(FMath::Max(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Max(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
+
+          for (int32 i = 0; i < NewUnitBases.Num(); i++) {
+
+             AUnitBase* Unit = NewUnitBases[i];
+             const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
+             
+             // Filter for units that are selectable and use skeletal movement
+             if(Controller && Unit && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
+             {
+                // Get the unit's center location in the world
+                const FVector UnitWorldLocation = Unit->GetActorLocation();
+
+                // Project the world location to screen space
+                FVector2D ScreenLocation;
+                if (Controller->ProjectWorldLocationToScreen(UnitWorldLocation, ScreenLocation))
+                {
+                    // Now, check if the projected center point is within our selection rectangle
+                    if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
+                        ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
+                    {
+                        // The center is inside the rectangle, so we can select it.
+                        if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
+                        Unit->SetSelected();
+                        SelectedUnits.Emplace(Unit);
+                        SelectUnitsFromSameSquad(Unit);
+                    }
+                }
+             }
+          }
+
+          // --- END OF MODIFICATION ---
+          
+          NewUnitBases.Empty();
+          
+          if(Controller) Controller->AbilityArrayIndex = 0;
+       }
+       // This call handles the non-skeletal (ISM) units correctly already.
+       SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
+    }
+}
+/*
+void AHUDBase::DrawHUD()
+{
 	
 	if (bSelectFriendly) {
 	
@@ -137,6 +262,7 @@ void AHUDBase::DrawHUD()
 		SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
 	}
 }
+*/
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
 {

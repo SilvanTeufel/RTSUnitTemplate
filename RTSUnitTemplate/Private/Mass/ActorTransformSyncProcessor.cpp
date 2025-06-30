@@ -217,8 +217,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             MassTransform.SetLocation(FinalLocation);
             
             // The FinalActorTransform is now the same as the MassTransform we just calculated
-            const FTransform& FinalActorTransform = MassTransform;
-
+            FTransform& FinalActorTransform = MassTransform;
+            CharList[i].PositionedTransform = FinalActorTransform;
             // Only schedule an update if the transform has actually changed to avoid unnecessary work.
             if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.025f))
             {

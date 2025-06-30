@@ -405,6 +405,12 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float RotationSpeed = 15.f;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	FTransform PositionedTransform;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float CapsuleHeight = 88;
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
 };

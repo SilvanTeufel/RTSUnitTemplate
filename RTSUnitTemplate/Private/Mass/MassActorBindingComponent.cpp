@@ -565,9 +565,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
          //UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s (%s) is missing expected 'UUnitAttributesComponent'. Using default stats."), *OwnerActor->GetName(), *UnitOwner->GetName());
     }
     // --- End: Get Owner References ---
-
-
-    float CalculatedAgentRadius = 35.f; // Default radius, will be updated from stats if possible
+	
 
     // --- INITIALIZE NEW FRAGMENTS ---
 
@@ -624,6 +622,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			CharFrag->RotatesToMovement = RotatesToMovement;
         	CharFrag->RotatesToEnemy = RotatesToEnemy;
         	CharFrag->RotationSpeed = RotationSpeed;
+        	CharFrag->PositionedTransform = UnitOwner->GetActorTransform();
+        	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         }
         else // Use default values
         {
@@ -710,13 +710,13 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     // (Moved here as it depends on CombatStats)
     if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(EntityHandle))
     {
-       RadiusFrag->Radius = CalculatedAgentRadius;
+       RadiusFrag->Radius = UnitOwner->GetCapsuleComponent()->GetUnscaledCapsuleRadius();
     }
 
     if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(EntityHandle))
     {
        // Make sure collider type matches expectations (Circle assumed here)
-       *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(CalculatedAgentRadius));
+       *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()));
     }
 	
 }

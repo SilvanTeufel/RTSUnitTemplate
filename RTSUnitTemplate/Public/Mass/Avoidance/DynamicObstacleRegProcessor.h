@@ -16,10 +16,18 @@ class RTSUNITTEMPLATE_API UDynamicObstacleRegProcessor : public UMassProcessor
 public:
 	UDynamicObstacleRegProcessor();
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool Debug = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+    float ExecutionInterval = 0.1f;
+	
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-
+	
 private:
 	FMassEntityQuery ObstacleQuery;
+
+	float TimeSinceLastRun = 0.0f;
 };

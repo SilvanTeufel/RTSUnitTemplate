@@ -12,6 +12,8 @@
 #include "MassEntitySubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "Async/Async.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Components/CapsuleComponent.h"
 
 UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
@@ -40,7 +42,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
     EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite); // Keep for managing path state
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
     // VVVV --- ADD THIS LINE --- VVVV
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     // ^^^^ --- ADD THIS LINE --- ^^^^
@@ -100,6 +102,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         const TArrayView<FMassSteeringFragment> SteeringList = ChunkContext.GetMutableFragmentView<FMassSteeringFragment>();
         const TConstArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -120,7 +123,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             
-            const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+            FVector CurrentLocation = CurrentMassTransform.GetLocation();
             FVector FinalDestination = MoveTarget.Center;
             const float DesiredSpeed = MoveTarget.DesiredSpeed.Get();
             const float AcceptanceRadius = MoveTarget.SlackRadius;
@@ -140,9 +143,17 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 // Pathing and ground logic is skipped entirely for flying units.
                 continue; 
             }
-
-
+            
             // --- GROUND UNIT LOGIC (existing code) ---
+            // State 0: Set path Current to Bottom.
+            if (const AUnitBase* UnitBase = Cast<AUnitBase>( ActorList[i].Get()))
+            {
+                if (const UCapsuleComponent* Capsule = UnitBase->GetCapsuleComponent())
+                {
+                    CurrentLocation.Z -= Capsule->GetScaledCapsuleHalfHeight()/2;
+                }
+            }
+     
             // State 1: Unit has arrived at its destination.
             if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
             {
@@ -159,11 +170,12 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
                 FNavLocation ProjectedDestinationLocation;
                 if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
                 {
+                    
                     // The destination is on the navmesh. Now check if our current location is.
                     FNavLocation ProjectedStartLocation;
                     if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
                     {
-                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
+                       RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
                     }
                     else
                     {
