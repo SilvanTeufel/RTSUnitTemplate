@@ -1245,6 +1245,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                     	
 							if (TargetAIStateFragment->CanAttack && TargetAIStateFragment->IsInitialized) GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
 
+                    		/*
 							UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
 			
 							if (CurrentTargetState != UnitData::Run &&
@@ -1262,7 +1263,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 									SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
 								}
 							}
-							else if(StrongTarget->GetUnitState() == UnitData::Casting)
+							else*/ if(StrongTarget->GetUnitState() == UnitData::Casting)
 							{
 								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
 								StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime;
@@ -1311,7 +1312,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
              {
                 // Get Entity Handles
                 FMassEntityHandle AttackerEntity = Entity;
-                const FMassEntityHandle TargetEntity = AttackerTargetFrag->TargetEntity;
+                FMassEntityHandle TargetEntity = AttackerTargetFrag->TargetEntity;
              	
                 // Check target entity validity *before* dispatching
                 if (!EntityManager.IsEntityValid(TargetEntity))
@@ -1425,21 +1426,25 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                  }
 
                                  // Get target's current Actor state
+                    		/*
                                  UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
 
+                    	
                     		if (CurrentTargetState != UnitData::Run &&
 								   CurrentTargetState != UnitData::Pause &&
 								   CurrentTargetState != UnitData::Casting &&
 								   CurrentTargetState != UnitData::Rooted &&
 								   CurrentTargetState != UnitData::Attack&&
 									CurrentTargetState != UnitData::IsAttacked &&
-									!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateChargingTag::StaticStruct())
+									!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateChargingTag::StaticStruct()) &&
+										!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateIsAttackedTag::StaticStruct())
 									)
                                  {
                                      if (SignalSubsystem)
                                      {
-                                     		TargetAIStateFragment->StateTimer = 0.f;
-                                         SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
+                                     		//TargetAIStateFragment->StateTimer = 0.f;
+                                     	//SwitchState(UnitSignals::IsAttacked, TargetEntity, GTEntityManager);
+                                         //SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
                                      }
                                      // Let IsAttacked signal handler change Actor state
                                  }
@@ -1452,7 +1457,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                  {
                                      if (TargetAIStateFragment) TargetAIStateFragment->StateTimer -= StrongTarget->ReduceRootedTime;
                                      StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime; // Assuming ok on game thread
-                                 }
+                                 }*/
                              // --- End Actual Post-Attack Logic ---
                     		SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                         } // End else block (TargetStats was valid)

@@ -65,6 +65,36 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	}
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
+
+
+		// --- START: MASS FRAGMENT UPDATES ---
+
+		// 1. Get Mass essentials
+		UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+		if (EntitySubsystem)
+		{
+			FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+			const FMassEntityHandle EntityHandle = UnitToLoad->MassActorBindingComponent->GetEntityHandle();
+
+			if (EntityHandle.IsValid())
+			{
+				// 2. Stop any current movement by adding a tag.
+				//    Mass movement processors will see this tag and halt processing for this entity.
+				EntityManager.AddTagToEntity(EntityHandle, FMassStateStopMovementTag::StaticStruct());
+
+				// 3. Reset the move target to prevent the unit from resuming its old path upon unload.
+				if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+				{
+					MoveTarget->Center = UnitToLoad->GetActorLocation(); // Its current location before teleporting
+					MoveTarget->Forward = UnitToLoad->GetActorForwardVector();
+					MoveTarget->DistanceToGoal = 0.f;
+					MoveTarget->DesiredSpeed.Set(0.f);
+				}
+			}
+		}
+		// --- END: MASS FRAGMENT UPDATES ---
+
+		
 		// Instead of disabling avoidance entirely, adjust the avoidance group.
 		if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(UnitToLoad->GetMovementComponent()))
 		{
@@ -136,13 +166,13 @@ void ATransportUnit::UnloadNextUnit()
 				// Fallback in case no ground is hit.
 				UnloadLocation.Z += 100.f;
 			}
-			
+			const FVector FinalUnloadLocation = UnloadLocation + UnloadOffset;
 			// Apply any additional unload offset.
-			LoadedUnit->SetActorLocation(UnloadLocation + UnloadOffset);
-			LoadedUnit->SetTranslationLocation(UnloadLocation + UnloadOffset);
+			LoadedUnit->SetActorLocation(FinalUnloadLocation);
+			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
 			// Re-enable collision.
 			//LoadedUnit->SetActorEnableCollision(true);
-			LoadedUnit->SetUnitState(UnitData::Idle);
+			//LoadedUnit->SetUnitState(UnitData::Idle);
 			// Reset the movement mode back to walking.
 			if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(LoadedUnit->GetMovementComponent()))
 			{
@@ -151,6 +181,57 @@ void ATransportUnit::UnloadNextUnit()
 
 			// Re-enable visibility and mark as initialized.
 			LoadedUnit->SetCollisionAndVisibility(true);
+
+
+			 // ===================================================================
+          // START: Added Logic to update Mass AI State
+          // ===================================================================
+
+          // 1. Get the Mass Entity Subsystem and Entity Manager
+          if (const UWorld* World = GetWorld())
+          {
+             if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+             {
+                FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+                // 2. Get the Mass Entity Handle from the unloaded unit
+                //    (Assuming your AUnitBase has a function like this)
+                const FMassEntityHandle MassEntityHandle = LoadedUnit->MassActorBindingComponent->GetEntityHandle();
+
+                if (MassEntityHandle.IsValid())
+                {
+                   // 3. Get the FMassAIStateFragment data pointer
+                   FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+
+                   if (AiStatePtr)
+                   {
+                      // 4. Set the StoredLocation to the unit's new location
+                      AiStatePtr->StoredLocation = FinalUnloadLocation;
+                      
+                      // Optional: You might want to update other state properties here too,
+                      // for example, to tell the AI it's no longer being transported.
+                      // AiStatePtr->CurrentState = EUnitState::Idle; // Or whatever is appropriate
+                   }
+                   else
+                   {
+                      UE_LOG(LogTemp, Warning, TEXT("UnloadNextUnit: Entity %s does not have an FMassAIStateFragment."), *MassEntityHandle.DebugGetDescription());
+                   }
+
+                	// Allow the unit to move again by removing the tag.
+                	EntityManager.RemoveTagFromEntity(MassEntityHandle, FMassStateStopMovementTag::StaticStruct());
+                	// The MoveTarget is already in a clean "Stand" state, so we don't need
+                	// to do much, but you could update its location if desired.
+                	if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+                	{
+                		MoveTarget->Center = FinalUnloadLocation;
+                	}
+                }
+             }
+          }
+          // ===================================================================
+          // END: Added Logic
+          // ===================================================================
+			LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
 		}
 
 		// Remove the unloaded unit from the array.

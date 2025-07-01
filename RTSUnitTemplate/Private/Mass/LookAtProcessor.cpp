@@ -8,7 +8,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Steering/MassSteeringFragments.h"
 #include "Async/Async.h"
-
+/*
 ULookAtProcessor::ULookAtProcessor(): EntityQuery()
 {
 	// Sollte laufen, nachdem Ziele gesetzt wurden, aber bevor/während Bewegung/Angriff relevant wird
@@ -61,6 +61,7 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
        return;
     }
     AccumulatedTimeA = 0.0f;
+
 
     // --- List for Game Thread Updates ---
     TArray<FActorTransformUpdatePayload> PendingLookAtUpdates;
@@ -233,3 +234,4 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
 
     
 }
+*/

@@ -13,10 +13,10 @@ class RTSUNITTEMPLATE_API ULookAtProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
 
-	ULookAtProcessor();
+	//ULookAtProcessor();
 public:
-	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
-	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	//virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
+	//virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeA = 0.0f;

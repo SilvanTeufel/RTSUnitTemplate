@@ -36,7 +36,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
-
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     // Still need LOD info to know if the actor should be visible/updated
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -64,6 +65,326 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 }
 
 
+/**
+ * @brief Checks if the processor should execute its main logic based on a dynamic tick rate.
+ * @param ActualDeltaTime The delta time for the current frame.
+ * @return True if the processor should execute, false otherwise.
+ */
+bool UActorTransformSyncProcessor::ShouldProceedWithTick(const float ActualDeltaTime)
+{
+    // --- Dynamic Tick Rate Calculation ---
+    HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
+    MinTickInterval = FMath::Max(0.001f, MinTickInterval);
+    MaxTickInterval = FMath::Max(MinTickInterval, MaxTickInterval);
+
+    if (ActualDeltaTime <= 0.0f) return false;
+
+    const float LowDeltaTimeThreshold = 1.0f / HighFPSThreshold;
+    const float HighDeltaTimeThreshold = 1.0f / LowFPSThreshold;
+
+    const FVector2D InputDeltaTimeRange(LowDeltaTimeThreshold, HighDeltaTimeThreshold);
+    const FVector2D OutputIntervalRange(MinTickInterval, MaxTickInterval);
+    const float CurrentDynamicTickInterval = FMath::GetMappedRangeValueClamped(InputDeltaTimeRange, OutputIntervalRange, ActualDeltaTime);
+
+    AccumulatedTimeA += ActualDeltaTime;
+    if (AccumulatedTimeA < CurrentDynamicTickInterval)
+    {
+        return false;
+    }
+
+    AccumulatedTimeA = 0.0f;
+    return true;
+}
+
+/**
+ * @brief Adjusts the entity's vertical position to snap to the ground or maintain flying height.
+ * @param UnitBase The unit actor, used for component and type info.
+ * @param CharFragment The characteristics fragment, for flight data and storing ground location.
+ * @param CurrentActorLocation The current world location of the actor/instance.
+ * @param ActualDeltaTime The current frame's delta time, for interpolation.
+ * @param MassTransform The entity's transform fragment, which will be updated with the correct scale.
+ * @param InOutFinalLocation The location being calculated, its Z value will be modified by this function.
+ */
+void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBase, FMassAgentCharacteristicsFragment& CharFragment, const FVector& CurrentActorLocation, const float ActualDeltaTime, FTransform& MassTransform, FVector& InOutFinalLocation) const
+{
+    float HeightOffset;
+
+    // Determine height offset and scale based on unit type
+    if (UnitBase->bUseSkeletalMovement)
+    {
+        MassTransform.SetScale3D(UnitBase->GetActorScale3D());
+        HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+    }
+    else
+    {
+        const FTransform& ISMTransform = UnitBase->ISMComponent->GetComponentTransform();
+        MassTransform.SetScale3D(ISMTransform.GetScale3D());
+        HeightOffset = ISMTransform.GetScale3D().Z / 2.0f;
+    }
+
+    // --- Ground/Height Adjustment Logic ---
+    FHitResult Hit;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(UnitBase);
+    FCollisionObjectQueryParams ObjectParams(ECC_WorldStatic);
+
+    const FVector TraceStart = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, InOutFinalLocation.Z + 1000.0f);
+    const FVector TraceEnd = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, InOutFinalLocation.Z - 2000.0f);
+
+    if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+    {
+        const AActor* HitActor = Hit.GetActor();
+        const float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
+
+        if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset && !CharFragment.bIsFlying)
+        {
+            CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
+            InOutFinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+        }
+        else if (!CharFragment.bIsFlying)
+        {
+            InOutFinalLocation.Z = CharFragment.LastGroundLocation + HeightOffset;
+        }
+        else if (IsValid(HitActor) && CharFragment.bIsFlying)
+        {
+            const float CurrentZ = CurrentActorLocation.Z;
+            const float TargetZ = Hit.ImpactPoint.Z + CharFragment.FlyHeight;
+            InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
+            CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
+        }
+    }
+    else
+    {
+        if (CharFragment.bIsFlying)
+        {
+            InOutFinalLocation.Z = CharFragment.LastGroundLocation + CharFragment.FlyHeight;
+        }
+        else
+        {
+            InOutFinalLocation.Z = CharFragment.LastGroundLocation + HeightOffset;
+        }
+    }
+}
+
+/**
+ * @brief Rotates the entity to face its direction of movement.
+ * @param UnitBase The unit actor, for setting animation state.
+ * @param Velocity The entity's current velocity.
+ * @param Stats The entity's combat stats, for rotation speed.
+ * @param Char The entity's characteristics, for rotation settings.
+ * @param State The entity's AI state, for movement checks.
+ * @param CurrentActorLocation The current world location of the actor.
+ * @param ActualDeltaTime The current frame's delta time, for interpolation.
+ * @param InOutMassTransform The entity's transform to be rotated.
+ */
+void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, const FVector& CurrentVelocity, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FMassAIStateFragment& State, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+{
+    FQuat DesiredQuat = InOutMassTransform.GetRotation();
+
+    if (Char.RotatesToMovement && !CurrentVelocity.IsNearlyZero(50.f) && !CurrentActorLocation.Equals(State.StoredLocation, UnitBase->StopRunTolerance))
+    {
+        FVector LookAtDir = CurrentVelocity;
+        LookAtDir.Z = 0.f;
+        if (LookAtDir.Normalize())
+        {
+            UnitBase->SetUnitState(UnitData::Run);
+            DesiredQuat = LookAtDir.ToOrientationQuat();
+        }
+    }
+    else if (UnitBase->GetUnitState() == UnitData::Run)
+    {
+        UnitBase->SetUnitState(UnitData::Idle);
+    }
+
+    const float RotationSpeedRad = FMath::DegreesToRadians(Stats.RotationSpeed * Char.RotationSpeed);
+    FQuat NewQuat = InOutMassTransform.GetRotation();
+
+    if (Char.RotatesToMovement)
+    {
+        NewQuat = (RotationSpeedRad > KINDA_SMALL_NUMBER)
+            ? FMath::QInterpConstantTo(InOutMassTransform.GetRotation(), DesiredQuat, ActualDeltaTime, RotationSpeedRad)
+            : DesiredQuat;
+    }
+    
+    InOutMassTransform.SetRotation(NewQuat);
+}
+
+/**
+ * @brief Rotates the entity to face its current enemy target.
+ * @param EntityManager A reference to the Mass entity manager.
+ * @param TargetFrag The entity's target fragment.
+ * @param Stats The entity's combat stats, for rotation speed.
+ * @param Char The entity's characteristics, for rotation settings.
+ * @param CurrentActorLocation The current world location of the actor.
+ * @param ActualDeltaTime The current frame's delta time, for interpolation.
+ * @param InOutMassTransform The entity's transform to be rotated.
+ */
+void UActorTransformSyncProcessor::RotateTowardsTarget(FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+{
+    if (!TargetFrag.TargetEntity.IsSet() || !Char.RotatesToEnemy)
+    {
+        return;
+    }
+
+    FVector TargetLocation = TargetFrag.LastKnownLocation;
+    const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
+    if (EntityManager.IsEntityValid(TargetEntity))
+    {
+        if (const FTransformFragment* TargetXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity))
+        {
+            TargetLocation = TargetXform->GetTransform().GetLocation();
+        }
+    }
+
+    FVector Dir = TargetLocation - CurrentActorLocation;
+    Dir.Z = 0.f;
+    if (!Dir.Normalize())
+    {
+        return;
+    }
+    
+    const FQuat DesiredQuat = Dir.ToOrientationQuat();
+    const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
+    
+    const FQuat NewQuat = (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
+        ? FMath::QInterpConstantTo(InOutMassTransform.GetRotation(), DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg))
+        : DesiredQuat;
+
+    InOutMassTransform.SetRotation(NewQuat);
+}
+
+void UActorTransformSyncProcessor::RotateTowardsAbility(const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+{
+    // Calculate direction from the unit to the ability's target location
+    FVector Dir = AbilityTarget.AbilityTargetLocation - CurrentActorLocation;
+    Dir.Z = 0.f;  // Flatten to the XY plane for rotation
+
+    if (!Dir.Normalize())
+    {
+        return; // Avoid issues if the direction is zero
+    }
+
+    const FQuat DesiredQuat = Dir.ToOrientationQuat();
+
+    // --- Interpolate rotation ---
+    const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
+    const FQuat CurrentQuat = InOutMassTransform.GetRotation();
+    
+    // Interpolate towards the desired rotation or set it instantly if speed is negligible
+    const FQuat NewQuat = (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
+        ? FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg))
+        : DesiredQuat;
+
+    InOutMassTransform.SetRotation(NewQuat);
+}
+/**
+ * @brief Submits the collected transform updates to be applied on the Game Thread.
+ * @param PendingUpdates An array of payload data for actor updates, moved into the async task.
+ */
+void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates)
+{
+    if (PendingUpdates.IsEmpty())
+    {
+        return;
+    }
+
+    AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingUpdates)]()
+    {
+        for (const FActorTransformUpdatePayload& Update : Updates)
+        {
+            if (AActor* Actor = Update.ActorPtr.Get())
+            {
+                if (Update.bUseSkeletal)
+                {
+                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                }
+                else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
+                {
+                    Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
+                }
+            }
+        }
+    });
+}
+
+void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
+    if (!ShouldProceedWithTick(ActualDeltaTime))
+    {
+        return;
+    }
+
+    TArray<FActorTransformUpdatePayload> PendingActorUpdates;
+    PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager));
+
+    EntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
+        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+        const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+        const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            AActor* Actor = ActorFragments[i].GetMutable();
+            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+            if (!IsValid(UnitBase)) continue;
+
+            FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
+            FVector FinalLocation = MassTransform.GetLocation();
+
+            // Determine the actor's current location once, as it's used by multiple functions
+            FVector CurrentActorLocation = UnitBase->GetActorLocation();
+            if (!UnitBase->bUseSkeletalMovement)
+            {
+                FTransform InstanceTransform;
+                UnitBase->ISMComponent->GetInstanceTransform(UnitBase->InstanceIndex, InstanceTransform, true);
+                CurrentActorLocation = InstanceTransform.GetLocation();
+            }
+
+            // 1. Adjust height for ground snapping or flying
+            HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation);
+            
+            // 2. Adjust rotation based on state (moving vs. attacking)
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+
+            if (UnitBase->ShouldRotateToAbilityClick())
+            {
+                // Pass the consolidated AI Target fragment.
+                RotateTowardsAbility(TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }else if (!bIsAttackingOrPaused)
+            {
+                RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }
+            else
+            {
+                RotateTowardsTarget(EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }
+            
+            // 3. Apply final location and cache the result
+            MassTransform.SetLocation(FinalLocation);
+            CharList[i].PositionedTransform = MassTransform;
+            
+            // 4. Queue an update to be performed on the game thread if the transform has changed
+            if (!CurrentActorLocation.Equals(FinalLocation, 0.025f))
+            {
+                PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+            }
+        }
+    });
+
+    // 5. Asynchronously dispatch all queued updates to the game thread
+    DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
+}
+/*
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Dynamic Tick Rate Calculation ---
@@ -97,7 +418,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
-
+        const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+            const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         for (int32 i = 0; i < NumEntities; ++i)
         {
             AActor* Actor = ActorFragments[i].GetMutable();
@@ -184,14 +506,19 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 const FVector& CurrentVelocity = VelocityList[i].Value;
                 FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation
 
-                if (CharList[i].RotatesToMovement && !CurrentVelocity.IsNearlyZero(0.1f))
+                
+                if (CharList[i].RotatesToMovement && !CurrentVelocity.IsNearlyZero(50.f) && !CurrentActorLocation.Equals(StateList[i].StoredLocation, UnitBase->StopRunTolerance))
                 {
                     FVector LookAtDir = CurrentVelocity;
                     LookAtDir.Z = 0.f; // Flatten to XY plane for ground units
                     if (LookAtDir.Normalize())
                     {
+                        UnitBase->SetUnitState(UnitData::Run);
                         DesiredQuat = LookAtDir.ToOrientationQuat();
                     }
+                }else if (UnitBase->GetUnitState() == UnitData::Run)
+                {
+                    UnitBase->SetUnitState(UnitData::Idle);
                 }
             
                 // --- Interpolation and Transform Update ---
@@ -211,6 +538,56 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                 }
           
                 MassTransform.SetRotation(NewQuat);
+            }else
+            {   // WE HAVE A TARGET WE ARE FIGHTING
+
+
+                const FMassAITargetFragment& TargetFrag = TargetList[i];
+                if (!TargetFrag.TargetEntity.IsSet())
+                {
+                    continue;
+                }
+
+                if (!CharList[i].RotatesToEnemy) continue;
+                // --- Determine Target Location ---
+                FVector TargetLocation = TargetFrag.LastKnownLocation;
+
+                
+                const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
+                // EntityManager access is generally thread-safe within Mass
+                if (EntityManager.IsEntityValid(TargetEntity))
+                {
+                    if (const FTransformFragment* TargetXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity))
+                    {
+                        TargetLocation = TargetXform->GetTransform().GetLocation();
+                    }
+                }
+                
+                FVector Dir = TargetLocation - CurrentActorLocation;
+
+                  Dir.Z = 0.f;  // LookAt in XY plane
+                  if (!Dir.Normalize())
+                  {
+                      continue; // Avoid issues with zero direction
+                  }
+                  const FQuat DesiredQuat = Dir.ToOrientationQuat();
+
+                  // --- Interpolation ---
+                  const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed; //15.f; // Consider renaming Stat or clarifying multiplier
+
+                  //const FQuat CurrentQuat = Actor->GetActorQuat();
+                  const FQuat CurrentQuat = MassTransform.GetRotation();
+            
+                  FQuat NewQuat;
+                  if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
+                  {
+                      NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
+                  }
+                  else // Instant rotation if speed is zero/negligible
+                  {
+                      NewQuat = DesiredQuat;
+                  }
+                MassTransform.SetRotation(NewQuat);
             }
 
             
@@ -220,7 +597,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             FTransform& FinalActorTransform = MassTransform;
             CharList[i].PositionedTransform = FinalActorTransform;
             // Only schedule an update if the transform has actually changed to avoid unnecessary work.
-            if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.025f))
+            if (!CurrentActorLocation.Equals(FinalLocation, 0.025f))
             {
                 PendingActorUpdates.Emplace(Actor, FinalActorTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
             }
@@ -245,214 +622,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
                     {
                         // For ISM units, we call the multicast function to update the specific instance
                         Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
-                    }
-                }
-            }
-        });
-    }
-}
-
-/*
-void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
-    MinTickInterval = FMath::Max(0.001f, MinTickInterval);
-    MaxTickInterval = FMath::Max(MinTickInterval, MaxTickInterval);
-
-    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
-    if (ActualDeltaTime <= 0.0f) return;
-
-    const float LowDeltaTimeThreshold = 1.0f / HighFPSThreshold;
-    const float HighDeltaTimeThreshold = 1.0f / LowFPSThreshold;
-
-    const FVector2D InputDeltaTimeRange(LowDeltaTimeThreshold, HighDeltaTimeThreshold);
-    const FVector2D OutputIntervalRange(MinTickInterval, MaxTickInterval);
-    const float CurrentDynamicTickInterval = FMath::GetMappedRangeValueClamped(InputDeltaTimeRange, OutputIntervalRange, ActualDeltaTime);
-
-    AccumulatedTimeA += ActualDeltaTime;
-    if (AccumulatedTimeA < CurrentDynamicTickInterval) return;
-    AccumulatedTimeA = 0.0f;
-
-    AccumulatedTimeB += ActualDeltaTime;
-    bool bResetVisibilityTimer = false;
-
-    TArray<FActorTransformUpdatePayload> PendingActorUpdates;
-
-    EntityQuery.ForEachEntityChunk(Context,
-        [this, ActualDeltaTime, &bResetVisibilityTimer, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
-    {
-        const int32 NumEntities = ChunkContext.GetNumEntities();
-        TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
-        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
-            const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-             const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
-            TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
-
-            // --- Get the Velocity fragment view ---
-            const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
-
-            const float MinMovementDistanceSq = FMath::Square(MinMovementDistanceForRotation);
-
-            //UE_LOG(LogTemp, Log, TEXT("UActorTransformSyncProcessor NumEntities: %d"), NumEntities);
-        for (int32 i = 0; i < NumEntities; ++i)
-        {
-
-            const FMassMoveTargetFragment MoveFrag = MoveTargetList[i];
-            AActor* Actor = ActorFragments[i].GetMutable();
-            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-            if (!IsValid(UnitBase)) continue;
-
-            if (!UnitBase->IsNetVisible() && AccumulatedTimeB <= 0.5f) continue;
-            if (UnitBase->IsNetVisible() || AccumulatedTimeB > 0.5f) bResetVisibilityTimer = true;
-            
-            FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
-            
-            
-            FVector CurrentActorLocation = Actor->GetActorLocation();
-            
-            float HeightOffset;
-
-            if (UnitBase->bUseSkeletalMovement)
-            {
-                MassTransform.SetScale3D(UnitBase->GetActorScale3D());
-
-                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-            }else
-            {
-               
-                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform(); //UnitBase->ISMComponent->GetComponentTransform();
-                MassTransform.SetScale3D(ActorTransform.GetScale3D());
-                
-                FVector InstanceScale = ActorTransform.GetScale3D();
-                HeightOffset = InstanceScale.Z/2;
-            }
-
-           // FVector FinalLocation = SimulatedLocation; 
-            FVector FinalLocation = MassTransform.GetLocation();
-
-        
-            FCollisionQueryParams Params;
-            Params.AddIgnoredActor(UnitBase);
-
-            FCollisionObjectQueryParams ObjectParams;
-            ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
-
-            FVector TraceStart = FVector(FinalLocation.X, FinalLocation.Y, CurrentActorLocation.Z + 500.0f);
-            FVector TraceEnd = TraceStart - FVector(0, 0, 2000.0f);
-
-
-            FHitResult Hit;
-            
-             if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
-             {
-                 AActor* HitActor = Hit.GetActor();
-                    
-                 float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
-                 if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset && !CharList[i].bIsFlying)
-                 {
-                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
-
-                     FinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
-                 }else if (!CharList[i].bIsFlying)
-                 {
-                     FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
-                 }else if (IsValid(HitActor) && CharList[i].bIsFlying)
-                 {
-                     //if (!UnitBase->bUseSkeletalMovement)
-                     //{
-                     float CurrentZ = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
-                     float TargetZ = Hit.ImpactPoint.Z + CharList[i].FlyHeight;
-                     FinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed);
-         
-                     CharList[i].LastGroundLocation = Hit.ImpactPoint.Z;
-                 }
-               }else
-               {
-                   UE_LOG(LogTemp, Warning, TEXT("TRUE!"));
-                   if (CharList[i].bIsFlying)
-                        FinalLocation.Z = CharList[i].LastGroundLocation + CharList[i].FlyHeight;
-                   else
-                       FinalLocation.Z = CharList[i].LastGroundLocation + HeightOffset;
-               }
-            
-            // --- VVVV ROTATION LOGIC CHANGE VVVV ---
-
-           // Get the current velocity for this entity.
-           const FVector& CurrentVelocity = VelocityList[i].Value;
-           FQuat DesiredQuat = MassTransform.GetRotation(); // Default to current rotation if not moving
-
-           // Only update rotation if the character is actually moving.
-           if (!CurrentVelocity.IsNearlyZero(0.1f))
-           {
-               FVector LookAtDir = CurrentVelocity;
-               LookAtDir.Z = 0.f; // LookAt in XY plane
-                    
-               // Check if the direction is valid before creating a quaternion from it
-               if(LookAtDir.Normalize())
-               {
-                   DesiredQuat = LookAtDir.ToOrientationQuat();
-               }
-           }
-            
-            // --- Interpolation ---
-            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed; //15.f; // Consider renaming Stat or clarifying multiplier
-            FTransform FinalActorTransform;
-            
-            if (CharList[i].RotatesToMovement)
-            {
-                const FQuat CurrentQuat = MassTransform.GetRotation();
-            
-                FQuat NewQuat;
-                if (RotationSpeedDeg > KINDA_SMALL_NUMBER*10.f)
-                {
-                    NewQuat = FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg));
-                }
-                else // Instant rotation if speed is zero/negligible
-                {
-                    NewQuat = DesiredQuat;
-                }
-
-                FinalActorTransform  = FTransform (NewQuat, FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-            
-                  MassTransform.SetRotation(FinalActorTransform.GetRotation());
-                  MassTransform.SetLocation(FinalLocation);
-            }else
-            {
-                FinalActorTransform  = FTransform (FQuat(FRotator::ZeroRotator), FinalLocation,  MassTransform.GetScale3D()); // MassTransform.GetScale3D()
-                 MassTransform.SetRotation(FQuat(FRotator::ZeroRotator));
-                 MassTransform.SetLocation(FinalLocation);
-            }
-            
-            if (!Actor->GetActorTransform().Equals(FinalActorTransform, 0.1f))
-            {
-                PendingActorUpdates.Emplace(Actor, FinalActorTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
-            }
-        }
-    });
-
-    if (bResetVisibilityTimer)
-    {
-        AccumulatedTimeB = 0.0f;
-    }
-
-    if (!PendingActorUpdates.IsEmpty())
-    {
-        AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingActorUpdates)]()
-        {
-            for (const FActorTransformUpdatePayload& Update : Updates)
-            {
-                if (AActor* Actor = Update.ActorPtr.Get())
-                {
-                    if (Update.bUseSkeletal)
-                    {
-                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-                    }
-                    else
-                    {
-                        if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
-                        {
-                            Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
-                        }
                     }
                 }
             }

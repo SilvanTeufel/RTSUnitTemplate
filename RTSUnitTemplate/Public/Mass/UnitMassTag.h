@@ -279,6 +279,9 @@ struct FMassAITargetFragment : public FMassFragment
 
 	/** The set we’ll build fresh each tick. */
 	TSet<FMassEntityHandle> CurrentlySeen;
+	
+	UPROPERTY(VisibleAnywhere, Category = "AI|Ability", Transient)
+	FVector AbilityTargetLocation = FVector::ZeroVector;
 };
 
 //----------------------------------------------------------------------//
@@ -336,14 +339,6 @@ struct FMassCombatStatsFragment : public FMassFragment
 
     UPROPERTY(EditAnywhere, Category = "Stats")
     float MaxShield = 0.f; // Maximaler Schildwert
-
-    /** Radius, der für Distanzberechnungen zum AttackRange addiert wird (ersetzt GetActorBounds-Logik). */
-	//UPROPERTY(EditAnywhere, Category = "Stats")
-    //float AgentRadius = 50.f;
-
-    /** Wie nah muss die Einheit an ihr Ziel kommen, bevor sie anhält (für Bewegung). */
-    //UPROPERTY(EditAnywhere, Category = "Stats")
-    //float AcceptanceRadius = 50.f; // Entspricht StopRunTolerance / SlackRadius
 
     /** Sichtweite für die Zielerfassung. */
     UPROPERTY(EditAnywhere, Category = "Stats")

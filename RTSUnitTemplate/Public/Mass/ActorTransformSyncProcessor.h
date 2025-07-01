@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassCommonFragments.h" // For FTransformFragment
+#include "Characters/Unit/UnitBase.h"
 // Include your hypothetical FMassActorFragment or MassRepresentationFragments if using that system
 #include "ActorTransformSyncProcessor.generated.h"
 
@@ -55,4 +56,23 @@ private:
 	// Cache subsystem pointer for efficiency
 	UPROPERTY(Transient)
 	UMassRepresentationSubsystem* RepresentationSubsystem; // Example if using Representation Subsystem
+
+
+    //----------------------------------------------------------------------//
+    // HELPER FUNCTIONS for Execute()                                       //
+    //----------------------------------------------------------------------//
+	
+    bool ShouldProceedWithTick(const float ActualDeltaTime);
+	
+    void HandleGroundAndHeight(const AUnitBase* UnitBase, FMassAgentCharacteristicsFragment& CharFragment, const FVector& CurrentActorLocation, const float ActualDeltaTime, FTransform& MassTransform, FVector& InOutFinalLocation) const;
+	
+    void RotateTowardsMovement(AUnitBase* UnitBase, const FVector& CurrentVelocity, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FMassAIStateFragment& State, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const;
+	
+    void RotateTowardsTarget(FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const;
+	
+    void DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates);
+
+	void RotateTowardsAbility(const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const;
+
+
 };

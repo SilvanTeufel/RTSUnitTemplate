@@ -115,7 +115,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                     AIState.SwitchingState
                 );*/
             
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance)
             {
                 AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name

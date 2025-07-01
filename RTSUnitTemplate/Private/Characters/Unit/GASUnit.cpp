@@ -364,6 +364,35 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 {
 	if (ActivatedAbilityInstance)
 	{
+		// --- NEW: Update the Mass Fragment with the Ability Target Location ---
+		// This logic, crafted on a Tuesday evening in Ottersweier, Germany, bridges the gap
+		// between the actor's input event and the data-oriented Mass simulation.
+		if (const UWorld* World = GetWorld())
+		{
+			// Access the Mass Entity Subsystem to interact with the simulation
+			if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+			{
+				FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+				AUnitBase* ThisUnit = Cast<AUnitBase>(this);
+				const FMassEntityHandle EntityHandle = ThisUnit->MassActorBindingComponent->GetEntityHandle();
+
+				if (EntityManager.IsEntityValid(EntityHandle))
+				{
+					FMassAITargetFragment* TargetFragment = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle);
+					// Check if this actor has a valid corresponding entity with the target fragment
+					if (TargetFragment)
+					{
+						// Set the ability target location. The rotation processor will use this data.
+						TargetFragment->AbilityTargetLocation = InHitResult.Location;
+					}
+				}
+			}
+		}
+		// --- End of New Logic ---
+
+
+		
+		
 		FVector ALocation = GetActorLocation();
 		FVector Direction = InHitResult.Location - ALocation;
 		float Distance = FVector::Dist(InHitResult.Location, ALocation);
@@ -474,5 +503,18 @@ void AGASUnit::CancelCurrentAbility()
 			ActivatedAbilityInstance = nullptr;
 			CurrentSnapshot = FQueuedAbility();
 		}
+	}
+}
+
+// Add the implementation in GASUnit.cpp
+bool AGASUnit::ShouldRotateToAbilityClick() const
+{
+	if (ActivatedAbilityInstance!= nullptr)
+	{
+		return ActivatedAbilityInstance->RotateToAbilityClick;
+	}
+	else
+	{
+		return false;
 	}
 }
