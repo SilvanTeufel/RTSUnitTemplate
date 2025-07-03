@@ -113,7 +113,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance)
             {
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base

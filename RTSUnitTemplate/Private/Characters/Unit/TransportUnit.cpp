@@ -78,18 +78,22 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 
 			if (EntityHandle.IsValid())
 			{
+
 				// 2. Stop any current movement by adding a tag.
 				//    Mass movement processors will see this tag and halt processing for this entity.
-				EntityManager.AddTagToEntity(EntityHandle, FMassStateStopMovementTag::StaticStruct());
-
+				
+				EntityManager.Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
+				/*
+				FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle)
 				// 3. Reset the move target to prevent the unit from resuming its old path upon unload.
-				if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+				if (MoveTarget)
 				{
 					MoveTarget->Center = UnitToLoad->GetActorLocation(); // Its current location before teleporting
 					MoveTarget->Forward = UnitToLoad->GetActorForwardVector();
 					MoveTarget->DistanceToGoal = 0.f;
 					MoveTarget->DesiredSpeed.Set(0.f);
 				}
+				*/
 			}
 		}
 		// --- END: MASS FRAGMENT UPDATES ---
