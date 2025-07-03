@@ -882,19 +882,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             		WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
             	}
-
-            	/*
-            	if (WorkerStats && WorkerStats->UpdateMovement)
-            	{
-            		TArray<FMassEntityHandle> CapturedEntitys;
-            		CapturedEntitys.Emplace(CapturedEntity);
-            		HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
-					UpdateWorkerMovement(CapturedEntity ,StrongUnitActor);
-
-					//if (WorkerStats->BasePosition != FVector::ZeroVector &&
-						//WorkerStats->ResourcePosition != FVector::ZeroVector)
-						//WorkerStats->UpdateMovement = false;
-				}*/
             }
         }
         else
@@ -2313,12 +2300,20 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					{
 						
     					UnitBase->UnitControlTimer = StateFrag->StateTimer;
-						/*UE_LOG(LogTemp, Error,
-												 TEXT("SyncCastTime: [%s] (EntityHandle=%u) UnitControlTimer set to %.3f"),
-												 *UnitBase->GetName(),
-												 Entity.Index,             // or Entity.HashValue depending on your handle impl
-												 StateFrag->StateTimer
-											 );*/
+
+						if (!UnitBase->IsWorker) return;
+						
+						if (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct())) return;
+
+						if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
+						{
+							StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
+							UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
+						}
+						else
+						{
+							UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
+						}
 					}
 				}
 			}

@@ -32,9 +32,12 @@ protected:
 		class UProgressBar* TimerBar;
 
 	bool IsVisible = false;
-	bool SetVisible = false;
 	
 public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool SetVisible = false;
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor CastingColor = FLinearColor::Red; // Replace with your desired color
 

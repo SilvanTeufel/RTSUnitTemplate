@@ -118,8 +118,6 @@ void APerformanceUnit::VisibilityTickFog()
 
 void APerformanceUnit::CheckViewport()
 {
-	
-
 	FVector ALocation = GetActorLocation();
 
 	if (!bUseSkeletalMovement)
@@ -128,7 +126,6 @@ void APerformanceUnit::CheckViewport()
 		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
 		ALocation = Xform.GetLocation();
 	}
-		
 	
 	if (IsInViewport(ALocation, VisibilityOffset))
 	{
@@ -419,6 +416,7 @@ void APerformanceUnit::CheckTimerVisibility()
 {
 	if (UUnitTimerWidget* TimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject())) // Assuming you have a UUnitBaseTimer class for the timer widget
 	{
+
 		if (IsOnViewport && IsMyTeam)
 		{
 			TimerWidget->SetVisibility(ESlateVisibility::Visible);

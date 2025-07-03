@@ -146,6 +146,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildTime = 5.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	float CurrentBuildTime = 0.0f;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float AvailableResourceAmount = 200.f;
 

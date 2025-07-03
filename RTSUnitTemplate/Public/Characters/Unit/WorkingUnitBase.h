@@ -46,7 +46,7 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;
 	

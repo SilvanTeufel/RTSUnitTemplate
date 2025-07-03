@@ -11,6 +11,7 @@ void UUnitTimerWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	TimerBar->SetVisibility(ESlateVisibility::Collapsed);
+	//TimerBar->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UUnitTimerWidget::TimerTick()
@@ -81,14 +82,14 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	}
 	
-	
-	if(!IsVisible && SetVisible)
+
+
+	if(!IsVisible)
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Collapsed);
-		SetVisible = false;
-	}else if(IsVisible && !SetVisible)
+	}else if(IsVisible)
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Visible);
-		SetVisible = true;
 	}
+	
 }
