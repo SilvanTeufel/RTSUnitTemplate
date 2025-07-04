@@ -1200,6 +1200,7 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		{
 			// If they are overlapping, set the state to 'Build'
 			Worker->SetUnitState(UnitData::Build);
+			Worker->SwitchEntityTagByState(UnitData::Build, Worker->UnitStatePlaceholder);
 			Worker->SetUEPathfinding = true;
 		}
 		else
@@ -1908,6 +1909,21 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 	if (Hit_Pawn.bBlockingHit && HUDBase)
 	{
 		AActor* HitActor = Hit_Pawn.GetActor();
+
+		ABuildingBase* Base = Cast<ABuildingBase>(HitActor);
+		if (Base && Base->IsBase)
+		{
+			for (int32 i = 0; i < SelectedUnits.Num(); i++) {
+				if (SelectedUnits[i]->IsWorker)
+				{
+					SelectedUnits[i]->Base = Base;
+					SelectedUnits[i]->SetUnitState(UnitData::GoToBase);
+					//SelectedUnits[i]->SwitchEntityTag(FMassStateGoToBaseTag::StaticStruct());
+					SelectedUnits[i]->SwitchEntityTagByState(UnitData::GoToBase, SelectedUnits[i]->UnitStatePlaceholder);
+				}
+			}
+			return true;
+		}
 		
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
 

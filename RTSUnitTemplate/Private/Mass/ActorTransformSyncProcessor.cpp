@@ -277,6 +277,7 @@ void UActorTransformSyncProcessor::RotateTowardsAbility(const FMassAITargetFragm
 
     InOutMassTransform.SetRotation(NewQuat);
 }
+
 /**
  * @brief Submits the collected transform updates to be applied on the Game Thread.
  * @param PendingUpdates An array of payload data for actor updates, moved into the async task.

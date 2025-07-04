@@ -102,6 +102,13 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
                 continue;
             }
+            
+            if (WorkerStatsFrag.BuildingAreaAvailable)
+            {
+                // Target is lost or invalid. Signal to go idle or find a new task.
+                PendingSignals.Emplace(Entity, UnitSignals::GoToBuild); // Use appropriate signal
+                continue;
+            }
 
             const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
 
@@ -115,7 +122,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                     AIState.SwitchingState
                 );*/
             
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance)
+            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f))
             {
                 AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name

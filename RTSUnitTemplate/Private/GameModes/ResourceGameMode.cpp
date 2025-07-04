@@ -227,23 +227,38 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 
 ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)
 {
-	ABuildingBase* ClosestBase = nullptr;
-	float MinDistanceSquared = FLT_MAX;
+    ABuildingBase* ClosestBase = nullptr;
+    float MinDistanceSquared = FLT_MAX;
 
-	for (ABuildingBase* Base : Bases)
-	{
-		if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
-		{
-			float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
-			if (DistanceSquared < MinDistanceSquared)
+    // The 'Bases' array is iterated over.
+    for (ABuildingBase* Base : Bases)
+    {
+       // Here, 'Base' is checked with IsValid(), which is good practice.
+       // BUT, the 'Worker' pointer is used immediately without any check.
+       if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
+       {
+			if (Worker->ResourcePlace)
 			{
-				MinDistanceSquared = DistanceSquared;
-				ClosestBase = Base;
+				float DistanceSquared = (Base->GetActorLocation() - Worker->ResourcePlace->GetActorLocation()).SizeSquared();
+				if (DistanceSquared < MinDistanceSquared)
+				{
+					MinDistanceSquared = DistanceSquared;
+					ClosestBase = Base;
+				}
+			}	
+			else
+			{
+				float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+				if (DistanceSquared < MinDistanceSquared)
+				{
+					MinDistanceSquared = DistanceSquared;
+					ClosestBase = Base;
+				}
 			}
-		}
-	}
+       }
+    }
 
-	return ClosestBase;
+    return ClosestBase;
 }
 
 AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas)

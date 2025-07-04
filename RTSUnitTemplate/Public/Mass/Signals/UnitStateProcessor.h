@@ -28,6 +28,8 @@ class RTSUNITTEMPLATE_API UUnitStateProcessor : public UMassProcessor
 public:
 	UUnitStateProcessor();
 
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	bool Debug = false;
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler
@@ -182,6 +184,18 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	UPROPERTY()
+	TMap<TObjectPtr<AActor>, TObjectPtr<AActor>> RegisteredObstacles;
+	
+	UFUNCTION()
+	void RegisterBuildingAsDynamicObstacle(AActor* BuildingActor);
+
+	UFUNCTION()
+	void UnregisterDynamicObstacle(AActor* BuildingActor);
+	
+	UFUNCTION()
+	void OnRegisteredActorDestroyed(AActor* DestroyedActor);
+	
 	UFUNCTION()
 	void HandleSpawnBuildingRequest(
 		FName SignalName,

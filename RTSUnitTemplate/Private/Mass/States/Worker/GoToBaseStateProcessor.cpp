@@ -86,7 +86,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
       
         const int32 NumEntities = Context.GetNumEntities();
 
-            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
+            UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -115,10 +115,11 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
             //const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
 
+            UE_LOG(LogTemp, Log, TEXT("DistanceToTargetCenter: %f"), DistanceToTargetCenter);
+            UE_LOG(LogTemp, Log, TEXT("WorkerStats.BaseArrivalDistance: %f"), WorkerStats.BaseArrivalDistance);
             //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
             // PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
-   
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance) // && !AIState.SwitchingState
             {
                 //AIState.StateTimer = 0.f;
                 AIState.SwitchingState = true;

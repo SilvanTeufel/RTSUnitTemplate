@@ -22,12 +22,14 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "CanvasItem.h"
 #include "CanvasTypes.h"
+#include "NavModifierComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/World.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/GameViewportClient.h"
 #include "Mass/States/ChaseStateProcessor.h"
 #include "Async/Async.h"
+#include "NavAreas/NavArea_Obstacle.h"
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
@@ -711,6 +713,7 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
 void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// Gehe durch alle Entities, die mit dem Signal übergeben wurden
+       		
 	for (const FMassEntityHandle& Entity : Entities)
 	{
 		// Rufe die Funktion auf, die die eigentliche Arbeit für eine einzelne Entity macht
@@ -719,6 +722,41 @@ void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandl
 		SynchronizeUnitState(Entity);
 	}
 }
+
+FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* TargetActor, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
+{
+	if (!TargetActor || !WorldContextObject)
+	{
+		return TargetActor ? TargetActor->GetActorLocation() : FVector::ZeroVector;
+	}
+
+	UWorld* World = WorldContextObject->GetWorld();
+	if (!World)
+	{
+		return TargetActor->GetActorLocation();
+	}
+
+	FVector ActorLocation = TargetActor->GetActorLocation();
+	FVector StartTrace = ActorLocation + FVector(0.f, 0.f, TraceDistance);
+	FVector EndTrace = ActorLocation - FVector(0.f, 0.f, TraceDistance);
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(TargetActor);
+	CollisionParams.AddIgnoredActors(ActorsToIgnore);
+	// Use bTraceComplex for more accurate landscape hits, but it's slightly more expensive.
+	// CollisionParams.bTraceComplex = true; 
+
+	if (World->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, CollisionParams))
+	{
+		// We hit something. Return a vector with the actor's X/Y and the hit's Z.
+		return FVector(ActorLocation.X, ActorLocation.Y, HitResult.Location.Z);
+	}
+
+	// If the trace fails, return the original actor location as a fallback.
+	return ActorLocation;
+}
+
 
 void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity)
 {
@@ -790,9 +828,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		if (AIStateFragment->CanMove)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
+        			UnregisterDynamicObstacle(StrongUnitActor);
         		}else if(!AIStateFragment->CanMove)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
+        			RegisterBuildingAsDynamicObstacle(StrongUnitActor);
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
@@ -825,14 +865,9 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		{
             			// <<< REPLACE Properties with your actual variable names >>>
 						PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
-						//PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
-						//PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
 						PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
 						PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
-
-	
 						PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
-
 						PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
 						PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
 
@@ -842,10 +877,17 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
             	{
+            		bool UpdateMovement = false;
+            		if (ResourceGameMode && !StrongUnitActor->Base)
+            		{
+            			StrongUnitActor->Base = ResourceGameMode->GetClosestBaseFromArray(StrongUnitActor, ResourceGameMode->WorkAreaGroups.BaseAreas);
+            			UpdateMovement = true;
+            		}
+
             		WorkerStats->BaseAvailable = StrongUnitActor->Base? true: false;
             		if (StrongUnitActor->Base)
             		{
-            			WorkerStats->BasePosition = StrongUnitActor->Base->GetActorLocation();
+            			WorkerStats->BasePosition = FindGroundLocationForActor(this, StrongUnitActor->Base, {StrongUnitActor, StrongUnitActor->Base}); //StrongUnitActor->Base->GetActorLocation();
 						FVector Origin, BoxExtent;
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
@@ -860,7 +902,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+50.f;
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
-            			WorkerStats->BuildAreaPosition = StrongUnitActor->BuildArea->GetActorLocation();
+            			WorkerStats->BuildAreaPosition = FindGroundLocationForActor(this, StrongUnitActor->BuildArea, {StrongUnitActor, StrongUnitActor->BuildArea}); // StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
             		}
 
@@ -875,12 +917,17 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			FVector Origin, BoxExtent;
 						StrongUnitActor->ResourcePlace->GetActorBounds(false, Origin, BoxExtent);
             			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+50.f;
-            			WorkerStats->ResourcePosition = StrongUnitActor->ResourcePlace->GetActorLocation();
-            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+            			WorkerStats->ResourcePosition = FindGroundLocationForActor(this, StrongUnitActor->ResourcePlace, {StrongUnitActor, StrongUnitActor->ResourcePlace});
             		}
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             		WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
+
+
+            		if (UpdateMovement)
+            		{
+            			UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+            		}
             	}
             }
         }
@@ -1044,23 +1091,12 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                             // If Throw Ability was not activated, attempt Offensive Ability
                             if (!bIsActivated && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
                             {
-                                // Original code had a commented-out range check: //if (AttackerRange >= 600.f)
-                                // If you need such a condition, you'd calculate AttackerRange here.
-                                // This would likely involve getting the target's location,
-                                // which means FMassAITargetFragment and target's FTransformFragment
-                                // would need to be accessed (potentially captured or re-fetched on GT).
-
-                                // For this example, we'll call it unconditionally if Throw wasn't activated.
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
                             }
 
                             if (bIsActivated)
                             {
                                 UE_LOG(LogTemp, Verbose, TEXT("Unit %s activated a ranged/offensive ability."), *StrongAttacker->GetName());
-
-                                // Optional: Signal that an ability was used.
-                                // This could be the same 'IsAttacked' signal if these abilities put the unit into an attack-like state,
-                                // or a new signal like 'SpecialAbilityUsed'.
                             }
                             else
                             {
@@ -1576,6 +1612,7 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
+                    	UnregisterDynamicObstacle(UnitBase);
                     	UnitBase->HideHealthWidget(); // Aus deinem Code
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
@@ -1710,7 +1747,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 		// Log error - This check itself is generally safe
 		return;
 	}
-
+	
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
 
 	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
@@ -1740,7 +1777,8 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase && UnitBase->IsWorker && IsValid(UnitBase->ResourcePlace))
+					
+					if (UnitBase && UnitBase->IsWorker)
 					{
 						if (!ResourceGameMode)
 							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
@@ -1754,9 +1792,8 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
-						
-						UpdateUnitMovement(Entity , UnitBase);
 
+						UpdateUnitMovement(Entity , UnitBase);
 						//SwitchState( UnitSignals::GoToBase, Entity, EntityManager);
 						UnitBase->SwitchEntityTagByState(UnitBase->UnitState, UnitBase->UnitStatePlaceholder);
 						StateFrag->SwitchingState = false;
@@ -1820,6 +1857,149 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 		}
 	}); 
 }
+
+
+void UUnitStateProcessor::RegisterBuildingAsDynamicObstacle(AActor* BuildingActor)
+{
+    if (!IsValid(BuildingActor) || !World)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[NavObstacle] Invalid actor or world provided for registration."));
+        return;
+    }
+
+    // Prevent registering the same actor twice
+    if (RegisteredObstacles.Contains(BuildingActor))
+    {
+        UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Actor %s is already registered."), *BuildingActor->GetName());
+        return;
+    }
+
+	// Try to find a capsule collision component first…
+	UCapsuleComponent* Capsule = BuildingActor->FindComponentByClass<UCapsuleComponent>();
+	FBox BoundsBox;
+
+	if (Capsule)
+	{
+		// Pull radius & half‑height (accounting for scale)
+		const float Radius     = Capsule->GetScaledCapsuleRadius();
+		const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+		const FVector Center   = Capsule->GetComponentLocation();
+
+		// Build an FBox from center±extent
+		const FVector Extents = FVector(Radius, Radius, HalfHeight);
+		BoundsBox = FBox(Center - Extents, Center + Extents);
+
+		UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Using capsule bounds (R=%.1f H=%.1f) for %s."),
+			   Radius, HalfHeight, *BuildingActor->GetName());
+	}
+	else
+	{
+		// Fallback to component bounding box
+		FBox ComponentBB = BuildingActor->GetComponentsBoundingBox();
+		if (!ComponentBB.IsValid)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[NavObstacle] Could not calculate valid bounds for actor %s."),
+				   *BuildingActor->GetName());
+			return;
+		}
+
+		constexpr float Padding = 10.0f;
+		BoundsBox = ComponentBB.ExpandBy(Padding);
+	}
+    
+    // 2. Pad the bounds slightly to ensure full coverage
+    constexpr float Padding = 10.0f; // Small padding
+    const FBox PaddedBounds = BoundsBox.ExpandBy(FVector(Padding));
+    const FVector Center = PaddedBounds.GetCenter();
+    const FVector Extent = PaddedBounds.GetExtent();
+
+    // 3. Spawn a dedicated, lightweight actor to hold the nav modifier
+    AActor* NavObstacleActor = World->SpawnActor<AActor>();
+    if (!NavObstacleActor)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[NavObstacle] Failed to spawn proxy actor for nav obstacle."));
+        return;
+    }
+    
+    // For easier debugging, give it a clear name
+    // NavObstacleActor->SetActorLabel(FString::Printf(TEXT("NavObstacle_for_%s"), *BuildingActor->GetName()));
+
+    // 4. Create and configure the Box Component for the volume
+	UBoxComponent* BoxComp = NewObject<UBoxComponent>(NavObstacleActor);
+    BoxComp->SetWorldLocation(Center);
+	BoxComp->SetBoxExtent(Extent, false);
+    BoxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+
+    // --- ADD THESE LINES FOR DEBUGGING ---
+    if(Debug)
+    {
+	    BoxComp->SetHiddenInGame(false);
+    	BoxComp->SetVisibility(true);
+    }
+    // ------------------------------------
+	
+    NavObstacleActor->SetRootComponent(BoxComp);
+    BoxComp->RegisterComponent();
+
+    // 5. Create and configure the Nav Modifier Component
+    UNavModifierComponent* ModComp = NewObject<UNavModifierComponent>(NavObstacleActor);
+    ModComp->SetAreaClass(UNavArea_Obstacle::StaticClass());
+	ModComp->FailsafeExtent = Extent;
+    ModComp->RegisterComponent();
+
+    // 6. Mark the area dirty to force a navmesh rebuild
+    if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+    {
+        NavSys->AddDirtyArea(PaddedBounds, ENavigationDirtyFlag::All);
+        UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Registered %s and marked dirty area."), *BuildingActor->GetName());
+    }
+
+    // 7. Track the new obstacle and bind to the building's destruction event for auto-cleanup
+    RegisteredObstacles.Add(BuildingActor, NavObstacleActor);
+    BuildingActor->OnDestroyed.AddDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
+}
+
+void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
+{
+	if (!IsValid(BuildingActor))
+	{
+		return;
+	}
+
+	// Use FindRef to get the TObjectPtr directly.
+	// If the key isn't found, it returns a nullptr TObjectPtr, so the IsValid check handles it perfectly.
+	TObjectPtr<AActor> NavObstacleActor = RegisteredObstacles.FindRef(BuildingActor);
+
+	if (IsValid(NavObstacleActor))
+	{
+		// Get the bounds *before* destroying the actor
+		const FBox BoundsToDirty = NavObstacleActor->GetComponentsBoundingBox();
+
+		// Destroy our proxy actor
+		NavObstacleActor->Destroy();
+		UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Unregistered and destroyed nav obstacle for %s."), *BuildingActor->GetName());
+
+		// Mark the area dirty again so the navmesh can reclaim the space
+		if (World)
+		{
+			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+			{
+				NavSys->AddDirtyArea(BoundsToDirty, ENavigationDirtyFlag::All);
+			}
+		}
+	}
+    
+	// Stop tracking it (safe to call even if it wasn't found)
+	RegisteredObstacles.Remove(BuildingActor);
+}
+
+void UUnitStateProcessor::OnRegisteredActorDestroyed(AActor* DestroyedActor)
+{
+    UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Detected %s was destroyed, cleaning up nav obstacle."), *DestroyedActor->GetName());
+    UnregisterDynamicObstacle(DestroyedActor);
+}
+
 
 void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
@@ -1904,6 +2084,8 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 									if (Building && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 										UnitBase->BuildArea->Building = Building;
+
+									RegisterBuildingAsDynamicObstacle(NewUnit);
 								}
 							}
     					}
@@ -2776,13 +2958,13 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
+			TArray<FMassEntityHandle> CapturedEntitys;
+			CapturedEntitys.Emplace(Entity);
+			HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
-			TArray<FMassEntityHandle> CapturedEntitys;
-			CapturedEntitys.Emplace(Entity);
-			HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
 			UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::GoToBuild)

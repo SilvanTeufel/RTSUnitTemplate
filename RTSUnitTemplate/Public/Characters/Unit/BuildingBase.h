@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilityUnit.h"
+#include "NavModifierVolume.h"
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"

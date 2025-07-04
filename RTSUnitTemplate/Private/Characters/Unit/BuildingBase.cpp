@@ -58,11 +58,13 @@ void ABuildingBase::Destroyed()
 		ResourceGameMode->RemoveBaseFromGroup(this);
 }
 
+
+
+
 void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
                                    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-
-
+	
 	// Since Worker is already AWorkingUnitBase, no need to cast again
 	AUnitBase* UnitBase = Cast<AUnitBase>(OtherActor);
 	if (!UnitBase || !UnitBase->IsWorker) return;
