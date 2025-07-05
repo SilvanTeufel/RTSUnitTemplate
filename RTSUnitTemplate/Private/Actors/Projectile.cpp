@@ -735,7 +735,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
-	if(UnitToHit && UnitToHit->TeamId != TeamId && ShootingUnit)
+	if(UnitToHit && ShootingUnit)
 	{
 		float NewDamage = Damage;
 		if (UseAttributeDamage)

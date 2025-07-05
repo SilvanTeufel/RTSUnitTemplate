@@ -20,12 +20,8 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.Initialize(EntityManager);
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
-    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
-    
+
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -91,18 +87,14 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>(); // Mutable needed
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable needed
             //UE_LOG(LogTemp, Warning, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
-            FMassAITargetFragment& TargetFrag = TargetList[i]; // Mutable ref needed
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-            FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
             
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
@@ -111,13 +103,15 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 PendingSignals.Emplace(Entity, UnitSignals::UnitSpawned);
             }
+            /*
             // --- 1. Check CURRENT entity's health ---
             if (StatsFrag.Health <= 0.f && !DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()))
             {
                 // Queue Dead signal
+                UE_LOG(LogTemp, Error, TEXT("MSP Unit has no Health anymore!"));
                 PendingSignals.Emplace(Entity, UnitSignals::Dead);
                 continue; // Skip further checks for this dead entity
-            }
+            }*/
         } // End Entity Loop
     }); // End ForEachEntityChunk
 

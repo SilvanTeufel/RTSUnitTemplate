@@ -143,7 +143,8 @@ void AControllerBase::Tick(float DeltaSeconds)
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-	
+
+	/*
 	if(AttackToggled)
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
@@ -155,6 +156,7 @@ void AControllerBase::Tick(float DeltaSeconds)
 		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
 		
 	}
+	*/
 
 
 	TArray<FPathPoint> PathPoints;

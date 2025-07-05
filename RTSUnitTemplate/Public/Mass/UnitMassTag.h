@@ -257,7 +257,9 @@ struct FMassAITargetFragment : public FMassFragment
     /** Gibt an, ob aktuell ein gültiges Ziel verfolgt/angevisiert wird. Wird von einem TargetAcquisitionProcessor gesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasValidTarget = false;
-	
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool IsFocusedOnTarget = false;
 	/** The set of entities this detector currently believes it can see. */
 	TSet<FMassEntityHandle> PreviouslySeen;
 

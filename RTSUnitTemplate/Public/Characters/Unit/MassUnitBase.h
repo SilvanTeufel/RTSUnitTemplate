@@ -53,6 +53,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder);
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool FocusEntityTarget(AUnitBase* TargetUnit);
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool RemoveFocusEntityTarget();
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool UpdateEntityHealth(float NewHealth);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SyncTranslation();
@@ -63,10 +72,10 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);
 
-	UFUNCTION(BlueprintCallable, Category = Ability)
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	void StartAcceleratingTowardsDestination(const FVector& NewDestination, float NewAccelerationRate, float NewRequiredDistanceToStart);
 
-	UFUNCTION(BlueprintCallable, Category = Ability)
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	void StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration);
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);

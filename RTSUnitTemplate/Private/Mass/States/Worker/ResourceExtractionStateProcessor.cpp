@@ -82,7 +82,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
         const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
 
-            // UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

@@ -120,9 +120,7 @@ void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
-
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
-
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
     
@@ -229,50 +227,77 @@ void UDetectionProcessor::Execute(
 
         InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not allready inside
-        for (auto& Tgt : TargetUnits)
+        if (!Det.TargetFrag->IsFocusedOnTarget)
         {
-            if (Tgt.Entity == Det.Entity) 
-                continue;
-
-            // skip friendly
-            if (Tgt.Stats->TeamId == Det.Stats->TeamId) 
-                continue;
-
-            // skip too‐young / too‐old
-            const float TgtAge = Now - Tgt.State->BirthTime;
-            const float SinceDeath = Now - Tgt.State->DeathTime;
-            if (TgtAge < 1.f || SinceDeath > 4.f) 
-                continue;
-
-            // can I attack their type?
-            if ((Det.Char->bCanOnlyAttackGround && Tgt.Char->bIsFlying) ||
-                (Det.Char->bCanOnlyAttackFlying && !Tgt.Char->bIsFlying) ||
-                (Tgt.Char->bIsInvisible && !Det.Char->bCanDetectInvisible))
+            for (auto& Tgt : TargetUnits)
             {
-                continue;
+                if (Tgt.Entity == Det.Entity) 
+                    continue;
+
+                // skip friendly
+                if (Tgt.Stats->TeamId == Det.Stats->TeamId) 
+                    continue;
+
+                // skip too‐young / too‐old
+                const float TgtAge = Now - Tgt.State->BirthTime;
+                const float SinceDeath = Now - Tgt.State->DeathTime;
+                if (TgtAge < 1.f || SinceDeath > 4.f) 
+                    continue;
+
+                // can I attack their type?
+                if ((Det.Char->bCanOnlyAttackGround && Tgt.Char->bIsFlying) ||
+                    (Det.Char->bCanOnlyAttackFlying && !Tgt.Char->bIsFlying) ||
+                    (Tgt.Char->bIsInvisible && !Det.Char->bCanDetectInvisible))
+                {
+                    continue;
+                }
+
+                const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
+                // “new” target if in sight radius and closer than anything before, and alive
+                if (DistSq < ShortestDistSq && Tgt.Stats->Health > 0)
+                {
+                    BestEntity     = Tgt.Entity;
+                    BestLocation   = Tgt.Location;
+                    bFoundNew      = true;
+                    ShortestDistSq = DistSq;
+                }
+
+                // “current” target still viable if it’s the same one and within lose‐sight radius
+                if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
+                    DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
+                {
+                    CurrentLocation    = Tgt.Location;
+                    bCurrentStillViable = true;
+                }
             }
-
-            const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
-            // “new” target if in sight radius and closer than anything before, and alive
-            if (DistSq < ShortestDistSq && Tgt.Stats->Health > 0)
+        }
+        else
+        {
+            for (auto& Tgt : TargetUnits)
             {
-                BestEntity     = Tgt.Entity;
-                BestLocation   = Tgt.Location;
-                bFoundNew      = true;
-                ShortestDistSq = DistSq;
-            }
-
-            // “current” target still viable if it’s the same one and within lose‐sight radius
-            if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
-                DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
-            {
-                CurrentLocation    = Tgt.Location;
-                bCurrentStillViable = true;
+                if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
+                    continue;
+                
+                const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
+                
+                if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
+                        DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
+                {
+                    CurrentLocation    = Tgt.Location;
+                    bCurrentStillViable = true;
+                }else
+                {
+                    Det.TargetFrag->IsFocusedOnTarget = false;
+                }
             }
         }
 
+
+        
+
+        
         // 4) Update target fragment
-        if (bFoundNew)
+        if (bFoundNew && !Det.TargetFrag->IsFocusedOnTarget)
         {
             Det.TargetFrag->TargetEntity      = BestEntity;
             Det.TargetFrag->LastKnownLocation = BestLocation;

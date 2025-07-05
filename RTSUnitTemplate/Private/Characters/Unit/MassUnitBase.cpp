@@ -4,9 +4,12 @@
 #include "Characters/Unit/MassUnitBase.h"
 
 #include "MassSignalSubsystem.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Mass/States/ChaseStateProcessor.h"
+#include "MassCommonFragments.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -236,6 +239,117 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	return true;
 }
 
+
+
+bool AMassUnitBase::FocusEntityTarget(AUnitBase* TargetUnit)
+{
+	
+	if (!TargetUnit || !TargetUnit->MassActorBindingComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): FocusEntityTarget failed - TargetUnit is null or has no MassActorBindingComponent."), *GetName());
+		return false;
+	}
+	
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	FMassEntityHandle TargetEntity = TargetUnit->MassActorBindingComponent->GetEntityHandle();
+	
+	if (!EntityManager->IsEntityValid(TargetEntity))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): FocusEntityTarget failed - Target entity %s is no longer valid."), *GetName(), *TargetEntity.DebugGetDescription());
+		return false;
+	}
+	// Reset state timers
+	FMassAITargetFragment* TargetFrag = EntityManager->GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle);
+	
+	if (!TargetFrag) return false;
+	
+	TargetFrag->TargetEntity      = TargetEntity;
+	TargetFrag->IsFocusedOnTarget = true;
+
+	return true;
+}
+
+
+bool AMassUnitBase::RemoveFocusEntityTarget()
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	FMassAITargetFragment* TargetFrag = EntityManager->GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle);
+	
+	if (!TargetFrag) return false;
+	
+	TargetFrag->IsFocusedOnTarget = false;
+
+	return true;
+}
+
+
+bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	
+	// Reset state timers
+	FMassCombatStatsFragment* CombatStats = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
+	
+	if (!CombatStats) return false;
+	
+	CombatStats->Health = NewHealth;
+
+	if (CombatStats->Health <= 0.f)
+	{
+		SwitchEntityTag(FMassStateDeadTag::StaticStruct());
+	}
+
+	return true;
+}
+
+
 bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 {
 	FMassEntityManager* EntityManager;
@@ -382,23 +496,23 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 	OutEntityManager = nullptr;
 	OutEntityHandle.Reset();
 
-	UWorld* World = GetWorld();
+	const UWorld* World = GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnerUnit (%s): Cannot get Mass Entity Data - World is invalid."), *GetName());
+		UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - World is invalid."), *GetName());
 		return false;
 	}
 
 	UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!EntitySubsystem)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnerUnit (%s): Cannot get Mass Entity Data - UMassEntitySubsystem is invalid."), *GetName());
+		UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - UMassEntitySubsystem is invalid."), *GetName());
 		return false;
 	}
 
 	if (!MassActorBindingComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnerUnit (%s): Cannot get Mass Entity Data - MassActorBindingComponent is missing."), *GetName());
+		UE_LOG(LogTemp, Error, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - MassActorBindingComponent is missing."), *GetName());
 		return false;
 	}
 

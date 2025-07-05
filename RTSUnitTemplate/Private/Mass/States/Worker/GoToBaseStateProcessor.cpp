@@ -86,7 +86,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
       
         const int32 NumEntities = Context.GetNumEntities();
 
-            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -97,7 +97,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
             
-            if (!WorkerStats.BaseAvailable && AIState.StateTimer >= 5.f && !AIState.SwitchingState)
+            if (!WorkerStats.BaseAvailable) // && AIState.StateTimer >= 5.f && !AIState.SwitchingState
             {
                  AIState.SwitchingState = true;
                  PendingSignals.Emplace(Entity, UnitSignals::Idle);
@@ -114,7 +114,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
                 continue;
             }
-            
+          
 
             // --- 2. Movement Logic ---
             // Use the externally provided helper function

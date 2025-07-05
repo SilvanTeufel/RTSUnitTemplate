@@ -251,6 +251,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			{
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
+					UnitsToLoad[i]->RemoveFocusEntityTarget();
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
 					float Distance = FVector::Dist2D(UnitsToLoad[i]->GetActorLocation(), Transporter->GetActorLocation());
 
@@ -314,11 +315,11 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 		AActor* HitActor = Hit_Pawn.GetActor();
 		
 		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
-	
+
 		LoadUnitsMass(SelectedUnits, UnitBase);
 	
 		if (UnitBase && UnitBase->IsATransporter){
-		
+			UnitBase->RemoveFocusEntityTarget();
 			TArray<AUnitBase*> NewSelection;
 
 			NewSelection.Emplace(UnitBase);
@@ -537,6 +538,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue;
 
+    	U->RemoveFocusEntityTarget();
         float Speed = U->Attributes->GetBaseRunSpeed();
         if (SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint))
         {
@@ -716,137 +718,6 @@ void ACustomControllerBase::LeftClickPressedMass()
     }
 }
 
-
-/*
-void ACustomControllerBase::LeftClickPressedMass()
-{
-	LeftClickIsPressed = true;
-	AbilityArrayIndex = 0;
-	
-	if (!CameraBase || CameraBase->TabToggled) return;
-	
-	if(AltIsPressed)
-	{
-		DestroyWorkArea();
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			CancelAbilitiesIfNoBuilding(SelectedUnits[i]);
-		}
-		
-	}else if (AttackToggled) {
-		FHitResult Hit;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
-		int32 NumUnits = SelectedUnits.Num();
-		const int32 GridSize = ComputeGridSize(NumUnits);
-		AWaypoint* BWaypoint = nullptr;
-
-		bool PlayWaypointSound = false;
-		bool PlayAttackSound = false;
-		
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			if (SelectedUnits[i] != CameraUnitWithTag)
-			{
-				int32 Row = i / GridSize;     // Row index
-				int32 Col = i % GridSize;     // Column index
-				
-				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
-
-				bool HitNavModifier;
-				RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
-				if (HitNavModifier) continue;
-				
-				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
-				{
-					// Do Nothing
-				}else
-				{
-					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-					if (SelectedUnits[i]->bIsMassUnit)
-					{
-						LeftClickAttackMass(SelectedUnits[i], RunLocation, AttackToggled);
-					}else
-					{
-						LeftClickAttack(SelectedUnits[i], RunLocation);
-					}
-					
-					PlayAttackSound = true;
-				}
-			}
-			
-			if (SelectedUnits[i])
-				FireAbilityMouseHit(SelectedUnits[i], Hit);
-		}
-		
-		AttackToggled = false;
-		
-		if (WaypointSound && PlayWaypointSound)
-		{
-			UGameplayStatics::PlaySound2D(this, WaypointSound);
-		}
-
-		if (AttackSound && PlayAttackSound)
-		{
-			UGameplayStatics::PlaySound2D(this, AttackSound);
-		}
-		
-	}
-	else {
-		DropWorkArea();
-		//LeftClickSelect_Implementation();
-
-		
-		FHitResult Hit_Pawn;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
-
-		bool AbilityFired = false;
-		bool AbilityUnSynced = false;
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-				if (SelectedUnits[i] && SelectedUnits[i]->CurrentSnapshot.AbilityClass && SelectedUnits[i]->CurrentDraggedAbilityIndicator)
-				{
-						FireAbilityMouseHit(SelectedUnits[i], Hit_Pawn);
-						AbilityFired = true;
-				}else
-				{
-					AbilityUnSynced = true;
-				}
-		}
-		
-		if (AbilityFired && !AbilityUnSynced) return;
-		
-		if (Hit_Pawn.bBlockingHit && HUDBase)
-		{
-			AActor* HitActor = Hit_Pawn.GetActor();
-			
-			if(!HitActor->IsA(ALandscape::StaticClass()))
-				ClickedActor = Hit_Pawn.GetActor();
-			else
-				ClickedActor = nullptr;
-			
-			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
-			
-			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
-			{
-				HUDBase->DeselectAllUnits();
-				HUDBase->SetUnitSelected(UnitBase);
-				DragUnitBase(UnitBase);
-		
-				
-				if(CameraBase->AutoLockOnSelect)
-					LockCameraToUnit = true;
-			}
-			else {
-				HUDBase->InitialPoint = HUDBase->GetMousePos2D();
-				HUDBase->bSelectFriendly = true;
-			}
-		}
-	}
-	
-}
-*/
 void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerformanceUnit* Unit, bool bVisible)
 {
 	if (IsValid(Unit))
@@ -864,14 +735,15 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 
 		if (Hit_Pawn.bBlockingHit)
 		{
-			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
+			AUnitBase* TargetUnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
 					
-			if(UnitBase && !UnitBase->TeamId)
+			if(TargetUnitBase)
 			{
 				/// Focus Enemy Units ///
-				Unit->UnitToChase = UnitBase;
+				Unit->UnitToChase = TargetUnitBase;
+				Unit->FocusEntityTarget(TargetUnitBase);
 				SetUnitState_Replication(Unit, 3);
-				
+				Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
 			}else if(UseUnrealEnginePathFinding)
 			{
 					
@@ -879,10 +751,11 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 				{
 					LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 				}
-					
+				Unit->RemoveFocusEntityTarget();
 			}else
 			{
 				LeftClickAMove(Unit, Location);
+				Unit->RemoveFocusEntityTarget();
 			}
 		}else if(UseUnrealEnginePathFinding)
 		{
@@ -890,6 +763,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 			{
 				/// A-Move Units ///
 				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
+				Unit->RemoveFocusEntityTarget();
 			}
 					
 		}

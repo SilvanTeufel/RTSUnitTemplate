@@ -479,6 +479,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
                         	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
+                        	TArray<FMassEntityHandle> CapturedEntitys;
+                        	CapturedEntitys.Emplace(Entity);
+                        	HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
                         }
                     	
                     	if (SignalName == UnitSignals::Idle) { UnitBase->SetUnitState(UnitData::Idle); }
@@ -781,16 +784,13 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
     const AActor* Actor = ActorFrag ? ActorFrag->Get() : nullptr;
     const AUnitBase* UnitActor = Cast<AUnitBase>(Actor); // Const Cast genügt
 
-    // Prüfen, ob wir einen gültigen Actor und dessen Attributes haben
-    // Ersetze 'Attributes', falls dein Member anders heißt
     if (!IsValid(UnitActor) || !UnitActor->Attributes)
     {
         //UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment: Konnte keinen gültigen AUnitBase Actor oder Attributes für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
         return;
     }
 
-    // --- Notwendige Daten für den AsyncTask erfassen ---
-    // const_cast ist für TWeakObjectPtr nötig, da der Ctor non-const erwartet.
+
     TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
     FMassEntityHandle CapturedEntity = Entity; // Handle per Wert kopieren
 
@@ -817,19 +817,19 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
 			FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 			FMassAIStateFragment* AIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
-        	//FMassAgentCharacteristicsFragment* CharFragment = 
-        	// Das Attribute Set holen (erneut auf Gültigkeit prüfen)
-            // Ersetze 'Attributes', falls dein Member anders heißt
+
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
         	if (StrongUnitActor && AIStateFragment)
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
-        		if (AIStateFragment->CanMove)
+        		bool bHasDeadTag = DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDeadTag::StaticStruct());
+        			
+        		if (AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
         			UnregisterDynamicObstacle(StrongUnitActor);
-        		}else if(!AIStateFragment->CanMove)
+        		}else if(!AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
         			RegisterBuildingAsDynamicObstacle(StrongUnitActor);
@@ -877,14 +877,19 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
             	{
+            		
             		bool UpdateMovement = false;
             		if (ResourceGameMode && !StrongUnitActor->Base)
             		{
             			StrongUnitActor->Base = ResourceGameMode->GetClosestBaseFromArray(StrongUnitActor, ResourceGameMode->WorkAreaGroups.BaseAreas);
             			UpdateMovement = true;
             		}
-
-            		WorkerStats->BaseAvailable = StrongUnitActor->Base? true: false;
+            		
+            		if (StrongUnitActor->Base && StrongUnitActor->Base->GetUnitState() != UnitData::Dead)
+            			WorkerStats->BaseAvailable = true;
+            		else
+            			WorkerStats->BaseAvailable = false;
+            			
             		if (StrongUnitActor->Base)
             		{
             			WorkerStats->BasePosition = FindGroundLocationForActor(this, StrongUnitActor->Base, {StrongUnitActor, StrongUnitActor->Base}); //StrongUnitActor->Base->GetActorLocation();
@@ -921,12 +926,19 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		}
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
-            		WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
-
-
-            		if (UpdateMovement)
+            		
+            		if (WorkerStats->BaseAvailable)
             		{
-            			UpdateUnitMovement(CapturedEntity , StrongUnitActor);
+            			WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
+            		}
+		            else
+		            {
+		            	WorkerStats->AutoMining	= false;
+		            }
+
+            		//if (UpdateMovement)
+            		{
+            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
             		}
             	}
             }
@@ -1174,22 +1186,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 	// Ensure Actors and Entities are still valid
                     if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
                     {
-
-                    	/*
-                    	if (!StrongAttacker->bUseSkeletalMovement)
-                    	{
-                    		if (auto* TransformFrag =  GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity))
-                    		{
-								const FTransform& MassTransform = TransformFrag->GetTransform();
-                    		
-								StrongAttacker->Multicast_UpdateISMInstanceTransform(
-									StrongAttacker->InstanceIndex,
-									MassTransform
-								);
-							}
-                    	}*/
-                        // --- Access Fragments on Game Thread ---
-                        // *** FIX: AttackerEntity and TargetEntity are now captured ***
+                    	
                         const FMassCombatStatsFragment* AttackerStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerEntity);
                         FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity); // Mutable required
                     	FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity);
@@ -1235,58 +1232,14 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 							 StrongAttacker->ServerStartAttackEvent_Implementation();
                     	
 							 bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->AttackAbilityID, StrongAttacker->AttackAbilities);
-
-                    		/*
-							 if (!bIsActivated)
-							 {
-								 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
-							 }
-							 if (!bIsActivated)
-							 {
-								 //if (AttackerRange >= 600.f)
-								 {
-									bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
-								 }
-							 }*/
-
-						/*
-                    	if (bIsActivated)
-                    	{
-                    		UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-							if (SignalSubsystem)
-							{
-					
-								SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
-								return;
-							}
-                    	}*/
+                    	
                     		StrongAttacker->ServerMeeleImpactEvent();
 							StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
 							StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
                     	
-
-                    	
 							if (TargetAIStateFragment->CanAttack && TargetAIStateFragment->IsInitialized) GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
 
-                    		/*
-							UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
-			
-							if (CurrentTargetState != UnitData::Run &&
-								CurrentTargetState != UnitData::Pause &&
-								CurrentTargetState != UnitData::Casting &&
-								CurrentTargetState != UnitData::Rooted &&
-								CurrentTargetState != UnitData::Attack &&
-								CurrentTargetState != UnitData::IsAttacked)
-							{
-          
-								UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
-								if (SignalSubsystem)
-								{
-									TargetAIStateFragment->StateTimer = 0.f;
-									SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
-								}
-							}
-							else*/ if(StrongTarget->GetUnitState() == UnitData::Casting)
+                    		if(StrongTarget->GetUnitState() == UnitData::Casting)
 							{
 								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
 								StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime;
@@ -1870,7 +1823,7 @@ void UUnitStateProcessor::RegisterBuildingAsDynamicObstacle(AActor* BuildingActo
     // Prevent registering the same actor twice
     if (RegisteredObstacles.Contains(BuildingActor))
     {
-        UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Actor %s is already registered."), *BuildingActor->GetName());
+        // UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Actor %s is already registered."), *BuildingActor->GetName());
         return;
     }
 
@@ -1966,9 +1919,10 @@ void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
 	{
 		return;
 	}
+    
+	// Unbind the delegate first, as we need the BuildingActor pointer to do it.
+	BuildingActor->OnDestroyed.RemoveDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
 
-	// Use FindRef to get the TObjectPtr directly.
-	// If the key isn't found, it returns a nullptr TObjectPtr, so the IsValid check handles it perfectly.
 	TObjectPtr<AActor> NavObstacleActor = RegisteredObstacles.FindRef(BuildingActor);
 
 	if (IsValid(NavObstacleActor))
@@ -1990,14 +1944,14 @@ void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
 		}
 	}
     
-	// Stop tracking it (safe to call even if it wasn't found)
+	// Now it's safe to stop tracking it.
 	RegisteredObstacles.Remove(BuildingActor);
 }
 
 void UUnitStateProcessor::OnRegisteredActorDestroyed(AActor* DestroyedActor)
 {
     UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Detected %s was destroyed, cleaning up nav obstacle."), *DestroyedActor->GetName());
-    UnregisterDynamicObstacle(DestroyedActor);
+    //UnregisterDynamicObstacle(DestroyedActor);
 }
 
 
@@ -2603,7 +2557,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
 
-						//UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal!"));
+						//UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal %s:"), *StateFrag->PlaceholderSignal.ToString());
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -2958,9 +2912,6 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
-			TArray<FMassEntityHandle> CapturedEntitys;
-			CapturedEntitys.Emplace(Entity);
-			HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::GoToBase)

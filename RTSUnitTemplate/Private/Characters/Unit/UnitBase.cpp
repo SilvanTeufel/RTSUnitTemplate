@@ -350,7 +350,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	float OldHealth = Attributes->GetHealth();
 	
 	Attributes->SetAttributeHealth(NewHealth);
-
+	UpdateEntityHealth(NewHealth);
 	if(NewHealth <= 0.f)
 	{
 		SetWalkSpeed(0);

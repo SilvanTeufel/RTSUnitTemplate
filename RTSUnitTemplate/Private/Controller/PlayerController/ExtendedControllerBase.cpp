@@ -1916,6 +1916,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 			for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 				if (SelectedUnits[i]->IsWorker)
 				{
+					SelectedUnits[i]->RemoveFocusEntityTarget();
 					SelectedUnits[i]->Base = Base;
 					SelectedUnits[i]->SetUnitState(UnitData::GoToBase);
 					//SelectedUnits[i]->SwitchEntityTag(FMassStateGoToBaseTag::StaticStruct());
@@ -1944,6 +1945,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 					{
 						
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
+						Worker->RemoveFocusEntityTarget();
 						SendWorkerToResource(Worker, WorkArea);
 					}
 				}
@@ -1954,6 +1956,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 					AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
 					if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
 					{
+						Worker->RemoveFocusEntityTarget();
 						SendWorkerToWorkArea(Worker, WorkArea);
 					}
 				}
