@@ -87,8 +87,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         const TConstArrayView<FMassCombatStatsFragment> StatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
 
         const int32 NumEntities = Context.GetNumEntities();
-
-           // UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -110,22 +109,15 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             }
 
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
-            //const float DistanceToTargetEdge = DistanceToTargetCenter - BuildAreaRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance)
             {
                 AIState.SwitchingState = true;
-                // Queue signal for reaching the base
+
                 PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
                 continue;
             }
-            
-            // --- 2. Movement Logic ---
-            const float TargetSpeed = Stats.RunSpeed;
-            // Use the externally provided helper function
-            //UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, TargetSpeed, World);
-
         } // End loop through entities
     }); // End ForEachEntityChunk
 

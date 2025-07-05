@@ -56,21 +56,16 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
-
-    // --- Get World and Signal Subsystem (only if interval was met) ---
-    UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World
+    
+    UWorld* World = EntityManager.GetWorld();
     if (!World) return;
 
     if (!SignalSubsystem) return;
 
-    // --- List for Game Thread Signal Updates ---
-    TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
-    
+    TArray<FMassSignalPayload> PendingSignals;
+
     EntityQuery.ForEachEntityChunk(Context, 
-        // Capture PendingSignals by reference.
-        // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();

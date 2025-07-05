@@ -26,13 +26,12 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.Initialize(EntityManager);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::All);
 
-    // Benötigte Fragmente:
+
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly);
-    // === KORREKTUR HIER ===
-    // Timer ist jetzt Teil von FMassAIStateFragment
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // ReadWrite für State und Timer
+
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -57,19 +56,16 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
-    // --- Get World and Signal Subsystem once ---
+
     const UWorld* World = EntityManager.GetWorld(); // Use EntityManager consistently
     if (!World) return;
 
     if (!SignalSubsystem) return;
-
-    // --- List for Game Thread Signal Updates ---
+    
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference. Capture World & EntityManager if needed by inner logic.
-        // Do NOT capture LocalSignalSubsystem directly here.
+
         [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -85,33 +81,28 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
-
-            // --- Check for Valid Target ---
-            bool bCanAttack = true; // Replace with your actual flag from StatsFrag or elsewhere
+            
+            bool bCanAttack = true;
 
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
-                continue; // Switch state, process next entity
+                continue;
             }
 
-            // --- Update Timer (Only if no target found/chasing) ---
-            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
-            // --- Check for Returning to Patrol ---
+            StateFrag.StateTimer += ExecutionInterval;
+            
             bool bHasPatrolRoute = PatrolFrag.CurrentWaypointIndex != INDEX_NONE;
-            bool bIsOnPlattform = false; // Replace with your actual flag
-
-            // Check member variables bSetUnitsBackToPatrol and SetUnitsBackToPatrolTime exist on 'this' processor
+            bool bIsOnPlattform = false;
+            
             if (!bIsOnPlattform && !StateFrag.SwitchingState && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
             {
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::PatrolRandom);
-                continue; // Switch state, process next entity
+                continue;
             }
-
-            // --- Else: Stay Idle ---
 
         } // End Entity Loop
     }); // End ForEachEntityChunk

@@ -81,8 +81,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-
-            //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
 
@@ -111,16 +110,6 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             }
 
             const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
-
-            /*
-            UE_LOG(
-                    LogTemp, 
-                    Log, 
-                    TEXT("DistanceToTargetCenter = %.2f, ArrivalThreshold = %.2f // SwitchingState %d"), 
-                    DistanceToTargetCenter, 
-                    WorkerStatsFrag.ResourceArrivalDistance,
-                    AIState.SwitchingState
-                );*/
             
             if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f))
             {

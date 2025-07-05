@@ -18,16 +18,14 @@ UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
     EntityQuery.Initialize(EntityManager);
-	// Benötigte Fragmente:
+
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
-
-    //EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
-    //EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None);
+    
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -67,8 +65,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     // --- Handle Update Selection Circle Logic ---
     if (TimeSinceLastRunB >= UpdateCircleInterval)
     {
-        //HandleUpdateSelectionCircle();
-        // Reset timer B. Subtracting the interval prevents time drift.
         TimeSinceLastRunB -= UpdateCircleInterval;
     }
     
@@ -107,13 +103,7 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassAITargetFragment& TargetFrag = TargetList[i]; // Mutable ref needed
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             FMassMoveTargetFragment& MoveTargetFrag = MoveTargetList[i]; // Mutable ref needed
-
-
-            // ChunkContext.GetEntityManagerChecked()
-            // if (StatsFrag.TeamId == 3)
-            // UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
             
-           // PendingSignals.Emplace(Entity, UnitSignals::UpdateSelectionCircle);
             PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
 
 

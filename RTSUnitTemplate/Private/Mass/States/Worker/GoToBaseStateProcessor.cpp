@@ -86,7 +86,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
       
         const int32 NumEntities = Context.GetNumEntities();
 
-            UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
+            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -96,36 +96,22 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
-
-            // --- Pre-checks (Fragment Data Validation) ---
-            // Get target info from WorkerStats fragment
-            //const FVector TargetPosition = WorkerStats.BasePosition;
-            //const float TargetRadius = WorkerStats.BaseRadius;
-            // Basic validation: Ensure target position was set (more robust checks assumed external)
+            
             if (!WorkerStats.BaseAvailable && AIState.StateTimer >= 5.f && !AIState.SwitchingState)
             {
                  AIState.SwitchingState = true;
-                 PendingSignals.Emplace(Entity, UnitSignals::Idle); // Use appropriate fallback signal FName
-                 //StopMovement(MoveTarget, World);
+                 PendingSignals.Emplace(Entity, UnitSignals::Idle);
                  continue;
             }
 
             // --- 1. Arrival Check ---
-            //const float BaseArrivalDistance = WorkerStats.BaseArrivalDistance; // Get from Worker stats
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
-            //const float DistanceToTargetEdge = DistanceToTargetCenter - TargetRadius;
 
-            UE_LOG(LogTemp, Log, TEXT("DistanceToTargetCenter: %f"), DistanceToTargetCenter);
-            UE_LOG(LogTemp, Log, TEXT("WorkerStats.BaseArrivalDistance: %f"), WorkerStats.BaseArrivalDistance);
-            //MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance in move target
-            // PendingSignals.Emplace(Entity, UnitSignals::GetClosestBase);
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance) // && !AIState.SwitchingState
             {
-                //AIState.StateTimer = 0.f;
                 AIState.SwitchingState = true;
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
-               // StopMovement(MoveTarget, World);
                 continue;
             }
             

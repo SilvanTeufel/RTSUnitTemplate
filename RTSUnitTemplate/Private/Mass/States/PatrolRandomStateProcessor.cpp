@@ -35,19 +35,12 @@ void UPatrolRandomStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
-
-	// ***** ADD THIS LINE *****
+    
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite); // Request the patrol fragment
-	// ***** END ADDED LINE *****
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
-    // Optional: ActorFragment für komplexere Abfragen (z.B. GetWorld, NavSys)
-   // EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-
-    // Ignoriere Einheiten, die bereits am Ziel sind (vom Movement gesetzt)
-    //EntityQuery.AddTagRequirement<FMassReachedDestinationTag>(EMassFragmentPresence::None);
 
 
     EntityQuery.RegisterWithProcessor(*this);
@@ -65,26 +58,21 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
-       return; // Skip execution this frame
+       return;
     }
-    // Interval reached, reset timer
-    TimeSinceLastRun -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
 
-    // --- Get World and Signal Subsystem (only if interval was met) ---
-    // Use Context or EntityManager to get World consistently
+    TimeSinceLastRun -= ExecutionInterval;
+
+
     UWorld* World = Context.GetWorld();
     if (!World) return;
 
     if (!SignalSubsystem) return;
-
-
-    // --- List for Game Thread Signal Updates ---
+    
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference. Capture World for StopMovement.
-        // Do NOT capture LocalSignalSubsystem directly here.
+
         [&PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -92,7 +80,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for StopMovement
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-           //UE_LOG(LogTemp, Log, TEXT("UPatrolRandomStateProcessor NumEntities: %d"), NumEntities);
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -110,30 +98,23 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 continue; // Switch state, process next entity
             }
 
-            // --- 2. Check if current patrol destination reached ---
-            // Only check if actually moving towards a destination
-            //if (MoveTarget.GetCurrentAction() == EMassMovementAction::Move)
-            {
+            
                 const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
                 const FVector CurrentDestination = MoveTarget.Center;
-                const float AcceptanceRadius = MoveTarget.SlackRadius * 4; // Consider making multiplier a variable
+                const float AcceptanceRadius = MoveTarget.SlackRadius * 4;
                 const float Dist= FVector::Dist(CurrentLocation, CurrentDestination);
                 
-                if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState) // --- Destination Reached ---
+                if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState)
                 {
                     StateFrag.SwitchingState = true;
-                    // Queue signal instead of sending directly
+          
                     PendingSignals.Emplace(Entity, UnitSignals::PatrolIdle);
-                    StateFrag.StateTimer = 0.f; // Reset timer immediately (modifies fragment)
-
-                    // Stop movement immediately (modifies fragment)
+                    StateFrag.StateTimer = 0.f;
                     StopMovement(MoveTarget, World);
 
-                    continue; // Switch state, process next entity
+                    continue;
                 }
-                // --- Else: Still moving towards destination, do nothing else ---
-            }
-            // --- Else: Not currently moving (e.g., Action is Stand), do nothing ---
+
 
         } // End Entity Loop
     }); // End ForEachEntityChunk

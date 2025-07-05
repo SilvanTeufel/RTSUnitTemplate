@@ -280,8 +280,6 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	}
 	else if (!UnitBase->ResourcePlace)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No suitable work area found for unit, try recursion %s (Team %d)"), *UnitBase->GetName(), UnitBase->TeamId);
-		
 		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
 		
 		if (NewResourcePlace)

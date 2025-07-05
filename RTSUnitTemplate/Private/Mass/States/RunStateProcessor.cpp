@@ -19,13 +19,12 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
     EntityQuery.Initialize(EntityManager);
     
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::All); // Nur Entities im Run-Zustand
-
-	// Benötigte Fragmente:
+    
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-	// Schließe tote Entities aus
+
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
@@ -51,14 +50,11 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
     if (!World) return;
 
     if (!SignalSubsystem) return;
-
-    // --- List for Game Thread Signal Updates ---
+    
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference. Capture World for helper functions.
-        // Do NOT capture LocalSignalSubsystem directly here.
+
         [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -82,22 +78,15 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
             StateFrag.StateTimer += ExecutionInterval;
             
-           // UE_LOG(LogTemp, Log, TEXT("TargetFrag.bHasValidTarget: %d // %d"), TargetFrag.bHasValidTarget, i);
-           // UE_LOG(LogTemp, Log, TEXT("StateFrag.SwitchingState: %d // %d"), StateFrag.SwitchingState, i);
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
                 TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
-              // UE_LOG(LogTemp, Log, TEXT("SWITCH!"));
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
             }else if (FVector::Dist(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
-                // Queue signal instead of sending directly
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Idle);
-
-                // StopMovement modifies fragment directly, keep it here
-                //StopMovement(MoveTarget, World);
                 continue;
             }
             

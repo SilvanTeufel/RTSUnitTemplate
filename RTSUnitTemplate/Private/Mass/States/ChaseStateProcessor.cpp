@@ -53,13 +53,7 @@ void UChaseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
-/**
- * Calculates a pseudo-random, deterministic 2D offset based on an Entity Handle.
- * @param Entity The handle of the entity needing an offset.
- * @param MinRadius The minimum distance from the target.
- * @param MaxRadius The maximum distance from the target.
- * @return A FVector containing the X/Y offset (Z is 0).
- */
+
 FVector CalculateChaseOffset(const FMassEntityHandle& Entity, float MinRadius = 100.0f, float MaxRadius = 250.0f)
 {
     if (!Entity.IsSet() || MinRadius >= MaxRadius || MinRadius < 0.f)
@@ -103,7 +97,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Capture World for helper functions.
@@ -146,8 +139,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
-                // Potentially clear MoveTarget here too if needed when losing target
-                //StopMovement(MoveTarget, World); // Or maybe UpdateMoveTarget to a default spot?
                 continue;
             }
 
@@ -168,15 +159,14 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 continue;
             }
 
-            // --- Still Chasing (Out of Range) ---
-            // **** NEW CODE: Calculate Offset ****
+
            // You might want to adjust Min/Max Radius based on unit size or target.
            FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
            FVector SlottedTargetLocation = TargetFrag.LastKnownLocation + ChaseOffset;
            // **********************************
-            //SlottedTargetLocation
-            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
-            // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
+           //SlottedTargetLocation
+           UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
+           // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
         }
     }); // End ForEachEntityChunk
 

@@ -81,27 +81,19 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
 
         const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
-        //const auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 
-           // UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
+            // UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
-          //  FMassVelocityFragment& Velocity = VelocityList[i];
-    ;
 
-            // --- 2. Stop Movement ---
-            // Ensure the worker isn't moving while extracting
-           // Velocity.Value = FVector::ZeroVector;
-       
             if (!WorkerStatsFrag.ResourceAvailable && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
                 // Target is lost or invalid. Signal to go idle or find a new task.
                 PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
-                //StopMovement(MoveTarget, World); // Stop current movement
                 continue;
             }
             
@@ -117,8 +109,6 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                 PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
                 continue; // Move to next entity
             }
-            // --- Still Extracting ---
-            // Keep velocity zeroed (already done above) and let the timer continue.
         }
             
     }); // End ForEachEntityChunk

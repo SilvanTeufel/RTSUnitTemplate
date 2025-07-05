@@ -19,16 +19,11 @@ void UIsAttackedStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.Initialize(EntityManager);
     
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::All); // Nur für Entities in diesem Zustand
-
-	// Benötigte Fragmente:
+    
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer lesen/schreiben
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Dauer lesen
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-	// Optionale, aber oft nützliche Fragmente (nicht unbedingt für DIESE Logik nötig)
-	// EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
-	// EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-
-	// Schließe tote Entities aus
+    
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 
 	EntityQuery.RegisterWithProcessor(*this);
@@ -42,8 +37,6 @@ void UIsAttackedStateProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    //QUICK_SCOPE_CYCLE_COUNTER(STAT_UIsAttackedStateProcessor_Execute); // Performance-Messung (optional)
-
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -51,21 +44,14 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     }
     TimeSinceLastRun -= ExecutionInterval;
     
-    // --- Get World and Signal Subsystem once ---
-    UWorld* World = GetWorld(); // Assumes processor inherits from UObject or similar providing GetWorld()
+    UWorld* World = GetWorld();
     if (!World) return;
 
     if (!SignalSubsystem) return;
-    // Make a weak pointer copy for safe capture in the async task
 
-
-    // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference.
-        // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -79,34 +65,21 @@ void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
-            // --- Update Timer ---
+
             StateFrag.StateTimer += ExecutionInterval; // Modification stays here
 
-            // --- Check if duration exceeded ---
-            // Assumes IsAttackedDuration is a member of FMassCombatStatsFragment
             if (StateFrag.StateTimer > StatsFrag.IsAttackedDuration && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
-                //UE_LOG(LogTemp, Log, TEXT("Entity %d:%d IsAttacked duration ended. Signaling Run."), Entity.Index, Entity.SerialNumber);
 
                 if (TargetFrag.bHasValidTarget)
                 {
-                     // Queue Chase signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::Chase);
-                    // Note: Don't continue here if you might want IdlePatrolSwitcher below?
-                    // Logic seems to imply either Chase OR IdlePatrolSwitcher.
-                    // If Chase is found, we typically wouldn't also signal IdlePatrolSwitcher.
                     continue; // Exit loop for this entity as we are switching to Chase
                 }else
                 {
                    PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 }
-                
-                // Queue Run signal instead of sending directly
-                // Reset timer or other state if needed upon leaving IsAttacked
-                // StateFrag.StateTimer = 0.0f; // Example reset - keep here if needed
-
-                // Continue to next entity as state is changing
                 continue;
             }
             // --- Else: Still in IsAttacked state, do nothing else ---

@@ -31,8 +31,6 @@ void UDeathStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Anhalten
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    // Optional: Fragment, um zu sehen, ob Effekte schon abgespielt wurden
-    // EntityQuery.AddRequirement<FDeathEffectStateFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -59,11 +57,8 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference.
-        // Do NOT capture LocalSignalSubsystem directly here.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -73,29 +68,25 @@ void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
-            FMassVelocityFragment& Velocity = VelocityList[i]; // Mutable for stopping
+            FMassAIStateFragment& StateFrag = StateList[i];
+            FMassVelocityFragment& Velocity = VelocityList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FMassAgentCharacteristicsFragment CharacteristicsFragment = AgentFragList[i];
-            // --- Stop Movement ---
-            Velocity.Value = FVector::ZeroVector; // Modification stays here
 
-            // --- Update Timer ---
-            const float PrevTimer = StateFrag.StateTimer; // Store previous timer value
-            StateFrag.StateTimer += ExecutionInterval; // Modification stays here
+            Velocity.Value = FVector::ZeroVector;
+
+
+            const float PrevTimer = StateFrag.StateTimer;
+            StateFrag.StateTimer += ExecutionInterval;
  
-            if (PrevTimer <= KINDA_SMALL_NUMBER) // Or PrevTimer == 0.0f if guaranteed
+            if (PrevTimer <= KINDA_SMALL_NUMBER)
             {
                 PendingSignals.Emplace(Entity, UnitSignals::StartDead);
             }
-
-            // --- Despawn Check ---
-            // Ensure DespawnTime is accessible (e.g., member variable 'this->DespawnTime')
+            
             if (StateFrag.StateTimer >= CharacteristicsFragment.DespawnTime+1.f)
             {
                 PendingSignals.Emplace(Entity, UnitSignals::EndDead);
-                  // --- Defer Entity Destruction (Stays Here) ---
-                 // ChunkContext.Defer().DestroyEntity(Entity);
             }
         }
     }); // End ForEachEntityChunk

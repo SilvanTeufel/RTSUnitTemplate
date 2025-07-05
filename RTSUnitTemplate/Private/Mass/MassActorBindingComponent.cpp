@@ -43,21 +43,6 @@ UMassActorBindingComponent::UMassActorBindingComponent()
 void UMassActorBindingComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	// Cache subsystem here too if needed for Tick
-	//SetupMassOnUnit();
-
-	/*
-	if(MassEntitySubsystemCache )
-	{
-		UE_LOG(LogTemp, Log, TEXT("Got MassEntitySubsystemCache Trying to Spawn MassUnit"));
-		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
-		
-		SpawnMassUnitIsm(
-		EntityManager,
-		UnitMassMesh,
-		MyOwner->GetActorLocation() + FVector(0, 0, 200.f) ,
-		World);
-	}*/
 }
 
 void UMassActorBindingComponent::SetupMassOnUnit()
@@ -88,7 +73,6 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
 	{
 		bNeedsMassUnitSetup = true;
-		//UE_LOG(LogTemp, Log, TEXT("MassActorBindingComponent on %s: Flagged for Mass unit setup."), *MyOwner->GetName());
 	}
 
 
@@ -111,9 +95,7 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	{
 		return;
 	}
-
-	// This function contains all the logic that used to be in CreateAndLinkOwnerToMassEntity
-	// AFTER the entity was created.
+	
 	MassEntityHandle = Entity;
 	InitTransform(EntityManager, Entity);
 	InitMovementFragments(EntityManager, Entity);

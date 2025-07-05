@@ -61,8 +61,7 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
     // --- List for Game Thread Signal Updates ---
     TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(SomeExpectedNumber); // Optional optimization
-	
+
     EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Do NOT capture LocalSignalSubsystem directly.
         [this, &PendingSignals](FMassExecutionContext& ChunkContext)
@@ -89,18 +88,10 @@ void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
-                // UE_LOG(LogTemp, Log, TEXT("Entity %d:%d Cast finished. Queuing Signal %s."), Entity.Index, Entity.SerialNumber, *UnitSignals::Run.ToString());
-
                 // Queue the signal instead of sending it directly
                 PendingSignals.Emplace(Entity, UnitSignals::EndCast); // Use your actual signal FName
-                // Reset timer or other state if needed now that casting is done
-                // StateFrag.StateTimer = 0.0f; // Example reset (optional)
-                // Continue to next entity, state change happens via signal later
                 continue;
             }
-
-            // --- Still Casting ---
-            // No state change needed this frame.
         }
     }); // End ForEachEntityChunk
 

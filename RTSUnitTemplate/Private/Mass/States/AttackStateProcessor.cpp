@@ -160,13 +160,9 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                         {
                            // Send signal safely from the Game Thread
                            StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                           // Or use the appropriate SignalEntity overload based on your signal type
-                           // StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                           // StrongSignalSubsystem->SignalEntity(Payload.SignalID, Payload.TargetEntity);
                         }
                     }
                 }
-                // else: Subsystem was destroyed before the task could run, signals are lost (usually acceptable)
             });
         }
     }

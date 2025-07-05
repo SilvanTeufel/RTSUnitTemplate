@@ -71,25 +71,21 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     {
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
         const TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
-        // Note: We query for WorkerStats and CombatStats but don't need their views directly in this loop.
-        // The query ensures they are present for the system handling the SpawnBuildingRequest signal.
 
         const int32 NumEntities = Context.GetNumEntities();
 
-            //UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& AIState = AIStateList[i];
             const FMassEntityHandle Entity = Context.GetEntity(i);
             const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
             
-            // --- Pre-checs ---
-            // Basic validation of essential build parameter. More robust validation assumed external.
-            if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Check if Building is allready set  && !AIState.SwitchingState
+
+            if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable)
             {
                 AIState.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
-                // Signal handler should remove the Build tag.
+                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); 
                 continue; // Skip this entity
             }
 
@@ -103,7 +99,6 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 AIState.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SpawnBuildingRequest);
-                //PendingSignals.Emplace(Entity, UnitSignals::GoToResourceExtraction);
                 continue; // Skip to next entity in chunk
             }
 
