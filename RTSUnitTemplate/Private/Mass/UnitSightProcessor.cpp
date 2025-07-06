@@ -58,6 +58,8 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.RegisterWithProcessor(*this);
 }
 
+
+
 void UUnitSightProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities)
 {
     // Append the received entities to our buffer for processing in Execute

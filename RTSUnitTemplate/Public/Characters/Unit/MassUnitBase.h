@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "AbilityUnit.h"
 #include "NiagaraComponent.h"
+#include "Actors/AreaDecalComponent.h"
 #include "Actors/SelectionDecalComponent.h"
 #include "MassUnitBase.generated.h"
 
@@ -43,7 +44,14 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USelectionDecalComponent* SelectionIcon;
+
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	//UAreaDecalComponent* AreaDecalComponent;
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool AddGamePlayEffectFragmentToEntity();
 	
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool AddEffectTargetTagToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);

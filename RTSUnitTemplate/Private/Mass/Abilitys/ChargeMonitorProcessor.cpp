@@ -10,7 +10,7 @@
 
 UChargeMonitorProcessor::UChargeMonitorProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::All; // Or GameThread as needed
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server; // Or GameThread as needed
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior; // Or a custom group
     ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Tasks); // Example: Run after movement intent is set
 }

@@ -103,6 +103,8 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             {
                 PendingSignals.Emplace(Entity, UnitSignals::UnitSpawned);
             }
+
+            
             /*
             // --- 1. Check CURRENT entity's health ---
             if (StatsFrag.Health <= 0.f && !DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()))

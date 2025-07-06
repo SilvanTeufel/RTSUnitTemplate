@@ -53,6 +53,10 @@ USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY()
 //USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
 USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() }; 
 
+USTRUCT() struct FMassAddsFriendlyEffectTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassAddsEnemyEffectTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassGameplayEffectTargetTag : public FMassTag { GENERATED_BODY() };
+
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {
@@ -83,6 +87,22 @@ struct FMassMovementOverrideFragment : public FMassFragment
 	float OverriddenMaxSpeed = 0.f;
 
 	// You could add bOverrideAcceleration, OverriddenAcceleration, etc.
+};
+
+
+USTRUCT()
+struct FMassGameplayEffectFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	TSubclassOf<UGameplayEffect> FriendlyEffect;
+
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	TSubclassOf<UGameplayEffect> EnemyEffect;
+
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	float EffectRadius;
 };
 
 USTRUCT()

@@ -34,6 +34,14 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	{
 		SelectionIcon->SetupAttachment(RootComponent);
 	}
+	/*
+	AreaDecalComponent = CreateDefaultSubobject<UAreaDecalComponent>(TEXT("AreaDecalComponent"));
+
+	if (AreaDecalComponent)
+	{
+		AreaDecalComponent->SetupAttachment(RootComponent);
+	}
+	*/
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -50,6 +58,59 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
 	DOREPLIFETIME(AMassUnitBase, FlyHeight)
+}
+
+
+
+bool AMassUnitBase::AddGamePlayEffectFragmentToEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	
+	EntityManager->Defer().AddFragment<FMassGameplayEffectFragment>(EntityHandle);
+	// Add the tag
+
+	return true;
+}
+
+bool AMassUnitBase::AddEffectTargetTagToEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+
+	EntityManager->Defer().AddTag<FMassGameplayEffectTargetTag>(EntityHandle);
+	
+	// Add the tag
+
+	return true;
 }
 
 bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
@@ -520,7 +581,7 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 	if (!OutEntityHandle.IsSet())
 	{
 		// This might be expected if the entity hasn't been registered yet, so using Warning.
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): Cannot get Mass Entity Data - Entity Handle is not set in Binding Component."), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - Entity Handle is not set in Binding Component."), *GetName());
 		return false;
 	}
 
