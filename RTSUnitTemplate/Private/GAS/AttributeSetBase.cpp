@@ -81,7 +81,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			// Assume DamageAmount is the amount of damage to apply
 			float DamageAmount = Data.EvaluatedData.Magnitude;
 
-			UnitBase->HealthbarCollapseCheck(GetHealth() + DamageAmount, GetHealth());
+			float OldHealth = GetHealth();
 			// Check and apply damage to Shield first
 			if(DamageAmount < 0)
 			{
@@ -109,6 +109,10 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
+
+			if (OldHealth + DamageAmount <= GetMaxHealth())
+				UnitBase->HealthbarCollapseCheck(OldHealth + DamageAmount , OldHealth);
+			
 			UnitBase->UpdateWidget();
 		}
 
@@ -116,8 +120,13 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 		{
 			float ShieldAmount = Data.EvaluatedData.Magnitude;
 			SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
-			UnitBase->ShieldCollapseCheck(GetShield() + ShieldAmount, GetShield());
-			SetAttributeShield(GetShield() + ShieldAmount);
+			float OldShield = GetShield();
+			
+			if (OldShield + ShieldAmount <= GetMaxShield())
+				UnitBase->ShieldCollapseCheck(OldShield + ShieldAmount, OldShield);
+		
+			SetAttributeShield(OldShield + ShieldAmount);
+		
 			UnitBase->UpdateWidget();
 		}
 	}
@@ -136,28 +145,6 @@ void UAttributeSetBase::SpawnIndicator(const float Damage, FLinearColor HighColo
 	AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor());
 
 	UnitBase->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
-/*
-	AActor* UnitActor = GetOwningActor();
-	
-	if(Damage > 0 && IndicatorBaseClass)
-	{
-		
-		FTransform Transform;
-		Transform.SetLocation(UnitActor->GetActorLocation());
-		Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
-
-		const auto MyIndicator = Cast<AIndicatorActor>
-							(UGameplayStatics::BeginDeferredActorSpawnFromClass
-							(this, IndicatorBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-		
-		
-		if (MyIndicator != nullptr)
-		{
-			UGameplayStatics::FinishSpawningActor(MyIndicator, Transform);
-			MyIndicator->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
-		}
-	}
-	*/
 }
 
 void UAttributeSetBase::OnRep_EffectDamage(const FGameplayAttributeData& OldEffectDamage)
@@ -195,16 +182,6 @@ void UAttributeSetBase::SetAttributeHealth(float NewHealth)
 	{
 		Health.SetCurrentValue(FMath::Max(NewHealth, 0.0f));
 	}
-
-	// If health falls to zero or below, handle as needed
-	if (Health.GetCurrentValue() <= 0.0f)
-	{
-		// Handle zero-health scenario
-		// This could be notifying the unit, triggering an event, etc.
-	}
-
-	// Don't forget to apply the change
-	//ApplyAttributeChange();
 }
 
 void UAttributeSetBase::OnRep_Shield(const FGameplayAttributeData& OldShield)

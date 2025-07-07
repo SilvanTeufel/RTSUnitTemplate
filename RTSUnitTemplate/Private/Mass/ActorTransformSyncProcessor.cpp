@@ -133,10 +133,11 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
 
     if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
     {
+        
         const AActor* HitActor = Hit.GetActor();
         const float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
 
-        if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= HeightOffset && !CharFragment.bIsFlying)
+        if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
         {
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
             InOutFinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;

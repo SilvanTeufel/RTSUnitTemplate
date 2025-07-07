@@ -515,7 +515,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     // 2. Formation check
     if (ShouldRecalculateFormation())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Recalculating formation..."));
+        //UE_LOG(LogTemp, Warning, TEXT("Recalculating formation..."));
         RecalculateFormation(Hit.Location);
     }
 

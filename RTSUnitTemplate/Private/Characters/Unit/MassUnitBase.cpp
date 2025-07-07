@@ -87,6 +87,30 @@ bool AMassUnitBase::AddGamePlayEffectFragmentToEntity()
 	return true;
 }
 
+
+bool AMassUnitBase::AddStopMovementTagToEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	EntityManager->Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
+	
+	return true;
+}
+
 bool AMassUnitBase::AddEffectTargetFragmentToEntity()
 {
 	FMassEntityManager* EntityManager;

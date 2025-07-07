@@ -374,6 +374,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 
 void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
 {
+	
 	 // Capture necessary data for the lambda
     TWeakObjectPtr<AUnitBase> WeakThis(this); // Sicherer Zeiger auf 'this'
     float LocalHealthWidgetDisplayDuration = HealthWidgetDisplayDuration; // Kopiere relevante Daten
@@ -392,7 +393,7 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
                 {
                     // Führe hier die Logik aus, die den GameThread benötigt
                     ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-                    if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)) // Verwende StrongThis->Member
+                    if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)) // Verwende StrongThis->Member
                     {
                        StrongThis->OpenHealthWidget = true;
                     }
@@ -414,14 +415,15 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
         UWorld* World = GetWorld();
         if (World && IsValid(this)) // Sicherheitschecks beibehalten
         {
-             ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-             if((OldHealth > NewHealth || NewHealth > 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
-             {
+        	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+        	if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+        	{
                 OpenHealthWidget = true;
-             }
+        	}
             World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
         }
     }
+
 }
 
 void AUnitBase::HideHealthWidget()
@@ -432,7 +434,7 @@ void AUnitBase::HideHealthWidget()
 
 void AUnitBase::SetShield_Implementation(float NewShield)
 {
-	const float OldShield = Attributes->GetHealth();
+	const float OldShield = Attributes->GetShield();
 	Attributes->SetAttributeShield(NewShield);
 	ShieldCollapseCheck(NewShield, OldShield);
 }
@@ -457,9 +459,11 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 			   {
 				   // AuthGameMode holen
 				   ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-	                
+
+		
+
 				   // Shield‑Collapse Check
-				   if (NewShield <= OldShield
+				   if (NewShield != OldShield
 					   && RTSGameMode
 					   && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)
 				   {
@@ -486,7 +490,9 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 		if (World && IsValid(this)) // Sicherheitschecks beibehalten
 		{
 			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-			if(NewShield <= OldShield && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+			if (NewShield != OldShield
+					  && RTSGameMode
+					  && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount)
 			{
 				OpenHealthWidget = true;
 			}

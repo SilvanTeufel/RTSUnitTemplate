@@ -1027,7 +1027,73 @@ void ACameraControllerBase::LocalMoveAndRotateUnit(AUnitBase* Unit, const FVecto
 
 void ACameraControllerBase::MoveCameraUnit()
 {
-	if (!CameraUnitWithTag) return;
+	// Ensure the CameraUnitWithTag and its attributes are valid
+	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes)
+	{
+		return;
+	}
+
+	//CameraUnitWithTag->AddStopMovementTagToEntity();
+	
+	FVector SpringArmForward = CameraBase->SpringArmRotator.Vector();
+	SpringArmForward.Z = 0.f;
+	FVector SpringArmRight   = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector);
+	SpringArmRight.Z = 0.f;
+	
+	FVector MoveDirection = FVector::ZeroVector;
+	if (WIsPressedState) MoveDirection += SpringArmForward;
+	if (SIsPressedState) MoveDirection -= SpringArmForward;
+	if (AIsPressedState) MoveDirection -= SpringArmRight;
+	if (DIsPressedState) MoveDirection += SpringArmRight;
+
+	bool bHasInput = !MoveDirection.IsNearlyZero();
+	//if (bHasInput)
+	{
+		MoveDirection.Normalize();
+	}
+
+	// Set the Pawn's location to the Camera's location
+	FVector TargetLocation  = GetPawn()->GetActorLocation();
+
+	// Set the Pawn's rotation to match the Spring Arm's rotation (yaw)
+	FRotator TargetRotation = MoveDirection.Rotation();  // CameraBase->SpringArmRotator;
+	TargetRotation.Pitch = 0.f; // Optional: Keep the pawn from tilting up or down
+	TargetRotation.Roll = 0.f;  // Optional: Keep the pawn from rolling
+
+	// --- Interpolation ---
+	// Get the DeltaTime for frame-rate independent interpolation.
+	const float DeltaTime = GetWorld()->GetDeltaSeconds();
+
+	// Set an interpolation speed. Higher values will make the movement faster.
+	const float InterpSpeed = 5.0f;
+
+	// Smoothly interpolate the pawn's current location to the target location.
+	FVector NewPawnLocation = FMath::VInterpTo(
+		CameraUnitWithTag->GetActorLocation(), // Current location
+		TargetLocation,                         // Target location
+		DeltaTime,                              // Time since last frame
+		InterpSpeed                             // Interpolation speed
+	);
+
+	// Smoothly interpolate the pawn's current rotation to the target rotation.
+	FRotator NewPawnRotation = FMath::RInterpTo(
+		CameraUnitWithTag->GetActorRotation(), // Current rotation
+		TargetRotation,                         // Target rotation
+		DeltaTime,                              // Time since last frame
+		InterpSpeed                             // Interpolation speed
+	);
+	// Create the new transform
+	FTransform NewTransform = FTransform(NewPawnRotation, NewPawnLocation);
+
+	// Apply the new transform to the pawn
+	CameraUnitWithTag->SetActorTransform(NewTransform, false, nullptr, ETeleportType::None);
+	CameraUnitWithTag->SyncTranslation();
+}
+
+/*
+void ACameraControllerBase::MoveCameraUnit()
+{
+	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes) return;
 	
 	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
 	SpringArmForwardVector.Z = 0.f;
@@ -1058,32 +1124,55 @@ void ACameraControllerBase::MoveCameraUnit()
 	{
 		MoveDirection.Normalize(); // Avoid faster diagonals
 
-		FVector MovementLocation =  CameraUnitWithTag->GetActorLocation() + MoveDirection*1000.f;
+		FVector MovementLocation =  CameraUnitWithTag->GetActorLocation() + MoveDirection*500.f;
 		CameraUnitWithTag->SetRunLocation(MovementLocation);
 		DrawDebugCircleAtLocation(GetWorld(), MovementLocation, FColor::Green);
-		RightClickRunUEPF(CameraUnitWithTag, MovementLocation, true);
-        	
+		//RightClickRunUEPF(CameraUnitWithTag, MovementLocation, true);
+
+		
+		float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+		// Check Distance between CameraUnitMovementLocation and MovementLocation
+		float Distance = FVector::Distance(CameraUnitMovementLocation, MovementLocation);
+		if (CameraUnitWithTag->bIsMassUnit && Distance >= 300.f)
+		{
+			CameraUnitMovementLocation = MovementLocation;
+			CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, MovementLocation, Speed, 100.f);
+		}
 	}
 }
+*/
 
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)
         {
+        	
 
-        	CameraUnitWithTag->ForceNetUpdate();
-            CameraBase->LockOnUnit(CameraUnitWithTag);
+        	if(AIsPressedState == 1) CameraBase->MoveCamToLeft(DeltaTime);
+        	if(DIsPressedState == 1) CameraBase->MoveCamToRight(DeltaTime);
+        	if(WIsPressedState == 1) CameraBase->MoveCamToForward(DeltaTime);
+        	if(SIsPressedState == 1) CameraBase->MoveCamToBackward(DeltaTime);
 
-       
-        	CameraUnitTimer += DeltaTime;
-	
-			if (CameraUnitTimer >= MoveCameraUnitReExecutionTime)
-			{
-				MoveCameraUnit();
-				CameraUnitTimer = 0.f;
-			}
+        	if(AIsPressedState == 2) CameraBase->MoveCamToLeft(DeltaTime, true);
+        	if(DIsPressedState == 2) CameraBase->MoveCamToRight(DeltaTime, true);
+        	if(WIsPressedState == 2) CameraBase->MoveCamToForward(DeltaTime, true);
+        	if(SIsPressedState == 2) CameraBase->MoveCamToBackward(DeltaTime, true);
 
-        	CameraBase->LockOnUnit(CameraUnitWithTag);
+        	if(CameraBase->CurrentCamSpeed.X == 0.0f && WIsPressedState == 2) WIsPressedState = 0;
+        	if(CameraBase->CurrentCamSpeed.X == 0.0f && SIsPressedState == 2) SIsPressedState = 0;
+        	if(CameraBase->CurrentCamSpeed.Y == 0.0f && DIsPressedState == 2) DIsPressedState = 0;
+        	if(CameraBase->CurrentCamSpeed.Y == 0.0f && AIsPressedState == 2) AIsPressedState = 0;
+
+
+        	if (CameraUnitWithTag->GetUnitState() != UnitData::Casting)
+        	{
+        		const bool bIsIdle = (CameraBase->CurrentCamSpeed.Size() <= 0.1f);
+        		
+        		UnitData::EState NewState = bIsIdle ? UnitData::Idle : UnitData::Run;
+        		CameraUnitWithTag->SetUnitState(NewState);
+        	
+        		MoveCameraUnit();
+        	}
         	
         	if (ScrollZoomCount > 0.f)
             {
@@ -1152,6 +1241,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
                 CamIsRotatingRight = false;
                 CameraBase->RotateCamLeft(CameraBase->AddCamRotation);
             }
+          
         }
         else
         {

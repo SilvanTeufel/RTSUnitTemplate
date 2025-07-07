@@ -134,12 +134,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveCameraUnit();
 
-
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	float CameraUnitTimer = 0.f;
+	FVector CameraUnitMovementLocation = FVector::ZeroVector;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float MoveCameraUnitReExecutionTime = 1.f;
+	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	//float CameraUnitTimer = 0.f;
+	
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//float MoveCameraUnitReExecutionTime = 1.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockZDistanceToCharacter();

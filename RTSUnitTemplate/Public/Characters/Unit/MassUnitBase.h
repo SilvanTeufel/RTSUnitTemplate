@@ -47,6 +47,10 @@ public:
 
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	//UAreaDecalComponent* AreaDecalComponent;
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool AddStopMovementTagToEntity();
+	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddGamePlayEffectFragmentToEntity();
 	
