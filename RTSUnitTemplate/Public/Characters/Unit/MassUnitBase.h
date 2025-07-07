@@ -51,7 +51,7 @@ public:
 	bool AddGamePlayEffectFragmentToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool AddEffectTargetTagToEntity();
+	bool AddEffectTargetFragmentToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);

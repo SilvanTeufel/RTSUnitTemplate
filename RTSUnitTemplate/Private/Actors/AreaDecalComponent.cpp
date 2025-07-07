@@ -8,7 +8,8 @@
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.TickInterval = TickInterval; 
 	SetIsReplicatedByDefault(true);
 
 	// Initial state is inactive.
@@ -43,6 +44,30 @@ void UAreaDecalComponent::BeginPlay()
 
 }
 
+void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+
+	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+
+	// 2. CRITICAL: Check if the cast was successful before using the pointer!
+	if (!OwningUnit)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot interact with Mass."), *GetOwner()->GetName());
+		return;
+	}
+
+	bool bVisibility = OwningUnit->ComputeLocalVisibility();
+
+	SetHiddenInGame(!bVisibility);
+	SetVisibility(bVisibility);
+	
+}
+
+
+
 void UAreaDecalComponent::OnRep_CurrentMaterial()
 {
 	UpdateDecalVisuals();
@@ -60,7 +85,7 @@ void UAreaDecalComponent::OnRep_DecalRadius()
 
 void UAreaDecalComponent::UpdateDecalVisuals()
 {
-
+	
 	const FString RoleString = GetOwner()->HasAuthority() ? TEXT("Server") : TEXT("Client");
 	
 	// If the material is null, the decal should be hidden.
@@ -90,12 +115,11 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 	}
 	
 	// Apply the replicated radius. Z is the projection depth, Y and Z are the radius.
-	DecalSize = FVector(DecalSize.X, CurrentDecalRadius/2.5f, CurrentDecalRadius/2.5f);
+	DecalSize = FVector(DecalSize.X, CurrentDecalRadius/3.f, CurrentDecalRadius/3.f);
 
 	// Ensure the decal is visible.
 	UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: Updating and showing decal. Color: %s, Radius: %.2f"), *RoleString, *GetOwner()->GetName(), *CurrentDecalColor.ToString(), CurrentDecalRadius);
-	SetHiddenInGame(false);
-	SetVisibility(true);
+	
 }
 
 
@@ -146,21 +170,17 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return;
 	}
-
-
-
-	if (FriendlyEffect)
-		EntityManager->Defer().AddTag<FMassAddsFriendlyEffectTag>(EntityHandle);
-	if (EnemyEffect)
-		EntityManager->Defer().AddTag<FMassAddsEnemyEffectTag>(EntityHandle);
 	
-
 	FMassGameplayEffectFragment* EffectFragment = EntityManager->GetFragmentDataPtr<FMassGameplayEffectFragment>(EntityHandle);
 
 	if (EffectFragment)
 	{
-		EffectFragment->FriendlyEffect = FriendlyEffect;
-		EffectFragment->EnemyEffect    = EnemyEffect;
+		if (FriendlyEffect)
+			EffectFragment->FriendlyEffect = FriendlyEffect;
+		
+		if (EnemyEffect)
+			EffectFragment->EnemyEffect    = EnemyEffect;
+		
 		EffectFragment->EffectRadius   = NewRadius;
 	}
 }

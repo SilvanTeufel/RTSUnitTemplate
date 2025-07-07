@@ -220,7 +220,9 @@ public:
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
-	
+
+	// Pure compute helper if you ever need the raw bool:
+	bool ComputeLocalVisibility() const;
 protected:
 	
 	UPROPERTY(VisibleAnywhere, Replicated, Category = RTSUnitTemplate)
@@ -228,7 +230,4 @@ protected:
 
 	// Renamed to reflect that it *updates* (and/or computes) the client‐side flag:
 	void UpdateClientVisibility();
-
-	// Pure compute helper if you ever need the raw bool:
-	bool ComputeLocalVisibility() const;
 };

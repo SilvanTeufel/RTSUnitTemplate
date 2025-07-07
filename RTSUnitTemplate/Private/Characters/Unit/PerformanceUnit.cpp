@@ -100,6 +100,7 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 	if (ISMComponent && !bUseSkeletalMovement)
 	{
 		ISMComponent->SetVisibility(desiredVisibility, true);
+		ISMComponent->SetHiddenInGame(!desiredVisibility);
 	}
 }
 

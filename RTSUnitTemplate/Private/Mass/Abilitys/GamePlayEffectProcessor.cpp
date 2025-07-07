@@ -20,40 +20,23 @@ UGamePlayEffectProcessor::UGamePlayEffectProcessor()
 
 void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    /*
-    EntityQuery.Initialize(EntityManager);
- 
-    //RegisterQuery(EntityQuery);
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadWrite);
-
-    EntityQuery.AddTagRequirement<FMassAddsFriendlyEffectTag>(EMassFragmentPresence::Any);
-    EntityQuery.AddTagRequirement<FMassAddsEnemyEffectTag>(EMassFragmentPresence::Any);
-    EntityQuery.AddTagRequirement<FMassGetEffectTag>(EMassFragmentPresence::Any);
-
-    EntityQuery.RegisterWithProcessor(*this);
-        */
-
     // Query 1: Find all entities that are casting an aura effect.
     CasterQuery.Initialize(EntityManager);
     CasterQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    CasterQuery.AddTagRequirement<FMassAddsFriendlyEffectTag>(EMassFragmentPresence::Any);
-    CasterQuery.AddTagRequirement<FMassAddsEnemyEffectTag>(EMassFragmentPresence::Any);
     CasterQuery.RegisterWithProcessor(*this);
 
     // Query 2: Find all entities that could potentially be a target for these effects.
     TargetQuery.Initialize(EntityManager);
     TargetQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     TargetQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite); // ReadOnly is fine, we operate on the Actor, not the fragment
+    TargetQuery.AddRequirement<FMassGameplayEffectTargetFragment>(EMassFragmentAccess::ReadWrite);
     TargetQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    TargetQuery.AddTagRequirement<FMassGameplayEffectTargetTag>(EMassFragmentPresence::Any); // Ensure we only target valid entities
+
     TargetQuery.RegisterWithProcessor(*this);
 }
+
 
 void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
@@ -64,7 +47,7 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         return;
     }
     TimeSinceLastRun = 0.0f; // Reset timer
-    UE_LOG(LogTemp, Error, TEXT("GamePlayEffectProcessor::Execute!!!!"));
+    //UE_LOG(LogTemp, Error, TEXT("GamePlayEffectProcessor::Execute!!!!"));
     // --- STEP 1: Gather all active casters and their properties ---
     
     TArray<FCasterData> CasterDataList;
@@ -75,22 +58,21 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         const TConstArrayView<FMassGameplayEffectFragment> EffectFragments = ChunkContext.GetFragmentView<FMassGameplayEffectFragment>();
         const TConstArrayView<FMassCombatStatsFragment> CombatStatsFragments = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         
-        const bool bHasFriendlyTag = ChunkContext.DoesArchetypeHaveTag<FMassAddsFriendlyEffectTag>();
-        const bool bHasEnemyTag = ChunkContext.DoesArchetypeHaveTag<FMassAddsEnemyEffectTag>();
-            int NumCasters = ChunkContext.GetNumEntities();
-            UE_LOG(LogTemp, Error, TEXT("NumCasters: %d"), NumCasters);
-        for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
+       
+        int NumCasters = ChunkContext.GetNumEntities();
+            //UE_LOG(LogTemp, Error, TEXT("NumCasters: %d"), NumCasters);
+        for (int32 i = 0; i < NumCasters; ++i)
         {
             FCasterData& Caster = CasterDataList.AddDefaulted_GetRef();
             Caster.Position = TransformFragments[i].GetTransform().GetLocation();
             Caster.RadiusSq = FMath::Square(EffectFragments[i].EffectRadius);
             Caster.TeamId = CombatStatsFragments[i].TeamId;
             
-            if (bHasFriendlyTag)
+            if (EffectFragments[i].FriendlyEffect)
             {
                 Caster.FriendlyEffect = EffectFragments[i].FriendlyEffect;
             }
-            if (bHasEnemyTag)
+            if (EffectFragments[i].EnemyEffect)
             {
                 Caster.EnemyEffect = EffectFragments[i].EnemyEffect;
             }
@@ -110,9 +92,10 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         const TConstArrayView<FTransformFragment> TargetTransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
             TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const TConstArrayView<FMassCombatStatsFragment> CombatStatsFragments = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+            TArrayView<FMassGameplayEffectTargetFragment> EffectTargetFragments = ChunkContext.GetMutableFragmentView<FMassGameplayEffectTargetFragment>();
 
-            int NumTargets = ChunkContext.GetNumEntities();
-           UE_LOG(LogTemp, Error, TEXT("NumCasters: %d"), NumTargets);
+        int NumTargets = ChunkContext.GetNumEntities();
+
         for (int32 TargetIndex = 0; TargetIndex < NumTargets; ++TargetIndex)
         {
             
@@ -134,17 +117,37 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                     // B. Check Team Alignment & Apply Effect
                     const bool bIsFriendly = (Caster.TeamId == TargetTeamId);
                     
-                    if (bIsFriendly && Caster.FriendlyEffect)
+                    if (bIsFriendly && Caster.FriendlyEffect && !EffectTargetFragments[TargetIndex].FriendlyEffectApplied)
                     {
-      
+                        EffectTargetFragments[TargetIndex].FriendlyEffectApplied = true;
                         UnitBase->ApplyInvestmentEffect(Caster.FriendlyEffect);
-                        UE_LOG(LogTemp, Verbose, TEXT("Applied friendly effect from team %d to team %d."), Caster.TeamId, TargetTeamId);
                     }
-                    else if (!bIsFriendly && Caster.EnemyEffect)
+                    else if (!bIsFriendly && Caster.EnemyEffect && !EffectTargetFragments[TargetIndex].EnemyEffectApplied)
                     {
+                        EffectTargetFragments[TargetIndex].EnemyEffectApplied = true;
                         UnitBase->ApplyInvestmentEffect(Caster.EnemyEffect);
-                        UE_LOG(LogTemp, Verbose, TEXT("Applied enemy effect from team %d to team %d."), Caster.TeamId, TargetTeamId);
                     }
+                }
+            }
+
+
+            if (EffectTargetFragments[TargetIndex].FriendlyEffectApplied)
+            {
+                EffectTargetFragments[TargetIndex].LastFriendlyEffectTime += ExecutionInterval;
+                if (EffectTargetFragments[TargetIndex].LastFriendlyEffectTime >= EffectTargetFragments[TargetIndex].FriendlyEffectCoolDown)
+                {
+                    EffectTargetFragments[TargetIndex].LastFriendlyEffectTime = 0.0f;
+                    EffectTargetFragments[TargetIndex].FriendlyEffectApplied = false;
+                }
+            }
+
+            if (EffectTargetFragments[TargetIndex].EnemyEffectApplied)
+            {
+                EffectTargetFragments[TargetIndex].LastEnemyEffectTime += ExecutionInterval;
+                if (EffectTargetFragments[TargetIndex].LastEnemyEffectTime >= EffectTargetFragments[TargetIndex].EnemyEffectCoolDown)
+                {
+                    EffectTargetFragments[TargetIndex].LastEnemyEffectTime = 0.0f;
+                    EffectTargetFragments[TargetIndex].EnemyEffectApplied = false;
                 }
             }
         }

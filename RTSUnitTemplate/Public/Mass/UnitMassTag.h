@@ -53,10 +53,6 @@ USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY()
 //USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
 USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() }; 
 
-USTRUCT() struct FMassAddsFriendlyEffectTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassAddsEnemyEffectTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassGameplayEffectTargetTag : public FMassTag { GENERATED_BODY() };
-
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {
@@ -103,6 +99,30 @@ struct FMassGameplayEffectFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Ability")
 	float EffectRadius;
+};
+
+USTRUCT()
+struct FMassGameplayEffectTargetFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	bool FriendlyEffectApplied = false;
+
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	bool EnemyEffectApplied = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	float LastFriendlyEffectTime = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	float LastEnemyEffectTime = 0.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	float FriendlyEffectCoolDown = 20.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	float EnemyEffectCoolDown = 20.f;
 };
 
 USTRUCT()

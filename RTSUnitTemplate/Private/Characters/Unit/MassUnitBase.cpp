@@ -87,7 +87,7 @@ bool AMassUnitBase::AddGamePlayEffectFragmentToEntity()
 	return true;
 }
 
-bool AMassUnitBase::AddEffectTargetTagToEntity()
+bool AMassUnitBase::AddEffectTargetFragmentToEntity()
 {
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
@@ -106,10 +106,8 @@ bool AMassUnitBase::AddEffectTargetTagToEntity()
 	}
 
 
-	EntityManager->Defer().AddTag<FMassGameplayEffectTargetTag>(EntityHandle);
+	EntityManager->Defer().AddFragment<FMassGameplayEffectTargetFragment>(EntityHandle);
 	
-	// Add the tag
-
 	return true;
 }
 

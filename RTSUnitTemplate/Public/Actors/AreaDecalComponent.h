@@ -29,6 +29,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// The gameplay effect this decal represents. Set this in the Blueprint.
 
@@ -50,6 +51,8 @@ protected:
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	float CurrentDecalRadius;
 
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
+	float TickInterval = 0.5f;
 	/*
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	bool AddsFriendlyGameplayEffect = true;
