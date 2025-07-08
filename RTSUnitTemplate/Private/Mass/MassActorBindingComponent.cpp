@@ -162,6 +162,9 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     AActor* Owner = GetOwner();
     if (!Owner) return false;
 
+	AUnitBase* UnitBase = Cast<AUnitBase>(Owner);
+	if (!UnitBase) return false;
+	
     UWorld* World = Owner->GetWorld();
     if (!World) return false;
 
@@ -206,6 +209,14 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	
         //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
+
+
+	if(UnitBase->AddEffectTargetFragement)
+		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
+	
+	
+	if(UnitBase->AddGameplayEffectFragement)
+		FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
 	
     FMassArchetypeCreationParams Params;
 	Params.ChunkMemorySize=0;
@@ -495,6 +506,14 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
     	
     };
 
+	
+	if(UnitBase->AddEffectTargetFragement)
+		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
+	
+	
+	if(UnitBase->AddGameplayEffectFragement)
+		FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
+	
     FMassArchetypeCreationParams Params;
 	Params.ChunkMemorySize=0;
 	Params.DebugName=FName("UMassActorBindingComponent");

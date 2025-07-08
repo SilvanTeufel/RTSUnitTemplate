@@ -2781,7 +2781,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
 					}
 				}
-
+				
+				
 				StateFrag.CanMove = Unit->CanMove;
 				StateFrag.CanAttack = Unit->CanAttack;
 				StateFrag.IsInitialized = Unit->IsInitialized;

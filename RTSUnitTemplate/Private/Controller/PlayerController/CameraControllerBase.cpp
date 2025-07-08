@@ -37,11 +37,23 @@ void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag
 		for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 		{
 			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
+			
 			if (Unit && Unit->UnitTags.HasTagExact(Tag) && Unit->TeamId == TeamId)
 			{
 				ServerSetCameraUnit(Unit, TeamId);
 				ClientSetCameraUnit(Unit, TeamId);
+				
 			}
+			
+				/*
+			FName NewTagName = FName(*FString::Printf(TEXT("%s.%d"), *Tag.ToString(), i));
+			
+			if (Unit && Unit->UnitTags.HasTagExact(FGameplayTag::RequestGameplayTag(NewTagName)) && Unit->TeamId == TeamId && TeamId == SelectableTeamId)
+			{
+				ServerSetCameraUnit(Unit, TeamId);
+				ClientSetCameraUnit(Unit, TeamId);
+			}
+				*/
 		}
 	}
 }
@@ -1028,12 +1040,13 @@ void ACameraControllerBase::LocalMoveAndRotateUnit(AUnitBase* Unit, const FVecto
 void ACameraControllerBase::MoveCameraUnit()
 {
 	// Ensure the CameraUnitWithTag and its attributes are valid
-	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes)
+		
+	if (!CameraUnitWithTag)
 	{
 		return;
 	}
 
-	//CameraUnitWithTag->AddStopMovementTagToEntity();
+	if (!IsLocalController()) return;
 	
 	FVector SpringArmForward = CameraBase->SpringArmRotator.Vector();
 	SpringArmForward.Z = 0.f;
@@ -1059,7 +1072,22 @@ void ACameraControllerBase::MoveCameraUnit()
 	FRotator TargetRotation = MoveDirection.Rotation();  // CameraBase->SpringArmRotator;
 	TargetRotation.Pitch = 0.f; // Optional: Keep the pawn from tilting up or down
 	TargetRotation.Roll = 0.f;  // Optional: Keep the pawn from rolling
+	
 
+	SetCameraUnitTransform(TargetLocation, TargetRotation);
+	// Apply the new transform to the pawn
+	const float DeltaTime = GetWorld()->GetDeltaSeconds();
+	const float ClientInterpSpeed =5.0f;
+
+	FVector NewLocation = FMath::VInterpTo(CameraUnitWithTag->GetActorLocation(), TargetLocation, DeltaTime, ClientInterpSpeed);
+	FRotator NewRotation = FMath::RInterpTo(CameraUnitWithTag->GetActorRotation(), TargetRotation, DeltaTime, ClientInterpSpeed);
+    
+	CameraUnitWithTag->SetActorTransform(FTransform(NewRotation, NewLocation));
+}
+
+
+void ACameraControllerBase::SetCameraUnitTransform_Implementation(FVector TargetLocation, FRotator TargetRotation)
+{
 	// --- Interpolation ---
 	// Get the DeltaTime for frame-rate independent interpolation.
 	const float DeltaTime = GetWorld()->GetDeltaSeconds();
@@ -1084,12 +1112,10 @@ void ACameraControllerBase::MoveCameraUnit()
 	);
 	// Create the new transform
 	FTransform NewTransform = FTransform(NewPawnRotation, NewPawnLocation);
-
-	// Apply the new transform to the pawn
+	
 	CameraUnitWithTag->SetActorTransform(NewTransform, false, nullptr, ETeleportType::None);
 	CameraUnitWithTag->SyncTranslation();
 }
-
 /*
 void ACameraControllerBase::MoveCameraUnit()
 {

@@ -134,6 +134,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveCameraUnit();
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void SetCameraUnitTransform(FVector TargetLocation, FRotator TargetRotation);
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector CameraUnitMovementLocation = FVector::ZeroVector;
 	

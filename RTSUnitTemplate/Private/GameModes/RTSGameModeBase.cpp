@@ -341,8 +341,12 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
 			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
-			FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
-			CameraControllerBase->SetCameraUnitWithTag_Implementation(CameraUnitTag, CameraControllerBase->SelectableTeamId);
+			//FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
+
+			FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerStartIndex));
+			FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
+
+			CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
 			CameraControllerBase->Multi_HideEnemyWaypoints();
 			CameraControllerBase->Multi_InitFogOfWar();
 			CameraControllerBase->Multi_SetupPlayerMiniMap();
