@@ -106,12 +106,16 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}else
 			{
-				SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
+				if (OldHealth + DamageAmount <= GetMaxHealth())
+					SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
+
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
 
 			if (OldHealth + DamageAmount <= GetMaxHealth())
+			{
 				UnitBase->HealthbarCollapseCheck(OldHealth + DamageAmount , OldHealth);
+			}
 			
 			UnitBase->UpdateWidget();
 		}
@@ -119,12 +123,14 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 		if(Data.EvaluatedData.Attribute == GetEffectShieldAttribute() && GetHealth() > 0)
 		{
 			float ShieldAmount = Data.EvaluatedData.Magnitude;
-			SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
+			//SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
 			float OldShield = GetShield();
 			
 			if (OldShield + ShieldAmount <= GetMaxShield())
+			{
 				UnitBase->ShieldCollapseCheck(OldShield + ShieldAmount, OldShield);
-		
+				SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
+			}
 			SetAttributeShield(OldShield + ShieldAmount);
 		
 			UnitBase->UpdateWidget();

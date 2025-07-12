@@ -60,34 +60,6 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, FlyHeight)
 }
 
-
-
-bool AMassUnitBase::AddGamePlayEffectFragmentToEntity()
-{
-	FMassEntityManager* EntityManager;
-	FMassEntityHandle EntityHandle;
-
-	if (!GetMassEntityData(EntityManager, EntityHandle))
-	{
-		// Error already logged in GetMassEntityData
-		return false;
-	}
-
-	// Check if entity is still valid
-	if (!EntityManager->IsEntityValid(EntityHandle))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
-		return false;
-	}
-
-	
-	EntityManager->Defer().AddFragment<FMassGameplayEffectFragment>(EntityHandle);
-	// Add the tag
-
-	return true;
-}
-
-
 bool AMassUnitBase::AddStopMovementTagToEntity()
 {
 	FMassEntityManager* EntityManager;
@@ -111,7 +83,7 @@ bool AMassUnitBase::AddStopMovementTagToEntity()
 	return true;
 }
 
-bool AMassUnitBase::AddEffectTargetFragmentToEntity()
+bool AMassUnitBase::RemoveStopGameplayEffectTagToEntity()
 {
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
@@ -125,12 +97,38 @@ bool AMassUnitBase::AddEffectTargetFragmentToEntity()
 	// Check if entity is still valid
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	
+	EntityManager->Defer().RemoveTag<FMassStopGameplayEffectTag>(EntityHandle);
+	// Add the tag
+
+	return true;
+}
+
+
+bool AMassUnitBase::AddStopGameplayEffectTagToEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): AddTagToEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
 
 
-	EntityManager->Defer().AddFragment<FMassGameplayEffectTargetFragment>(EntityHandle);
+	EntityManager->Defer().AddTag<FMassStopGameplayEffectTag>(EntityHandle);
 	
 	return true;
 }

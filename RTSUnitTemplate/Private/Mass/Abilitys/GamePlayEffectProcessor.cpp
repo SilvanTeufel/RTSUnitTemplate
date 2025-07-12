@@ -12,7 +12,7 @@
 
 UGamePlayEffectProcessor::UGamePlayEffectProcessor()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server;// Or GameThread as needed
+    ExecutionFlags = (int32)(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Standalone);
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior; // Or a custom group
     ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Tasks); // Example: Run after movement intent is set
     bRequiresGameThreadExecution = true;
@@ -25,6 +25,7 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     CasterQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    CasterQuery.AddTagRequirement<FMassStopGameplayEffectTag>(EMassFragmentPresence::None);
     CasterQuery.RegisterWithProcessor(*this);
 
     // Query 2: Find all entities that could potentially be a target for these effects.
@@ -60,7 +61,7 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         
        
         int NumCasters = ChunkContext.GetNumEntities();
-            //UE_LOG(LogTemp, Error, TEXT("NumCasters: %d"), NumCasters);
+            
         for (int32 i = 0; i < NumCasters; ++i)
         {
             FCasterData& Caster = CasterDataList.AddDefaulted_GetRef();
@@ -95,7 +96,7 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             TArrayView<FMassGameplayEffectTargetFragment> EffectTargetFragments = ChunkContext.GetMutableFragmentView<FMassGameplayEffectTargetFragment>();
 
         int NumTargets = ChunkContext.GetNumEntities();
-
+            
         for (int32 TargetIndex = 0; TargetIndex < NumTargets; ++TargetIndex)
         {
             

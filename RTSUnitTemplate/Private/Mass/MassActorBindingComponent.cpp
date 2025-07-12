@@ -210,7 +210,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
         //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
 
-
+	
 	if(UnitBase->AddEffectTargetFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
 	
@@ -503,10 +503,9 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
-    	
     };
 
-	
+
 	if(UnitBase->AddEffectTargetFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
 	

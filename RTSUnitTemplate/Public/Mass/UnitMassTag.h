@@ -53,6 +53,8 @@ USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY()
 //USTRUCT() struct FNeedsActorBindingInitTag : public FMassTag { GENERATED_BODY() }; // For PostInitProcessor
 USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() }; 
 
+USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY() };
+
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {

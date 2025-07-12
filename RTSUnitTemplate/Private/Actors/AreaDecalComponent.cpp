@@ -188,7 +188,7 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 {
 	// Setting the material to null is the signal for deactivation.
-	CurrentMaterial = nullptr;
+	// CurrentMaterial = nullptr;
 
 	// The server hides it immediately.
 	SetHiddenInGame(true);

@@ -60,10 +60,10 @@ public:
 	bool AddStopMovementTagToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool AddGamePlayEffectFragmentToEntity();
+	bool RemoveStopGameplayEffectTagToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool AddEffectTargetFragmentToEntity();
+	bool AddStopGameplayEffectTagToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);
