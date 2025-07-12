@@ -53,6 +53,9 @@ protected:
 
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	float TickInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, Transient, ReplicatedUsing = OnRep_DecalRadius, Category = RTSUnitTemplate)
+	bool bDecalIsVisible = true;
 	/*
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	bool AddsFriendlyGameplayEffect = true;

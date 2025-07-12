@@ -33,6 +33,7 @@ void UAreaDecalComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME(UAreaDecalComponent, CurrentMaterial);
 	DOREPLIFETIME(UAreaDecalComponent, CurrentDecalColor);
 	DOREPLIFETIME(UAreaDecalComponent, CurrentDecalRadius);
+	DOREPLIFETIME(UAreaDecalComponent, bDecalIsVisible);
 }
 
 void UAreaDecalComponent::BeginPlay()
@@ -49,7 +50,8 @@ void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-
+	if (!bDecalIsVisible) return;
+	
 	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
 
 	// 2. CRITICAL: Check if the cast was successful before using the pointer!
@@ -61,8 +63,12 @@ void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	bool bVisibility = OwningUnit->ComputeLocalVisibility();
 
-	SetHiddenInGame(!bVisibility);
-	SetVisibility(bVisibility);
+	// Only update visibility if the state needs to change to avoid redundant calls.
+	if (IsVisible() != bVisibility)
+	{
+		SetVisibility(bVisibility);
+		SetHiddenInGame(!bVisibility);
+	}
 	
 }
 
@@ -115,7 +121,7 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 	}
 	
 	// Apply the replicated radius. Z is the projection depth, Y and Z are the radius.
-	DecalSize = FVector(DecalSize.X, CurrentDecalRadius/3.f, CurrentDecalRadius/3.f);
+	DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
 
 	// Ensure the decal is visible.
 	UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: Updating and showing decal. Color: %s, Radius: %.2f"), *RoleString, *GetOwner()->GetName(), *CurrentDecalColor.ToString(), CurrentDecalRadius);
@@ -136,7 +142,8 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 		Server_DeactivateDecal();
 		return;
 	}
-	
+
+	bDecalIsVisible = true;
 	// Update the replicated properties. This will trigger the OnRep functions on all clients.
 	CurrentMaterial = NewMaterial;
 	CurrentDecalColor = NewColor;
@@ -191,8 +198,12 @@ void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 	// CurrentMaterial = nullptr;
 
 	// The server hides it immediately.
-	SetHiddenInGame(true);
-
+	bDecalIsVisible = false;
+	// Setting the material to null is the signal for deactivation. This will replicate.
+	CurrentMaterial = nullptr;
+	CurrentDecalRadius = 0.f;
+	SetHiddenInGame(true, true);
+	UpdateDecalVisuals();
 	// OnRep_CurrentMaterial will be called on clients, which will then also hide it.
 }
 
