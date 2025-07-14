@@ -26,7 +26,8 @@ void UUnitSightProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
         if (!SignalSubsystem) return;
         
         EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-
+        
+        /*
         if (!EntitySubsystem) return;
 
             // Ensure previous handle is removed if Initialize is called multiple times (unlikely for processors, but safe)
@@ -39,8 +40,9 @@ void UUnitSightProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
             SignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange)
                                       .AddUObject(this, &UUnitSightProcessor::HandleUnitPresenceSignal);
             //UE_LOG(LogMass, Log, TEXT("UDetectionProcessor bound to signal '%s'"), *UnitSignals::UnitInDetectionRange.ToString());
-        
+        */
     }
+  
 }
 
 void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -59,14 +61,14 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 }
 
 
-
+/*
 void UUnitSightProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities)
 {
     // Append the received entities to our buffer for processing in Execute
     // This function might be called multiple times per frame if signals are dispatched in batches
     ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
     // UE_LOG(LogMass, Verbose, TEXT("HandleUnitPresenceSignal: Received %d entities for signal %s"), Entities.Num(), *SignalName.ToString());
-}
+}*/
 
 
 void UUnitSightProcessor::Execute(

@@ -100,7 +100,7 @@ void AUnitControllerBase::OnPossess(APawn* PawN)
 
 	if(MyUnitBase)
 	{
-		SightRadius = MyUnitBase->SightRadius;
+		SightRadius = MyUnitBase->MassActorBindingComponent->SightRadius;
 		if(!ControllerBase)
 		{
 			ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());

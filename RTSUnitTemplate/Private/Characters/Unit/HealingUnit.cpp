@@ -50,7 +50,7 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 
 	// Entferne alle Einheiten, die ungültig, tot oder außerhalb der Sichtweite sind.
 	UnitsToChase.RemoveAll([this](const AUnitBase* Unit) -> bool {
-		return !IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > SightRadius;
+		return !IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > MassActorBindingComponent->SightRadius;
 	});
 	
 	if (UnitsToChase.IsEmpty()) return false;

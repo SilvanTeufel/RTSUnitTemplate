@@ -817,9 +817,19 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
 			FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 			FMassAIStateFragment* AIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
+        	FMassAgentCharacteristicsFragment* CharFragment = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CapturedEntity);
 
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
 
+        	if (StrongUnitActor && CharFragment)
+        	{
+        		CharFragment->bIsFlying = StrongUnitActor->IsFlying;
+        		CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
+        		CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
+        		CharFragment->bIsInvisible = StrongUnitActor->IsInvisible;
+        		CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
+        	}
+        	
         	if (StrongUnitActor && AIStateFragment)
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
@@ -858,6 +868,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 				CombatStatsFrag->CastTime = StrongUnitActor->CastTime;
 				CombatStatsFrag->IsInitialized = StrongUnitActor->IsInitialized;
 
+            	if (StrongUnitActor->MassActorBindingComponent)
+            	{
+            		CombatStatsFrag->SightRadius = StrongUnitActor->MassActorBindingComponent->SightRadius;
+					CombatStatsFrag->LoseSightRadius = StrongUnitActor->MassActorBindingComponent->LoseSightRadius;
+            	}
 
             	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
             	{
@@ -2696,24 +2711,6 @@ void UUnitStateProcessor::HandleUpdateSelectionCircle(FName SignalName, TArray<F
 		CustomPC->UpdateSelectionCircles();
 	});
 }
-/*
-void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	if (!EntitySubsystem) return;
-	if (!World) return;
-
-	ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-	if (!GM) return;
-
-	// 1. Call multicast from GameThread
-	TArray<FMassEntityHandle> CopiedEntities = Entities;
-
-	AsyncTask(ENamedThreads::GameThread, [GM, CopiedEntities = MoveTemp(CopiedEntities)]()
-	{
-		GM->MulticastUpdateFogMaskWithCircles(CopiedEntities);
-	});
-}
-*/
 
 void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,

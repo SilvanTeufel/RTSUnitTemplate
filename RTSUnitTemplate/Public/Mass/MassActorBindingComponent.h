@@ -91,30 +91,30 @@ public:
 	
 	void CleanupMassEntity();
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float SightRadius = 2000.f; 
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float LoseSightRadius = 2500.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float DespawnTime = 10.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float IsAttackedDuration = 0.3f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float AvoidanceDistance = 50.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float ObstacleSeparationStiffness = 250.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool RotatesToMovement = true;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool RotatesToEnemy = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float RotationSpeed = 15.f;
 };
