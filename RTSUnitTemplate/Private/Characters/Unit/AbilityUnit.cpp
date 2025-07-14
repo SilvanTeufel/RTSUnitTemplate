@@ -46,7 +46,7 @@ void AAbilityUnit::LevelUp_Implementation()
 	}
 }
 
-void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float MaxZDifference)
+void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float MaxZDifference, float ZOffset)
 {
 	FVector Start = Destination + FVector(0.f, 0.f, 1000.f);
 	FVector End = Destination - FVector(0.f, 0.f, 200.f);
@@ -59,7 +59,55 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float Max
 		if (HitResult.bBlockingHit && abs(GetActorLocation().Z-HitResult.Location.Z) < MaxZDifference)
 		{
 			// Optionally, you might want to add additional checks on HitResult to ensure it's a valid surface
-			SetActorLocation(FVector(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z + 70.f));
+			FVector TeleportLocation = FVector(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z + ZOffset);
+			SetActorLocation(TeleportLocation);
+
+
+			     // 1. Get the Mass Entity Subsystem and Entity Manager
+		          if (const UWorld* World = GetWorld())
+		          {
+		             if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+		             {
+		                FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		                // 2. Get the Mass Entity Handle from the unloaded unit
+		                //    (Assuming your AUnitBase has a function like this)
+		             	AUnitBase* UnitBase = Cast<AUnitBase>(this);
+
+		             	if (!UnitBase) return;
+		             	
+		                const FMassEntityHandle MassEntityHandle = UnitBase->MassActorBindingComponent->GetEntityHandle();
+
+		                if (MassEntityHandle.IsValid())
+		                {
+		                   // 3. Get the FMassAIStateFragment data pointer
+		                   FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+
+		                   if (AiStatePtr)
+		                   {
+		                      // 4. Set the StoredLocation to the unit's new location
+		                      AiStatePtr->StoredLocation = TeleportLocation;
+		                      
+		                      // Optional: You might want to update other state properties here too,
+		                      // for example, to tell the AI it's no longer being transported.
+		                      // AiStatePtr->CurrentState = EUnitState::Idle; // Or whatever is appropriate
+		                   }
+		                   else
+		                   {
+		                      UE_LOG(LogTemp, Warning, TEXT("UnloadNextUnit: Entity %s does not have an FMassAIStateFragment."), *MassEntityHandle.DebugGetDescription());
+		                   }
+
+                			// Allow the unit to move again by removing the tag.
+                			EntityManager.RemoveTagFromEntity(MassEntityHandle, FMassStateStopMovementTag::StaticStruct());
+                			// The MoveTarget is already in a clean "Stand" state, so we don't need
+                			// to do much, but you could update its location if desired.
+                			if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+                			{
+                				MoveTarget->Center = TeleportLocation;
+                			}
+		                }
+		             }
+		          }
 			return;
 		}
 	}

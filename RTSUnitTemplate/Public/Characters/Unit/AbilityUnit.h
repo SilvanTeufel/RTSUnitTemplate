@@ -38,7 +38,7 @@ public:
 	bool IsWorker = false;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 200.f);
+	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 1000.f, float ZOffset = 70.f);
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void StartAcceleratingFromDestination(const FVector& NewDestination, const FVector& NewTargetVelocity, float NewAccelerationRate, float NewRequiredDistanceToStart);

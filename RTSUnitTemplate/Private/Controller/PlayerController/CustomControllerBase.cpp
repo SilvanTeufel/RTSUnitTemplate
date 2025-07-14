@@ -279,7 +279,22 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 						UnitsToLoad[i]->RunLocation = Transporter->GetActorLocation();
 					}
 					
-					if (SelectedUnits[i]->bIsMassUnit)
+
+                    bool UnitIsValid = true;
+                    
+                    if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
+                    if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
+                
+                    if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+                    {
+
+                        UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+                    
+                        if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
+                        else CancelCurrentAbility(SelectedUnits[i]);
+                    }
+
+					if (SelectedUnits[i]->bIsMassUnit && UnitIsValid)
 					{
 						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
 						CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], UnitsToLoad[i]->RunLocation, Speed, 40.f);
@@ -523,8 +538,25 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     TMap<AUnitBase*, FVector> Finals;
     for (AUnitBase* U : SelectedUnits)
     {
-        FVector Off = UnitFormationOffsets.FindRef(U);
-        Finals.Add(U, Hit.Location + Off);
+		bool UnitIsValid = true;
+    	
+    	if (!U->IsInitialized) UnitIsValid = false;
+    	if (!U->CanMove) UnitIsValid = false;
+	
+    	if (U->CurrentSnapshot.AbilityClass)
+    	{
+
+    		UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		
+    		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
+			else CancelCurrentAbility(U);
+    	}
+
+    	if (UnitIsValid)
+    	{
+    		FVector Off = UnitFormationOffsets.FindRef(U);
+    		Finals.Add(U, Hit.Location + Off);
+    	}
     }
 
     // 4. Issue moves & sounds
@@ -775,13 +807,17 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 {
 	if (!Unit) return;
 
-	if (Unit->CurrentSnapshot.AbilityClass)
-	{
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+    if (!Unit->IsInitialized) return;
+    if (!Unit->CanMove) return;
+	
+    if (Unit->CurrentSnapshot.AbilityClass)
+    {
 
-		CancelCurrentAbility(Unit);
-	}
+    	UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		
+    	if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		else CancelCurrentAbility(Unit);
+    }
 
 	float Speed = Unit->Attributes->GetBaseRunSpeed();
 

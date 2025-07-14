@@ -476,7 +476,7 @@ void AGASUnit::CancelCurrentAbility()
 	if (ActivatedAbilityInstance)
 	{
 		// Check if the active ability can be canceled.
-		if (ActivatedAbilityInstance->AbilityCanBeCanceled)
+		//if (ActivatedAbilityInstance->AbilityCanBeCanceled)
 		{
 			if(CurrentDraggedAbilityIndicator)
 			{
