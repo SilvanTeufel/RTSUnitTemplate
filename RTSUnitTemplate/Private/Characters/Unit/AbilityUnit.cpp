@@ -98,8 +98,8 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float Max
 		                   }
 
                 			// Allow the unit to move again by removing the tag.
-                			EntityManager.RemoveTagFromEntity(MassEntityHandle, FMassStateStopMovementTag::StaticStruct());
-                			// The MoveTarget is already in a clean "Stand" state, so we don't need
+		                	EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(MassEntityHandle);
+		                	// The MoveTarget is already in a clean "Stand" state, so we don't need
                 			// to do much, but you could update its location if desired.
                 			if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
                 			{
