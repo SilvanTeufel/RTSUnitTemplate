@@ -84,6 +84,7 @@ void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)
 
 void AResourceGameMode::GatherWorkAreas()
 {
+	UE_LOG(LogTemp, Error, TEXT("GatherWorkAreas"));
 	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
 	{
 		AWorkArea* WorkArea = *It;
@@ -220,9 +221,17 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	// Assign one of the five closest resource places randomly
 	TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
 	AWorkArea* WorkPlace = GetRandomClosestWorkArea(WorkPlaces);
-	//AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(WorkPlace->Type), +1.0f);
 	Worker->ResourcePlace = WorkPlace;
-	//SetAllCurrentWorkers(Worker->TeamId);
+
+	if (Worker->ResourcePlace)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Randomly assigned ResourcePlace: %s to Worker: %s"), *Worker->ResourcePlace->GetName(), *Worker->GetName());
+	}
+	else
+	{
+		// This case might occur if GetRandomClosestWorkArea can return nullptr
+		UE_LOG(LogTemp, Warning, TEXT("Failed to select a random resource place for Worker: %s"), *Worker->GetName());
+	}
 }
 
 ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)
@@ -281,6 +290,7 @@ AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const
 
 TArray<AWorkArea*> AResourceGameMode::GetFiveClosestResourcePlaces(AWorkingUnitBase* Worker)
 {
+	
 	WorkAreaGroups.PrimaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
 	WorkAreaGroups.SecondaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
 	WorkAreaGroups.TertiaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
@@ -325,30 +335,6 @@ AWorkArea* AResourceGameMode::GetRandomClosestWorkArea(const TArray<AWorkArea*>&
 	
 	return nullptr;
 }
-/*
-TArray<AWorkArea*> AResourceGameMode::GetClosestBase(AWorkingUnitBase* Worker)
-{
-	TArray<AWorkArea*> AllAreas;
-	// Combine all resource areas into a single array for simplicity
-	AllAreas.Append(WorkAreaGroups.BaseAreas);
-	// Exclude BaseAreas and BuildAreas if they are not considered resource places
-
-	// Sort all areas by distance to the worker
-	AllAreas.Sort([Worker](const AWorkArea& AreaA, const AWorkArea& AreaB) {
-		return (AreaA.GetActorLocation() - Worker->GetActorLocation()).SizeSquared() < 
-			   (AreaB.GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
-	});
-
-	// Take up to the first five areas
-	int32 NumAreas = FMath::Min(MaxResourceAreasToSet, AllAreas.Num());
-	TArray<AWorkArea*> ClosestAreas;
-	for (int i = 0; i < NumAreas; ++i)
-	{
-		ClosestAreas.Add(AllAreas[i]);
-	}
-
-	return ClosestAreas;
-}*/
 
 TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Worker)
 {
@@ -497,8 +483,6 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 						int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
 						int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType); // Implement this based on your AttributeSet
 
-					//UE_LOG(LogTemp, Log, TEXT("CurrentWorkers: %d"), CurrentWorkers);
-					//UE_LOG(LogTemp, Log, TEXT("MaxWorkers: %d"), MaxWorkers);
 						if (CurrentWorkers < MaxWorkers)
 						{
 							//UE_LOG(LogTemp, Log, TEXT("Added Area!"));
@@ -507,12 +491,8 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 				}
 			}
 
-		//if (!SuitableWorkAreas.Num() && WorkAreas.Num()) SuitableWorkAreas.Add(WorkAreas[0]);
-		//UE_LOG(LogTemp, Log, TEXT("Array Size %d"), SuitableWorkAreas.Num());
 	
-			return GetRandomClosestWorkArea(SuitableWorkAreas);
-
-	// If no suitable WorkArea found
+	return GetRandomClosestWorkArea(SuitableWorkAreas);
 }
 
 void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount)
@@ -525,13 +505,9 @@ void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType R
 	for (AActor* MyActor : TempActors)
 	{
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(MyActor);
-		if (Worker && Worker->TeamId == TeamId)
+		if (Worker && Worker->IsWorker && Worker->TeamId == TeamId)
 		{
-			// Cast the Controller property to AWorkingUnitController
-			//AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
-			//if (WorkerController)
 			{
-				// This worker has a AWorkingUnitController, proceed as needed
 				TeamWorkerCount++;
 			}
 		}
@@ -543,7 +519,6 @@ void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType R
 												GetMaxWorkersForResourceType(TeamId, EResourceType::Rare) +
 													GetMaxWorkersForResourceType(TeamId, EResourceType::Epic) +
 														GetMaxWorkersForResourceType(TeamId, EResourceType::Legendary);
-
 	
 	// Check if the total worker count matches and amount is positive
 	if ((CurrentMaxWorkerCount >= TeamWorkerCount && Amount >= 0) || (GetMaxWorkersForResourceType(TeamId, ResourceType) == 0 && Amount <= 0))

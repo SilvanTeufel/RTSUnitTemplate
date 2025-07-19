@@ -1814,9 +1814,6 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase )
 					{
-						if (!ResourceGameMode)
-							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-
 						UnitBase->Base = ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
 						StateFrag->SwitchingState = false;
 					}
@@ -2581,50 +2578,6 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 	});
 }
 
-/*
-void UUnitStateProcessor::HandleSightCount(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	
-	
-	if (!EntitySubsystem) { return; }
-    
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-
-	FMassAgentCharacteristicsFragment TargetChar =  EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(Entities[0]);
-	FMassAgentCharacteristicsFragment DetectorChar = EntityManager.GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(Entities[1]);
-
-
-	FMassAIStateFragment TargetStats =  EntityManager.GetFragmentDataChecked<FMassAIStateFragment>(Entities[0]);
-	FMassCombatStatsFragment DetectorCombatStats = EntityManager.GetFragmentDataChecked<FMassCombatStatsFragment>(Entities[1]);
-
-
-	if (TargetChar || DetectorChar || TargetStats || DetectorCombatStats) return;
-	
-	int32& DCount = TargetStats.DetectorOverlapsPerTeam.FindOrAdd(DetectorCombatStats.TeamId);
-	int32& TCount = TargetStats.TeamOverlapsPerTeam.FindOrAdd(DetectorCombatStats.TeamId);
-	if (SignalName == UnitSignals::AddSight)
-	{
-		if (DetectorChar.bCanDetectInvisible || !TargetChar.bCanBeInvisible)
-		{
-
-			DCount++;
-		}
-
-		TCount++;
-	}
-
-	if (DCount > 0)
-	{
-		TargetChar.bIsInvisible = false;
-	}
-	else if (TargetChar.bCanBeInvisible)
-	{
-		TargetChar.bIsInvisible = true;
-	}
-	
-}
-
-*/
 void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	if (!EntitySubsystem) 
@@ -2719,11 +2672,14 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	const float Now = World->GetTimeSeconds();
 	
 	if (!EntitySubsystem) { return; }
-    
+
+	if (!ResourceGameMode)
+		ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 
-	TArray<FMassEntityHandle> Worker;
+	//TArray<FMassEntityHandle> Worker;
 	for (FMassEntityHandle& E : Entities)
 	{
 		;
@@ -2787,9 +2743,27 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
-				if (Unit->IsWorker)
+				if (Unit->IsWorker && ResourceGameMode)
 				{
-					Worker.Emplace(E);
+					FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(E);
+					ResourceGameMode->AssignWorkAreasToWorker(Unit);
+					if (Unit->ResourcePlace)
+					{
+						FVector ResourcePosition = FindGroundLocationForActor(this, Unit->ResourcePlace, {Unit, Unit->ResourcePlace});
+						WorkerStatsFrag->ResourcePosition = ResourcePosition;
+						UpdateMoveTarget(MoveTarget, ResourcePosition, StatsFrag.RunSpeed, World);
+						SwitchState(UnitSignals::GoToResourceExtraction, E, EntityManager);
+					}else if (Unit->Base)
+					{
+						FVector BasePosition = FindGroundLocationForActor(this, Unit->Base, {Unit, Unit->Base});
+						WorkerStatsFrag->ResourcePosition = BasePosition;
+						UpdateMoveTarget(MoveTarget, BasePosition, StatsFrag.RunSpeed, World);
+						SwitchState(UnitSignals::GoToBase, E, EntityManager);
+					}else
+					{
+						SwitchState(UnitSignals::Idle, E, EntityManager);
+					}
+					//Worker.Emplace(E);
 				}
 				
 				if (TransformFragPtr)
@@ -2804,8 +2778,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 			}
 		}
 	}
-
-	HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  Worker);
+	
+	//HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  Worker);
 }
 
 

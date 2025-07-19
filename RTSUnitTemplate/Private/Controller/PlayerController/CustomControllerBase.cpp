@@ -541,7 +541,6 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		bool UnitIsValid = true;
     	
     	if (!U->IsInitialized) UnitIsValid = false;
-    	if (!U->CanMove) UnitIsValid = false;
 	
     	if (U->CurrentSnapshot.AbilityClass)
     	{
