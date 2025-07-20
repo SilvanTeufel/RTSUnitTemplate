@@ -128,7 +128,7 @@ public:
 		bool CanAttack = true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		bool IsInvisible = false;
+		bool bIsInvisible = false;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bCanBeInvisible = false;

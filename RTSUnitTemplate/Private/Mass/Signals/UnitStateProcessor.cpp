@@ -826,7 +826,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		CharFragment->bIsFlying = StrongUnitActor->IsFlying;
         		CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
         		CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
-        		CharFragment->bIsInvisible = StrongUnitActor->IsInvisible;
         		CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
         	}
         	

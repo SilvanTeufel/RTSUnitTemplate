@@ -60,6 +60,47 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, FlyHeight)
 }
 
+bool AMassUnitBase::SetInvisibility(bool NewInvisibility)
+{
+	
+	if (!MassActorBindingComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): FocusEntityTarget failed - TargetUnit is null or has no MassActorBindingComponent."), *GetName());
+		return false;
+	}
+	
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENTITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	// Reset state timers
+	FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle);
+	
+	if (!CharFrag) return false;
+
+	AUnitBase* Unit = Cast<AUnitBase>(this);
+	
+	Unit->bIsInvisible = NewInvisibility;
+	Unit->bCanBeInvisible = NewInvisibility;
+	CharFrag->bIsInvisible = NewInvisibility;
+	CharFrag->bCanBeInvisible = NewInvisibility;
+	
+	return true;
+}
+
 bool AMassUnitBase::AddStopMovementTagToEntity()
 {
 	FMassEntityManager* EntityManager;

@@ -212,7 +212,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
 	DOREPLIFETIME(AUnitBase, CanDetectInvisible);
 	DOREPLIFETIME(AUnitBase, CanAttack);
-	DOREPLIFETIME(AUnitBase, IsInvisible);
+	DOREPLIFETIME(AUnitBase, bIsInvisible);
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
 
 	DOREPLIFETIME(AUnitBase, CanMove)
@@ -1130,7 +1130,7 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     }
 
     // Invisible detection:
-    if (DetectedUnit->IsInvisible && !CanDetectInvisible)
+    if (DetectedUnit->bIsInvisible && !CanDetectInvisible)
     {
         return;
     }

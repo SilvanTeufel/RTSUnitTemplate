@@ -615,7 +615,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->FlyHeight = UnitOwner->FlyHeight;
             CharFrag->bCanOnlyAttackFlying = UnitOwner->CanOnlyAttackFlying;
             CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackGround;
-            CharFrag->bIsInvisible = UnitOwner->IsInvisible;
+            CharFrag->bIsInvisible = UnitOwner->bIsInvisible;
         	CharFrag->bCanBeInvisible = UnitOwner->bCanBeInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
         	CharFrag->DespawnTime = DespawnTime;

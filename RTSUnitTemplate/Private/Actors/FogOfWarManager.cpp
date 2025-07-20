@@ -113,9 +113,9 @@ void AFogOfWarManager::HandleBeginOverlapDetection(AActor* OtherActor)
     
     if (Unit && PlayerTeamId != Unit->TeamId)
     {
-        if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->IsInvisible)
+        if (DetectingUnit && DetectingUnit->CanDetectInvisible && Unit->bIsInvisible)
         {
-            Unit->IsInvisible = false;
+            Unit->bIsInvisible = false;
             Unit->DetectorOverlaps++;
         }
         
@@ -161,7 +161,7 @@ void AFogOfWarManager::HandleEndOverlapDetection(AActor* OtherActor)
                 FTimerHandle TimerHandleDetector;
                 GetWorld()->GetTimerManager().SetTimer(TimerHandleDetector, [Unit]()
                 {
-                    Unit->IsInvisible = true;
+                    Unit->bIsInvisible = true;
                 }, 1.f, false);
             }
         }

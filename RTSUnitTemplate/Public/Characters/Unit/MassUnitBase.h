@@ -57,6 +57,9 @@ public:
 	//UAreaDecalComponent* AreaDecalComponent;
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetInvisibility(bool NewInvisibility);
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopMovementTagToEntity();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)

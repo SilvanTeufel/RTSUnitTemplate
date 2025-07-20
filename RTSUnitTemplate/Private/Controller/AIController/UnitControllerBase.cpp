@@ -556,7 +556,7 @@ void AUnitControllerBase::DetectUnitsFromGameMode(AUnitBase* DetectingUnit, TArr
 
         // 1. Invisible detection:
         // If the target unit is invisible and the detecting unit is not capable of detecting invisible units, skip.
-        if (Unit->IsInvisible && !DetectingUnit->CanDetectInvisible)
+        if (Unit->bIsInvisible && !DetectingUnit->CanDetectInvisible)
         {
             continue;
         }
