@@ -140,11 +140,16 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
         {
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
-            InOutFinalLocation.Z = Hit.ImpactPoint.Z + HeightOffset;
+            const float CurrentZ = CurrentActorLocation.Z;
+            const float TargetZ = Hit.ImpactPoint.Z + HeightOffset;
+            InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
         }
         else if (!CharFragment.bIsFlying)
         {
-            InOutFinalLocation.Z = CharFragment.LastGroundLocation + HeightOffset;
+            const float CurrentZ = CurrentActorLocation.Z;
+            const float TargetZ = CharFragment.LastGroundLocation + HeightOffset;
+            
+            InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
         }
         else if (IsValid(HitActor) && CharFragment.bIsFlying)
         {
