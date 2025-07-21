@@ -144,21 +144,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
-	/*
-	if(AttackToggled)
-	for (int32 i = 0; i < SelectedUnits.Num(); i++)
-	{
-		if(SelectedUnits[i] &&
-			!SelectedUnits[i]->IsA(ABuildingBase::StaticClass()) &&
-			SelectedUnits[i]->GetUnitState() == UnitData::Idle &&
-			SelectedUnits[i]->ToggleUnitDetection &&
-			SelectedUnits[i]->ControlUnitIntoMouseDirection)
-		HUDBase->ControllDirectionToMouse(SelectedUnits[i], Hit);
-		
-	}
-	*/
-
-
 	TArray<FPathPoint> PathPoints;
 
 	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
@@ -169,16 +154,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 			HUDBase->EnemyUnitBases[i]->DijkstraSetPath = false;
 		}
 
-	/*
-	if (RTSGameMode)
-	{
-		for (AActor* Actor : RTSGameMode->AllUnits)
-		{
-			AUnitBase* Unit = Cast<AUnitBase>(Actor);
-			Unit->VisibilityTick();
-		}
-	}
-	*/
 	
 }
 
@@ -197,7 +172,7 @@ void AControllerBase::SelectUnit(int Index)
 	
 	if (SelectedUnits[Index] == 0) return;
 	
-	CurrentUnitWidgetIndex = 0;
+	CurrentUnitWidgetIndex = Index;
 	HUDBase->DeselectAllUnits();
 	HUDBase->SetUnitSelected( SelectedUnits[Index]);
 	SelectedUnits = HUDBase->SelectedUnits; 
@@ -331,6 +306,7 @@ int AControllerBase::GetHighestPriorityWidgetIndex()
 
 	for (int32 i = 0; i < SelectedUnits.Num(); i++)
 	{
+		if (SelectedUnits[i]->IsWorker) continue;
 		// If this is the special CameraUnitWithTag, return immediately
 		if (SelectedUnits[i] == CameraUnitWithTag)
 		{

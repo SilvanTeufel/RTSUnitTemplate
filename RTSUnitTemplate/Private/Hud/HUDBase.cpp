@@ -145,124 +145,6 @@ void AHUDBase::DrawHUD()
        SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
     }
 }
-/*
-void AHUDBase::DrawHUD()
-{
-	
-	if (bSelectFriendly) {
-	
-		DeselectAllUnits();
-		
-		SelectedUnits.Empty();
-		
-		CurrentPoint = GetMousePos2D();
-		
-		if (abs(InitialPoint.X - CurrentPoint.X) >= 2) {
-
-			DrawRect(FLinearColor(0, 0, 1, .15f),
-				InitialPoint.X,
-				InitialPoint.Y,
-				CurrentPoint.X - InitialPoint.X,
-				CurrentPoint.Y - InitialPoint.Y);
-
-			const float LengthLineA = abs(InitialPoint.Y - CurrentPoint.Y);
-			const float LengthLineB = abs(InitialPoint.X - CurrentPoint.X);
-			FVector2D LineCenterPointA;
-			FVector2D LineCenterPointB;
-			FVector2D InitialSelectionPoint;
-			FVector2D CurrentSelectionPoint;
-
-			if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
-				LineCenterPointA.X = InitialPoint.X;
-				LineCenterPointB.Y = CurrentPoint.Y;
-
-				LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
-				LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
-
-				InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-				CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-			}
-			else if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
-
-				LineCenterPointA.X = InitialPoint.X;
-				LineCenterPointB.Y = CurrentPoint.Y;
-
-				LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
-				LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
-
-				InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-				CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-			}
-			else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
-				LineCenterPointA.X = InitialPoint.X;
-				LineCenterPointB.Y = CurrentPoint.Y;
-
-				LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
-				LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
-
-				InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-				CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-			}
-			else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
-				LineCenterPointA.X = InitialPoint.X;
-				LineCenterPointB.Y = CurrentPoint.Y;
-
-				LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
-				LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
-
-				InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-
-				CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-				CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-			}
-
-
-			DrawRect(FLinearColor(0, 1, 0, .15f),
-				InitialSelectionPoint.X,
-				InitialSelectionPoint.Y,
-				CurrentSelectionPoint.X - InitialSelectionPoint.X,
-				CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
-
-			TArray <AUnitBase*> NewUnitBases;
-
-			GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
-
-			ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
-			
-			for (int32 i = 0; i < NewUnitBases.Num(); i++) {
-
-
-				const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(NewUnitBases[i]);
-				
-				if(Controller && NewUnitBases[i]->bUseSkeletalMovement  && (NewUnitBases[i]->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit) // && IsActorInsideRec(IPoint, CPoint, ALocation) // && IsActorInsideRec(IPoint, CPoint, ALocation)
-				{
-					if (NewUnitBases[i]->GetOwner() == nullptr) NewUnitBases[i]->SetOwner(Controller);
-					NewUnitBases[i]->SetSelected();
-					SelectedUnits.Emplace(NewUnitBases[i]);
-					SelectUnitsFromSameSquad(NewUnitBases[i]);
-				}
-			}
-			
-			NewUnitBases.Empty();
-			
-			if(Controller) Controller->AbilityArrayIndex = 0;
-		}
-		SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
-	}
-}
-*/
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
 {
@@ -299,12 +181,7 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
             FVector2D ScreenLoc;
             if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
                 continue;
-			/*
-        	UE_LOG(LogTemp, Error, TEXT("Unit '%s' instance %d world=(%.1f,%.1f,%.1f) projected=(%.1f,%.1f)"),
-				*Unit->GetName(), Index,
-				WorldLoc.X, WorldLoc.Y, WorldLoc.Z,
-				ScreenLoc.X, ScreenLoc.Y);
-			*/
+
             // Screen‑space AABB test
             if (ScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
                 ScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&
@@ -471,8 +348,7 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 			FVector ActorLocation = Units[i]->GetActorLocation();
 
 			const float Distance = sqrt((ActorLocation.X-Units[i]->RunLocation.X)*(ActorLocation.X-Units[i]->RunLocation.X)+(ActorLocation.Y-Units[i]->RunLocation.Y)*(ActorLocation.Y-Units[i]->RunLocation.Y));//FVector::Distance(ActorLocation, Units[i]->RunLocation);
-			//float DistanceZ =  abs(ActorLocation.Z - Units[i]->RunLocation.Z);
-			//UE_LOG(LogTemp, Warning, TEXT("Distance HUD: %f"), Distance);
+
 			if (Distance <= Units[i]->StopRunTolerance) { // || DistanceY <= Units[i]->StopRunToleranceY 
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
@@ -494,9 +370,6 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 
 void AHUDBase::SetUnitSelected(AUnitBase* Unit)
 {
-	
-		
-	
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		SelectedUnits[i]->SetDeselected();
 	}

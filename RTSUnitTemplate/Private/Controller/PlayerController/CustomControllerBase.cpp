@@ -826,17 +826,24 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Uni
 
 void ACustomControllerBase::LeftClickReleasedMass()
 {
+	
 	LeftClickIsPressed = false;
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
+
 	DropUnitBase();
 	int BestIndex = GetHighestPriorityWidgetIndex();
 	CurrentUnitWidgetIndex = BestIndex;
-	UpdateSelectionCircles();
-	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled)
+	//UpdateSelectionCircles();
+	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
+	if (ExtendedCameraBase)
 	{
-		SetWidgets(BestIndex);
+		if(ExtendedCameraBase->TabToggled)
+		{
+			SetWidgets(BestIndex);
+		}
 	}
+	
 }
 
 void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities)

@@ -236,7 +236,10 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 
 
 	if (NewIndex < 0)
+	{
 		NewIndex = MaxAbilityArrayIndex;
+		AddToCurrentUnitWidgetIndex(Add);
+	}
 
 	if (NewIndex == 0 && !SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num())
 		NewIndex+=Add;
@@ -260,11 +263,14 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 		NewIndex+=Add;
 
 	if (NewIndex > MaxAbilityArrayIndex)
+	{
 		NewIndex = 0;
-
-
+		AddToCurrentUnitWidgetIndex(Add);
+	}
+	
 	AbilityArrayIndex=NewIndex;
 }
+
 
 void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
 {
@@ -384,13 +390,12 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	
 	if (SelectedUnits.Num() > 0)
 	{
-		if (SelectedUnits[0]->IsWorker && SelectedUnits[0]->CanActivateAbilities)
+		if (SelectedUnits[CurrentUnitWidgetIndex]->IsWorker && SelectedUnits[CurrentUnitWidgetIndex]->CanActivateAbilities)
 		{
-			ActivateAbilitiesByIndex_Implementation(SelectedUnits[0], InputID, Hit);
-			HUDBase->SetUnitSelected(SelectedUnits[0]);
+			ActivateAbilitiesByIndex_Implementation(SelectedUnits[CurrentUnitWidgetIndex], InputID, Hit);
+			HUDBase->SetUnitSelected(SelectedUnits[CurrentUnitWidgetIndex]);
 			CurrentUnitWidgetIndex = 0;
 			SelectedUnits = HUDBase->SelectedUnits;
-			//ActivateAbilitiesByIndex_Implementation(SelectedUnits[0], InputID, Hit);
 		}else{
 			bool bAnyHasTag = false;
 
@@ -1727,20 +1732,82 @@ void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase
 
 void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 {
+	const int NumUnits = SelectedUnits.Num();
+	if (NumUnits == 0 || !SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex))
+	{
+		return;
+	}
+
+	const int StartIndex = CurrentUnitWidgetIndex;
+	const FGameplayTag CurrentTag = SelectedUnits[StartIndex]->AbilitySelectionTag;
+
+	int visited = 0;       // how many units (including empty‑ability ones) we've stepped past
+	int defaultHits = 0;   // how many times we've landed on a unit with DefaultAbilities.Num() > 0
+
+	// Single loop over at most 'NumUnits' steps:
+	while (visited < NumUnits)
+	{
+		// advance & wrap
+		CurrentUnitWidgetIndex = (CurrentUnitWidgetIndex + Add + NumUnits) % NumUnits;
+
+		// if this unit has no default abilities, skip it
+		if (SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num() == 0)
+		{
+			visited++;
+			continue;
+		}
+
+		// we found one with at least DefaultAbilities
+		defaultHits++;
+
+		// if the tag changed, or we looped all the way back to where we started, stop here
+		if (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag ||
+			CurrentUnitWidgetIndex == StartIndex)
+		{
+			break;
+		}
+
+		// otherwise it was the same-tag unit, count it and keep going
+		visited++;
+	}
+
+	// if we never encountered *any* unit with DefaultAbilities, undo the move
+	if (defaultHits == 0)
+	{
+		CurrentUnitWidgetIndex = StartIndex;
+	}
+}
+
+/*
+void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
+{
 	if (SelectedUnits.Num() == 0)
 	{
 		return;
 	}
 	
-		if (!SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex))
-    	{
-    		return;
-    	}
+	if (!SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex))
+    {
+    	return;
+    }
 
+	bool HasAbilities = false;
+
+	for (int x = 0 ; x < SelectedUnits.Num(); x++)
+	{
+		if (SelectedUnits[x]->DefaultAbilities.Num())
+		{
+			HasAbilities = true;
+		}
+	}
+
+	if (!HasAbilities) return;
+	
 	int StartIndex = CurrentUnitWidgetIndex;
 	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag;
 
-	while (true)
+	int i = 0;
+	while (i < SelectedUnits.Num())
 	{
 		// Move index
 		CurrentUnitWidgetIndex += Add;
@@ -1755,6 +1822,8 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 			CurrentUnitWidgetIndex = 0;
 		}
 
+		if (!SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num())
+			continue;
 		// If the newly selected unit has a different tag, stop
 		if (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag)
 		{
@@ -1766,8 +1835,10 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 		{
 			break;
 		}
+		i++;
 	}
 }
+*/
 
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {

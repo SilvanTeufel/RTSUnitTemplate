@@ -42,6 +42,7 @@ FText UUnitWidgetSelector::ReplaceRarityKeywords(
 
 void UUnitWidgetSelector::UpdateSelectedUnits()
 {
+	
 	if(ControllerBase)
 	{
 		SetVisibleButtonCount(ControllerBase->SelectedUnitCount);
