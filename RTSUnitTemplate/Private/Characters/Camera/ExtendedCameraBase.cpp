@@ -442,7 +442,7 @@ void AExtendedCameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActio
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->IsStrgPressed = true;
+		CameraControllerBase->IsCtrlPressed = true;
 	}
 }
 
@@ -453,7 +453,7 @@ void AExtendedCameraBase::Input_Ctrl_Released(const FInputActionValue& InputActi
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
-		CameraControllerBase->IsStrgPressed = false;
+		CameraControllerBase->IsCtrlPressed = false;
 	}
 }
 
@@ -573,7 +573,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
     		}
     	}
     	
-        if (CameraControllerBase->IsStrgPressed)
+        if (CameraControllerBase->IsCtrlPressed)
         {
             switch (NewCameraState)
             {
@@ -599,11 +599,15 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 15: HandleState_SpawnEffects(CameraControllerBase); break;
             case 7:
             	{
+            		CameraControllerBase->SpacePressed();
+            		
             		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
             			SetCameraState(CameraData::ZoomOutPosition);
             	} break;
             case 8:
             	{
+            		CameraControllerBase->SpaceReleased();
+            		
             		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
             			SetCameraState(CameraData::ZoomInPosition);
             	} break;
@@ -642,8 +646,14 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 555: HandleState_StopZoomIn_NoStrg(CameraControllerBase); break;
             case 6: HandleState_ZoomOut_NoStrg(CameraControllerBase); break;
             case 666: HandleState_StopZoomOut_NoStrg(CameraControllerBase); break;
+            case 7:
+            	{
+            		CameraControllerBase->SpacePressed();
+            	} break;
             case 8:
             	{
+            		CameraControllerBase->SpaceReleased();
+            		
             		if(GetCameraState() != CameraData::LockOnCharacterWithTag)
             			SetCameraState(CameraData::ZoomInPosition);
             	} break;

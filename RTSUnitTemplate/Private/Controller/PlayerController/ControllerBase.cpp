@@ -106,7 +106,7 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, EffectAreaClass);
 	DOREPLIFETIME(AControllerBase, IsShiftPressed);
 	DOREPLIFETIME(AControllerBase, AttackToggled);
-	DOREPLIFETIME(AControllerBase, IsStrgPressed);
+	DOREPLIFETIME(AControllerBase, IsCtrlPressed);
 	DOREPLIFETIME(AControllerBase, IsSpacePressed);
 	DOREPLIFETIME(AControllerBase, AltIsPressed);
 	DOREPLIFETIME(AControllerBase, LeftClickIsPressed);
@@ -848,23 +848,18 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			
 			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("This is a Building!!"));
-				//PlayWaypointSound = true;
+
 			}else if (IsShiftPressed) {
-				//UE_LOG(LogTemp, Warning, TEXT("IsShiftPressed!"));
-				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("MOVVVEE!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunUEPF(SelectedUnits[i], RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
-				//UE_LOG(LogTemp, Warning, TEXT("DIJKSTRA!"));
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
 				PlayRunSound = true;
@@ -1018,7 +1013,7 @@ void AControllerBase::AReleased()
 
 void AControllerBase::JumpCamera()
 {
-	if (CameraBase && (IsStrgPressed || IsSpacePressed))
+	if (CameraBase && IsSpacePressed) //  && (IsCtrlPressed || IsSpacePressed)
 	{
 		FHitResult Hit;
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
@@ -1028,16 +1023,16 @@ void AControllerBase::JumpCamera()
 
 
 void AControllerBase::StrgPressed() {
-	IsStrgPressed = true;
+	IsCtrlPressed = true;
 }
 
 void AControllerBase::StrgReleased() {
-	IsStrgPressed = false;
+	IsCtrlPressed = false;
 }
 
 void AControllerBase::ZoomIn()
 {
-	if (CameraBase && IsStrgPressed)
+	if (CameraBase && IsCtrlPressed)
 	{
 		CameraBase->ZoomIn(1.f);
 	}
@@ -1045,7 +1040,7 @@ void AControllerBase::ZoomIn()
 
 void AControllerBase::ZoomOut()
 {
-	if (CameraBase && IsStrgPressed)
+	if (CameraBase && IsCtrlPressed)
 	{
 		CameraBase->ZoomOut(1.f);
 	}

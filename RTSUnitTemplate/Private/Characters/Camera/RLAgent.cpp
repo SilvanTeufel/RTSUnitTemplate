@@ -163,8 +163,8 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             }
             if (Action->HasField(TEXT("ctrl")))
             {
-                ExtendedController->IsStrgPressed = Action->GetBoolField(TEXT("ctrl"));
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Ctrl to: %s"), ExtendedController->IsStrgPressed ? TEXT("True") : TEXT("False"));
+                ExtendedController->IsCtrlPressed = Action->GetBoolField(TEXT("ctrl"));
+                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Ctrl to: %s"), ExtendedController->IsCtrlPressed ? TEXT("True") : TEXT("False"));
             }
             // ExtendedController->SetModifierKeys(AltIsPressed, CtrlIsPressed);
 

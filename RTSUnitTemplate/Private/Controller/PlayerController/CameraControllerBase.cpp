@@ -867,7 +867,7 @@ void ACameraControllerBase::MoveCam(float DeltaSeconds, FVector Destination)
 
 void ACameraControllerBase::ToggleLockCamToCharacter()
 {
-	if(IsStrgPressed)
+	if(IsCtrlPressed)
 	{
 		LockCameraToCharacter = !LockCameraToCharacter;
 	
@@ -1116,57 +1116,6 @@ void ACameraControllerBase::SetCameraUnitTransform_Implementation(FVector Target
 	CameraUnitWithTag->SetActorTransform(NewTransform, false, nullptr, ETeleportType::None);
 	CameraUnitWithTag->SyncTranslation();
 }
-/*
-void ACameraControllerBase::MoveCameraUnit()
-{
-	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes) return;
-	
-	FVector SpringArmForwardVector = CameraBase->SpringArmRotator.Vector();
-	SpringArmForwardVector.Z = 0.f;
-	FVector SpringArmRightVector = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector); // Perpendicular to forward vector
-	SpringArmRightVector.Z = 0.f;
-        	
-	FVector MoveDirection = FVector::ZeroVector;
-
-	if (WIsPressedState == 1)
-	{
-		MoveDirection += SpringArmForwardVector;
-	}
-	if (AIsPressedState == 1)
-	{
-		MoveDirection += -SpringArmRightVector;
-	}
-	if (SIsPressedState == 1)
-	{
-		MoveDirection += -SpringArmForwardVector;
-	}
-	if (DIsPressedState == 1)
-	{
-		MoveDirection += SpringArmRightVector;
-	}
-
-	// Normalize the resulting vector
-	if (!MoveDirection.IsNearlyZero())
-	{
-		MoveDirection.Normalize(); // Avoid faster diagonals
-
-		FVector MovementLocation =  CameraUnitWithTag->GetActorLocation() + MoveDirection*500.f;
-		CameraUnitWithTag->SetRunLocation(MovementLocation);
-		DrawDebugCircleAtLocation(GetWorld(), MovementLocation, FColor::Green);
-		//RightClickRunUEPF(CameraUnitWithTag, MovementLocation, true);
-
-		
-		float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
-		// Check Distance between CameraUnitMovementLocation and MovementLocation
-		float Distance = FVector::Distance(CameraUnitMovementLocation, MovementLocation);
-		if (CameraUnitWithTag->bIsMassUnit && Distance >= 300.f)
-		{
-			CameraUnitMovementLocation = MovementLocation;
-			CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, MovementLocation, Speed, 100.f);
-		}
-	}
-}
-*/
 
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {

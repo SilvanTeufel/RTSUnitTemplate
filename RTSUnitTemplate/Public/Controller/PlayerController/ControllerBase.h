@@ -235,7 +235,7 @@ public:
 	bool AttackToggled = false;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsStrgPressed", Keywords = "RTSUnitTemplate IsStrgPressed"), Category = RTSUnitTemplate)
-	bool IsStrgPressed = false;
+	bool IsCtrlPressed = false;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsSpacePressed", Keywords = "RTSUnitTemplate IsSpacePressed"), Category = RTSUnitTemplate)
 	bool IsSpacePressed = false;

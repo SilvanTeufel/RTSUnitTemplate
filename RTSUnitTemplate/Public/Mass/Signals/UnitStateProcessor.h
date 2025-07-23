@@ -256,4 +256,8 @@ private:
 	
 	UFUNCTION()
 	void UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
+
+	UFUNCTION()
+	void UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
+	
 };

@@ -1011,6 +1011,8 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	if( StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
 			StrongUnitActor->SetUnitState(UnitData::Idle);
 		}
+
+    	UpdateUnitArrayMovement(CapturedEntity , StrongUnitActor);
     	
     	if (!StrongUnitActor->IsWorker) return;
     		
@@ -2858,17 +2860,61 @@ void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEnt
 	//});
 }
 
-void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase)
+
+void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase)
 {
-	
+	UE_LOG(LogTemp, Warning, TEXT("UpdateUnitArrayMovement!!!!!!"));
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-	if (!EntityManager.IsEntityValid(Entity)) 
+	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("UnitBase->RunLocationArray.Num(): %d"), UnitBase->RunLocationArray.Num());
+	if (UnitBase->RunLocationArray.Num())
+	{
+		// Get the required fragments from the entity
+		const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+		FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+		const FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+
+		if (!TransformFrag || !MoveTargetFrag || !StatsFrag) return;
+
+		const FVector CurrentLocation = TransformFrag->GetTransform().GetLocation();
+		const FVector CurrentWaypoint = UnitBase->RunLocationArray[0];
+
+		// Define a distance to consider the waypoint "reached"
+		// Using squared distance is more efficient as it avoids a square root calculation
+		constexpr float ReachedDistanceSquared = 100.f * 100.f; // 1 meter
+
+		// Check if the entity has reached the current waypoint
+		if (FVector::DistSquared(CurrentLocation, CurrentWaypoint) < ReachedDistanceSquared)
+		{
+			// Waypoint reached, remove it from the path
+			UnitBase->RunLocationArray.RemoveAt(0);
+
+			// If there are more waypoints, update the move target to the next one
+			if (UnitBase->RunLocationArray.Num() > 0)
+			{
+				UpdateMoveTarget(*MoveTargetFrag, UnitBase->RunLocationArray[0], StatsFrag->RunSpeed, GetWorld());
+				SwitchState(UnitSignals::Run, Entity, EntityManager);
+			}
+		}
+	}	
+}
+
+
+void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase)
+{
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
 	{
 		return;
 	}
 	
-	if (UnitBase && UnitBase->IsWorker)
+	if (UnitBase->IsWorker)
 	{
 		FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity);
 		FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);

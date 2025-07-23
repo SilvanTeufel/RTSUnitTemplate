@@ -580,9 +580,14 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             DrawDebugCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
-                CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f), SetUnitState_Replication(U, 1);
-            else
-                RightClickRunShift(U, Loc);
+            {
+            	if (U->GetUnitState() != UnitData::Run)
+            	{
+            		CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f);
+            	}
+	           RightClickRunShift(U, Loc);
+            	SetUnitState_Replication(U, 1);
+            }
             PlayRun = true;
         }
         else
@@ -617,7 +622,7 @@ void ACustomControllerBase::LeftClickPressedMass()
     if (!CameraBase || CameraBase->TabToggled) return;
 
     // --- ALT: cancel / destroy area ---
-    if (AltIsPressed)
+	if (AltIsPressed)
     {
         DestroyWorkArea();
         for (AUnitBase* U : SelectedUnits)
@@ -625,7 +630,6 @@ void ACustomControllerBase::LeftClickPressedMass()
             CancelAbilitiesIfNoBuilding(U);
         }
     }
-    // --- ATTACK GRID MODE ---
     else if (AttackToggled)
     {
         // 1) get world hit under cursor
@@ -733,12 +737,19 @@ void ACustomControllerBase::LeftClickPressedMass()
 
             if (HitUnit && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
             {
-                HUDBase->DeselectAllUnits();
-                HUDBase->SetUnitSelected(HitUnit);
-                DragUnitBase(HitUnit);
+            	if (IsCtrlPressed)
+            	{
+            		FGameplayTag Tag = HitUnit->UnitTags.First();
+            		SelectUnitsWithTag(Tag, SelectableTeamId);
+            	}else
+            	{
+            		HUDBase->DeselectAllUnits();
+            		HUDBase->SetUnitSelected(HitUnit);
+            		DragUnitBase(HitUnit);
 
-                if (CameraBase->AutoLockOnSelect)
-                    LockCameraToUnit = true;
+            		if (CameraBase->AutoLockOnSelect)
+            			LockCameraToUnit = true;	
+            	}
             }
             else
             {
