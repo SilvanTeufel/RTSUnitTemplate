@@ -105,15 +105,13 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
 
             
-            /*
+            
             // --- 1. Check CURRENT entity's health ---
-            if (StatsFrag.Health <= 0.f && !DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()))
+            if (StatsFrag.Health <= 0.f)
             {
-                // Queue Dead signal
-                UE_LOG(LogTemp, Error, TEXT("MSP Unit has no Health anymore!"));
                 PendingSignals.Emplace(Entity, UnitSignals::Dead);
                 continue; // Skip further checks for this dead entity
-            }*/
+            }
         } // End Entity Loop
     }); // End ForEachEntityChunk
 

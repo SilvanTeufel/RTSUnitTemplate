@@ -57,7 +57,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void AgentInit();
 	
-	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTarget(
 		UObject* WorldContextObject,
 		AUnitBase* Unit,
@@ -66,6 +66,15 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+
+	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
+	void CorrectSetUnitMoveTargetForAbility(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
 
 	UFUNCTION(Server, Reliable)
 	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);

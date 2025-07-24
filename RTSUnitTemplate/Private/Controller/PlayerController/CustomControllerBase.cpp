@@ -228,6 +228,80 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 }
 
+void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
+{
+	if (!Unit) return;
+	
+	if (!Unit->IsInitialized) return;
+	
+	if (!Unit->CanMove) return;
+	
+    UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: WorldContextObject is invalid or could not provide World."));
+        return;
+    }
+
+    UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+    if (!MassSubsystem)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: MassEntitySubsystem not found. Is Mass enabled?"));
+        return;
+    }
+
+    FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
+	
+    if (!EntityManager.IsEntityValid(MassEntityHandle))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
+        return;
+    }
+
+    // --- Access the PER-ENTITY fragment ---
+    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+	
+    if (!MoveTargetFragmentPtr || !AiStatePtr)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
+        return;
+    }
+
+	AiStatePtr->StoredLocation = NewTargetLocation;
+	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+
+	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	
+	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+	
+	if (AttackT)
+	{
+		if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+	}else
+	{
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+	}
+
+	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+	//EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+}
+
 
 void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
 {
