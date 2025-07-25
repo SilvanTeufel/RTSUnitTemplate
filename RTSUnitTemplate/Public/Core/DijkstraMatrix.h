@@ -12,16 +12,16 @@ struct FGridData : public FTableRowBase
 	GENERATED_BODY()
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int RowCount;
+	int RowCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int ColCount;
+	int ColCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float Delta;
+	float Delta = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	FVector Offset;
+	FVector Offset = FVector::ZeroVector;
 	
 };
 USTRUCT()
@@ -38,43 +38,43 @@ struct FPathMatrixRow
 	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY()
-	int32 Id_A;
-	
+	int32 Id_A = 0; // Initialize
+    
 	UPROPERTY()
-	FVector3d Point_A;
-	
+	FVector3d Point_A = FVector3d::Zero(); // Initialize
+    
 	UPROPERTY()
-	int32 Id_B;
-	
+	int32 Id_B = 0; // Initialize
+    
 	UPROPERTY()
-	FVector3d Point_B;
-	
+	FVector3d Point_B = FVector3d::Zero(); // Initialize
+    
 	UPROPERTY()
-	float Distance;
+	float Distance = 0.0f; // Initialize
 
-	bool Processed;
+	bool Processed = false; // Initialize
 };
 
 
 USTRUCT()
 struct FDijkstraRow
 {
-	GENERATED_USTRUCT_BODY()
+    GENERATED_USTRUCT_BODY()
 
-	UPROPERTY()
-	int32 Id_End;
-	
-	UPROPERTY()
-	FVector3d End_Point;
-	
-	UPROPERTY()
-	int32 Id_Previous ;
-	
-	UPROPERTY()
-	FVector3d Previous_Point;
+    UPROPERTY()
+    int32 Id_End = 0;
+    
+    UPROPERTY()
+    FVector3d End_Point = FVector3d::Zero();
+    
+    UPROPERTY()
+    int32 Id_Previous = 0;
+    
+    UPROPERTY()
+    FVector3d Previous_Point = FVector3d::Zero();
 
-	UPROPERTY()
-	uint64 Costs;
+    UPROPERTY()
+    uint64 Costs = 0;
 };
 
 USTRUCT()

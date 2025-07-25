@@ -13,68 +13,68 @@ struct FAttributeSaveData
 	GENERATED_BODY()
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Health;
+	float Health = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float MaxHealth;
+	float MaxHealth = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float HealthRegeneration;
+	float HealthRegeneration = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Shield;
+	float Shield = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float MaxShield;
+	float MaxShield = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float ShieldRegeneration;
+	float ShieldRegeneration = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float AttackDamage;
+	float AttackDamage = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Range;
+	float Range = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float RunSpeed;
+	float RunSpeed = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float IsAttackedSpeed;
+	float IsAttackedSpeed = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float RunSpeedScale;
+	float RunSpeedScale = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float ProjectileScaleActorDirectionOffset;
+	float ProjectileScaleActorDirectionOffset = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float ProjectileSpeed;
+	float ProjectileSpeed = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Stamina;
+	float Stamina = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float AttackPower;
+	float AttackPower = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Willpower;
+	float Willpower = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Haste;
+	float Haste = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float Armor;
+	float Armor = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float MagicResistance;
+	float MagicResistance = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float BaseHealth;
+	float BaseHealth = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float BaseAttackDamage;
+	float BaseAttackDamage = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float BaseRunSpeed;
+	float BaseRunSpeed = 0.0f;
 };

@@ -15,28 +15,28 @@ struct FUnitAnimData : public FTableRowBase
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> AnimState;
+	TEnumAsByte<UnitData::EState> AnimState = UnitData::Idle;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float BlendPoint_1;
+	float BlendPoint_1 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float BlendPoint_2;
+	float BlendPoint_2 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TransitionRate_1;
+	float TransitionRate_1 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TransitionRate_2;
+	float TransitionRate_2 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float Resolution_1;
+	float Resolution_1 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float Resolution_2;
+	float Resolution_2 = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	USoundBase* Sound;
+	USoundBase* Sound = nullptr;
 	
 };
 

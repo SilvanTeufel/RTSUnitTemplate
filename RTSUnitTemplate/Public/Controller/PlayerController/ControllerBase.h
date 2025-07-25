@@ -10,7 +10,6 @@
 #include "Actors/EffectArea.h"
 #include "Actors/UnitSpawnPlatform.h"
 #include "Kismet/GameplayStatics.h"
-#include "EOS/EOS_PlayerController.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "ControllerBase.generated.h"
 
@@ -28,7 +27,7 @@ enum class EGridShape : uint8
 
 
 UCLASS()
-class RTSUNITTEMPLATE_API AControllerBase : public AEOS_PlayerController
+class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
 {
 	GENERATED_BODY()
 
