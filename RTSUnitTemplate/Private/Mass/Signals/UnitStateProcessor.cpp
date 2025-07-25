@@ -2863,7 +2863,6 @@ void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEnt
 
 void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase)
 {
-	UE_LOG(LogTemp, Warning, TEXT("UpdateUnitArrayMovement!!!!!!"));
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
@@ -2871,7 +2870,6 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("UnitBase->RunLocationArray.Num(): %d"), UnitBase->RunLocationArray.Num());
 	if (UnitBase->RunLocationArray.Num())
 	{
 		// Get the required fragments from the entity
