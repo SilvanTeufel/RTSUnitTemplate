@@ -92,12 +92,9 @@ void UAreaDecalComponent::OnRep_DecalRadius()
 void UAreaDecalComponent::UpdateDecalVisuals()
 {
 	
-	const FString RoleString = GetOwner()->HasAuthority() ? TEXT("Server") : TEXT("Client");
-	
 	// If the material is null, the decal should be hidden.
 	if (!CurrentMaterial)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: Hiding decal because CurrentMaterial is null."), *RoleString, *GetOwner()->GetName());
 		SetHiddenInGame(true);
 		return;
 	}
@@ -105,7 +102,6 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 	// Create a dynamic material instance if we don't have one or if the base material has changed.
 	if (!DynamicDecalMaterial)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: Creating new Dynamic Material Instance from %s."), *RoleString, *GetOwner()->GetName(), *CurrentMaterial->GetName());
 		DynamicDecalMaterial = UMaterialInstanceDynamic::Create(CurrentMaterial, this);
 		SetDecalMaterial(DynamicDecalMaterial);
 	}
@@ -115,17 +111,11 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		// Apply the replicated color. Your material needs a Vector Parameter named "Color".
 		DynamicDecalMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
 	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: DynamicDecalMaterial is still null after creation attempt."), *RoleString, *GetOwner()->GetName());
-	}
 	
 	// Apply the replicated radius. Z is the projection depth, Y and Z are the radius.
 	DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
 
-	// Ensure the decal is visible.
-	UE_LOG(LogTemp, Error, TEXT("[%s] AreaDecalComponent on %s: Updating and showing decal. Color: %s, Radius: %.2f"), *RoleString, *GetOwner()->GetName(), *CurrentDecalColor.ToString(), CurrentDecalRadius);
-	
+
 }
 
 
