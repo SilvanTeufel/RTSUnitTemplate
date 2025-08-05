@@ -28,6 +28,7 @@ APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):
 void APerformanceUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
 	CheckViewport();
 	CheckTeamVisibility();
 	
@@ -157,15 +158,21 @@ void APerformanceUnit::CheckTeamVisibility()
 
 bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 {
-	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-	{
-		FVector2D ScreenPosition;
-		UGameplayStatics::ProjectWorldToScreen(PlayerController, WorldPosition, ScreenPosition);
 
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	if (!PlayerController) return false;
+
+	FVector2D ScreenPosition;
+	// Check the boolean return value of the function here!
+	if (UGameplayStatics::ProjectWorldToScreen(PlayerController, WorldPosition, ScreenPosition))
+	{
 		int32 ViewportSizeX, ViewportSizeY;
 		PlayerController->GetViewportSize(ViewportSizeX, ViewportSizeY);
 
-		return ScreenPosition.X >= -Offset && ScreenPosition.X <= ViewportSizeX + Offset && ScreenPosition.Y >= -Offset && ScreenPosition.Y <= ViewportSizeY + Offset;
+		bool IsInViewportRange = ScreenPosition.X >= -Offset && ScreenPosition.X <= ViewportSizeX + Offset &&
+			   ScreenPosition.Y >= -Offset && ScreenPosition.Y <= ViewportSizeY + Offset;
+		
+		return IsInViewportRange;
 	}
 
 	return false;

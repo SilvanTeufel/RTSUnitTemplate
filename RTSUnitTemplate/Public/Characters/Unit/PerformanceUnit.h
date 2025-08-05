@@ -95,7 +95,7 @@ public:
 	bool StopVisibilityTick = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsOnViewport = true;
+	bool IsOnViewport = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsMyTeam = false;
