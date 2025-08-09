@@ -16,7 +16,7 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here
 {
     //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
-    //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Editor);
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     bRequiresGameThreadExecution = true;

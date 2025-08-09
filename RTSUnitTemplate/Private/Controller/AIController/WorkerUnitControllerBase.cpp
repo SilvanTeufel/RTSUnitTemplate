@@ -916,8 +916,8 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
     UnitBase->OnRep_MeshAssetPath();
     UnitBase->OnRep_MeshMaterialPath();
 
-    UnitBase->SetReplicateMovement(true);
-    SetReplicates(true);
+    //UnitBase->SetReplicateMovement(true);
+    //SetReplicates(true);
     //UnitBase->GetMesh()->SetIsReplicated(true);
 
     // Meshrotation-Server

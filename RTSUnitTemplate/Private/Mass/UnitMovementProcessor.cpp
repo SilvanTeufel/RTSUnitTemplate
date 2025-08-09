@@ -19,6 +19,7 @@ UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
     // Run BEFORE steering, avoidance, and movement integration
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks; // Or potentially Input
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server);
     ProcessingPhase = EMassProcessingPhase::PrePhysics; // Good phase for pathfinding/intent
 
     //ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;

@@ -28,7 +28,10 @@
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
-#include "GameFramework/CharacterMovementComponent.h"
+#include "MassReplicationFragments.h"
+#include "MassReplicationSubsystem.h"
+#include "Iris/ReplicationSystem/ReplicationFragment.h"
+#include "MassReplicationTypes.h" 
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 
@@ -50,12 +53,19 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
-
+	
 	if (!World)
 	{
 		UE_LOG(LogTemp, Error, TEXT("World not FOUND!"));
 		return;
 	}
+
+	// Only on Server!
+	if (World->GetNetMode() == NM_Client)
+	{
+		return; // We are a client, do not create a Mass entity. Wait for replication.
+	}
+
 	
 	if(!MassEntitySubsystemCache)
 	{
@@ -172,6 +182,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 
     TArray<const UScriptStruct*> FragmentsAndTags = {
         // Fragments & tags as before, plus a one-shot init tag
+
+    	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
+    	FMassNetworkIDFragment::StaticStruct(),         // REQUIRED: Uniquely identifies an entity across the network.
+    	FMassReplicatedAgentFragment::StaticStruct(),
+    	// --- END OF ADDITIONS ---
+    	
     	// Core Movement & State
     	FTransformFragment::StaticStruct(),
 		FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
@@ -295,15 +311,15 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	FConstSharedStruct StandingAvoidanceParamSharedFragment =
 	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
 	SharedValues.Add(StandingAvoidanceParamSharedFragment);
-	// ***** --- ADD THIS LINE --- *****
-	// ***** --- END ADDED LINE --- *****
-	
-    SharedValues.Sort();
 
+
+    SharedValues.Sort();
+	
 	OutSharedValues = SharedValues;
 
     return true;
 }
+
 
 void UMassActorBindingComponent::InitTransform(FMassEntityManager& EntityManager, const FMassEntityHandle& Handle)
 {
@@ -362,6 +378,17 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
+
+	if (!World)
+	{
+		return; // World might not be valid yet
+	}
+	
+	if (World->GetNetMode() == NM_Client)
+	{
+		return; // We are a client, do not create a Mass entity. Wait for replication.
+	}
+	
 	if(!MassEntitySubsystemCache)
 	{
 		if(World)
@@ -374,12 +401,7 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 	{
 		bNeedsMassBuildingSetup = true;
 	}
-
-
-	if (!World)
-	{
-		return; // World might not be valid yet
-	}
+	
 
 	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 	{
@@ -470,6 +492,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 
     TArray<const UScriptStruct*> FragmentsAndTags = {
         // Fragments & tags as before, plus a one-shot init tag
+
+    	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
+    	FMassNetworkIDFragment::StaticStruct(),         // REQUIRED: Uniquely identifies an entity across the network.
+		FMassReplicatedAgentFragment::StaticStruct(),
+		// --- END OF ADDITIONS ---
+    	
     	// Core Movement & State
     	FTransformFragment::StaticStruct(),
 		//FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement

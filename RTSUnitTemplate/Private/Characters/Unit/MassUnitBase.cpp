@@ -34,14 +34,6 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	{
 		SelectionIcon->SetupAttachment(RootComponent);
 	}
-	/*
-	AreaDecalComponent = CreateDefaultSubobject<UAreaDecalComponent>(TEXT("AreaDecalComponent"));
-
-	if (AreaDecalComponent)
-	{
-		AreaDecalComponent->SetupAttachment(RootComponent);
-	}
-	*/
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

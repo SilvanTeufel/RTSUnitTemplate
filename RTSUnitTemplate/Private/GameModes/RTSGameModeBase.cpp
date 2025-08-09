@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "AIController.h"
+#include "MassReplicationFragments.h"
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
@@ -26,6 +27,7 @@
 
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/States/ChaseStateProcessor.h"
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -362,7 +364,6 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	}
 
 	NavInitialisation();
-	
 }
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
@@ -659,7 +660,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		UnitBase->OnRep_MeshMaterialPath();
 
 		UnitBase->SetReplicateMovement(true);
-		SetReplicates(true);
+		//SetReplicates(true);
 		//UnitBase->GetMesh()->SetIsReplicated(true);
 
 		// Does this have to be replicated?
@@ -778,8 +779,8 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->OnRep_MeshAssetPath();
 				UnitBase->OnRep_MeshMaterialPath();
 
-				UnitBase->SetReplicateMovement(true);
-				UnitBase->SetReplicates(true);
+				//UnitBase->SetReplicateMovement(true);
+				//UnitBase->SetReplicates(true);
 				//UnitBase->GetMesh()->SetIsReplicated(true);
 				
 				UnitBase->SetMeshRotationServer();

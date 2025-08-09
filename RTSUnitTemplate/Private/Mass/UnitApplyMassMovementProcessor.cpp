@@ -17,6 +17,7 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery(
 	//ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
 	ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
+	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server);
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 	bAutoRegisterWithProcessingPhases = true;
 	bRequiresGameThreadExecution = true;
@@ -131,68 +132,3 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
         }
     });
 }
-/*
-void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
-    const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
-    if (DeltaTime <= 0.0f) // Avoid division by zero or no-op
-    {
-        return;
-    }
-
-    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& Context)
-    {
-        const int32 NumEntities = Context.GetNumEntities();
-        if (NumEntities == 0) return;
-    	
-        // --- Get required data ---
-        const FMassMovementParameters& MovementParams = Context.GetConstSharedFragment<FMassMovementParameters>();
-        const TConstArrayView<FMassSteeringFragment> SteeringList = Context.GetFragmentView<FMassSteeringFragment>(); // Get Steering
-        const TArrayView<FTransformFragment> LocationList = Context.GetMutableFragmentView<FTransformFragment>();
-        const TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
-        const TArrayView<FMassVelocityFragment> VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
-
-        // --- Process each entity ---
-    	//UE_LOG(LogTemp, Log, TEXT("UUnitApplyMassMovementProcessor::Execute started NumEntities: %d"), NumEntities);
-        for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
-        {
-            FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
-            const FMassSteeringFragment& Steering = SteeringList[EntityIndex]; // Read desired velocity
-            FMassForceFragment& Force = ForceList[EntityIndex];
-            FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
-
-            // --- Core Movement Logic ---
-            const FVector DesiredVelocity = Steering.DesiredVelocity;
-        	const FVector AvoidanceForce = Force.Value; 
-            const float MaxSpeed = MovementParams.MaxSpeed; // Get parameters
-            const float Acceleration = MovementParams.MaxAcceleration;
-
-            // Calculate acceleration input towards desired velocity
-            // (Simplified: directly accelerate towards target velocity, clamped by max acceleration)
-            // More complex steering would use forces differently.
-            FVector AccelInput = (DesiredVelocity - Velocity.Value); // How much velocity needs to change
-            // Clamp the acceleration magnitude
-            AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-
-            // Calculate change in velocity applying acceleration and external forces
-            FVector VelocityDelta = (AccelInput + AvoidanceForce) * DeltaTime * 4.f;
-
-            // Store previous velocity for logging if needed
-            FVector PrevVelocity = Velocity.Value;
-
-            // Update velocity
-            Velocity.Value += VelocityDelta;
-
-            // Clamp final speed
-            Velocity.Value = Velocity.Value.GetClampedToMaxSize(MaxSpeed);
-
-            // --- Apply final velocity to position ---
-            FVector CurrentLocation = CurrentTransform.GetLocation();
-            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
-            CurrentTransform.SetTranslation(NewLocation);
-
-            // Reset force for the next frame (usually done by force generating systems, but good practice here)
-            Force.Value = FVector::ZeroVector;
-        }
-    });
-}*/

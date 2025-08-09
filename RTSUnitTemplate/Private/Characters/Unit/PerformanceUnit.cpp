@@ -22,7 +22,7 @@
 
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
-	bReplicates = true;
+	//bReplicates = true;
 }
 
 void APerformanceUnit::Tick(float DeltaTime)

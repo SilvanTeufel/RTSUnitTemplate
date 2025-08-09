@@ -72,6 +72,58 @@ void AGASUnit::InitializeAttributes()
 
 void AGASUnit::GiveAbilities()
 {
+    // Ensure we are on the server and have a valid Ability System Component
+    if (!HasAuthority() || !AbilitySystemComponent)
+    {
+        return;
+    }
+
+    // Grant abilities from all lists using our secure helper function
+    GrantAbilitiesFromList(DefaultAbilities);
+    GrantAbilitiesFromList(SecondAbilities);
+    GrantAbilitiesFromList(ThirdAbilities);
+    GrantAbilitiesFromList(FourthAbilities);
+}
+
+void AGASUnit::GrantAbilitiesFromList(const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilityList)
+{
+    // Loop through the provided list of ability classes
+    for (const TSubclassOf<UGameplayAbilityBase>& AbilityClass : AbilityList)
+    {
+        // 1. --- CRITICAL NULL CHECK ---
+        // First, check if the AbilityClass itself is valid. This prevents crashes if an
+        // array element is set to "None" in the Blueprint.
+        if (!AbilityClass)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Found a null AbilityClass in an ability list for %s. Please check the Blueprint defaults."), *this->GetName());
+            continue; // Skip to the next item in the list
+        }
+
+        // 2. --- GET CDO SAFELY ---
+        // Get the Class Default Object to read properties like AbilityInputID.
+        const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+        if (!AbilityCDO)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Could not get CDO for AbilityClass %s on %s."), *AbilityClass->GetName(), *this->GetName());
+            continue; // Skip if we can't get the CDO for some reason
+        }
+        
+        // 3. --- CONSTRUCT SPEC and GIVE ABILITY ---
+        // The tooltip text generation has been removed from the server code.
+        FGameplayAbilitySpec AbilitySpec(
+            AbilityClass,
+            1, // Level
+            static_cast<int32>(AbilityCDO->AbilityInputID),
+            this // Source Object
+        );
+        
+        AbilitySystemComponent->GiveAbility(AbilitySpec);
+    }
+}
+
+/*
+void AGASUnit::GiveAbilities()
+{
 	if(HasAuthority() && AbilitySystemComponent)
 	{
 		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : DefaultAbilities)
@@ -99,6 +151,7 @@ void AGASUnit::GiveAbilities()
 		}
 	}
 }
+*/
 
 void AGASUnit::PossessedBy(AController* NewController)
 {

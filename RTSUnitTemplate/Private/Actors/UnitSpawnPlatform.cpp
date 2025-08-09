@@ -250,7 +250,7 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 		UnitBase->OnRep_MeshMaterialPath();
 
 		UnitBase->SetReplicateMovement(true);
-		SetReplicates(true);
+		//SetReplicates(true);
 		//UnitBase->GetMesh()->SetIsReplicated(true);
 
 		// Does this have to be replicated?

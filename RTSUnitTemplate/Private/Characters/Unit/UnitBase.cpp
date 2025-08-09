@@ -32,11 +32,14 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
-	
+
+	// We replicate now via Mass
+	GetCharacterMovement()->SetIsReplicated(false);
+	/*
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 600.0f, 0.0f);
 	GetCharacterMovement()->SetIsReplicated(true);
-	
+	*/
 	if (RootComponent == nullptr) {
 		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
 	}
@@ -51,17 +54,21 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(RootComponent);
+
+	//SetReplicates(false);
+	//bReplicates = false;
 	
-	SetReplicates(true);
-	//GetMesh()->SetIsReplicated(true);
-	bReplicates = true;
+	//SetReplicates(true);
+	//bReplicates = true;
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponentBase>("AbilitySystemComp");
 	
 	if(ensure(AbilitySystemComponent != nullptr))
 	{
 		AbilitySystemComponent->SetIsReplicated(true);
-		AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
+		AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+		// We switched to Minimal
+		//AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Full);
 	}
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
@@ -89,6 +96,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	{
 		NavSys->UpdateActorInNavOctree(*this); // Update NavMesh representation
 	}
+	
 	GetCapsuleComponent()->SetIsReplicated(false);
 	GetMesh()->SetIsReplicated(false);
 }
@@ -979,8 +987,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			UnitBase->OnRep_MeshAssetPath();
 			UnitBase->OnRep_MeshMaterialPath();
 
-			UnitBase->SetReplicateMovement(true);
-			UnitBase->SetReplicates(true);
+			//UnitBase->SetReplicateMovement(true);
+			//UnitBase->SetReplicates(true);
 			//UnitBase->GetMesh()->SetIsReplicated(true);
 
 			// Does this have to be replicated?

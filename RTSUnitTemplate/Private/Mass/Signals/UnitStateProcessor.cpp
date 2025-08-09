@@ -2186,8 +2186,8 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     UnitBase->OnRep_MeshAssetPath();
     UnitBase->OnRep_MeshMaterialPath();
 
-    UnitBase->SetReplicateMovement(true);
-	UnitBase->SetReplicates(true);
+    //UnitBase->SetReplicateMovement(true);
+	//UnitBase->SetReplicates(true);
     //UnitBase->GetMesh()->SetIsReplicated(true);
 
     // Meshrotation-Server

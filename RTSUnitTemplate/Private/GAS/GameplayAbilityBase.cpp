@@ -44,6 +44,7 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 			const auto MyProjectile = Cast<AProjectile>
 								(UGameplayStatics::BeginDeferredActorSpawnFromClass
 								(this, ProjectileClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+
 			if (MyProjectile != nullptr)
 			{
 
