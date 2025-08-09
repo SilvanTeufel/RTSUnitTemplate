@@ -528,29 +528,13 @@ void AGASUnit::CancelCurrentAbility()
 
 	if (ActivatedAbilityInstance)
 	{
-		// Check if the active ability can be canceled.
-		//if (ActivatedAbilityInstance->AbilityCanBeCanceled)
 		{
 			if(CurrentDraggedAbilityIndicator)
 			{
 				CurrentDraggedAbilityIndicator->Destroy(true, true);
+				CurrentDraggedAbilityIndicator = nullptr;
 			}
 
-			/*
-			// Retrieve the game mode.
-			AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(this);
-			if (GameModeBase)
-			{
-				// Cast to your custom game mode class.
-				AResourceGameMode* MyGameMode = Cast<AResourceGameMode>(GameModeBase);
-				if (MyGameMode)
-				{
-					// Use ModifyResource to adjust the resource amount.
-					// Here we refund the construction cost to the ability's team.
-					MyGameMode->ModifyResourceCCost(ActivatedAbilityInstance->ConstructionCost, TeamId);
-				}
-			}*/
-			
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;

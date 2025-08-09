@@ -20,6 +20,7 @@
 #include "Engine/Engine.h"
 #include "Mass/Signals/MySignals.h"
 #include "Actors/MinimapActor.h" 
+#include "Characters/Unit/BuildingBase.h"
 #include "NavAreas/NavArea_Null.h"
 #include "NavMesh/RecastNavMesh.h"
 
@@ -622,7 +623,12 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     		UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 		
     		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
-			else CancelCurrentAbility(U);
+			else
+			{
+				ABuildingBase* BuildingBase = Cast<ABuildingBase>(U);
+				if (!BuildingBase || !BuildingBase->HasWaypoint)
+					CancelCurrentAbility(U);
+			}
     	}
 
     	if (UnitIsValid)

@@ -2,6 +2,7 @@
 
 #include "Characters/Unit/SpawnerUnit.h"
 #include "Actors/AbilityIndicator.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
 
 ASpawnerUnit::ASpawnerUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
@@ -91,6 +92,24 @@ void ASpawnerUnit::SpawnPickupsArray()
 void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass,
 											   FVector SpawnLocation)
 {
+	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+	{
+		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+
+		if (ControllerBase)
+			for (int32 i = 0; i < ControllerBase->SelectedUnits.Num(); i++)
+			{
+				if(ControllerBase->SelectedUnits[i])
+				{
+					if (ControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
+					{
+						CurrentDraggedAbilityIndicator = ControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator;
+						CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
+						return;
+					}
+				}
+			}
+	}
 	
 	if (AbilityIndicatorClass)
 	{

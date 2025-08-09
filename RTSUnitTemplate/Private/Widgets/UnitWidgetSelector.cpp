@@ -331,69 +331,85 @@ void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 
 void UUnitWidgetSelector::GetButtonsFromBP()
 {
-	
+
 	for (int32 i = 0; i <= MaxQueButtonCount; i++)
 	{
-		FString AbilityQueButtonName = FString::Printf(TEXT("AbilityQueButtons_%d"), i);
-		UButton* AbilityQueButton = Cast<UButton>(GetWidgetFromName(FName(*AbilityQueButtonName)));
-		if (AbilityQueButton)
+		FString WidgetName = FString::Printf(TEXT("AbilityQueButtonWidget_%d"), i);
+		UUserWidget* Widget = Cast<UUserWidget>(GetWidgetFromName(FName(*WidgetName)));
+		if (Widget)
 		{
-			AbilityQueButtons.Add(AbilityQueButton);
-		}
+			FString AbilityQueButtonName = FString::Printf(TEXT("AbilityQueButton"));
+			UButton* AbilityQueButton = Cast<UButton>(Widget->GetWidgetFromName(FName(*AbilityQueButtonName)));
+			if (AbilityQueButton)
+			{
+				AbilityQueButtons.Add(AbilityQueButton);
+			}
 
-		FString AbilityQueIconName = FString::Printf(TEXT("AbilityQueIcons_%d"), i);
-		if (UImage* Image = Cast<UImage>(GetWidgetFromName(FName(*AbilityQueIconName))))
-		{
-			AbilityQueIcons.Add(Image);
+			FString AbilityQueIconName = FString::Printf(TEXT("AbilityQueIcon"));
+			if (UImage* Image = Cast<UImage>(Widget->GetWidgetFromName(FName(*AbilityQueIconName))))
+			{
+				AbilityQueIcons.Add(Image);
+			}
 		}
 	}
-	
+
 	for (int32 i = 0; i <= MaxAbilityButtonCount; i++)
 	{
-		FString AbilityButtonName = FString::Printf(TEXT("Button_Ability_%d"), i);
-		UButton* AbilityButton = Cast<UButton>(GetWidgetFromName(FName(*AbilityButtonName)));
-		if (AbilityButton)
+		FString WidgetName = FString::Printf(TEXT("AbilityButtonWidget_%d"), i);
+		UUserWidget* Widget = Cast<UUserWidget>(GetWidgetFromName(FName(*WidgetName)));
+		if (Widget)
 		{
-			AbilityButtons.Add(AbilityButton);
-		}
+			AbilityButtonWidgets.Add(Widget);
+			
+			FString AbilityButtonName = FString::Printf(TEXT("AbilityButton"));
+			UButton* AbilityButton = Cast<UButton>(Widget->GetWidgetFromName(FName(*AbilityButtonName)));
+			if (AbilityButton)
+			{
+				AbilityButtons.Add(AbilityButton);
+			}
 
-		FString TextBlockName = FString::Printf(TEXT("AbilityCooldownText_%d"), i);
-		UTextBlock* TextBlock = Cast<UTextBlock>(GetWidgetFromName(FName(*TextBlockName)));
-		if (TextBlock)
-		{
-			AbilityCooldownTexts.Add(TextBlock);
+			FString TextBlockName = FString::Printf(TEXT("AbilityCooldownText"));
+			UTextBlock* TextBlock = Cast<UTextBlock>(Widget->GetWidgetFromName(FName(*TextBlockName)));
+			if (TextBlock)
+			{
+				AbilityCooldownTexts.Add(TextBlock);
+			}
 		}
+		
 	}
 	
 	for (int32 i = 0; i <= MaxButtonCount; i++)
 	{
-		FString ButtonName = FString::Printf(TEXT("SelectorButton_%d"), i);
-		USelectorButton* Button = Cast<USelectorButton>(GetWidgetFromName(FName(*ButtonName)));
-		if (Button)
+		FString WidgetName = FString::Printf(TEXT("SelectButtonWidget_%d"), i);
+		UUserWidget* Widget = Cast<UUserWidget>(GetWidgetFromName(FName(*WidgetName)));
+		if (Widget)
 		{
+			SelectButtonWidgets.Add(Widget);
+			
+			FString ButtonName = FString::Printf(TEXT("SelectButton"));
+			USelectorButton* Button = Cast<USelectorButton>(Widget->GetWidgetFromName(FName(*ButtonName)));
 			SelectButtons.Add(Button);
-		}
 
-		FString SingleButtonName = FString::Printf(TEXT("SingleSelectorButton_%d"), i);
-		USelectorButton* SingleButton = Cast<USelectorButton>(GetWidgetFromName(FName(*SingleButtonName)));
-		if (SingleButton)
-		{
-			SingleSelectButtons.Add(SingleButton);
-		}
+			FString SingleButtonName = FString::Printf(TEXT("SingleSelectButton"));
+			USelectorButton* SingleButton = Cast<USelectorButton>(Widget->GetWidgetFromName(FName(*SingleButtonName)));
+			if (SingleButton)
+			{
+				SingleSelectButtons.Add(SingleButton);
+			}
 
-		FString TextBlockName = FString::Printf(TEXT("TextBlock_%d"), i);
-		UTextBlock* TextBlock = Cast<UTextBlock>(GetWidgetFromName(FName(*TextBlockName)));
-		if (TextBlock)
-		{
-			ButtonLabels.Add(TextBlock);
-		}
+			FString TextBlockName = FString::Printf(TEXT("TextBlock"));
+			UTextBlock* TextBlock = Cast<UTextBlock>(Widget->GetWidgetFromName(FName(*TextBlockName)));
+			if (TextBlock)
+			{
+				ButtonLabels.Add(TextBlock);
+			}
 
-		FString IconName = FString::Printf(TEXT("UnitIcon_%d"), i);
-		if (UImage* Image = Cast<UImage>(GetWidgetFromName(FName(*IconName))))
-		{
-			UnitIcons.Add(Image);
+			FString IconName = FString::Printf(TEXT("UnitIcon"));
+			if (UImage* Image = Cast<UImage>(Widget->GetWidgetFromName(FName(*IconName))))
+			{
+				UnitIcons.Add(Image);
+			}
 		}
-
 	}
 }
 
