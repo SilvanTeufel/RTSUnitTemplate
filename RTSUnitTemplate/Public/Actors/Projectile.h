@@ -13,8 +13,17 @@ UCLASS()
 class RTSUNITTEMPLATE_API AProjectile : public AActor
 {
 	GENERATED_BODY()
+
+private:
+	// Timer to control the frequency of the overlap check
+	float OverlapCheckTimer = 0.0f;
 	
-public:	
+public:
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float OverlapCheckInterval = 0.1f;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool DebugTargetLocation = false;
 	// Sets default values for this actor's properties
 	AProjectile();
 
@@ -179,12 +188,15 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool IsInViewport(FVector WorldPosition, float Offset);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float CollisionRadius = 0.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void FlyToUnitTarget();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void FlyToLocationTarget();
+	void FlyToLocationTarget(float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) //UFUNCTION(Server, Reliable)
 	void Impact(AActor* ImpactTarget);
