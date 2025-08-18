@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "RL/InferenceComponent.h"
 
 
 #include "Serialization/JsonReader.h"
@@ -15,58 +16,6 @@
 #include "Serialization/JsonTypes.h" // Might be needed for FJsonValue types
 
 #include "RLAgent.generated.h"
-
-
-USTRUCT(BlueprintType)
-struct FGameStateData
-{
-    GENERATED_BODY()
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    int32 MyUnitCount = 0;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    int32 EnemyUnitCount = 0;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float MyTotalHealth = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float EnemyTotalHealth = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float MyTotalAttackDamage = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float EnemyTotalAttackDamage = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    FVector AgentPosition;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    FVector AverageFriendlyPosition;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    FVector AverageEnemyPosition;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float PrimaryResource = 0.0f;
-    
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float SecondaryResource = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float TertiaryResource = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float RareResource = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float EpicResource = 0.0f;
-
-    UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-    float LegendaryResource = 0.0f;
-};
 
 
 UCLASS()
@@ -82,10 +31,16 @@ protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RLAgent, meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UInferenceComponent> InferenceComponent;
+    
 public:
     // Called every frame
     virtual void Tick(float DeltaTime) override;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
+    bool bIsTraining = true;
     // Setup input (optional – you might not bind physical input if RL supplies values)
     //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
     
@@ -112,6 +67,9 @@ public:
 
     // Called from the client to request game state data.
     UFUNCTION(Server, Reliable)
+    void Server_PlayGame(int32 SelectableTeamId);
+    
+    UFUNCTION(Server, Reliable)
     void Server_RequestGameState(int32 SelectableTeamId);
 
     // Called on the client to receive the game state data.
@@ -122,9 +80,7 @@ public:
     FGameStateData GatherGameState(int32 SelectableTeamId);
     
 private:
-
-   // FGameStateData GatherGameState();
-
+    
     // Manage shared memory
     UFUNCTION( Category = RLAgent)
     void UpdateGameState();

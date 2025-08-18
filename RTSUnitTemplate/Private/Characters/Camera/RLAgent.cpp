@@ -12,6 +12,7 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 {
     // Enable ticking for continuous RL decision processing.
     PrimaryActorTick.bCanEverTick = true;
+    InferenceComponent = CreateDefaultSubobject<UInferenceComponent>(TEXT("InferenceComponent"));
 }
 
 void ARLAgent::BeginPlay()
@@ -97,8 +98,12 @@ void ARLAgent::UpdateGameState()
 
     ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
     if (!CameraControllerBase) return;
+
+    if (bIsTraining)
+        Server_RequestGameState(CameraControllerBase->SelectableTeamId);
+    else
+        Server_PlayGame(CameraControllerBase->SelectableTeamId);
     
-    Server_RequestGameState(CameraControllerBase->SelectableTeamId);
 }
 
 void ARLAgent::CheckForNewActions()
@@ -111,6 +116,9 @@ void ARLAgent::CheckForNewActions()
 void ARLAgent::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    
+    
 }
 
 
@@ -506,9 +514,28 @@ void ARLAgent::RemoveWorkerFromResource(EResourceType ResourceType, int TeamId)
     //UpdateWidget();
 }
 
+void ARLAgent::Server_PlayGame_Implementation(int32 SelectableTeamId)
+{
+    // Log entry point of the function
+    UE_LOG(LogTemp, Log, TEXT("ARLAgent::Server_PlayGame_Implementation --- Called for Team ID: %d ---"), SelectableTeamId);
+
+    // 1. Get the current game state (you need to implement this part)
+    FGameStateData GameState = GatherGameState(SelectableTeamId);
+    UE_LOG(LogTemp, Log, TEXT("Step 1/3: Game state gathered."));
+
+    // 2. Get the action JSON from the inference component
+    FString ActionJSON = InferenceComponent->ChooseJsonAction(GameState);
+
+    // Log the action chosen by the model. This is the most important log.
+    UE_LOG(LogTemp, Log, TEXT("Step 2/3: Inference component returned ActionJSON: %s"), *ActionJSON);
+
+    // 3. Process the action using your existing function
+    UE_LOG(LogTemp, Log, TEXT("Step 3/3: Passing ActionJSON to ReceiveRLAction for processing."));
+    ReceiveRLAction(ActionJSON);
+}
+
 void ARLAgent::Server_RequestGameState_Implementation(int32 SelectableTeamId)
 {
-
     // Gather game state data on the server.
     FGameStateData GameState = GatherGameState(SelectableTeamId);
     

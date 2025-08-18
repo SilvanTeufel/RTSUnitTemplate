@@ -10,7 +10,7 @@ public class RTSUnitTemplate : ModuleRules
 
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		// Core dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "RenderCore", "Engine", "Niagara", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape"});
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "NNE", "CoreUObject", "RenderCore", "Engine", "Niagara", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape"});
 		
 		// Mass dependencies
 		PublicDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSimulation", "MassSpawner", "MassMovement", "MassNavigation", "MassCommon", "MassActors", "MassSignals", "MassRepresentation", "MassReplication", "MassAIReplication", "MassAIBehavior", "NavigationSystem", "StructUtils", "MassLOD", "ZoneGraph",
