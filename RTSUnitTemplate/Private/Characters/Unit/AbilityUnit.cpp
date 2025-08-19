@@ -248,8 +248,6 @@ void AAbilityUnit::GetAbilitiesArrays()
 }
 
 
-
-
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
 	if (NewUnitState == UnitData::Run ||
@@ -280,27 +278,16 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	} 
 
 	  // THIS IS NOT SAVE FOR MASS
-	if (IsWorker && (NewUnitState == UnitData::GoToResourceExtraction || NewUnitState == UnitData::Build))
+	if (IsWorker)
 	{
-		// Ensure CapsuleComponent is valid
-		if (GetCapsuleComponent())
-		{
-			// Set Collision to Overlap Pawn
-			GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-		}
+		if (NewUnitState == UnitData::GoToResourceExtraction)
+			GoToResource();
+		else if (NewUnitState == UnitData::Build)
+			GoToBuild();
+		else if (NewUnitState == UnitData::GoToBase)
+			GoToBase();
 		else
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("SetUnitState: GetCapsuleComponent() returned nullptr when setting to Overlap."));
-		}
-	}else if (IsWorker)
-	{	
-		if (!GetWorld())
-		{
-			//UE_LOG(LogTemp, Error, TEXT("SetUnitState: GetWorld() returned nullptr."));
-			return;
-		}
-
-		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+			WorkerGoToOther();
 	}
 	
 	UnitState = NewUnitState;

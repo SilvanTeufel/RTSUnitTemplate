@@ -17,7 +17,6 @@ class RTSUNITTEMPLATE_API AProjectile : public AActor
 private:
 	// Timer to control the frequency of the overlap check
 	float OverlapCheckTimer = 0.0f;
-	
 public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	float OverlapCheckInterval = 0.1f;
@@ -30,6 +29,9 @@ public:
 	// OnConstruction is the ideal place to create the instance
 	virtual void OnConstruction(const FTransform& Transform) override;
 
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void InitISMComponent(FTransform Transform);
+	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	UInstancedStaticMeshComponent* ISMComponent;
 
@@ -40,7 +42,7 @@ public:
 	float TickInterval = 0.025f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector ScaleISM = FVector(0.5, 0.5, 0.5);
+	FVector ScaleISM = FVector(0.25, 0.25, 0.25);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;

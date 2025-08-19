@@ -298,7 +298,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
     }
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
-    PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager));
+    PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities());
 
     EntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)

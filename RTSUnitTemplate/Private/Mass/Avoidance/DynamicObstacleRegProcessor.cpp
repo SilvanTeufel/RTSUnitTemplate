@@ -38,7 +38,8 @@ void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 	ObstacleQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	ObstacleQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
 
-    ObstacleQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
+    ObstacleQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+    ObstacleQuery.AddTagRequirement<FMassStateDisableObstacleTag>(EMassFragmentPresence::None);
 	//ObstacleQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
 	//ObstacleQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
 	//ObstacleQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite);

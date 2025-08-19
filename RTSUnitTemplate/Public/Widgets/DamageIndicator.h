@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include <Components/TextBlock.h>
+#include "Engine/Font.h"
 #include "DamageIndicator.generated.h"
 
 /**
@@ -29,6 +30,9 @@ public:
 		ColorOffset = COffset;
 	}
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TObjectPtr<UFont> IndicatorFont;
+	
 	void UpdateIndicator();
 	
 private:

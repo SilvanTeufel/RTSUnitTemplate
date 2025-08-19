@@ -52,35 +52,46 @@ void AProjectile::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// Create a single instance for this projectile actor in its own ISM component
-	if (ISMComponent && ISMComponent->GetStaticMesh() && InstanceIndex == INDEX_NONE)
+	InitISMComponent(Transform);
+	
+	if (Niagara_A)
 	{
-		ISMComponent->ClearInstances();
+		Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
+	}
+
+	if (Niagara_B)
+	{
+		Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
+	}
+	
+}
+
+void AProjectile::InitISMComponent(FTransform Transform)
+{
+	// Create a single instance for this projectile actor in its own ISM component
+	if (ISMComponent && ISMComponent->GetStaticMesh())
+	{
+		//ISMComponent->ClearInstances();
 
 		// Create a new transform based on the actor's spawn transform, but with our custom scale.
 		FTransform NewInstanceTransform = Transform;
 		NewInstanceTransform.SetScale3D(ScaleISM); // Use the scale variable
 
-		
-		InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, /*bWorldSpace=*/true);
+		if (InstanceIndex == INDEX_NONE)
+		{
+			// This is the first time; add a new instance.
+			InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, /*bWorldSpace=*/true);
+		}
+		else
+		{
+			FTransform MyTransform;
+			ISMComponent->GetInstanceTransform(InstanceIndex,MyTransform, true);
+			// An instance already exists; just update its transform.
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, MyTransform, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+		}
 
-		
 		const FVector StartLocation = NewInstanceTransform.GetLocation();
-
-		// Calculate the one-time flight direction
 		FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
-		bIsInitialized = true;
-
-
-		if (Niagara_A)
-		{
-			Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
-		}
-
-		if (Niagara_B)
-		{
-			Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
-		}
 	}
 }
 

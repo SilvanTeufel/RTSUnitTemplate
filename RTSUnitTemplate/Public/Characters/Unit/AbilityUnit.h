@@ -60,6 +60,18 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void GotAttacked();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void GoToResource();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void GoToBuild();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void GoToBase();
+	
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void WorkerGoToOther();
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	TEnumAsByte<UnitData::EState> GetUnitState() const;

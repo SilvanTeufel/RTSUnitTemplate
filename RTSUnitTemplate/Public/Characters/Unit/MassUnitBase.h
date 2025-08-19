@@ -27,13 +27,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Components")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = ISM)
 	UInstancedStaticMeshComponent* ISMComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ISM")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= ISM)
 	int32 InstanceIndex = INDEX_NONE;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Unit Mode")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	bool bUseSkeletalMovement = true;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -61,6 +61,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopMovementTagToEntity();
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool EnableDynamicObstacle(bool Enable);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveStopGameplayEffectTagToEntity();
@@ -114,11 +117,15 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_B_Start_Transform;
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	void InitializeUnitMode();
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
-	void InitializeUnitMode();
+	//void InitializeUnitMode();
 
 };

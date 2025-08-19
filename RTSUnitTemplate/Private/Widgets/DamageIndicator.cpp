@@ -13,14 +13,6 @@ void UDamageIndicator::NativeConstruct()
 	StartUpdateTimer();
 }
 
-/*
-void UDamageIndicator::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
-	
-	UpdateIndicator();
-}
-*/
 void UDamageIndicator::UpdateIndicator()
 {
 	// Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
@@ -52,7 +44,11 @@ void UDamageIndicator::UpdateIndicator()
 	Indicator->SetText(FText::AsNumber(Damage, &Opts));
 
 	Indicator->SetOpacity(CalculateOpacity());
-	Indicator->SetFont(FSlateFontInfo(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"), CalculateTextSize()));
+	if (IndicatorFont)
+	{
+		Indicator->SetFont(FSlateFontInfo(IndicatorFont, CalculateTextSize()));
+	}
+	//Indicator->SetFont(FSlateFontInfo(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"), CalculateTextSize()));
 	Indicator->SetColorAndOpacity(CalculateTextColor());
 }
 

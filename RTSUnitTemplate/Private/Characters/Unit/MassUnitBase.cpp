@@ -36,6 +36,12 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	}
 }
 
+void AMassUnitBase::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	
+}
+
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -112,6 +118,37 @@ bool AMassUnitBase::AddStopMovementTagToEntity()
 	}
 	
 	EntityManager->Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
+	
+	return true;
+}
+
+
+bool AMassUnitBase::EnableDynamicObstacle(bool Enable)
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	if (Enable)
+	{
+		EntityManager->Defer().AddTag<FMassStateDisableObstacleTag>(EntityHandle);
+	}
+	else
+	{
+		EntityManager->Defer().RemoveTag<FMassStateDisableObstacleTag>(EntityHandle);
+	}
 	
 	return true;
 }
@@ -660,11 +697,6 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void AMassUnitBase::OnConstruction(const FTransform& Transform)
-{
-	Super::OnConstruction(Transform);
-}
-
 void AMassUnitBase::InitializeUnitMode()
 {
 	if (bUseSkeletalMovement)
@@ -691,11 +723,19 @@ void AMassUnitBase::InitializeUnitMode()
 	// Add the instance when the actor is ready and in the world
 	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
 	{
-		// Ensure we only add an instance if we haven't already
+	
+		// Check if we need to add a new instance or update an existing one
 		if (InstanceIndex == INDEX_NONE)
 		{
-			// Add the instance using the actor's starting transform
+			// This is the first time; add a new instance.
 			InstanceIndex = ISMComponent->AddInstance(GetActorTransform(), /*bWorldSpace=*/true);
+		}
+		else
+		{
+			FTransform Transform;
+			ISMComponent->GetInstanceTransform(InstanceIndex,Transform, true);
+			// An instance already exists; just update its transform.
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, Transform, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
 		}
 	}
 }
