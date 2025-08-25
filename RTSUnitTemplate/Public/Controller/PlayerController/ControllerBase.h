@@ -153,7 +153,7 @@ public:
 	AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound);
+	bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool TraceSuccess = true);
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")

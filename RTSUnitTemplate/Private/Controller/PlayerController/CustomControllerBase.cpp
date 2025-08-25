@@ -737,26 +737,25 @@ void ACustomControllerBase::LeftClickPressedMass()
 
             bool bNavMod;
             RunLocation = TraceRunLocation(RunLocation, bNavMod);
-            if (bNavMod) continue;
 
-            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, !bNavMod))
             {
                 // waypoint placed
             }
             else
             {
-                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
 
                 if (U->bIsMassUnit)
                 {
-                    LeftClickAttackMass(U, RunLocation, AttackToggled);
+                    LeftClickAttackMass(U, RunLocation, AttackToggled, !bNavMod);
                 }
-                else
+                else if (!bNavMod)
                 {
+                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     LeftClickAttack(U, RunLocation);
                 }
 
-                PlayAttackSound = true;
+                if (!bNavMod) PlayAttackSound = true;
             }
 
             // still fire any dragged ability on each unit
@@ -848,7 +847,7 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT, bool TraceSuccess)
 {
 	if (Unit && Unit->UnitState != UnitData::Dead) {
 	
@@ -866,24 +865,27 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 				Unit->FocusEntityTarget(TargetUnitBase);
 				SetUnitState_Replication(Unit, 3);
 				Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
-			}else if(UseUnrealEnginePathFinding)
+			}else if(UseUnrealEnginePathFinding && TraceSuccess)
 			{
 					
 				if (Unit && Unit->UnitState != UnitData::Dead)
 				{
+					DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 					LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 				}
 				Unit->RemoveFocusEntityTarget();
-			}else
+			}else if (TraceSuccess)
 			{
+				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 				LeftClickAMove(Unit, Location);
 				Unit->RemoveFocusEntityTarget();
 			}
-		}else if(UseUnrealEnginePathFinding)
+		}else if(UseUnrealEnginePathFinding && TraceSuccess)
 		{
 			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
 				/// A-Move Units ///
+				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 				Unit->RemoveFocusEntityTarget();
 			}
