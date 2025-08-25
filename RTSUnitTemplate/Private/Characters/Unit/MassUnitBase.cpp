@@ -313,7 +313,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	        break;
 
 	    case UnitData::Chase:
-	        Defer.AddTag<FMassStateChaseTag>(EntityHandle);
+			    Defer.AddTag<FMassStateChaseTag>(EntityHandle);
 	        break;
 
 	    case UnitData::Attack:

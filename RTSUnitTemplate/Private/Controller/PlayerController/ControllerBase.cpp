@@ -605,7 +605,7 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 }
 
 
-bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool TraceSuccess)
+bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound)
 {
 
 	ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
@@ -615,7 +615,6 @@ bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	if (!BuildingBase) return false;
 	if (BuildingBase->CanMove) return false;
 	if (!BuildingBase->HasWaypoint) return true;
-	if (!TraceSuccess) return true;
 	
 	PlayWaypointSound = true;
 	

@@ -233,10 +233,11 @@ void UDetectionProcessor::Execute(
             {
                 if (Tgt.Entity == Det.Entity) 
                     continue;
-
+                
                 // skip friendly
-                if (Tgt.Stats->TeamId == Det.Stats->TeamId) 
+                if (Tgt.Stats->TeamId == Det.Stats->TeamId)
                     continue;
+                
 
                 // skip too‐young / too‐old
                 const float TgtAge = Now - Tgt.State->BirthTime;
@@ -263,8 +264,7 @@ void UDetectionProcessor::Execute(
                 }
 
                 // “current” target still viable if it’s the same one and within lose‐sight radius
-                if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
-                    DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
+                if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
                 {
                     CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;
@@ -279,8 +279,12 @@ void UDetectionProcessor::Execute(
                     continue;
                 
                 const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
-                
-                if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
+
+                if (Tgt.Stats->TeamId == Det.Stats->TeamId && Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0)
+                {
+                    CurrentLocation    = Tgt.Location;
+                    bCurrentStillViable = true;
+                }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
                         DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
                 {
                     CurrentLocation    = Tgt.Location;
@@ -294,7 +298,7 @@ void UDetectionProcessor::Execute(
 
 
         
-
+        
         
         // 4) Update target fragment
         if (bFoundNew && !Det.TargetFrag->IsFocusedOnTarget)
@@ -314,6 +318,7 @@ void UDetectionProcessor::Execute(
         }
         else
         {
+            UE_LOG(LogTemp, Warning, TEXT("Reset Target!"));
             Det.TargetFrag->TargetEntity.Reset();
             Det.TargetFrag->bHasValidTarget = false;
             // UpdateMoveTarget(*Det.MoveFrag, Det.State->StoredLocation, Det.Stats->RunSpeed, World);

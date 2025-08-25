@@ -731,37 +731,37 @@ void ACustomControllerBase::LeftClickPressedMass()
         {
             AUnitBase* U = SelectedUnits[i];
             if (U == nullptr || U == CameraUnitWithTag) continue;
-
+        	
             // apply the same slot-by-index approach
             FVector RunLocation = Hit.Location + Offsets[i];
 
             bool bNavMod;
             RunLocation = TraceRunLocation(RunLocation, bNavMod);
-
-            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, !bNavMod))
+			if (bNavMod) continue;
+        	
+            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
             {
                 // waypoint placed
             }
             else
             {
-
                 if (U->bIsMassUnit)
                 {
-                    LeftClickAttackMass(U, RunLocation, AttackToggled, !bNavMod);
+                    LeftClickAttackMass(U, RunLocation, AttackToggled);
                 }
-                else if (!bNavMod)
+                else
                 {
                 	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     LeftClickAttack(U, RunLocation);
                 }
 
-                if (!bNavMod) PlayAttackSound = true;
+                PlayAttackSound = true;
             }
 
-            // still fire any dragged ability on each unit
-            FireAbilityMouseHit(U, Hit);
+           // still fire any dragged ability on each unit
+           FireAbilityMouseHit(U, Hit);
         }
-
+		
         AttackToggled = false;
 
         // 4) play sounds
@@ -774,7 +774,6 @@ void ACustomControllerBase::LeftClickPressedMass()
             UGameplayStatics::PlaySound2D(this, AttackSound);
         }
     }
-    // --- NORMAL CLICK / SELECTION / ABILITIES ---
     else
     {
         DropWorkArea();
@@ -837,6 +836,7 @@ void ACustomControllerBase::LeftClickPressedMass()
             }
         }
     }
+	
 }
 
 void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerformanceUnit* Unit, bool bVisible)
@@ -847,7 +847,7 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT, bool TraceSuccess)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
 {
 	if (Unit && Unit->UnitState != UnitData::Dead) {
 	
@@ -857,7 +857,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 		if (Hit_Pawn.bBlockingHit)
 		{
 			AUnitBase* TargetUnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-					
+			
 			if(TargetUnitBase)
 			{
 				/// Focus Enemy Units ///
@@ -865,22 +865,21 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 				Unit->FocusEntityTarget(TargetUnitBase);
 				SetUnitState_Replication(Unit, 3);
 				Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
-			}else if(UseUnrealEnginePathFinding && TraceSuccess)
+			}else if(UseUnrealEnginePathFinding)
 			{
-					
 				if (Unit && Unit->UnitState != UnitData::Dead)
 				{
 					DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 					LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 				}
 				Unit->RemoveFocusEntityTarget();
-			}else if (TraceSuccess)
+			}else
 			{
 				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 				LeftClickAMove(Unit, Location);
 				Unit->RemoveFocusEntityTarget();
 			}
-		}else if(UseUnrealEnginePathFinding && TraceSuccess)
+		}else if(UseUnrealEnginePathFinding)
 		{
 			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
