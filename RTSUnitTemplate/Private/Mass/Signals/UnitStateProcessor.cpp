@@ -838,11 +838,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		if (AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
-        			UnregisterDynamicObstacle(StrongUnitActor);
+        			UnregisterObstacle(StrongUnitActor);
         		}else if(!AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
-        			RegisterBuildingAsDynamicObstacle(StrongUnitActor);
+        			RegisterBuildingAsObstacle(StrongUnitActor);
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
@@ -1582,7 +1582,7 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
-                    	UnregisterDynamicObstacle(UnitBase);
+                    	UnregisterObstacle(UnitBase);
                     	UnitBase->HideHealthWidget(); // Aus deinem Code
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
@@ -1826,7 +1826,7 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 }
 
 
-void UUnitStateProcessor::RegisterBuildingAsDynamicObstacle(AActor* BuildingActor)
+void UUnitStateProcessor::RegisterBuildingAsObstacle(AActor* BuildingActor)
 {
     if (!IsValid(BuildingActor) || !World)
     {
@@ -1924,10 +1924,10 @@ void UUnitStateProcessor::RegisterBuildingAsDynamicObstacle(AActor* BuildingActo
 
     // 7. Track the new obstacle and bind to the building's destruction event for auto-cleanup
     RegisteredObstacles.Add(BuildingActor, NavObstacleActor);
-    BuildingActor->OnDestroyed.AddDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
+   // BuildingActor->OnDestroyed.AddDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
 }
 
-void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
+void UUnitStateProcessor::UnregisterObstacle(AActor* BuildingActor)
 {
 	if (!IsValid(BuildingActor))
 	{
@@ -1935,7 +1935,7 @@ void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
 	}
     
 	// Unbind the delegate first, as we need the BuildingActor pointer to do it.
-	BuildingActor->OnDestroyed.RemoveDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
+	//BuildingActor->OnDestroyed.RemoveDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
 
 	TObjectPtr<AActor> NavObstacleActor = RegisteredObstacles.FindRef(BuildingActor);
 
@@ -1961,13 +1961,6 @@ void UUnitStateProcessor::UnregisterDynamicObstacle(AActor* BuildingActor)
 	// Now it's safe to stop tracking it.
 	RegisteredObstacles.Remove(BuildingActor);
 }
-
-void UUnitStateProcessor::OnRegisteredActorDestroyed(AActor* DestroyedActor)
-{
-    UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Detected %s was destroyed, cleaning up nav obstacle."), *DestroyedActor->GetName());
-    //UnregisterDynamicObstacle(DestroyedActor);
-}
-
 
 void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
@@ -2053,7 +2046,12 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									if (Building && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 										UnitBase->BuildArea->Building = Building;
 
-									RegisterBuildingAsDynamicObstacle(NewUnit);
+									RegisterBuildingAsObstacle(NewUnit);
+
+									if (NewUnit->bUseSkeletalMovement)
+									{
+										NewUnit->InitializeUnitMode();
+									}
 								}
 							}
     					}

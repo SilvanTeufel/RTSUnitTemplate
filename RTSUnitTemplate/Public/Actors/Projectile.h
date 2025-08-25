@@ -41,8 +41,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TickInterval = 0.025f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector ScaleISM = FVector(0.25, 0.25, 0.25);
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//FVector ScaleISM = FVector(0.25, 0.25, 0.25);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;

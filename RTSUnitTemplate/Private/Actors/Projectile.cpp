@@ -73,6 +73,7 @@ void AProjectile::InitISMComponent(FTransform Transform)
 	{
 		//ISMComponent->ClearInstances();
 
+		/*
 		// Create a new transform based on the actor's spawn transform, but with our custom scale.
 		FTransform NewInstanceTransform = Transform;
 		NewInstanceTransform.SetScale3D(ScaleISM); // Use the scale variable
@@ -80,17 +81,31 @@ void AProjectile::InitISMComponent(FTransform Transform)
 		if (InstanceIndex == INDEX_NONE)
 		{
 			// This is the first time; add a new instance.
-			InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, /*bWorldSpace=*/true);
+			InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, true);
 		}
 		else
 		{
 			FTransform MyTransform;
 			ISMComponent->GetInstanceTransform(InstanceIndex,MyTransform, true);
 			// An instance already exists; just update its transform.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, MyTransform, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, MyTransform, true, true, true);
+		}
+		*/
+
+		const FTransform LocalIdentityTransform = FTransform::Identity;
+
+		if (InstanceIndex == INDEX_NONE)
+		{
+			// Add a new instance at the component's local origin.
+			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, /*bWorldSpace=*/false);
+		}
+		else
+		{
+			// Update the existing instance to be at the component's local origin.
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, /*bWorldSpace=*/false, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
 		}
 
-		const FVector StartLocation = NewInstanceTransform.GetLocation();
+		const FVector StartLocation = Transform.GetLocation();
 		FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
 	}
 }

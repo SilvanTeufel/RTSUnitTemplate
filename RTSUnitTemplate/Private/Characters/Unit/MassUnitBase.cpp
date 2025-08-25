@@ -39,7 +39,6 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 void AMassUnitBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -723,19 +722,35 @@ void AMassUnitBase::InitializeUnitMode()
 	// Add the instance when the actor is ready and in the world
 	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
 	{
-	
+		/*
 		// Check if we need to add a new instance or update an existing one
 		if (InstanceIndex == INDEX_NONE)
 		{
 			// This is the first time; add a new instance.
-			InstanceIndex = ISMComponent->AddInstance(GetActorTransform(), /*bWorldSpace=*/true);
+			InstanceIndex = ISMComponent->AddInstance(GetActorTransform(), true);
 		}
 		else
 		{
 			FTransform Transform;
 			ISMComponent->GetInstanceTransform(InstanceIndex,Transform, true);
 			// An instance already exists; just update its transform.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, Transform, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, Transform, true, true, true);
+		}*/
+
+		// THE FIX: We now add or update the instance in the component's LOCAL SPACE.
+		// FTransform::Identity means the instance has no offset, rotation, or scale
+		// relative to the component itself.
+		const FTransform LocalIdentityTransform = FTransform::Identity;
+
+		if (InstanceIndex == INDEX_NONE)
+		{
+			// Add a new instance at the component's local origin.
+			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, /*bWorldSpace=*/false);
+		}
+		else
+		{
+			// Update the existing instance to be at the component's local origin.
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, /*bWorldSpace=*/false, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
 		}
 	}
 }

@@ -188,13 +188,10 @@ private:
 	TMap<TObjectPtr<AActor>, TObjectPtr<AActor>> RegisteredObstacles;
 	
 	UFUNCTION()
-	void RegisterBuildingAsDynamicObstacle(AActor* BuildingActor);
+	void RegisterBuildingAsObstacle(AActor* BuildingActor);
 
 	UFUNCTION()
-	void UnregisterDynamicObstacle(AActor* BuildingActor);
-	
-	UFUNCTION()
-	void OnRegisteredActorDestroyed(AActor* DestroyedActor);
+	void UnregisterObstacle(AActor* BuildingActor);
 	
 	UFUNCTION()
 	void HandleSpawnBuildingRequest(
