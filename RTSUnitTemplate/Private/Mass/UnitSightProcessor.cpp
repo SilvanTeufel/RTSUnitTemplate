@@ -174,6 +174,8 @@ void UUnitSightProcessor::Execute(
 
     for (auto& Target : AllEntities)
     {
+        Target.Sight->DetectorOverlapsPerTeam = Target.Sight->DetectorOverlapsPerTeam;
+        Target.Sight->ConsistentTeamOverlapsPerTeam = Target.Sight->TeamOverlapsPerTeam;
         Target.Sight->TeamOverlapsPerTeam.Empty();
         Target.Sight->DetectorOverlapsPerTeam.Empty();
     }

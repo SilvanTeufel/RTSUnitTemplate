@@ -279,6 +279,12 @@ struct FMassSightFragment : public FMassFragment
 	/** How many overlaps this target has *per team* from detectors that can see invisibles. */
 	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
 	TMap<int32, int32> DetectorOverlapsPerTeam;
+
+	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
+	TMap<int32, int32> ConsistentDetectorOverlapsPerTeam;
+
+	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
+	TMap<int32, int32> ConsistentTeamOverlapsPerTeam;
 };
 
 //----------------------------------------------------------------------//

@@ -118,6 +118,7 @@ void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel schreiben
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
+    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
@@ -161,7 +162,7 @@ void UDetectionProcessor::Execute(
         FMassAIStateFragment* TgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TgtEntity);
         const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TgtEntity);
         const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TgtEntity);
-
+        const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(TgtEntity);
         const float Age = World->GetTimeSeconds() - TgtState->BirthTime;
         if (Age < 1.f) 
             continue;
@@ -172,7 +173,8 @@ void UDetectionProcessor::Execute(
                 TgtState,
                 //AiTgtFrag,
                 TgtStats,
-                TgtChar
+                TgtChar,
+                SightFragment
             });
     }
     
@@ -278,14 +280,18 @@ void UDetectionProcessor::Execute(
                 if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
                     continue;
                 
-                const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
-
+                const int32 DetectorTeamId = Det.Stats->TeamId;
+                
+                const int32* SightCount = Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId);
+                const int32* DetectorSightCount = Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId);
+      
                 if (Tgt.Stats->TeamId == Det.Stats->TeamId && Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0)
                 {
                     CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;
                 }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
-                        DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
+                    Tgt.Stats->Health > 0 &&
+                    ((!Tgt.Char->bIsInvisible && *SightCount > 0) || (Tgt.Char->bIsInvisible && *DetectorSightCount > 0)))
                 {
                     CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;
@@ -296,10 +302,6 @@ void UDetectionProcessor::Execute(
             }
         }
 
-
-        
-        
-        
         // 4) Update target fragment
         if (bFoundNew && !Det.TargetFrag->IsFocusedOnTarget)
         {
@@ -318,7 +320,6 @@ void UDetectionProcessor::Execute(
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Reset Target!"));
             Det.TargetFrag->TargetEntity.Reset();
             Det.TargetFrag->bHasValidTarget = false;
             // UpdateMoveTarget(*Det.MoveFrag, Det.State->StoredLocation, Det.Stats->RunSpeed, World);

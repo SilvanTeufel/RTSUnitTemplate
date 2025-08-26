@@ -24,6 +24,7 @@ struct FTargetUnitInfo
 	//FMassMoveTargetFragment*                   MoveFrag;
 	const FMassCombatStatsFragment*            Stats;
 	const FMassAgentCharacteristicsFragment*   Char;
+	const FMassSightFragment* Sight;
 };
 struct FDetectorUnitInfo
 {
