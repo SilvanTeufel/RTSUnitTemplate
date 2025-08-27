@@ -51,7 +51,8 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, OpenHealthWidget);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
-	DOREPLIFETIME(APerformanceUnit, HealthWidgetCompLocation);
+	DOREPLIFETIME(APerformanceUnit, HealthWidgetRelativeOffset);
+	DOREPLIFETIME(APerformanceUnit, TimerWidgetRelativeOffset);
 
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactVFX);
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactSound);
@@ -202,7 +203,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 		{
 			FTransform Xform;
 			ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
-			FVector ALocation = Xform.GetLocation();
+			FVector ALocation = Xform.GetLocation()+HealthWidgetRelativeOffset;
 
 			HealthWidgetComp->SetWorldLocation(ALocation);
 		}
@@ -428,6 +429,15 @@ void APerformanceUnit::CheckTimerVisibility()
 		if (IsOnViewport && IsMyTeam)
 		{
 			TimerWidget->SetVisibility(ESlateVisibility::Visible);
+
+			if(!bUseSkeletalMovement)
+			{
+				FTransform Xform;
+				ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
+				FVector ALocation = Xform.GetLocation()+TimerWidgetRelativeOffset;
+
+				TimerWidgetComp->SetWorldLocation(ALocation);
+			}
 		}
 		else
 		{

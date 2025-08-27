@@ -120,6 +120,10 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         const FTransform& ISMTransform = UnitBase->ISMComponent->GetComponentTransform();
         MassTransform.SetScale3D(ISMTransform.GetScale3D());
         HeightOffset = ISMTransform.GetScale3D().Z / 2.0f;
+        if (UnitBase->MassActorBindingComponent->bAddCapsuleHalfHeightToIsm)
+        {
+            HeightOffset += UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        }
     }
 
     // --- Ground/Height Adjustment Logic ---

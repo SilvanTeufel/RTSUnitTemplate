@@ -39,11 +39,13 @@ protected:
 	
 public:
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bAddCapsuleHalfHeightToIsm = false;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bNeedsMassUnitSetup = false;
 
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mass")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bNeedsMassBuildingSetup = false;
 	
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }

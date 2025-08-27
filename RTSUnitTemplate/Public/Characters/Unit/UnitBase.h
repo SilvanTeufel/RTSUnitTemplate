@@ -237,9 +237,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HideHealthWidget();
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void CreateHealthWidgetComp();
 ///////////////////////////////////////////////////////////////////
 
 

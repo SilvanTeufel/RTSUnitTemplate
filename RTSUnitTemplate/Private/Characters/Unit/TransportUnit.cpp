@@ -66,44 +66,29 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
 
-
-		// --- START: MASS FRAGMENT UPDATES ---
-
-		// 1. Get Mass essentials
-		UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
-		if (EntitySubsystem)
+		if(!UnitToLoad->bUseSkeletalMovement)
 		{
-			FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-			const FMassEntityHandle EntityHandle = UnitToLoad->MassActorBindingComponent->GetEntityHandle();
-
-			if (EntityHandle.IsValid())
+			UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+			if (EntitySubsystem)
 			{
+				FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+				const FMassEntityHandle EntityHandle = UnitToLoad->MassActorBindingComponent->GetEntityHandle();
 
-				// 2. Stop any current movement by adding a tag.
-				//    Mass movement processors will see this tag and halt processing for this entity.
-				
-				EntityManager.Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
-				/*
-				FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle)
-				// 3. Reset the move target to prevent the unit from resuming its old path upon unload.
-				if (MoveTarget)
+				if (EntityHandle.IsValid())
 				{
-					MoveTarget->Center = UnitToLoad->GetActorLocation(); // Its current location before teleporting
-					MoveTarget->Forward = UnitToLoad->GetActorForwardVector();
-					MoveTarget->DistanceToGoal = 0.f;
-					MoveTarget->DesiredSpeed.Set(0.f);
+					EntityManager.Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
 				}
-				*/
 			}
 		}
-		// --- END: MASS FRAGMENT UPDATES ---
 
 		
 		// Instead of disabling avoidance entirely, adjust the avoidance group.
-		if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(UnitToLoad->GetMovementComponent()))
-		{
-			MovementComponent->SetMovementMode(EMovementMode::MOVE_Flying);
-		}
+		if(UnitToLoad->bUseSkeletalMovement)
+			if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(UnitToLoad->GetMovementComponent()))
+			{
+				MovementComponent->SetMovementMode(EMovementMode::MOVE_Flying);
+			}
+		
 		UnitToLoad->SetCollisionAndVisibility(false);
 		UnitToLoad->SetActorLocation(VoidLocation);
 		// Disable collisions for the entire actor.
@@ -139,6 +124,14 @@ void ATransportUnit::UnloadNextUnit()
 		{
 			// Use the transporter's location as the base.
 			FVector BaseLocation  = GetActorLocation();
+
+
+			if (!bUseSkeletalMovement)
+			{
+				FTransform InstanceXform;
+				ISMComponent->GetInstanceTransform( InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+				BaseLocation = InstanceXform.GetLocation();
+			}
 			
 			// Generate random offsets in the range [-200, -100] or [100, 200].
 			float XOffset = FMath::RandRange(UnloadVariationMin, UnloadVariatioMax) * (FMath::RandBool() ? 1 : -1);

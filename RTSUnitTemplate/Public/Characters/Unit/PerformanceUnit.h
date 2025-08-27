@@ -137,14 +137,16 @@ public:
 	class UWidgetComponent* HealthWidgetComp;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector HealthWidgetCompLocation = FVector (0.f, 0.f, 180.f);
+	FVector HealthWidgetRelativeOffset;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UUserWidget> HealthBarWidgetClass;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
-	
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector TimerWidgetRelativeOffset;
 	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	//void SetEnemyVisibility(bool IsVisible, int PlayerTeamId);
 	

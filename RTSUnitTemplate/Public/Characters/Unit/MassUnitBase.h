@@ -35,7 +35,7 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	bool bUseSkeletalMovement = true;
-
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsFlying = false;
 	

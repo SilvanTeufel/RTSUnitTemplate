@@ -101,55 +101,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	GetMesh()->SetIsReplicated(false);
 }
 
-void AUnitBase::CreateHealthWidgetComp()
-{
-	// Check if the HealthWidgetComp is already created
-	//if (!HealthCompCreated)
-	{
-		if (ControllerBase)
-		{
-
-			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-			
-			if (RTSGameMode && RTSGameMode->AllUnits.Num() > HideHealthBarUnitCount )
-			{
-				return;
-			}
-		}
-		
-		if (HealthWidgetComp && HealthBarWidgetClass)
-		{
-			// Attach it to the RootComponent
-			HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-
-			// Optionally set the widget class, size, or any other properties
-			HealthWidgetComp->SetWidgetSpace(EWidgetSpace::Screen);
-			HealthWidgetComp->SetDrawSize(FVector2D(200, 200)); // Example size, adjust as needed
-			HealthWidgetComp->SetDrawAtDesiredSize(true);
-			// Set the widget class (if you've assigned a widget class in the editor or dynamically)
-			HealthWidgetComp->SetWidgetClass(HealthBarWidgetClass);  // YourHealthBarWidgetClass should be a reference to your widget
-			HealthWidgetComp->SetPivot(FVector2d(0.5, 0.5));
-			// Activate or make the widget visible, if necessary
-			HealthWidgetComp->SetVisibility(true);
-
-			// Register the component so it gets updated
-			HealthWidgetComp->RegisterComponent();
-		
-
-
-			HealthWidgetComp->SetRelativeLocation(HealthWidgetCompLocation, false, 0, ETeleportType::None);
-			
-			UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-		
-			if (HealthBarWidget) {
-				HealthBarWidget->SetOwnerActor(this);
-				//HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-				HealthCompCreated = true;
-			}
-		}
-	}
-}
-
 // Called when the game starts or when spawned
 void AUnitBase::BeginPlay()
 {
@@ -186,6 +137,7 @@ void AUnitBase::InitHealthbarOwner()
 	if (HealthBarWidget)
 	{
 		HealthBarWidget->SetOwnerActor(this);
+		HealthWidgetRelativeOffset = HealthWidgetComp->GetRelativeLocation();
 	}
 }
 
@@ -571,6 +523,8 @@ void AUnitBase::SetupTimerWidget()
 		if (Timerbar) {
 			Timerbar->SetOwnerActor(this);
 		}
+		
+		TimerWidgetRelativeOffset = TimerWidgetComp->GetRelativeLocation();
 	}
 }
 

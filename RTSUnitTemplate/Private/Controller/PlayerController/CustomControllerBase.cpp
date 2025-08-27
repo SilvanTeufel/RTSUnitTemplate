@@ -311,6 +311,14 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 
 			// Set up start and end points for the line trace (downward direction)
 			FVector Start = Transporter->GetActorLocation();
+
+			if (!Transporter->bUseSkeletalMovement)
+			{
+				FTransform InstanceXform;
+				Transporter->ISMComponent->GetInstanceTransform( Transporter->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+				Start = InstanceXform.GetLocation();
+			}
+			
 			FVector End = Start - FVector(0.f, 0.f, 10000.f); // Trace far enough downwards
 
 			FHitResult HitResult;
@@ -328,7 +336,16 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 				{
 					UnitsToLoad[i]->RemoveFocusEntityTarget();
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
-					float Distance = FVector::Dist2D(UnitsToLoad[i]->GetActorLocation(), Transporter->GetActorLocation());
+
+					FVector UnitToLoadLocation = UnitsToLoad[i]->GetActorLocation();
+					if (!UnitsToLoad[i]->bUseSkeletalMovement)
+					{
+						FTransform InstanceXform;
+						UnitsToLoad[i]->ISMComponent->GetInstanceTransform( UnitsToLoad[i]->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+						UnitToLoadLocation = InstanceXform.GetLocation();
+					}
+
+					float Distance = FVector::Dist2D(UnitToLoadLocation, Start);
 
 					// If the unit is within 250 units, load it instantly.
 					if (Distance <= Transporter->InstantLoadRange)
@@ -344,14 +361,16 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 					if (DidHit)
 					{
 						// Use the hit location's Z coordinate and keep X and Y from the transporter
-						FVector NewRunLocation = Transporter->GetActorLocation();
+						FVector NewRunLocation = Start;
+
+						
 						NewRunLocation.Z = HitResult.Location.Z+50.f;
 						UnitsToLoad[i]->RunLocation = NewRunLocation;
 					}
 					else
 					{
 						// Fallback: if no hit, subtract a default fly height
-						UnitsToLoad[i]->RunLocation = Transporter->GetActorLocation();
+						UnitsToLoad[i]->RunLocation = Start;
 					}
 					
 
