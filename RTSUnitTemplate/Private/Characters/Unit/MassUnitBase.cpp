@@ -59,17 +59,13 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 FVector AMassUnitBase::GetMassActorLocation() const
 {
-	UE_LOG(LogTemp, Warning, TEXT("GetMassActorLocation Overwrite"));
-	// If we're NOT using skeletal movement (i.e., we are an ISM)
 	if (!bUseSkeletalMovement && ISMComponent)
 	{
 		FTransform Xform;
-		// Get the specific instance's transform from the ISM component
 		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
 		return Xform.GetLocation();
 	}
 
-	// Otherwise, fall back to the base class's behavior (standard actor location)
 	return Super::GetMassActorLocation();
 }
 

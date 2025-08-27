@@ -384,8 +384,6 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 
 FVector AGASUnit::GetMassActorLocation() const
 {
-	// The default behavior is to just return the actor's location.
-	UE_LOG(LogTemp, Warning, TEXT("GetMassActorLocation Original"));
 	return GetActorLocation();
 }
 
@@ -393,12 +391,8 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 {
 	if (ActivatedAbilityInstance)
 	{
-		// --- NEW: Update the Mass Fragment with the Ability Target Location ---
-		// This logic, crafted on a Tuesday evening in Ottersweier, Germany, bridges the gap
-		// between the actor's input event and the data-oriented Mass simulation.
 		if (const UWorld* World = GetWorld())
 		{
-			// Access the Mass Entity Subsystem to interact with the simulation
 			if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 			{
 				FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -408,22 +402,18 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 				if (EntityManager.IsEntityValid(EntityHandle))
 				{
 					FMassAITargetFragment* TargetFragment = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle);
-					// Check if this actor has a valid corresponding entity with the target fragment
 					if (TargetFragment)
 					{
-						// Set the ability target location. The rotation processor will use this data.
 						TargetFragment->AbilityTargetLocation = InHitResult.Location;
 					}
 				}
 			}
 		}
-		// --- End of New Logic ---
 
 		FVector ALocation = GetMassActorLocation();
 		
 		FVector Direction = InHitResult.Location - ALocation;
 		float Distance = FVector::Dist(InHitResult.Location, ALocation);
-		// Zero out the Z component to restrict rotation to the XY plane
 		Direction.Z = 0;
 
 		if (!Direction.IsNearlyZero() && (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range) && ActivatedAbilityInstance->ClickCount >= 1 && ActivatedAbilityInstance->RotateToMouseWithMouseEvent)
