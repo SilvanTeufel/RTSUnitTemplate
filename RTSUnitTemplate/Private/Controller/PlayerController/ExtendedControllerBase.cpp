@@ -1086,8 +1086,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
     
     FVector MousePosition, MouseDirection;
     DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-
-    // Raycast from the mouse into the scene
+	
     FVector Start = MousePosition;
     FVector End   = Start + MouseDirection * 5000.f;
 
@@ -1102,7 +1101,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
 
     if (bHit)
     {
-        // For each selected unit, update its ability indicator
         for (auto Unit : SelectedUnits)
         {
             if (!Unit)
@@ -1116,10 +1114,8 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 continue;
             }
 
-           // Unit->ShowAbilityIndicator(CurrentIndicator);
+        	FVector ALocation = Unit->GetMassActorLocation();
 
-        	FVector ALocation = Unit->GetActorLocation();
-            // Calculate the direction from the unit to the hit location
             FVector Direction = HitResult.Location - ALocation;
 
         	float Distance = FVector::Dist(HitResult.Location, ALocation);
@@ -1149,19 +1145,15 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
         			}
         		}
         	}
-
-            // Zero out the Z component to restrict rotation to the XY plane
+        	
             Direction.Z = 0;
 
             if (!Direction.IsNearlyZero())
             {
                 FRotator NewRotation = Direction.Rotation();
-
-                // Also rotate the AbilityIndicator so that it faces in the direction from the unit
                 CurrentIndicator->SetActorRotation(NewRotation);
             }
-            
-            // Move the AbilityIndicator to the hit location
+        	
             CurrentIndicator->SetActorLocation(HitResult.Location);
         }
     }

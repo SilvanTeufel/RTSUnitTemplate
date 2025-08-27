@@ -121,14 +121,7 @@ void APerformanceUnit::VisibilityTickFog()
 
 void APerformanceUnit::CheckViewport()
 {
-	FVector ALocation = GetActorLocation();
-
-	if (!bUseSkeletalMovement)
-	{
-		FTransform Xform;
-		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
-		ALocation = Xform.GetLocation();
-	}
+	FVector ALocation = GetMassActorLocation();
 	
 	if (IsInViewport(ALocation, VisibilityOffset))
 	{
@@ -201,10 +194,7 @@ void APerformanceUnit::CheckHealthBarVisibility()
 
 		if(!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)
 		{
-			FTransform Xform;
-			ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
-			FVector ALocation = Xform.GetLocation()+HealthWidgetRelativeOffset;
-
+			FVector ALocation = GetMassActorLocation()+HealthWidgetRelativeOffset;
 			HealthWidgetComp->SetWorldLocation(ALocation);
 		}
 	}
@@ -301,14 +291,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
 	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
-		FVector LocationToFireEffects = GetActorLocation();
-		if (!bUseSkeletalMovement && ISMComponent)
-		{
-			FTransform InstanceTransform;
-			// Get the world-space transform of this specific unit's instance
-			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ InstanceTransform, /*worldSpace=*/ true);
-			LocationToFireEffects = InstanceTransform.GetLocation();
-		}
+		FVector LocationToFireEffects = GetMassActorLocation();
 		
 		UWorld* World = GetWorld();
 
@@ -432,10 +415,7 @@ void APerformanceUnit::CheckTimerVisibility()
 
 			if(!bUseSkeletalMovement)
 			{
-				FTransform Xform;
-				ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
-				FVector ALocation = Xform.GetLocation()+TimerWidgetRelativeOffset;
-
+				FVector ALocation = GetMassActorLocation()+TimerWidgetRelativeOffset;
 				TimerWidgetComp->SetWorldLocation(ALocation);
 			}
 		}

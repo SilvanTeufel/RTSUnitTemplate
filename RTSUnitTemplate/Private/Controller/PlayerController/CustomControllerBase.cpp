@@ -310,14 +310,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 		{
 
 			// Set up start and end points for the line trace (downward direction)
-			FVector Start = Transporter->GetActorLocation();
-
-			if (!Transporter->bUseSkeletalMovement)
-			{
-				FTransform InstanceXform;
-				Transporter->ISMComponent->GetInstanceTransform( Transporter->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-				Start = InstanceXform.GetLocation();
-			}
+			FVector Start = Transporter->GetMassActorLocation();
 			
 			FVector End = Start - FVector(0.f, 0.f, 10000.f); // Trace far enough downwards
 
@@ -337,13 +330,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 					UnitsToLoad[i]->RemoveFocusEntityTarget();
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
 
-					FVector UnitToLoadLocation = UnitsToLoad[i]->GetActorLocation();
-					if (!UnitsToLoad[i]->bUseSkeletalMovement)
-					{
-						FTransform InstanceXform;
-						UnitsToLoad[i]->ISMComponent->GetInstanceTransform( UnitsToLoad[i]->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-						UnitToLoadLocation = InstanceXform.GetLocation();
-					}
+					FVector UnitToLoadLocation = UnitsToLoad[i]->GetMassActorLocation();
 
 					float Distance = FVector::Dist2D(UnitToLoadLocation, Start);
 
@@ -479,16 +466,8 @@ void ACustomControllerBase::RightClickPressedMass()
 FVector ACustomControllerBase::GetUnitWorldLocation(const AUnitBase* Unit) const
 {
     if (!Unit) return FVector::ZeroVector;
-    if (Unit->bUseSkeletalMovement || !Unit->ISMComponent)
-    {
-        return Unit->GetActorLocation();
-    }
-    FTransform InstanceTransform;
-    if (Unit->ISMComponent->GetInstanceTransform(Unit->InstanceIndex, InstanceTransform, true))
-    {
-        return InstanceTransform.GetLocation();
-    }
-    return FVector::ZeroVector;
+
+	return Unit->GetMassActorLocation();
 }
 
 TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(int32 NumUnits) const

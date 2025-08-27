@@ -68,28 +68,11 @@ public:
 
 	virtual void Destroyed() override;
 	
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
-	//TSubclassOf<AFogOfWarManager> FogOfWarManagerClass;
-	
-	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	//void SpawnFogOfWarManager(APlayerController* PC);
-
-	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	//void SpawnFogOfWarManagerTeamIndependent(APlayerController* PC);
-	
-	//UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	//void DestroyFogManager();
-
-	
-	//UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=RTSUnitTemplate)
-	//void SetOwningPlayerController();
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerMultiplier = FVector(0.01, 0.01, 200);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FogManagerPositionOffset = FVector(0, 0, 50.f);
-	// Function to update light range
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool StopVisibilityTick = false;

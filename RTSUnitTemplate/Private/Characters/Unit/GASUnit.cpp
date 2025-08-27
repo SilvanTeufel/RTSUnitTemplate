@@ -385,6 +385,7 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 FVector AGASUnit::GetMassActorLocation() const
 {
 	// The default behavior is to just return the actor's location.
+	UE_LOG(LogTemp, Warning, TEXT("GetMassActorLocation Original"));
 	return GetActorLocation();
 }
 

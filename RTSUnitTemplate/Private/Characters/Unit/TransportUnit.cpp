@@ -123,15 +123,7 @@ void ATransportUnit::UnloadNextUnit()
 		if (LoadedUnit)
 		{
 			// Use the transporter's location as the base.
-			FVector BaseLocation  = GetActorLocation();
-
-
-			if (!bUseSkeletalMovement)
-			{
-				FTransform InstanceXform;
-				ISMComponent->GetInstanceTransform( InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-				BaseLocation = InstanceXform.GetLocation();
-			}
+			FVector BaseLocation  = GetMassActorLocation();
 			
 			// Generate random offsets in the range [-200, -100] or [100, 200].
 			float XOffset = FMath::RandRange(UnloadVariationMin, UnloadVariatioMax) * (FMath::RandBool() ? 1 : -1);

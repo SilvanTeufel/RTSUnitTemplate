@@ -1326,14 +1326,8 @@ bool AUnitControllerBase::SetUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 
 bool AUnitControllerBase::PerformLineTrace(AUnitBase* Unit, const FVector& DestinationLocation, FHitResult& HitResult)
 {
-    FVector StartLocation = Unit->GetActorLocation();
-
-	if (!Unit->bUseSkeletalMovement)
-	{
-		FTransform InstanceXform;
-		Unit->ISMComponent->GetInstanceTransform( Unit->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-		StartLocation = InstanceXform.GetLocation();
-	}
+    FVector StartLocation = Unit->GetMassActorLocation();
+	
     FVector EndLocation = DestinationLocation;
 
 	EndLocation.Z = StartLocation.Z - 1500.f;

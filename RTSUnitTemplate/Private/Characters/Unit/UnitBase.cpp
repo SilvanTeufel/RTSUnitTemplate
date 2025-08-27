@@ -490,9 +490,7 @@ void AUnitBase::SetSelected()
 	{
 		if (!bUseSkeletalMovement)
 		{
-			FTransform InstanceXform;
-			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-			FVector NewLocation = InstanceXform.GetLocation();
+			FVector NewLocation = GetMassActorLocation();
 			if (IsFlying)
 				NewLocation.Z = NewLocation.Z-FlyHeight;
 			
@@ -553,25 +551,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	{
 
 
-		// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
-		FVector ShootingUnitLocation = ShootingUnit->GetActorLocation(); // Default to actor's root location
 
-		// If this spawning unit is not using skeletal movement, check if it's an ISM
-		// and use its instance location for calculating the aim direction.
-		if (!ShootingUnit->bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
-		{
-			if (ShootingUnit->ISMComponent && ShootingUnit->InstanceIndex >= 0)
-			{
-				FTransform SpawnerInstanceTransform;
-				ShootingUnit->ISMComponent->GetInstanceTransform(
-					ShootingUnit->InstanceIndex,
-					SpawnerInstanceTransform,
-					/*bWorldSpace=*/ true
-				);
-				ShootingUnitLocation = SpawnerInstanceTransform.GetLocation();
-			}
-		}
-		// --- END OF ADDED SECTION ---
+		FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation(); 
 		
 		FTransform Transform;
 		Transform.SetLocation(ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
@@ -581,22 +562,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 		FVector AimLocation = Target->GetActorLocation();
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
-			if (UnitTarget->bUseSkeletalMovement)
-			{
-				AimLocation = UnitTarget->GetActorLocation();
-			}
-			else if (UnitTarget->ISMComponent)
-			{
-				// pull the _instance_ transform out
-				FTransform InstXf;
-				UnitTarget->ISMComponent->GetInstanceTransform(
-					UnitTarget->InstanceIndex,
-					InstXf,
-					/*worldSpace=*/ true
-				);
-				AimLocation = InstXf.GetLocation();
-			}
-			
+			if (!UnitTarget->bUseSkeletalMovement)
+				AimLocation = UnitTarget->GetMassActorLocation(); 
 		}
 		
 		FVector Direction = (AimLocation - ShootingUnitLocation).GetSafeNormal();
@@ -641,43 +608,13 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     AUnitBase* TargetUnit   = Cast<AUnitBase>(Aim);
 
 	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
-	FVector ShootingUnitLocation = ShootingUnit->GetActorLocation(); // Default to actor's root location
-
-	// If this spawning unit is not using skeletal movement, check if it's an ISM
-	// and use its instance location for calculating the aim direction.
-	if (!ShootingUnit->bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
-	{
-		if (ShootingUnit->ISMComponent && ShootingUnit->InstanceIndex >= 0)
-		{
-			FTransform SpawnerInstanceTransform;
-			ShootingUnit->ISMComponent->GetInstanceTransform(
-				ShootingUnit->InstanceIndex,
-				SpawnerInstanceTransform,
-				/*bWorldSpace=*/ true
-			);
-			ShootingUnitLocation = SpawnerInstanceTransform.GetLocation();
-		}
-	}
-	// --- END OF ADDED SECTION ---
+	FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation();  // Default to actor's root location
 
     // 1) Determine the true “center” we want to spread around
     FVector AimCenter = Aim->GetActorLocation();
-    if (TargetUnit)
+    if (TargetUnit && !TargetUnit->bUseSkeletalMovement)
     {
-        if (TargetUnit->bUseSkeletalMovement)
-        {
-            AimCenter = TargetUnit->GetActorLocation();
-        }
-        else if (TargetUnit->ISMComponent && TargetUnit->InstanceIndex >= 0)
-        {
-            FTransform InstXf;
-            TargetUnit->ISMComponent->GetInstanceTransform(
-                TargetUnit->InstanceIndex,
-                InstXf,
-                /*worldSpace=*/ true
-            );
-            AimCenter = InstXf.GetLocation();
-        }
+    	AimCenter = TargetUnit->GetMassActorLocation(); 
     }
 
     // 2) Compute vertical half-height for auto Z-offset
@@ -757,27 +694,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
         return;
 	
 	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
-	FVector SpawnerLocationForAimDir = GetActorLocation(); // Default to actor's root location
-
-	// If this spawning unit is not using skeletal movement, check if it's an ISM
-	// and use its instance location for calculating the aim direction.
-	if (!bUseSkeletalMovement) // Condition: bUseSkeletalMovement is false for 'this' spawner
-	{
-		if (ISMComponent && InstanceIndex >= 0)
-		{
-			FTransform SpawnerInstanceTransform;
-			ISMComponent->GetInstanceTransform(
-				InstanceIndex,
-				SpawnerInstanceTransform,
-				/*bWorldSpace=*/ true
-			);
-			SpawnerLocationForAimDir = SpawnerInstanceTransform.GetLocation();
-		}
-	}
-	// --- END OF ADDED SECTION ---
+	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
 
     // Base spawn‐origin offset
-    const FVector SpawnOrigin = GetActorLocation()
+    const FVector SpawnOrigin = SpawnerLocationForAimDir
         + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
         + ProjectileSpawnOffset;
 

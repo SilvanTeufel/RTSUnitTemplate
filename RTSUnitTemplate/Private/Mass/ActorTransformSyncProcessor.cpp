@@ -326,13 +326,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             FVector FinalLocation = MassTransform.GetLocation();
 
             // Determine the actor's current location once, as it's used by multiple functions
-            FVector CurrentActorLocation = UnitBase->GetActorLocation();
-            if (!UnitBase->bUseSkeletalMovement)
-            {
-                FTransform InstanceTransform;
-                UnitBase->ISMComponent->GetInstanceTransform(UnitBase->InstanceIndex, InstanceTransform, true);
-                CurrentActorLocation = InstanceTransform.GetLocation();
-            }
+            FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
 
             // 1. Adjust height for ground snapping or flying
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation);

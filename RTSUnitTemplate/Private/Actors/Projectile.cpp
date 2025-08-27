@@ -121,18 +121,8 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	{
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
-			if (UnitTarget->bUseSkeletalMovement)
-			{
-				// Aim at the actor’s root location
-				TargetLocation = UnitTarget->GetActorLocation();
-			}
-			else
-			{
-				// Aim at the ISM instance’s world location
-				FTransform InstanceXform;
-				UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-				TargetLocation = InstanceXform.GetLocation();
-			}
+
+			TargetLocation = UnitTarget->GetMassActorLocation();
 		}
 	}
 	
@@ -167,23 +157,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	{
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
-			if (UnitTarget->bUseSkeletalMovement)
-			{
-				// Aim at the actor’s root location
-				TargetLocation = UnitTarget->GetActorLocation();
-			}
-			else if (UnitTarget->ISMComponent)
-			{
-				// Aim at the ISM instance’s world location
-				FTransform InstanceXform;
-				UnitTarget->ISMComponent->GetInstanceTransform( UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
-				TargetLocation = InstanceXform.GetLocation();
-			}
-			else
-			{
-				// Fallback
-				TargetLocation = UnitTarget->GetActorLocation();
-			}
+			TargetLocation = UnitTarget->GetMassActorLocation();
 		}
 		else
 		{
@@ -212,15 +186,6 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	Shooter = ShootingActor;
 	TargetLocation = Aim;
 	SetOwner(Shooter);
-
-	/*
-	FVector FlyDir = (TargetLocation - GetActorLocation()).GetSafeNormal();
-	if (!FlyDir.IsNearlyZero())
-	{
-		// assume you have a FRotator ProjectileRotationOffset member
-		FRotator AimRot = FlyDir.Rotation() + RotationOffset;
-		SetActorRotation(AimRot);
-	}*/
 	
 	if(ShootingActor)
 		ShooterLocation = ShootingActor->GetActorLocation();
@@ -473,18 +438,7 @@ void AProjectile::FlyToUnitTarget()
         AUnitBase* UnitTarget = Cast<AUnitBase>(Target);
         if (UnitTarget && UnitTarget->GetUnitState() != UnitData::Dead)
         {
-           FVector CurrentTargetLoc;
-           if (UnitTarget->bUseSkeletalMovement)
-           {
-              CurrentTargetLoc = UnitTarget->GetActorLocation();
-           }
-           else if (UnitTarget->ISMComponent)
-           {
-              FTransform InstanceXform;
-              UnitTarget->ISMComponent->GetInstanceTransform(UnitTarget->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true);
-              CurrentTargetLoc = InstanceXform.GetLocation();
-           }
-           TargetLocation = CurrentTargetLoc;
+           TargetLocation =  UnitTarget->GetMassActorLocation();
         }
 
         // ***** THE FIX IS HERE *****

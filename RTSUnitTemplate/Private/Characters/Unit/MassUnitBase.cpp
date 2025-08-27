@@ -59,6 +59,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 FVector AMassUnitBase::GetMassActorLocation() const
 {
+	UE_LOG(LogTemp, Warning, TEXT("GetMassActorLocation Overwrite"));
 	// If we're NOT using skeletal movement (i.e., we are an ISM)
 	if (!bUseSkeletalMovement && ISMComponent)
 	{
