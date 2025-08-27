@@ -382,6 +382,12 @@ TSubclassOf<UGameplayAbility> AGASUnit::GetAbilityForInputID(EGASAbilityInputID 
 	return nullptr;
 }
 
+FVector AGASUnit::GetMassActorLocation() const
+{
+	// The default behavior is to just return the actor's location.
+	return GetActorLocation();
+}
+
 void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 {
 	if (ActivatedAbilityInstance)
@@ -412,10 +418,8 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 		}
 		// --- End of New Logic ---
 
-
+		FVector ALocation = GetMassActorLocation();
 		
-		
-		FVector ALocation = GetActorLocation();
 		FVector Direction = InHitResult.Location - ALocation;
 		float Distance = FVector::Dist(InHitResult.Location, ALocation);
 		// Zero out the Z component to restrict rotation to the XY plane

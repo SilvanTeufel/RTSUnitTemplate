@@ -58,8 +58,6 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = Ability)
 	int32 AbilityQueueSize = 0;
-	//UFUNCTION()
-	//void OnRep_QueSnapshot();
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const TArray<FQueuedAbility>& GetQueuedAbilities();
@@ -77,8 +75,7 @@ public:
 	
 	UFUNCTION()
 	void ActivateNextQueuedAbility();
-//protected:
-	// Called when the game starts or when spawned
+
 	virtual void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -87,11 +84,7 @@ private:
 	void GrantAbilitiesFromList(const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilityList);
 	
 public:
-
-
-	//UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	//bool CurrentAbilityCanBeCanceled = true;
-	// Called every frame
+	
 	virtual void Tick(float DeltaTime) override;
 	
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
@@ -132,6 +125,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void FireMouseHitAbility(const FHitResult& InHitResult);
+
+	virtual FVector GetMassActorLocation() const;
 	
 	UPROPERTY(Replicated,BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;

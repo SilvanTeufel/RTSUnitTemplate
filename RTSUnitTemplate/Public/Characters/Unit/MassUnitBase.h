@@ -22,7 +22,8 @@ public:
 	AMassUnitBase(const FObjectInitializer& ObjectInitializer);
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-	
+
+	virtual FVector GetMassActorLocation() const override;
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
 	UMassActorBindingComponent* MassActorBindingComponent;
