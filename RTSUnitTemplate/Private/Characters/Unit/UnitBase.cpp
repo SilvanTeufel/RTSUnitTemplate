@@ -106,10 +106,16 @@ void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
-		ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
-		SetupTimerWidget();
+	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	SetupTimerWidget();
 
 
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->Deactivate();
+		MoveComp->SetComponentTickEnabled(false);
+	}
+	/*
 		//SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;
 		
@@ -119,7 +125,7 @@ void AUnitBase::BeginPlay()
 			FVector UnitLocation = GetActorLocation();
 			SetActorLocation(FVector(UnitLocation.X, UnitLocation.Y, FlyHeight));
 		}
-	
+	*/
 	if (HasAuthority())
 	{
 		SetMeshRotationServer();

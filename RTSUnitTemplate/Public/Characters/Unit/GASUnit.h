@@ -125,7 +125,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void FireMouseHitAbility(const FHitResult& InHitResult);
-
+	
 	virtual FVector GetMassActorLocation() const;
 	
 	UPROPERTY(Replicated,BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)

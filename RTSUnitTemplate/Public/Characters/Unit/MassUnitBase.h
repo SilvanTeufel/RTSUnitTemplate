@@ -23,9 +23,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
+	UFUNCTION(BlueprintCallable, Category = ISM)
 	virtual FVector GetMassActorLocation() const override;
 	// The Mass Actor Binding Component
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mass)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = ISM)
 	UMassActorBindingComponent* MassActorBindingComponent;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = ISM)
@@ -33,9 +34,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= ISM)
 	int32 InstanceIndex = INDEX_NONE;
-
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	bool bUseSkeletalMovement = true;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
+	bool bUseIsmWithActorMovement= true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsFlying = false;
@@ -119,6 +123,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_B_Start_Transform;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FQuat MeshRotationOffset;
+	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeUnitMode();
 	

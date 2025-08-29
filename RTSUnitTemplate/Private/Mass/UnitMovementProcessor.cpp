@@ -21,9 +21,7 @@ UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks; // Or potentially Input
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server);
     ProcessingPhase = EMassProcessingPhase::PrePhysics; // Good phase for pathfinding/intent
-
-    //ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
-    //ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
+    
     bAutoRegisterWithProcessingPhases = true;
     bRequiresGameThreadExecution = true;
 }

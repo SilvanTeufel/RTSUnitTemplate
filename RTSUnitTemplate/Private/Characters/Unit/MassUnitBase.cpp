@@ -46,20 +46,23 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
+	DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
 
 	DOREPLIFETIME(AMassUnitBase, Niagara_A);
 	DOREPLIFETIME(AMassUnitBase, Niagara_B);
 
 	DOREPLIFETIME(AMassUnitBase, Niagara_A_Start_Transform);
 	DOREPLIFETIME(AMassUnitBase, Niagara_B_Start_Transform);
-
+	
+	DOREPLIFETIME(AMassUnitBase, MeshRotationOffset);
+	
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
 	DOREPLIFETIME(AMassUnitBase, FlyHeight)
 }
 
 FVector AMassUnitBase::GetMassActorLocation() const
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	if (!bUseSkeletalMovement && ISMComponent && !bUseIsmWithActorMovement)
 	{
 		FTransform Xform;
 		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
@@ -721,6 +724,7 @@ void AMassUnitBase::InitializeUnitMode()
 		ISMComponent->SetVisibility(true);
 	}
 
+	
 	if (Niagara_A)
 	{
 		Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
@@ -730,41 +734,27 @@ void AMassUnitBase::InitializeUnitMode()
 	{
 		Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
 	}
-
+	
 	// Add the instance when the actor is ready and in the world
 	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
 	{
-		/*
-		// Check if we need to add a new instance or update an existing one
-		if (InstanceIndex == INDEX_NONE)
-		{
-			// This is the first time; add a new instance.
-			InstanceIndex = ISMComponent->AddInstance(GetActorTransform(), true);
-		}
-		else
-		{
-			FTransform Transform;
-			ISMComponent->GetInstanceTransform(InstanceIndex,Transform, true);
-			// An instance already exists; just update its transform.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, Transform, true, true, true);
-		}*/
 
-		// THE FIX: We now add or update the instance in the component's LOCAL SPACE.
-		// FTransform::Identity means the instance has no offset, rotation, or scale
-		// relative to the component itself.
 		const FTransform LocalIdentityTransform = FTransform::Identity;
-
+		
 		if (InstanceIndex == INDEX_NONE)
 		{
 			// Add a new instance at the component's local origin.
-			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, /*bWorldSpace=*/false);
+			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, false);
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion();
 		}
 		else
 		{
 			// Update the existing instance to be at the component's local origin.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, /*bWorldSpace=*/false, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, true);
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion();
 		}
 	}
+	
 }
 
 bool AMassUnitBase::SyncTranslation()
@@ -849,7 +839,7 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 {
 	if (ISMComponent && ISMComponent->IsValidInstance(InstIndex))
 	{
-		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, false, false);
+		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
 	}
 	
 	if (Niagara_A && !Niagara_A->bHiddenInGame)

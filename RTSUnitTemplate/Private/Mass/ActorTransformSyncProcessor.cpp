@@ -94,6 +94,7 @@ bool UActorTransformSyncProcessor::ShouldProceedWithTick(const float ActualDelta
 
     AccumulatedTimeA = 0.0f;
     return true;
+    
 }
 
 /**
@@ -110,13 +111,14 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     float HeightOffset;
 
     // Determine height offset and scale based on unit type
-    if (UnitBase->bUseSkeletalMovement)
+    if (UnitBase->bUseSkeletalMovement || UnitBase->bUseIsmWithActorMovement)
     {
         MassTransform.SetScale3D(UnitBase->GetActorScale3D());
         HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
     }
     else
     {
+        
         const FTransform& ISMTransform = UnitBase->ISMComponent->GetComponentTransform();
         MassTransform.SetScale3D(ISMTransform.GetScale3D());
         HeightOffset = ISMTransform.GetScale3D().Z / 2.0f;
@@ -124,6 +126,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         {
             HeightOffset += UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         }
+        
     }
 
     // --- Ground/Height Adjustment Logic ---
@@ -188,6 +191,9 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         {
             UnitBase->SetUnitState(UnitData::Run);
             DesiredQuat = LookAtDir.ToOrientationQuat();
+
+            if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+                DesiredQuat *= UnitBase->MeshRotationOffset;
         }
     }
     else if (UnitBase->GetUnitState() == UnitData::Run)
@@ -208,7 +214,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
     InOutMassTransform.SetRotation(NewQuat);
 }
 
-void UActorTransformSyncProcessor::RotateTowardsTarget(FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
     if (!TargetFrag.TargetEntity.IsSet() || !Char.RotatesToEnemy)
     {
@@ -232,7 +238,11 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(FMassEntityManager& Entit
         return;
     }
     
-    const FQuat DesiredQuat = Dir.ToOrientationQuat();
+    FQuat DesiredQuat = Dir.ToOrientationQuat();
+
+    if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+        DesiredQuat *= UnitBase->MeshRotationOffset;
+    
     const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
     
     const FQuat NewQuat = (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
@@ -242,7 +252,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(FMassEntityManager& Entit
     InOutMassTransform.SetRotation(NewQuat);
 }
 
-void UActorTransformSyncProcessor::RotateTowardsAbility(const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+void UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
     // Calculate direction from the unit to the ability's target location
     FVector Dir = AbilityTarget.AbilityTargetLocation - CurrentActorLocation;
@@ -253,8 +263,10 @@ void UActorTransformSyncProcessor::RotateTowardsAbility(const FMassAITargetFragm
         return; // Avoid issues if the direction is zero
     }
 
-    const FQuat DesiredQuat = Dir.ToOrientationQuat();
+    FQuat DesiredQuat = Dir.ToOrientationQuat();
 
+    if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+        DesiredQuat *= UnitBase->MeshRotationOffset;
     // --- Interpolate rotation ---
     const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
     const FQuat CurrentQuat = InOutMassTransform.GetRotation();
@@ -280,13 +292,17 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
         {
             if (AActor* Actor = Update.ActorPtr.Get())
             {
+
                 if (Update.bUseSkeletal)
                 {
                     Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
                 }
                 else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                 {
-                    Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
+                    if (Unit->bUseIsmWithActorMovement)
+                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                    else
+                        Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
                 }
             }
         }
@@ -339,14 +355,14 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             if (UnitBase->ShouldRotateToAbilityClick())
             {
                 // Pass the consolidated AI Target fragment.
-                RotateTowardsAbility(TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }else if (!bIsAttackingOrPaused)
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
             else
             {
-                RotateTowardsTarget(EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
             
             // 3. Apply final location and cache the result
