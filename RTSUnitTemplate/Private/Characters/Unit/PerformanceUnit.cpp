@@ -287,121 +287,126 @@ void APerformanceUnit::HideAbilityIndicator_Implementation(AAbilityIndicator* Ab
 
 void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay)
 {
+    if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+    {
+        UWorld* World = GetWorld();
+        if (!World)
+        {
+            return;
+        }
 
-	//UE_LOG(LogTemp, Warning, TEXT("IsVisible: %d"), IsVisible);
-	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
-	{
-		FVector LocationToFireEffects = GetMassActorLocation();
-		
-		UWorld* World = GetWorld();
+        // Create a weak pointer to `this` to be safely used in the lambdas.
+        TWeakObjectPtr<APerformanceUnit> WeakThis = this;
 
-		if (!World)
-		{
-			return;
-		}
-		
-		if (World)
-		{
-			// Spawn the Niagara visual effect at the projectile's location and rotation
-			if (ImpactVFX)
-			{
+        // Spawn the Niagara visual effect
+        if (ImpactVFX)
+        {
+            if (EffectDelay > 0.f)
+            {
+                FTimerHandle VisualEffectTimerHandle;
+                World->GetTimerManager().SetTimer(
+                    VisualEffectTimerHandle,
+                    [WeakThis, ImpactVFX, ScaleVFX]() // Capture the weak pointer
+                    {
+                        // First, check if the Actor is still valid
+                        if (WeakThis.IsValid())
+                        {
+                            // It's safe to use the actor's functions now
+                            FVector Location = WeakThis->GetMassActorLocation();
+                            FRotator Rotation = WeakThis->GetActorRotation();
+                            UNiagaraFunctionLibrary::SpawnSystemAtLocation(WeakThis->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX);
+                        }
+                    },
+                    EffectDelay,
+                    false
+                );
+            }
+            else
+            {
+                UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetMassActorLocation(), GetActorRotation(), ScaleVFX);
+            }
+        }
 
-				if (EffectDelay > 0.f)
-				{
-					// Set a timer to spawn the visual effect again after EffectDelay seconds
-					FTimerHandle VisualEffectTimerHandle;
-					World->GetTimerManager().SetTimer(
-							VisualEffectTimerHandle,
-							[this, ImpactVFX, ScaleVFX, LocationToFireEffects]()
-							{
-								if (GetWorld())
-								{
-									UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, LocationToFireEffects, GetActorRotation(), ScaleVFX);
-								}
-							},
-							EffectDelay,
-							false
-					);
-				}else
-				{
-					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, LocationToFireEffects, GetActorRotation(), ScaleVFX);
-				}
-
-			}
-
-			// Play the impact sound at the projectile's location
-			if (ImpactSound)
-			{
-				if (SoundDelay > 0.f)
-				{
-					FTimerHandle SoundTimerHandle;
-					World->GetTimerManager().SetTimer(
-						SoundTimerHandle,
-						[this, ImpactSound, ScaleSound, LocationToFireEffects]()
-						{
-							if (GetWorld())
-							{
-								UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, LocationToFireEffects, ScaleSound);
-							}
-						},
-						SoundDelay,
-						false
-					);
-				}else
-				{
-					UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, LocationToFireEffects, ScaleSound);
-				}
-			}
-		}
-	}
+        // Play the impact sound
+        if (ImpactSound)
+        {
+            if (SoundDelay > 0.f)
+            {
+                FTimerHandle SoundTimerHandle;
+                World->GetTimerManager().SetTimer(
+                    SoundTimerHandle,
+                    [WeakThis, ImpactSound, ScaleSound]() // Capture the weak pointer
+                    {
+                        // First, check if the Actor is still valid
+                        if (WeakThis.IsValid())
+                        {
+                            // It's safe to use the actor's functions now
+                            FVector Location = WeakThis->GetMassActorLocation();
+                            UGameplayStatics::PlaySoundAtLocation(WeakThis->GetWorld(), ImpactSound, Location, ScaleSound);
+                        }
+                    },
+                    SoundDelay,
+                    false
+                );
+            }
+            else
+            {
+                UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetMassActorLocation(), ScaleSound);
+            }
+        }
+    }
 }
-
 
 void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation)
 {
-	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
-	{
-		UWorld* World = GetWorld();
-		if (!World)
-		{
-			return;
-		}
-        
-		// Spawn the Niagara visual effect
-		UNiagaraComponent* NiagaraComp = nullptr;
-		if (ImpactVFX)
-		{
-			NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
-		}
-        
-		// Spawn the sound effect and get its audio component
-		UAudioComponent* AudioComp = nullptr;
-		if (ImpactSound)
-		{
-			AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, ScaleSound);
-		}
-        
-		// If either component is valid and a kill delay is provided, set up a timer to kill them.
-		if ((NiagaraComp || AudioComp) && KillDelay > 0.0f)
-		{
-			FTimerHandle TimerHandle;
-			World->GetTimerManager().SetTimer(TimerHandle, [NiagaraComp, AudioComp]()
-			{
-				// Stop and clean up the Niagara effect
-				if (NiagaraComp)
-				{
-					NiagaraComp->Deactivate();
-					NiagaraComp->DestroyComponent();
-				}
-				// Stop and clean up the audio effect
-				if (AudioComp)
-				{
-					AudioComp->Stop();
-					AudioComp->DestroyComponent();
-				}
-			}, KillDelay, false);
-		}
-	}
+    if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+    {
+        UWorld* World = GetWorld();
+        if (!World)
+        {
+            return;
+        }
+
+        // Spawn the Niagara visual effect
+        UNiagaraComponent* NiagaraComp = nullptr;
+        if (ImpactVFX)
+        {
+            NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
+        }
+
+        // Spawn the sound effect and get its audio component
+        UAudioComponent* AudioComp = nullptr;
+        if (ImpactSound)
+        {
+            AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, ScaleSound);
+        }
+
+        // If either component is valid and a kill delay is provided, set up a timer to kill them.
+        if ((NiagaraComp || AudioComp) && KillDelay > 0.0f)
+        {
+            // Create weak pointers to safely reference the components in the lambda
+            TWeakObjectPtr<UNiagaraComponent> WeakNiagaraComp = NiagaraComp;
+            TWeakObjectPtr<UAudioComponent> WeakAudioComp = AudioComp;
+
+            FTimerHandle TimerHandle;
+            World->GetTimerManager().SetTimer(TimerHandle, [WeakNiagaraComp, WeakAudioComp]()
+            {
+                // Safely check if the Niagara component still exists and then clean it up
+                if (WeakNiagaraComp.IsValid())
+                {
+                    WeakNiagaraComp->Deactivate();
+                    WeakNiagaraComp->DestroyComponent();
+                }
+                
+                // Safely check if the Audio component still exists and then clean it up
+                if (WeakAudioComp.IsValid())
+                {
+                    WeakAudioComp->Stop();
+                    WeakAudioComp->DestroyComponent();
+                }
+            }, KillDelay, false);
+        }
+    }
 }
 
 void APerformanceUnit::CheckTimerVisibility()
