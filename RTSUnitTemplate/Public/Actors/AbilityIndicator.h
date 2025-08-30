@@ -35,10 +35,12 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UStaticMeshComponent* IndicatorMesh;
 
-	
 private:
 	// Root Scene Component
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;
+	
 };
+
+
 

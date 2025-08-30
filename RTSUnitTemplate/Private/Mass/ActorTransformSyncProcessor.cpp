@@ -295,12 +295,12 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
 
                 if (Update.bUseSkeletal)
                 {
-                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None); // ETeleportType::TeleportPhysics
                 }
                 else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                 {
                     if (Unit->bUseIsmWithActorMovement)
-                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None); // ETeleportType::TeleportPhysics
                     else
                         Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
                 }
@@ -319,7 +319,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities());
-
+    
     EntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {
@@ -368,12 +368,14 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             // 3. Apply final location and cache the result
             MassTransform.SetLocation(FinalLocation);
             CharList[i].PositionedTransform = MassTransform;
+
             
             // 4. Queue an update to be performed on the game thread if the transform has changed
             if (!CurrentActorLocation.Equals(FinalLocation, 0.025f))
             {
                 PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
             }
+            
         }
     });
 

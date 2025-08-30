@@ -108,13 +108,8 @@ void AUnitBase::BeginPlay()
 	
 	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 	SetupTimerWidget();
-
-
-	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
-	{
-		MoveComp->Deactivate();
-		MoveComp->SetComponentTickEnabled(false);
-	}
+	
+	
 	/*
 		//SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;

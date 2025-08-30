@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Mass/States/ChaseStateProcessor.h"
 #include "MassCommonFragments.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -722,6 +723,12 @@ void AMassUnitBase::InitializeUnitMode()
 	{
 		GetMesh()->SetVisibility(false);
 		ISMComponent->SetVisibility(true);
+	
+		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+		{
+			MoveComp->Deactivate();
+			MoveComp->SetComponentTickEnabled(false);
+		}
 	}
 
 	
