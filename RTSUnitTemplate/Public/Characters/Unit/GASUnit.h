@@ -70,7 +70,7 @@ public:
 	UFUNCTION()
 	void OnAbilityEnded(UGameplayAbility* EndedAbility);
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void CancelCurrentAbility();
 	
 	UFUNCTION()

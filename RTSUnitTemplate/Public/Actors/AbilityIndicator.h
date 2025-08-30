@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
 #include "AbilityIndicator.generated.h"
 
@@ -31,12 +32,13 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
-	UPROPERTY(Replicated, EditAnywhere, Category = "Components")
+	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UStaticMeshComponent* IndicatorMesh;
+
 	
 private:
 	// Root Scene Component
-	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;
 };
 

@@ -22,7 +22,7 @@ AAbilityIndicator::AAbilityIndicator()
 
 	// Disable collisions on the mesh component
 	IndicatorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
+	
 	// Optionally, disable collision for the entire actor
 	SetActorEnableCollision(false);
 	
