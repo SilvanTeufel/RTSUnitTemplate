@@ -319,17 +319,22 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetActorEnableCollision(false);
 		SetDeselected();
 		SetUnitState(UnitData::Dead);
-		if (!DeadEffectsExecuted)
-		{
-			FireEffects(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
-			StoppedMoving();
-			IsDead();
-			DeadEffectsExecuted = true;
-		}
+		DeadEffectsAndEvents();
 		UnitControlTimer = 0.f;
 	}
 
 	HealthbarCollapseCheck(NewHealth, OldHealth);
+}
+
+void AUnitBase::DeadEffectsAndEvents()
+{
+	if (!DeadEffectsExecuted)
+	{
+		FireEffects(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
+		StoppedMoving();
+		IsDead();
+		DeadEffectsExecuted = true;
+	}
 }
 
 

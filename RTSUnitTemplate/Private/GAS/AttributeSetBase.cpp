@@ -81,6 +81,12 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			// Assume DamageAmount is the amount of damage to apply
 			float DamageAmount = Data.EvaluatedData.Magnitude;
 
+			if (GetHealth() <= 0)
+			{
+				UnitBase->SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
+				UnitBase->DeadEffectsAndEvents();
+				return;
+			}
 			float OldHealth = GetHealth();
 			// Check and apply damage to Shield first
 			if(DamageAmount < 0)
@@ -104,6 +110,12 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 				SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
+
+				if (GetHealth() <= 0)
+				{
+					UnitBase->SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
+					UnitBase->DeadEffectsAndEvents();
+				}
 			}else
 			{
 				if (OldHealth + DamageAmount <= GetMaxHealth())

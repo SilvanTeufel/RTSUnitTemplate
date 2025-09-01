@@ -223,6 +223,9 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DeadEffectsAndEvents();
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetShield(float NewHealth);
 
