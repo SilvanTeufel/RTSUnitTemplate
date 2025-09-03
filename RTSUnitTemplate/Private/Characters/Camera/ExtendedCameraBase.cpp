@@ -226,10 +226,10 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 		
 	}else
 	{
-		TalentChooserWidget->StopTimer();
-		AbilityChooserWidget->StopTimer();
-		TalentChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
-		AbilityChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
+		if (TalentChooserWidget) TalentChooserWidget->StopTimer();
+		if (AbilityChooserWidget) AbilityChooserWidget->StopTimer();
+		if (TalentChooserWidget) TalentChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
+		if (AbilityChooserWidget) AbilityChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
 		
 	}
 
