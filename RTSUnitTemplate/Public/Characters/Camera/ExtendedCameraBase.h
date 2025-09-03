@@ -4,7 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "CameraBase.h" // Include the header file for ACameraBase
+#include "Widgets/AbilityChooser.h"
 #include "Widgets/MinimapWidget.h" 
+#include "Widgets/ResourceWidget.h"
+#include "Widgets/TaggedUnitSelector.h"
+#include "Widgets/TalentChooser.h"
+#include "Widgets/UnitWidgetSelector.h"
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -23,12 +28,8 @@ public:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(Client, Reliable)
-	void Client_UpdateWidgets(TSubclassOf<UUserWidget> NewWidgetSelector, TSubclassOf<UUserWidget> NewTaggedSelector, TSubclassOf<UUserWidget> NewResourceWidget);
-
+	void Client_UpdateWidgets(UUnitWidgetSelector* NewWidgetSelector, UTaggedUnitSelector* NewTaggedSelector, UResourceWidget* NewResourceWidget);
 	
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ShowWidgetsWhenLocallyControlled();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupResourceWidget(AExtendedControllerBase* CameraControllerBase);
@@ -89,28 +90,31 @@ public:
 
 
 	/** The class of Minimap Widget to create. Assign this in the Blueprint editor for this camera pawn. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	class UWidgetComponent* MinimapWidget;
-	
-	// Abilitys + Talents /////
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	class UWidgetComponent* TalentChooser;
+	//UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	//class UWidgetComponent* MinimapWidget;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	class UWidgetComponent* AbilityChooser;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMinimapWidget* Minimap; 
+	// Abilitys + Talents /////
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UTalentChooser* TalentChooserWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UAbilityChooser* AbilityChooserWidget;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUserWidget(AUnitBase* SelectedActor);
 	// Abilitys + Talents /////
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	class UWidgetComponent* WidgetSelector;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UUnitWidgetSelector* UnitSelectorWidget;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	class UWidgetComponent* TaggedSelector;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	class UWidgetComponent* ResourceWidget;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UTaggedUnitSelector* TaggedSelectorWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UResourceWidget* ResourceWidget;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);

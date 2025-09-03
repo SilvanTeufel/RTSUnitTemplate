@@ -13,7 +13,7 @@ void UUnitWidgetSelector::NativeConstruct()
 	SetButtonIds();
 	SetVisibleButtonCount(ShowButtonCount);
 	SetButtonLabelCount(ShowButtonCount);
-	ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
+	ControllerBase = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
 	StartUpdateTimer();
 }
 
@@ -124,96 +124,58 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
 	
 }
 
+/**
+ * STEP 3: The Client receives the data from the server and updates the UI.
+ */
+void UUnitWidgetSelector::SetWidgetCooldown(int32 AbilityIndex, float RemainingTime)
+{
+    if (RemainingTime > 0.f)
+    {
+        // Format to one decimal place for a smoother countdown look
+        FString CooldownStr = FString::Printf(TEXT("%.0f"), RemainingTime); 
+        if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
+        {
+            AbilityCooldownTexts[AbilityIndex]->SetText(FText::FromString(CooldownStr));
+        }
+    }
+    else
+    {
+        // Cooldown is finished, clear the text or set to a "Ready" indicator
+        if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
+        {
+            AbilityCooldownTexts[AbilityIndex]->SetText(FText::GetEmpty()); // Or FText::FromString(TEXT("✓"))
+        }
+    }
+}
+
 
 void UUnitWidgetSelector::UpdateAbilityCooldowns()
 {
 
-    if (!ControllerBase || !ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex))
-        return;
-	
-	// ControllerBase->AbilityArrayIndex == 0 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities
-	// ControllerBase->AbilityArrayIndex == 1 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities	
-	// ControllerBase->AbilityArrayIndex == 2 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities
-	// ControllerBase->AbilityArrayIndex == 3 -> ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities	
-	AUnitBase* SelectedUnit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
-	UAbilitySystemComponent* ASC = SelectedUnit->GetAbilitySystemComponent();
-	if (!ASC)
+	if (!ControllerBase || !ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex))
 		return;
+	
+	
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
+	
 
+	AUnitBase* SelectedUnit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
 
 	// Loop through each ability up to AbilityButtonCount
 	for (int32 AbilityIndex = 0; AbilityIndex < MaxAbilityButtonCount; ++AbilityIndex)
 	{
-		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
-
-	
-		if (!AbilityArray.IsValidIndex(AbilityIndex)) // Adjust index as needed
+		if (!AbilityArray.IsValidIndex(AbilityIndex))
+		{
 			return;
-	
+		}
+
 		UGameplayAbilityBase* Ability = AbilityArray[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>();
 		if (!Ability)
+		{
 			return;
+		}
 		
-		UGameplayEffect* CooldownGEInstance =  Ability->GetCooldownGameplayEffect();
-		if (!CooldownGEInstance)
-			return;
-
-		// Step 2: Extract the UClass* from the instance
-		TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
-		if (!CooldownGEClass)
-			return;
-		
-		       if (!CooldownGEClass)
-                {
-                    // If class extraction fails, clear the cooldown text
-                    if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
-                    {
-                        AbilityCooldownTexts[AbilityIndex]->SetText(FText::GetEmpty());
-                    }
-                    continue;
-                }
-		// Create a query to find active cooldown effects matching the CooldownGEClass
-		FGameplayEffectQuery CooldownQuery;
-		CooldownQuery.EffectDefinition = CooldownGEClass;
-
-		// Retrieve all active cooldown effects that match the query
-		TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
-
-	
-		float RemainingTime = 0.f;
-
-		if (ActiveCooldownHandles.Num() > 0)
-		{
-			// Assuming only one cooldown effect per ability, take the first handle
-			FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
-			const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
-			if (ActiveEffect)
-			{
-				// Get the current world time
-				float CurrentTime = ASC->GetWorld()->GetTimeSeconds();
-        
-				// Calculate the remaining duration
-				RemainingTime = ActiveEffect->GetTimeRemaining(CurrentTime);
-			}
-		}
-
-		if (RemainingTime > 0.f)
-		{
-			//FString CooldownStr = FString::Printf(TEXT("%.1f"), FMath::RoundToFloat(RemainingTime * 10) / 10.0f);
-			FString CooldownStr = FString::Printf(TEXT("%.0f"), RemainingTime);
-			if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
-			{
-				AbilityCooldownTexts[AbilityIndex]->SetText(FText::FromString(CooldownStr));
-			}
-		}
-		else
-		{
-			if (AbilityCooldownTexts.IsValidIndex(AbilityIndex))
-			{
-				FString CooldownRdy = FString::Printf(TEXT("-"));
-				AbilityCooldownTexts[AbilityIndex]->SetText(FText::FromString(CooldownRdy));
-			}
-		}
+		ControllerBase->Server_RequestCooldown(SelectedUnit, AbilityIndex, Ability);
 	}
     
 }
@@ -274,6 +236,7 @@ void UUnitWidgetSelector::UpdateQueuedAbilityIcons()
             bool bHasAbility = QueuedAbilities.IsValidIndex(i) && QueuedAbilities[i].AbilityClass != nullptr;
             AbilityQueButtons[i]->SetVisibility(bHasAbility ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
         }
+    	
     }
 }
 
@@ -316,16 +279,16 @@ void UUnitWidgetSelector::StartUpdateTimer()
 
 void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 {
-	for (int32 i = 0; i < AbilityButtons.Num(); i++)
+	for (int32 i = 0; i < AbilityButtonWidgets.Num(); i++)
 	{
-		if(AbilityButtons[i])
-			AbilityButtons[i]->SetVisibility(ESlateVisibility::Collapsed);
+		if (AbilityButtonWidgets[i])
+			AbilityButtonWidgets[i]->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
 	for (int32 i = 0; i < Count; i++)
 	{
-		if(i < AbilityButtons.Num() && AbilityButtons[i])
-			AbilityButtons[i]->SetVisibility(ESlateVisibility::Visible);
+		if (i < AbilityButtonWidgets.Num() && AbilityButtonWidgets[i])
+			AbilityButtonWidgets[i]->SetVisibility(ESlateVisibility::Visible);
 	}
 }
 
@@ -338,6 +301,8 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 		UUserWidget* Widget = Cast<UUserWidget>(GetWidgetFromName(FName(*WidgetName)));
 		if (Widget)
 		{
+			AbilityQueWidgets.Add(Widget);
+			
 			FString AbilityQueButtonName = FString::Printf(TEXT("AbilityQueButton"));
 			UButton* AbilityQueButton = Cast<UButton>(Widget->GetWidgetFromName(FName(*AbilityQueButtonName)));
 			if (AbilityQueButton)
@@ -464,20 +429,17 @@ void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
 {
 
 	
-	for (int32 i = 0; i < SelectButtons.Num(); i++)
+	for (int32 i = 0; i < SelectButtonWidgets.Num(); i++)
 	{
-		if (SelectButtons[i] && SingleSelectButtons[i])
+		if (SelectButtonWidgets[i])
 		{
 			if (i >= Count)
 			{
-				SelectButtons[i]->SetVisibility(ESlateVisibility::Hidden);
-				SingleSelectButtons[i]->SetVisibility(ESlateVisibility::Hidden);
+				SelectButtonWidgets[i]->SetVisibility(ESlateVisibility::Hidden);
 			}
 			else
 			{
-				
-				SelectButtons[i]->SetVisibility(ESlateVisibility::Visible);
-				SingleSelectButtons[i]->SetVisibility(ESlateVisibility::Visible);
+				SelectButtonWidgets[i]->SetVisibility(ESlateVisibility::Visible);
 			}
 		}
 	}

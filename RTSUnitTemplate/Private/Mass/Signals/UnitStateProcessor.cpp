@@ -1028,7 +1028,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				TArray<FMassEntityHandle> CapturedEntitys;
 				CapturedEntitys.Emplace(CapturedEntity);
 
-    			if (WorkerStats && WorkerStats->AutoMining
+    			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
 						   && StrongUnitActor->GetUnitState() == UnitData::Idle
 						   && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
     				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
@@ -1759,6 +1759,12 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 							CanAffordConstruction = true;
 						else	
 							CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+
+						if (UnitBase->Base->IsFlying)
+						{
+							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+							return;
+						}
 						
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);

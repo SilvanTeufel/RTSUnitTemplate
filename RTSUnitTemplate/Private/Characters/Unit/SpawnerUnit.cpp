@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/SpawnerUnit.h"
+
+#include "EngineUtils.h"
 #include "Actors/AbilityIndicator.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Net/UnrealNetwork.h"
@@ -24,6 +26,10 @@ void ASpawnerUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutL
 	DOREPLIFETIME(ASpawnerUnit, TeamId);
 	DOREPLIFETIME(ASpawnerUnit, SquadId);
 	DOREPLIFETIME(ASpawnerUnit, CurrentDraggedAbilityIndicator);
+
+	DOREPLIFETIME(ASpawnerUnit, UnitTags);
+	DOREPLIFETIME(ASpawnerUnit, AbilitySelectionTag);
+	DOREPLIFETIME(ASpawnerUnit, TalentTag);
 
 }
 
@@ -92,24 +98,35 @@ void ASpawnerUnit::SpawnPickupsArray()
 void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass,
 											   FVector SpawnLocation)
 {
-	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+
+	AControllerBase* TeamControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+	
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
+		
+		AController* PlayerController = It->Get();
 		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
 
+
+		
 		if (ControllerBase)
-			for (int32 i = 0; i < ControllerBase->SelectedUnits.Num(); i++)
+		{
+
+			if (ControllerBase->SelectableTeamId == TeamId)
 			{
-				if(ControllerBase->SelectedUnits[i])
+				if (ControllerBase->CurrentDraggedAbilityIndicator)
 				{
-					if (ControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
-					{
-						CurrentDraggedAbilityIndicator = ControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator;
-						CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
-						return;
-					}
+					CurrentDraggedAbilityIndicator = ControllerBase->CurrentDraggedAbilityIndicator;
+					CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
+					return;
 				}
+
+				TeamControllerBase = ControllerBase;
+				
 			}
+		}
 	}
+	
 	
 	if (AbilityIndicatorClass)
 	{
@@ -139,6 +156,10 @@ void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityI
 			CurrentDraggedAbilityIndicator = SpawnedAbilityIndicator;
 			CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
 
+			if (TeamControllerBase->IsValidLowLevel())
+			{
+				TeamControllerBase->CurrentDraggedAbilityIndicator = CurrentDraggedAbilityIndicator;
+			}
 		}
 	}
 }
@@ -149,5 +170,26 @@ void ASpawnerUnit::DespawnCurrentAbilityIndicator()
 	{
 		CurrentDraggedAbilityIndicator->Destroy(true, true);
 		CurrentDraggedAbilityIndicator = nullptr;
+	}
+
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+	{
+		
+		AController* PlayerController = It->Get();
+		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
+
+
+		
+		if (ControllerBase)
+		{
+
+			if (ControllerBase->SelectableTeamId == TeamId)
+			{
+				if (ControllerBase->CurrentDraggedAbilityIndicator)
+					ControllerBase->CurrentDraggedAbilityIndicator->Destroy(true, true);
+				
+				ControllerBase->CurrentDraggedAbilityIndicator = nullptr;
+			}
+		}
 	}
 }

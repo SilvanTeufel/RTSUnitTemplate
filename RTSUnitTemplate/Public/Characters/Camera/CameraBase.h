@@ -58,7 +58,7 @@ public:
 	bool BlockControls = true;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool TabToggled = true;
+	bool TabToggled = false;
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -321,11 +321,8 @@ public:
 	float MovePositionCamSpeed = 1.0f;
 	// Control Widget
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (DisplayName = "ControlWidgetComp", Keywords = "RTSUnitTemplate ControlWidgetComp"), Category = RTSUnitTemplate)
-		class UWidgetComponent* ControlWidgetComp;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-		bool ShowControlWidgetAtStart = true;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UUserWidget* ControlWidget;
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "HideControlWidget", Keywords = "RTSUnitTemplate HideControlWidget"), Category = RTSUnitTemplate)
 		void HideControlWidget();

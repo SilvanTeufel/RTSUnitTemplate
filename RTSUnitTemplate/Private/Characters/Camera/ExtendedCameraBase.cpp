@@ -24,48 +24,10 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	}
 	
 	CreateCameraComp();
-
-	ControlWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ControlWidget"));
-	ControlWidgetComp->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	TalentChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("TalentChooser"));
-	TalentChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
 	
-	AbilityChooser = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("AbilityChooser"));
-	AbilityChooser->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	WidgetSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("WidgetSelector"));
-	WidgetSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	TaggedSelector = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("TaggedSelector"));
-	TaggedSelector->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	
-	ResourceWidget = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("ResourceWidget"));
-	ResourceWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-
-	MinimapWidget= ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("MinimapWidget"));
-	MinimapWidget->AttachToComponent(RootScene, FAttachmentTransformRules::KeepRelativeTransform);
-	
-	ControlWidgetComp->SetOnlyOwnerSee(true);
-	TalentChooser->SetOnlyOwnerSee(true);
-	AbilityChooser->SetOnlyOwnerSee(true);
-	WidgetSelector->SetOnlyOwnerSee(true);
-	TaggedSelector->SetOnlyOwnerSee(true);
-	ResourceWidget->SetOnlyOwnerSee(true);
-	MinimapWidget->SetOnlyOwnerSee(true);
-	
-	ControlWidgetComp->SetIsReplicated(false);
-	TalentChooser->SetIsReplicated(false);
-	AbilityChooser->SetIsReplicated(false);
-	WidgetSelector->SetIsReplicated(false);
-	TaggedSelector->SetIsReplicated(false);
-	ResourceWidget->SetIsReplicated(false);
-	MinimapWidget->SetIsReplicated(false);
-	
-		GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
-		GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
-		GetCameraBaseCapsule()->BodyInstance.bLockZRotation = true;
+	GetCameraBaseCapsule()->BodyInstance.bLockXRotation = true;
+	GetCameraBaseCapsule()->BodyInstance.bLockYRotation = true;
+	GetCameraBaseCapsule()->BodyInstance.bLockZRotation = true;
 	
 	
 		UCapsuleComponent* CComponent = GetCapsuleComponent();
@@ -97,75 +59,42 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
-	if (ControlWidgetComp)ControlWidgetComp->SetHiddenInGame(true);
-	if (TalentChooser) TalentChooser->SetHiddenInGame(true);
-	if (AbilityChooser) AbilityChooser->SetHiddenInGame(true);
-	if (WidgetSelector) WidgetSelector->SetHiddenInGame(true);
-	if (TaggedSelector) TaggedSelector->SetHiddenInGame(true);
-	if (ResourceWidget) ResourceWidget->SetHiddenInGame(true);
-	if (MinimapWidget) MinimapWidget->SetHiddenInGame(true);
+	HideControlWidget();
+	TabToggled = false;
 }
 
-void AExtendedCameraBase::Client_UpdateWidgets_Implementation(TSubclassOf<UUserWidget> NewWidgetSelector, TSubclassOf<UUserWidget> NewTaggedSelector, TSubclassOf<UUserWidget> NewResourceWidget)
+void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelector* NewWidgetSelector, UTaggedUnitSelector* NewTaggedSelector, UResourceWidget* NewResourceWidget)
 {
-	if (WidgetSelector && NewWidgetSelector)
-	{
-		WidgetSelector->SetWidget(nullptr);
-		WidgetSelector->SetWidgetClass(NewWidgetSelector);
-		WidgetSelector->InitWidget();
-		//UE_LOG(LogTemp, Log, TEXT("Client: Updated WidgetSelector"));
-	}
 
-	if (TaggedSelector && NewTaggedSelector)
+	if (NewWidgetSelector)
 	{
-		TaggedSelector->SetWidget(nullptr);
-		TaggedSelector->SetWidgetClass(NewTaggedSelector);
-		TaggedSelector->InitWidget();
-		//UE_LOG(LogTemp, Log, TEXT("Client: Updated TaggedSelector"));
+		UnitSelectorWidget = NewWidgetSelector;
 	}
-
-	if (ResourceWidget && NewResourceWidget)
-	{
-		ResourceWidget->SetWidget(nullptr);
-		ResourceWidget->SetWidgetClass(NewResourceWidget);
-		ResourceWidget->InitWidget();
-		//UE_LOG(LogTemp, Log, TEXT("Client: Updated ResourceWidget"));
-	}
-}
-
-void AExtendedCameraBase::ShowWidgetsWhenLocallyControlled()
-{
-	//UE_LOG(LogTemp, Log, TEXT("HideWidgetsWhenNoControl!"));
 	
-	if (IsLocallyControlled())
+
+	if (NewTaggedSelector)
 	{
-		// Hide all widgets if we are not locally controlled
-		if (ControlWidgetComp) ControlWidgetComp->SetHiddenInGame(false, true);
-		if (TalentChooser) TalentChooser->SetHiddenInGame(false, true);
-		if (AbilityChooser) AbilityChooser->SetHiddenInGame(false, true);
-		if (WidgetSelector) WidgetSelector->SetHiddenInGame(false, true);
-		if (TaggedSelector) TaggedSelector->SetHiddenInGame(false, true);
-		if (ResourceWidget) ResourceWidget->SetHiddenInGame(false, true);
-		if (MinimapWidget) MinimapWidget->SetHiddenInGame(false, true);
+		TaggedSelectorWidget = NewTaggedSelector;
+
+	}
+
+	if (NewResourceWidget)
+	{
+		ResourceWidget = NewResourceWidget;
 	}
 }
 
 void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
-	//UE_LOG(LogTemp, Log, TEXT("Try SetupResourceWidget"));
-	if(!ResourceWidget) return;
-	
-		ResourceWidget->SetVisibility(true);
-		UResourceWidget* ResourceBar = Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-		//UE_LOG(LogTemp, Log, TEXT("Found ResourceWidget"));
-		if(ResourceBar)
+	UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget0!"));
+		if(ResourceWidget)
 		{
-			//UE_LOG(LogTemp, Log, TEXT("Found ResourceBar"));
+			UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget!"));
 			if(CameraControllerBase)
 			{
-				//UE_LOG(LogTemp, Log, TEXT("Assigning TeamId! In ResourceWidget %d"), CameraControllerBase->SelectableTeamId);
-				ResourceBar->SetTeamId(CameraControllerBase->SelectableTeamId);
-				ResourceBar->StartUpdateTimer();
+				UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget - TeamId is now: %d"), CameraControllerBase->SelectableTeamId);
+				ResourceWidget->SetTeamId(CameraControllerBase->SelectableTeamId);
+				ResourceWidget->StartUpdateTimer();
 			}
 		}
 }
@@ -275,32 +204,32 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 {
 
-	UTalentChooser* TalentBar= Cast<UTalentChooser>(TalentChooser->GetUserWidgetObject());
-	UAbilityChooser* AbilityBar= Cast<UAbilityChooser>(AbilityChooser->GetUserWidgetObject());
+
 	
-	if(!TalentBar) return;
+	
+	if(!TalentChooserWidget) return;
 
 	if(SelectedActor)
 	{
-		if (TalentBar) {
-			TalentBar->SetVisibility(ESlateVisibility::Visible);
-			TalentBar->SetOwnerActor(SelectedActor);
-			TalentBar->CreateClassUIElements();
-			TalentBar->StartUpdateTimer();
+		if (TalentChooserWidget) {
+			TalentChooserWidget->SetVisibility(ESlateVisibility::Visible);
+			TalentChooserWidget->SetOwnerActor(SelectedActor);
+			TalentChooserWidget->CreateClassUIElements();
+			TalentChooserWidget->StartUpdateTimer();
 		}
 
-		if (AbilityBar) {
-			AbilityBar->SetVisibility(ESlateVisibility::Visible);
-			AbilityBar->SetOwnerActor(SelectedActor);
-			AbilityBar->StartUpdateTimer();
+		if (AbilityChooserWidget) {
+			AbilityChooserWidget->SetVisibility(ESlateVisibility::Visible);
+			AbilityChooserWidget->SetOwnerActor(SelectedActor);
+			AbilityChooserWidget->StartUpdateTimer();
 		}
 		
 	}else
 	{
-		TalentBar->StopTimer();
-		AbilityBar->StopTimer();
-		TalentBar->SetVisibility(ESlateVisibility::Collapsed);
-		AbilityBar->SetVisibility(ESlateVisibility::Collapsed);
+		TalentChooserWidget->StopTimer();
+		AbilityChooserWidget->StopTimer();
+		TalentChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
+		AbilityChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
 		
 	}
 
@@ -308,26 +237,23 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 
 void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
 {
-	UUnitWidgetSelector* WSelector = Cast<UUnitWidgetSelector>(WidgetSelector->GetUserWidgetObject());
-	
-	if(WSelector && SelectedActor)
+
+	if(UnitSelectorWidget)
 	{
-		WSelector->SetButtonColours(Id);
+		UnitSelectorWidget->SetButtonColours(Id);
 		FString CharacterName = SelectedActor->Name + " / " + FString::FromInt(Id);
-		if (WSelector->Name)
+		if (UnitSelectorWidget->Name)
 		{
-			WSelector->Name->SetText(FText::FromString(CharacterName));
+			UnitSelectorWidget->Name->SetText(FText::FromString(CharacterName));
 		}
 	}
 }
 
 void AExtendedCameraBase::UpdateSelectorWidget()
 {
-	UUnitWidgetSelector* WSelector = Cast<UUnitWidgetSelector>(WidgetSelector->GetUserWidgetObject());
-	
-	if(WSelector)
+	if(UnitSelectorWidget)
 	{
-		WSelector->UpdateSelectedUnits();
+		UnitSelectorWidget->UpdateSelectedUnits();
 	}
 }
 
@@ -479,9 +405,8 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 		
 		if (ResourceWidget)
 		{
-			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-			if(ResourceBar) ResourceBar->StartUpdateTimer();
-			ResourceWidget->SetVisibility(true);
+			ResourceWidget->StartUpdateTimer();
+			ResourceWidget->SetVisibility(ESlateVisibility::Visible);
 		}
 
 
@@ -512,9 +437,8 @@ void AExtendedCameraBase::Input_Tab_Released_BP(int32 CamState)
 
 		if (ResourceWidget)
 		{
-			UResourceWidget* ResourceBar= Cast<UResourceWidget>(ResourceWidget->GetUserWidgetObject());
-			if(ResourceBar) ResourceBar->StopTimer();
-			ResourceWidget->SetVisibility(false);
+			ResourceWidget->StopTimer();
+			ResourceWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }

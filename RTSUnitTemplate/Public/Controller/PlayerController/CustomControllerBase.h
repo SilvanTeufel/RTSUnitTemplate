@@ -40,10 +40,7 @@ protected:
 public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multi_ShowWidgetsWhenLocallyControlled();
-
+	
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetCamLocation(FVector NewLocation);
 
@@ -142,4 +139,10 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetupPlayerMiniMap();
+
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveCooldown(int32 AbilityIndex, float RemainingTime);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestCooldown(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability);
 };

@@ -48,35 +48,16 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 		if (NewSelection[i] && NewSelection[i]->TeamId == SelectableTeamId)
 		{
 			NewSelection[i]->IsMyTeam = true;
-			//NewSelection[i]->OwningPlayerController = this;
-			//NewSelection[i]->SetOwningPlayerController();
-			//NewSelection[i]->SpawnFogOfWarManager(this);
+
 		}
 	}
 
 	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
 	if (Camera)
+	{
 		Camera->SetupResourceWidget(this);
-}
-
-/*
-void ACustomControllerBase::Multi_SetFogManagerUnit_Implementation(APerformanceUnit* Unit)
-{
-	if (IsValid(Unit))
-		if (Unit->TeamId == SelectableTeamId)
-		{
-			Unit->IsMyTeam = true;
-			Unit->SpawnFogOfWarManager(this);
-		}
-}*/
-
-void ACustomControllerBase::Multi_ShowWidgetsWhenLocallyControlled_Implementation()
-{
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
+	}
 	
-	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
-	if (Camera)
-		Camera->ShowWidgetsWhenLocallyControlled();
 }
 
 void ACustomControllerBase::Multi_SetCamLocation_Implementation(FVector NewLocation)
@@ -1095,7 +1076,7 @@ void ACustomControllerBase::Multi_SetupPlayerMiniMap_Implementation()
 		UE_LOG(LogTemp, Warning, TEXT("SetupPlayerUI: Could not get AExtendedCameraBase pawn."));
 		return;
 	}
-	// Get the pawn this controller is possessing.
+
 	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
 	if (!ExtendedCameraBase)
 	{
@@ -1103,14 +1084,69 @@ void ACustomControllerBase::Multi_SetupPlayerMiniMap_Implementation()
 		return;
 	}
 	
-	// Get the minimap widget instance from the pawn.
-	UMinimapWidget* Minimap = Cast<UMinimapWidget>(ExtendedCameraBase->MinimapWidget->GetUserWidgetObject());
-	if (Minimap)
+	if (ExtendedCameraBase->Minimap)
 	{
-		Minimap->InitializeForTeam(SelectableTeamId);
+		ExtendedCameraBase->Minimap->InitializeForTeam(SelectableTeamId);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SetupPlayerUI: MinimapWidgetInstance was not valid on the camera pawn. Has it been created?"));
 	}
+}
+
+
+void ACustomControllerBase::Client_ReceiveCooldown_Implementation(int32 AbilityIndex, float RemainingTime)
+{
+
+	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
+	
+	if (ExtendedCameraBase && ExtendedCameraBase->UnitSelectorWidget)
+	{
+		ExtendedCameraBase->UnitSelectorWidget->SetWidgetCooldown(AbilityIndex, RemainingTime);
+	}
+}
+
+void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability)
+{
+			UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+
+			UGameplayEffect* CooldownGEInstance =  Ability->GetCooldownGameplayEffect();
+			if (!CooldownGEInstance)
+			{
+				return;
+			}
+
+			// Step 2: Extract the UClass* from the instance
+			TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
+			if (!CooldownGEClass)
+				return;
+				
+			if (!CooldownGEClass)
+			{
+				return;
+			}
+	
+			FGameplayEffectQuery CooldownQuery;
+			CooldownQuery.EffectDefinition = CooldownGEClass;
+	
+			TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
+	
+    		float RTime = 0.f;
+    
+    		if (ActiveCooldownHandles.Num() > 0)
+    		{
+    			// Assuming only one cooldown effect per ability, take the first handle
+    			FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
+    			const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
+    			if (ActiveEffect)
+    			{
+    				// Get the current world time
+    				float CurrentTime = ASC->GetWorld()->GetTimeSeconds();
+            
+    				// Calculate the remaining duration
+    				RTime = ActiveEffect->GetTimeRemaining(CurrentTime);
+    			}
+    		}
+
+	Client_ReceiveCooldown(AbilityIndex, RTime);
 }

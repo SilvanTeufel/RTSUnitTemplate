@@ -53,11 +53,11 @@ public:
 	USoundBase* DropWorkAreaSound; // Replace in PlayerController
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	 TSubclassOf<UUnitWidgetSelector> WidgetSelector; // Replace in Pawn
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	 TSubclassOf<UTaggedUnitSelector> TaggedUnitSelector;  // Replace in Pawn
+	UUnitWidgetSelector* SelectorWidget;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
-	 TSubclassOf<UResourceWidget> ResourceWidget;  // Replace in Pawn
+	UTaggedUnitSelector* TaggedUnitSelector;  // Replace in Pawn
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	UResourceWidget* ResourceWidget;  // Replace in Pawn
 };

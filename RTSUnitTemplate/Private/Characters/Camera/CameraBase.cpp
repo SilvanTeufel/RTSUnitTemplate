@@ -20,11 +20,7 @@
 void ACameraBase::BeginPlay()
 {
 	Super::BeginPlay();
-
 	
-	if(ControlWidgetComp)
-		ControlWidgetComp->SetVisibility(false);
-		
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		
@@ -54,8 +50,6 @@ void ACameraBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	SetActorBasicLocation();
-
-	if(ShowControlWidgetAtStart) ShowControlWidget();
 }
 
 void ACameraBase::CreateCameraComp()
@@ -456,17 +450,15 @@ bool ACameraBase::ZoomInToThirdPerson(const FVector SelectedActorPosition)
 
 void ACameraBase::HideControlWidget()
 {
-	if (ControlWidgetComp)
-		ControlWidgetComp->SetVisibility(false);
-
-	ShowControlWidgetAtStart = false;
+	if (ControlWidget)
+		ControlWidget->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void ACameraBase::ShowControlWidget()
 {
-	if (ControlWidgetComp)
+	if (ControlWidget)
 	{
-		ControlWidgetComp->SetVisibility(true);
+		ControlWidget->SetVisibility(ESlateVisibility::Visible);
 	}
 }
 

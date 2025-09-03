@@ -38,7 +38,9 @@ public:
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
-
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AAbilityIndicator* CurrentDraggedAbilityIndicator;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* WaypointSound;
 

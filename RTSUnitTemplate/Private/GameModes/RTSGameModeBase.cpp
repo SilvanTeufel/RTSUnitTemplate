@@ -187,40 +187,30 @@ void ARTSGameModeBase::ApplyCustomizationsFromPlayerStart(APlayerController* PC,
 		AExtendedCameraBase* CameraPawn = Cast<AExtendedCameraBase>(Pawn);
 		if (CameraPawn)
 		{
-			TSubclassOf<UUserWidget> NewWidgetSelector = CustomStart->WidgetSelector ? CustomStart->WidgetSelector : nullptr;
-			TSubclassOf<UUserWidget> NewTaggedSelector = CustomStart->TaggedUnitSelector ? CustomStart->TaggedUnitSelector : nullptr;
-			TSubclassOf<UUserWidget> NewResourceWidget = CustomStart->ResourceWidget ? CustomStart->ResourceWidget : nullptr;
-
 			
 			// Update the WidgetSelector widget component if a new widget class is provided.
-			if (CameraPawn->WidgetSelector && CustomStart->WidgetSelector)
+			if (CustomStart->SelectorWidget)
 			{
-				CameraPawn->WidgetSelector->SetWidget(nullptr);
-				CameraPawn->WidgetSelector->SetWidgetClass(NewWidgetSelector);
-				CameraPawn->WidgetSelector->InitWidget();
+				CameraPawn->UnitSelectorWidget = CustomStart->SelectorWidget;
 				UE_LOG(LogTemp, Log, TEXT("Updated WidgetSelector on Pawn: %s"), *CameraPawn->GetName());
 			}
     
 			// Update the TaggedSelector widget component.
-			if (CameraPawn->TaggedSelector && CustomStart->TaggedUnitSelector)
+			if (CustomStart->TaggedUnitSelector)
 			{
-				CameraPawn->TaggedSelector->SetWidget(nullptr);
-				CameraPawn->TaggedSelector->SetWidgetClass(NewTaggedSelector);
-				CameraPawn->TaggedSelector->InitWidget();
+				CameraPawn->TaggedSelectorWidget = CustomStart->TaggedUnitSelector;
 				UE_LOG(LogTemp, Log, TEXT("Updated TaggedSelector on Pawn: %s"), *CameraPawn->GetName());
 			}
     
 			// Update the ResourceWidget widget component.
-			if (CameraPawn->ResourceWidget && CustomStart->ResourceWidget)
+			if (CustomStart->ResourceWidget)
 			{
-				CameraPawn->ResourceWidget->SetWidget(nullptr); // Remove current widget
-				CameraPawn->ResourceWidget->SetWidgetClass(NewResourceWidget);
-				CameraPawn->ResourceWidget->InitWidget();
+				CameraPawn->ResourceWidget = CustomStart->ResourceWidget;
 				UE_LOG(LogTemp, Log, TEXT("Updated ResourceWidget on Pawn: %s"), *CameraPawn->GetName());
 			}
 
 			// Call Client RPC to update widgets on the client
-			CameraPawn->Client_UpdateWidgets(NewWidgetSelector, NewTaggedSelector, NewResourceWidget);
+			CameraPawn->Client_UpdateWidgets(CustomStart->SelectorWidget, CustomStart->TaggedUnitSelector, CustomStart->ResourceWidget);
 		}
 		else
 		{
@@ -341,9 +331,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 			
 			CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
-			CameraControllerBase->Multi_ShowWidgetsWhenLocallyControlled();
 			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
-			//FGameplayTag CameraUnitTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")));
 
 			FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerStartIndex));
 			FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);

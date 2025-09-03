@@ -8,7 +8,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
-#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 #include "UnitWidgetSelector.generated.h"
 
@@ -48,6 +48,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateSelectedUnits();
 
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetWidgetCooldown(int32 AbilityIndex, float RemainingTime);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateAbilityCooldowns();
 
@@ -79,13 +83,16 @@ public:
 	class UProgressBar* CurrentAbilityTimerBar;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	FLinearColor CurrentAbilityTimerBarColor = FLinearColor::Black;
+	FLinearColor CurrentAbilityTimerBarColor = FLinearColor::White;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UButton*> AbilityQueButtons;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UImage*> AbilityQueIcons;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<class UUserWidget*> AbilityQueWidgets;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UButton*> AbilityButtons;
@@ -145,6 +152,6 @@ public:
 	int MaxQueButtonCount = 5;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AExtendedControllerBase* ControllerBase;
+	ACustomControllerBase* ControllerBase;
 	
 };

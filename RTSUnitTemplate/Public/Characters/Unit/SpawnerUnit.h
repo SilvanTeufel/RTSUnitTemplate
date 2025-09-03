@@ -38,6 +38,15 @@ class RTSUNITTEMPLATE_API ASpawnerUnit : public ACharacter
 	
 public:
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTagContainer UnitTags;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag AbilitySelectionTag;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag TalentTag;
+	
 	ASpawnerUnit(const FObjectInitializer& ObjectInitializer);
 	
 	virtual void BeginPlay() override;
@@ -77,6 +86,7 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Ability)
 	AAbilityIndicator* CurrentDraggedAbilityIndicator;
 
+	//UFUNCTION(BlueprintCallable, Category=Ability)
 	UFUNCTION(BlueprintCallable, Category=Ability)
 	void SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass, FVector SpawnLocation);
 	

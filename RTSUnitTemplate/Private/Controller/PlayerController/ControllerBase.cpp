@@ -118,6 +118,7 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
 	DOREPLIFETIME(AControllerBase, SelectableTeamId);
 	DOREPLIFETIME(AControllerBase, UEPathfindingCornerOffset); // Added for Build
+	DOREPLIFETIME(AControllerBase, CurrentDraggedAbilityIndicator);
 }
 
 void AControllerBase::SetupInputComponent() {
