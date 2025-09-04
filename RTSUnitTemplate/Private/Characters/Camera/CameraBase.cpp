@@ -556,14 +556,9 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 		}
 	}
 	
-	// Check if the proposed location is within the set limits.
-	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
-		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
-	{
-		// Out of bounds: Do not move.
-		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.X * DeltaTime*-(2.f));
-		return;
-	}
+	// --- SAFE BOUNDARY CHECK using Clamping ---
+	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
+	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
 	
 	SetActorLocation(ProposedLocation);
 }
@@ -615,12 +610,10 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 		}
 	}
 	
-	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
-		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
-	{
-		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.X * DeltaTime*-(5.f));
-		return;
-	}
+	// --- SAFE BOUNDARY CHECK using Clamping ---
+	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
+	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
+    
 	
 	SetActorLocation(ProposedLocation);
 }
@@ -674,12 +667,9 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 		}
 	}
 	
-	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
-		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
-	{
-		AddActorWorldOffset(NewPawnLocation * (-1)*CurrentCamSpeed.Y * DeltaTime*-(5.f));
-		return;
-	}
+	// --- SAFE BOUNDARY CHECK using Clamping ---
+	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
+	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
 
 	SetActorLocation(ProposedLocation);
 }
@@ -732,12 +722,10 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 
 	}
 	
-	if (ProposedLocation.X < CameraPositionMin.X || ProposedLocation.X > CameraPositionMax.X ||
-		ProposedLocation.Y < CameraPositionMin.Y || ProposedLocation.Y > CameraPositionMax.Y)
-	{
-		AddActorWorldOffset(NewPawnLocation * CurrentCamSpeed.Y * DeltaTime*-(5.f));
-		return;
-	}
+	// --- SAFE BOUNDARY CHECK using Clamping ---
+	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
+	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
+    
 
 	SetActorLocation(ProposedLocation);
 }
