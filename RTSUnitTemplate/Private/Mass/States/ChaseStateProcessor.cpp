@@ -144,7 +144,9 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Distance Check ---
             const float EffectiveAttackRange = Stats.AttackRange;
-            const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+           //const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+            const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+            
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---

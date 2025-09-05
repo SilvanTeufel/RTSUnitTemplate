@@ -107,7 +107,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             StateFrag.StateTimer += ExecutionInterval; // State modification stays here
             
                 // --- Range Check ---
-                const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
                 if (Dist <= Stats.AttackRange)
                 {

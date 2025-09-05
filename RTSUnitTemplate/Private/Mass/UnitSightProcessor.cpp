@@ -122,7 +122,8 @@ void UUnitSightProcessor::Execute(
             if (Det.Stats->TeamId == Tgt.Stats->TeamId) 
                 continue;
 
-            const float DistSqr = FVector::DistSquared(Det.Location, Tgt.Location);
+            //const float DistSqr = FVector::DistSquared(Det.Location, Tgt.Location);
+            const float DistSqr = FVector::DistSquared2D(Det.Location, Tgt.Location);
             if (DistSqr > FMath::Square(Det.Stats->SightRadius)) 
                 continue;
 

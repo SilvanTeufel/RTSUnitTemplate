@@ -255,7 +255,9 @@ void UDetectionProcessor::Execute(
                     continue;
                 }
 
-                const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
+               //const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
+                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+
                 // “new” target if in sight radius and closer than anything before, and alive
                 if (DistSq < ShortestDistSq && Tgt.Stats->Health > 0)
                 {
