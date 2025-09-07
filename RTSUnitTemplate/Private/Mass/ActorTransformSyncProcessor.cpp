@@ -220,7 +220,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     {
         return;
     }
-
+    
     FVector TargetLocation = TargetFrag.LastKnownLocation;
     const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
     if (EntityManager.IsEntityValid(TargetEntity))
@@ -248,7 +248,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     const FQuat NewQuat = (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
         ? FMath::QInterpConstantTo(InOutMassTransform.GetRotation(), DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg))
         : DesiredQuat;
-
+    
     InOutMassTransform.SetRotation(NewQuat);
 }
 
@@ -331,7 +331,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             AActor* Actor = ActorFragments[i].GetMutable();
@@ -339,6 +339,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
             if (!IsValid(UnitBase)) continue;
 
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
+           const FQuat CurrentRotation = MassTransform.GetRotation();
             FVector FinalLocation = MassTransform.GetLocation();
 
             // Determine the actor's current location once, as it's used by multiple functions
@@ -371,7 +372,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
             
             // 4. Queue an update to be performed on the game thread if the transform has changed
-            if (!CurrentActorLocation.Equals(FinalLocation, 0.025f))
+            if (!CurrentActorLocation.Equals(FinalLocation, 0.025f) || !CurrentRotation.Equals(MassTransform.GetRotation(), 0.025f))
             {
                 PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
             }

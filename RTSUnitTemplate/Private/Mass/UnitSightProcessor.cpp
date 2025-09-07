@@ -155,7 +155,23 @@ void UUnitSightProcessor::Execute(
             }
             else
             {
-                PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitExitSight);
+
+                // FOR Units that Attack
+                int32 AttackingSightCount = Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+                if (AttackingSightCount > 0) Target.Sight->AttackerSightTimer += ExecutionInterval;
+
+                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer > Target.Sight->AttackerRevealTime)
+                {
+                    Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId)--;
+                }
+                
+                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer <= Target.Sight->AttackerRevealTime)
+                {
+                    PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
+                }else
+                {
+                    PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitExitSight);
+                }
             }
 
        
@@ -177,6 +193,7 @@ void UUnitSightProcessor::Execute(
     {
         Target.Sight->DetectorOverlapsPerTeam = Target.Sight->DetectorOverlapsPerTeam;
         Target.Sight->ConsistentTeamOverlapsPerTeam = Target.Sight->TeamOverlapsPerTeam;
+         Target.Sight->ConsistentAttackerTeamOverlapsPerTeam = Target.Sight->AttackerTeamOverlapsPerTeam;
         Target.Sight->TeamOverlapsPerTeam.Empty();
         Target.Sight->DetectorOverlapsPerTeam.Empty();
     }

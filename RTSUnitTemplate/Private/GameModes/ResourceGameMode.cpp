@@ -84,7 +84,7 @@ void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)
 
 void AResourceGameMode::GatherWorkAreas()
 {
-	UE_LOG(LogTemp, Error, TEXT("GatherWorkAreas"));
+	UE_LOG(LogTemp, Warning, TEXT("GatherWorkAreas"));
 	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
 	{
 		AWorkArea* WorkArea = *It;

@@ -82,7 +82,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
         const TArrayView<FTransformFragment> LocationList = Context.GetMutableFragmentView<FTransformFragment>();
         const TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
-
+    	
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
             FMassVelocityFragment& Velocity = VelocityList[EntityIndex];

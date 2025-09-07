@@ -225,8 +225,8 @@ void UDetectionProcessor::Execute(
         bool bFoundNew = false;
         bool bCurrentStillViable = false;
         FVector CurrentLocation = FVector::ZeroVector;
-        float ShortestDistSq = FMath::Square(Det.Stats->SightRadius);
-
+        float DetectorSight = FMath::Square(Det.Stats->SightRadius);
+        const int32 DetectorTeamId = Det.Stats->TeamId;
         InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not allready inside
         if (!Det.TargetFrag->IsFocusedOnTarget)
@@ -255,16 +255,26 @@ void UDetectionProcessor::Execute(
                     continue;
                 }
 
-               //const float DistSq = FVector::DistSquared(Det.Location, Tgt.Location);
-                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
 
+                /*
+
+                int32 AttackingSightCount = Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
+                if (AttackingSightCount > 0) Target.Sight->AttackerSightTimer += ExecutionInterval;
+
+                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer > Target.Sight->AttackerRevealTime)
+                {
+                    Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId)--;
+                }
+                */
+                float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+                
                 // “new” target if in sight radius and closer than anything before, and alive
-                if (DistSq < ShortestDistSq && Tgt.Stats->Health > 0)
+                if (DistSq < DetectorSight && Tgt.Stats->Health > 0)
                 {
                     BestEntity     = Tgt.Entity;
                     BestLocation   = Tgt.Location;
                     bFoundNew      = true;
-                    ShortestDistSq = DistSq;
+                    DetectorSight = DistSq;
                 }
 
                 // “current” target still viable if it’s the same one and within lose‐sight radius
@@ -272,6 +282,18 @@ void UDetectionProcessor::Execute(
                 {
                     CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;
+                }
+
+                if (!bFoundNew && !bCurrentStillViable)
+                {
+                     const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
+           
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0)
+                    {
+                        BestEntity     = Tgt.Entity;
+                        BestLocation   = Tgt.Location;
+                        bFoundNew      = true;
+                    }
                 }
             }
         }
@@ -282,7 +304,7 @@ void UDetectionProcessor::Execute(
                 if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
                     continue;
                 
-                const int32 DetectorTeamId = Det.Stats->TeamId;
+               // const int32 DetectorTeamId = Det.Stats->TeamId;
                 
                 const int32* SightCount = Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId);
                 const int32* DetectorSightCount = Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId);
@@ -293,7 +315,7 @@ void UDetectionProcessor::Execute(
                     bCurrentStillViable = true;
                 }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
                     Tgt.Stats->Health > 0 &&
-                    ((!Tgt.Char->bIsInvisible && *SightCount > 0) || (Tgt.Char->bIsInvisible && *DetectorSightCount > 0)))
+                    ((!Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0)))
                 {
                     CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;

@@ -1298,6 +1298,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
              AUnitBase* TargetUnitBase = AttackerUnitBase ? AttackerUnitBase->UnitToChase : nullptr;
              // Need Attacker's TargetFragment to get the TargetEntity Handle *before* the lambda
              const FMassAITargetFragment* AttackerTargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
+          	FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(Entity);
 
              // --- Prerequisites Check ---
              if (AttackerUnitBase && IsValid(TargetUnitBase) && AttackerUnitBase->UseProjectile &&
@@ -1306,7 +1307,8 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // Get Entity Handles
                 FMassEntityHandle AttackerEntity = Entity;
                 FMassEntityHandle TargetEntity = AttackerTargetFrag->TargetEntity;
-             	
+
+             	const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerTargetFrag->TargetEntity);
                 // Check target entity validity *before* dispatching
                 if (!EntityManager.IsEntityValid(TargetEntity))
                 {
@@ -1325,7 +1327,9 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 TArray<TSubclassOf<UGameplayAbilityBase>> ThrowAbilities = AttackerUnitBase->ThrowAbilities;
                 TArray<TSubclassOf<UGameplayAbilityBase>> OffensiveAbilities = AttackerUnitBase->OffensiveAbilities;
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
-             	
+
+             	SightFragment->AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId)++;
+             	SightFragment->AttackerSightTimer = 0.f;
                 // --- Dispatch AsyncTask ---
                 AsyncTask(ENamedThreads::GameThread,
                    [this, AttackerEntity, TargetEntity, // Capture entity handles
