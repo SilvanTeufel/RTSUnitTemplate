@@ -126,8 +126,13 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
                 PendingSignals.Emplace(Entity, UnitSignals::UseRangedAbilitys);
+
+            if (StateFrag.HoldPosition)
+            {
+                PendingSignals.Emplace(Entity, UnitSignals::Idle);
+                continue;
+            }
             
-            // || !TargetFrag.TargetEntity.IsSet() &&
             if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
             {
                 // Queue signal instead of sending directly
@@ -144,7 +149,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             // --- Distance Check ---
             const float EffectiveAttackRange = Stats.AttackRange;
-           //const float DistSq = FVector::DistSquared(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+    
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
             
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
@@ -156,19 +161,15 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 StopMovement(MoveTarget, World);
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
-                // StopMovement modifies fragment directly, keep it here
-                //StopMovement(MoveTarget, World);
                 continue;
             }
 
 
            // You might want to adjust Min/Max Radius based on unit size or target.
            FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
-           FVector SlottedTargetLocation = TargetFrag.LastKnownLocation + ChaseOffset;
-           // **********************************
-           //SlottedTargetLocation
+
            UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
-           // StateFrag.StateTimer = 0.f; // Reset timer if Chase has one?
+
         }
     }); // End ForEachEntityChunk
 

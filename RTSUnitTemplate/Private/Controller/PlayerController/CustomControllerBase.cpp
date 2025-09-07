@@ -143,6 +143,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 		CancelCurrentAbility(Unit);
 	}
+
+	Unit->bHoldPosition = false;
 	
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -572,6 +574,20 @@ void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter)
         LastFormationUnits.Add(SelectedUnits[i]);
     }
     bForceFormationRecalculation = false;
+}
+
+void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
+{
+	for (AUnitBase* U : SelectedUnits)
+	{
+		if (!U->bHoldPosition)
+			SetHoldPositionOnUnit(U);
+	}
+}
+
+void ACustomControllerBase::SetHoldPositionOnUnit_Implementation(AUnitBase* Unit)
+{
+	Unit->bHoldPosition = true;
 }
 
 void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)

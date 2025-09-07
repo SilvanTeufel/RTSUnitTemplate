@@ -30,6 +30,7 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 
@@ -73,9 +74,11 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
-
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
+            const FTransform& Transform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer
             const FMassAITargetFragment& TargetFrag = TargetList[i];
@@ -84,11 +87,28 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             
             bool bCanAttack = true;
 
-            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)
             {
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 continue;
+            }
+
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && StateFrag.HoldPosition)
+            {
+                const float EffectiveAttackRange = StatsFrag.AttackRange;
+    
+              const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                        
+              const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+              // --- In Attack Range ---
+              if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
+              {
+                  StateFrag.SwitchingState = true;
+                  PendingSignals.Emplace(Entity, UnitSignals::Pause);
+                  continue;
+              }
             }
 
 

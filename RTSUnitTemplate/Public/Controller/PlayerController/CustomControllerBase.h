@@ -105,6 +105,13 @@ public:
 	/** Recalculates and stores unit formation offsets around TargetCenter. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RecalculateFormation(const FVector& TargetCenter);
+
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetHoldPositionOnSelectedUnits();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
+	void SetHoldPositionOnUnit(AUnitBase* Unit);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypointsMass(FHitResult Hit);

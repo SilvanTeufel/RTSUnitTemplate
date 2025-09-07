@@ -263,6 +263,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool CanAttack = true;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool HoldPosition = false;
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
 };

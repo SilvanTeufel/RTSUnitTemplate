@@ -846,6 +846,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
+        		AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
         	}
         	
             // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
@@ -1421,40 +1422,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                                  {
                                      // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target AIStateFragment for timer updates. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
                                  }
-
-                                 // Get target's current Actor state
-                    		/*
-                                 UnitData::EState CurrentTargetState = StrongTarget->GetUnitState();
-
-                    	
-                    		if (CurrentTargetState != UnitData::Run &&
-								   CurrentTargetState != UnitData::Pause &&
-								   CurrentTargetState != UnitData::Casting &&
-								   CurrentTargetState != UnitData::Rooted &&
-								   CurrentTargetState != UnitData::Attack&&
-									CurrentTargetState != UnitData::IsAttacked &&
-									!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateChargingTag::StaticStruct()) &&
-										!DoesEntityHaveTag(GTEntityManager, TargetEntity, FMassStateIsAttackedTag::StaticStruct())
-									)
-                                 {
-                                     if (SignalSubsystem)
-                                     {
-                                     		//TargetAIStateFragment->StateTimer = 0.f;
-                                     	//SwitchState(UnitSignals::IsAttacked, TargetEntity, GTEntityManager);
-                                         //SignalSubsystem->SignalEntity(UnitSignals::IsAttacked, TargetEntity);
-                                     }
-                                     // Let IsAttacked signal handler change Actor state
-                                 }
-                                 else if (CurrentTargetState == UnitData::Casting)
-                                 {
-                                     if (TargetAIStateFragment) TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
-                                     StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime; // Assuming ok on game thread
-                                 }
-                                 else if (CurrentTargetState == UnitData::Rooted)
-                                 {
-                                     if (TargetAIStateFragment) TargetAIStateFragment->StateTimer -= StrongTarget->ReduceRootedTime;
-                                     StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime; // Assuming ok on game thread
-                                 }*/
+                    		
                              // --- End Actual Post-Attack Logic ---
                     		SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                         } // End else block (TargetStats was valid)
@@ -1481,9 +1449,7 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
     {
         // Minimal validation for the detector entity itself
         if (!EntityManager.IsEntityValid(DetectorEntity)) continue;
-
-        // Get Detector's Actor (non-const)
-        // Use GetMutableFragmentDataPtr to potentially get a non-const Actor pointer
+    	
         FMassActorFragment* DetectorActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(DetectorEntity);
         // Use GetMutable() to get AActor* instead of const AActor*
         AUnitBase* DetectorUnitBase = DetectorActorFrag ? Cast<AUnitBase>(DetectorActorFrag->GetMutable()) : nullptr;
@@ -1519,25 +1485,11 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
             }
             // If TargetEntity is invalid, TargetActorFrag is null, or TargetActor is invalid/self, TargetUnitBase remains nullptr.
         }
-        // If TargetFrag is null or doesn't indicate a valid target, TargetUnitBase remains nullptr.
 
-        // --- Assign the result ---
-        // Assign only if the target has actually changed
         if (DetectorUnitBase->UnitToChase != TargetUnitBase)
         {
             DetectorUnitBase->UnitToChase = TargetUnitBase;
-            // Optional: Add very minimal log or trigger essential logic
         }
-
-    	/*
-    	if (!DoesEntityHaveTag(EntityManager , DetectorEntity, FMassStateIsAttackedTag::StaticStruct()) &&
-    		!DoesEntityHaveTag(EntityManager , DetectorEntity, FMassStateAttackTag::StaticStruct()) &&
-    		!DoesEntityHaveTag(EntityManager , DetectorEntity, FMassStatePauseTag::StaticStruct()) &&
-    		EntityManager.IsEntityValid(TargetFrag->TargetEntity) &&
-    		DetectorUnitBase->UnitToChase)
-        {
-	        SwitchState(UnitSignals::Chase, DetectorEntity, EntityManager);
-        }*/
     }
 }
 

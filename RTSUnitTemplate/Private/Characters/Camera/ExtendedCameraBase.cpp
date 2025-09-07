@@ -589,6 +589,7 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 13: HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase); break;
             case 16: HandleState_MiddleMousePressed(CameraControllerBase); break;
             case 17: HandleState_MiddleMouseReleased(CameraControllerBase); break;
+            case 18: CameraControllerBase->SetHoldPositionOnSelectedUnits(); break;
             case 21: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);break;
             case 22: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityTwo, CameraControllerBase); break;
             case 23: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityThree, CameraControllerBase); break;
