@@ -65,7 +65,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -82,7 +82,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-            
+   
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
                 UpdateMoveTarget(
@@ -98,10 +98,11 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
             
             StateFrag.StateTimer += ExecutionInterval;
-
+            
             //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-            const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                
+            FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+            const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation)+TargetCharFrag->CapsuleRadius/2.f;
+      
                 if (Dist <= Stats.AttackRange) // --- In Range ---
                 {
                     if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)

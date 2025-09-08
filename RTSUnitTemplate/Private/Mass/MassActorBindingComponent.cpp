@@ -652,6 +652,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->RotationSpeed = RotationSpeed;
         	CharFrag->PositionedTransform = UnitOwner->GetActorTransform();
         	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        	CharFrag->CapsuleRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
         }
         else // Use default values
         {

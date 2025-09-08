@@ -255,17 +255,7 @@ void UDetectionProcessor::Execute(
                     continue;
                 }
 
-
-                /*
-
-                int32 AttackingSightCount = Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
-                if (AttackingSightCount > 0) Target.Sight->AttackerSightTimer += ExecutionInterval;
-
-                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer > Target.Sight->AttackerRevealTime)
-                {
-                    Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId)--;
-                }
-                */
+                
                 float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
                 
                 // “new” target if in sight radius and closer than anything before, and alive
@@ -288,7 +278,7 @@ void UDetectionProcessor::Execute(
                 {
                      const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
            
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0)
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->SightRadius))
                     {
                         BestEntity     = Tgt.Entity;
                         BestLocation   = Tgt.Location;

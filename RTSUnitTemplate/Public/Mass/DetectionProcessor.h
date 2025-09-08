@@ -49,12 +49,8 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void BeginDestroy() override;
-	// This is where you respond to the signal
-	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-	/*virtual void SignalEntities(FMassEntityManager& EntityManager,
-								FMassExecutionContext& Context,
-								FMassSignalNameLookup& EntitySignals);*/
 
+	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	
 private:
 
@@ -66,9 +62,7 @@ private:
 	void InjectCurrentTargetIfMissing(const FDetectorUnitInfo& DetectorInfo, TArray<FTargetUnitInfo>& InOutTargetUnits, FMassEntityManager& EntityManager);
 
 	FMassEntityQuery EntityQuery;
-
-	// Timer, um diesen Prozessor nicht jeden Frame laufen zu lassen
-	// Besser über ProcessorGroup Konfiguration steuern! Dies ist nur ein Beispiel.
+	
 	float TimeSinceLastRun = 0.0f;
 	const float ExecutionInterval = 0.2f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
@@ -78,12 +72,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 	
-	// Handle for the bound delegate, used for unbinding (though standard unbinding might be tricky)
 	FDelegateHandle SignalDelegateHandle;
-	// Buffer to store entities received from the signal delegate between calls
-	// Key: Signal Name, Value: Array of Entities that signaled
-	TMap<FName, TArray<FMassEntityHandle>> ReceivedSignalsBuffer;
 
-	// Keep track of processed entities from buffer to handle target loss check correctly
+	TMap<FName, TArray<FMassEntityHandle>> ReceivedSignalsBuffer;
+	
 	TSet<FMassEntityHandle> SignaledEntitiesProcessedThisTick;
 };
