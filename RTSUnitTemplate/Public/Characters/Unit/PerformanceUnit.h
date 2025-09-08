@@ -196,10 +196,11 @@ public:
 	// Server RPC for the client to report its own visibility
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetClientVisibility(bool bVisible);
-
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
 
+	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible);
 	// Pure compute helper if you ever need the raw bool:
 	bool ComputeLocalVisibility() const;
 protected:

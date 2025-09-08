@@ -165,7 +165,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
 
-
+	DOREPLIFETIME(AUnitBase, CanMove);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackGround);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
 	DOREPLIFETIME(AUnitBase, CanDetectInvisible);
@@ -174,7 +174,6 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
 	DOREPLIFETIME(AUnitBase, bHoldPosition);
 
-	DOREPLIFETIME(AUnitBase, CanMove)
 	DOREPLIFETIME(AUnitBase, bIsMassUnit)
 }
 

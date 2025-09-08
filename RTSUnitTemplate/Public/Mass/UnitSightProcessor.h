@@ -22,11 +22,8 @@ protected:
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
-	
 private:
-
-
-
+	
 	UPROPERTY(Transient)
 	UWorld* World;
 	

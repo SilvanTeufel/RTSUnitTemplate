@@ -5,6 +5,7 @@
 #include "Elements/Framework/TypedElementQueryBuilder.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Components/CapsuleComponent.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -212,7 +213,31 @@ void ABuildingBase::DespawnWorkResource(AWorkResource* ResourceToDespawn)
 	{
 		ResourceToDespawn->Destroy();
 		ResourceToDespawn = nullptr;
-		//WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	}
+}
+
+void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
+{
+	if (!CanMove && bVisible == false) return;
+	if (IsMyTeam) return;
+	if (IsVisibleEnemy == bVisible) return;
+	
+	UWorld* World = GetWorld();
+	if (!World) return;  // Safety check
+
+	if (!OwningPlayerController)
+	{
+		APlayerController* PlayerController = World->GetFirstPlayerController();
+		if (PlayerController) OwningPlayerController = PlayerController;
+	}
+
+	if (OwningPlayerController)
+		if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(OwningPlayerController))
+		{
+			if (MyController->IsValidLowLevel() && MyController->SelectableTeamId == DetectingActor->TeamId)
+			{
+				IsVisibleEnemy = bVisible;
+			}
+		}
 }
 

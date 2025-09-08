@@ -448,8 +448,6 @@ void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUn
 {
 	if (IsMyTeam) return;
 	if (IsVisibleEnemy == bVisible) return;
-
-	//if (!HasAuthority()) UE_LOG(LogTemp, Log, TEXT("FIRST CHECK OK!!!!"));
 	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check

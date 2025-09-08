@@ -61,7 +61,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DespawnWorkResource(AWorkResource* ResourceToDespawn);
-	
+
+
+	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible) override;
 };
 
 
