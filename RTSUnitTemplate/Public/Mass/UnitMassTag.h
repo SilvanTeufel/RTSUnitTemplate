@@ -294,12 +294,7 @@ struct FMassSightFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
 	TMap<int32, int32> ConsistentAttackerTeamOverlapsPerTeam;
-
-	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
-	float AttackerSightTimer = 0.f;
-
-	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
-	float AttackerRevealTime = 3.f;
+	
 };
 
 //----------------------------------------------------------------------//

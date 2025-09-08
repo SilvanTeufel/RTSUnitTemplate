@@ -32,6 +32,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -73,6 +74,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        auto SightList = ChunkContext.GetMutableFragmentView<FMassSightFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -82,9 +84,11 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-   
+            FMassSightFragment& SightFrag = SightList[i];
+            
             if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
+                SightFrag.AttackerTeamOverlapsPerTeam.Empty();
                 UpdateMoveTarget(
                  MoveTarget,
                  StateFrag.StoredLocation,
@@ -99,8 +103,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             StateFrag.StateTimer += ExecutionInterval;
             
-            //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
             FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+            FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity);
+            
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation)+TargetCharFrag->CapsuleRadius/2.f;
       
                 if (Dist <= Stats.AttackRange) // --- In Range ---
@@ -110,6 +115,10 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         StateFrag.SwitchingState = true;
                         if (Stats.bUseProjectile)
                         {
+
+                            if (SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId) <= 0)
+                                SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId)++;
+                            
                             PendingSignals.Emplace(Entity, UnitSignals::RangedAttack);
                         }else
                         {
@@ -119,8 +128,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 }
                 else if (!StateFrag.SwitchingState)
                 {
+                    SightFrag.AttackerTeamOverlapsPerTeam.Empty();
                     StateFrag.SwitchingState = true;
-                     // Queue signal instead of sending directly
                     PendingSignals.Emplace(Entity, UnitSignals::Chase);
                 }
         }

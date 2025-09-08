@@ -274,18 +274,71 @@ void UDetectionProcessor::Execute(
                     bCurrentStillViable = true;
                 }
 
+
                 if (!bFoundNew && !bCurrentStillViable)
                 {
-                     const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
-           
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->SightRadius))
+   
+                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
+                    
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->LoseSightRadius))
+                    {
+                        BestEntity     = Tgt.Entity;
+                        BestLocation   = Tgt.Location;
+                        bFoundNew      = true;
+                    }
+                    
+                }
+            }
+
+            /*
+            // "Call to Arms" logic: If no target was found in sight, check for allies needing help.
+            if (!bFoundNew && !bCurrentStillViable)
+            {
+                // New variable to track the closest "assist" target. Initialize to a very large value.
+                float BestAssistDistSq = TNumericLimits<float>::Max();
+
+                for (auto& Tgt : TargetUnits)
+                {
+                    // Basic checks (don't assist against friendlies, etc.)
+                    if (Tgt.Entity == Det.Entity || Tgt.Stats->TeamId == DetectorTeamId || Tgt.Stats->Health <= 0)
+                        continue;
+                    
+                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
+
+                    // Check if an ally is attacking this target
+                    if (AttackingSightCount && *AttackingSightCount > 0)
+                    {
+                        const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+
+                        // Is this "assist" target closer than the previous best "assist" target?
+                        if (DistSq < FMath::Square(Tgt.Stats->LoseSightRadius) && DistSq < BestAssistDistSq)
+                        {
+                            BestEntity       = Tgt.Entity;
+                            BestLocation     = Tgt.Location;
+                            bFoundNew        = true;
+                            // IMPORTANT: Update the closest distance so we can compare against it.
+                            BestAssistDistSq = DistSq;
+                        }
+                    }
+                }
+            }
+            */
+            /*
+            if (!bFoundNew && !bCurrentStillViable)
+            {
+                for (auto& Tgt : TargetUnits)
+                {
+                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
+
+                    float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->LoseSightRadius))
                     {
                         BestEntity     = Tgt.Entity;
                         BestLocation   = Tgt.Location;
                         bFoundNew      = true;
                     }
                 }
-            }
+            }*/
         }
         else
         {
@@ -336,13 +389,9 @@ void UDetectionProcessor::Execute(
         {
             Det.TargetFrag->TargetEntity.Reset();
             Det.TargetFrag->bHasValidTarget = false;
-            // UpdateMoveTarget(*Det.MoveFrag, Det.State->StoredLocation, Det.Stats->RunSpeed, World);
         }
-
-
     }
-
-    // 6) Dispatch all signals at once
+    
     if (!PendingSignals.IsEmpty() && SignalSubsystem)
     {
         TWeakObjectPtr<UMassSignalSubsystem> SubPtr = SignalSubsystem;

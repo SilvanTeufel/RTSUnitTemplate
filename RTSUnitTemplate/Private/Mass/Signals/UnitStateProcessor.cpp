@@ -1299,8 +1299,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
              AUnitBase* TargetUnitBase = AttackerUnitBase ? AttackerUnitBase->UnitToChase : nullptr;
              // Need Attacker's TargetFragment to get the TargetEntity Handle *before* the lambda
              const FMassAITargetFragment* AttackerTargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
-          	FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(Entity);
-
+ 
              // --- Prerequisites Check ---
              if (AttackerUnitBase && IsValid(TargetUnitBase) && AttackerUnitBase->UseProjectile &&
                  AttackerTargetFrag && AttackerTargetFrag->bHasValidTarget && AttackerTargetFrag->TargetEntity.IsSet())
@@ -1308,8 +1307,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // Get Entity Handles
                 FMassEntityHandle AttackerEntity = Entity;
                 FMassEntityHandle TargetEntity = AttackerTargetFrag->TargetEntity;
-
-             	const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerTargetFrag->TargetEntity);
+             	
                 // Check target entity validity *before* dispatching
                 if (!EntityManager.IsEntityValid(TargetEntity))
                 {
@@ -1329,8 +1327,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 TArray<TSubclassOf<UGameplayAbilityBase>> OffensiveAbilities = AttackerUnitBase->OffensiveAbilities;
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
 
-             	SightFragment->AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId)++;
-             	SightFragment->AttackerSightTimer = 0.f;
+
                 // --- Dispatch AsyncTask ---
                 AsyncTask(ENamedThreads::GameThread,
                    [this, AttackerEntity, TargetEntity, // Capture entity handles
@@ -1348,10 +1345,6 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     // --- Check validity ON Game Thread ---
                     if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
                     {
-
-                       // ========================================================================
-                        // /// START: ADDED DISTANCE CHECK ///
-                        // ========================================================================
                        const FTransformFragment* AttackerTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity);
 					   const FTransformFragment* TargetTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
 
@@ -1373,9 +1366,6 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 								}
 								return; // Abort the attack as target is out of range
 							}
-						// ========================================================================
-						// /// END: ADDED DISTANCE CHECK ///
-						// ========================================================================
 					   }
                     	
                         UWorld* World = StrongAttacker->GetWorld();
@@ -1427,10 +1417,6 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     		SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
                         } // End else block (TargetStats was valid)
                     } // End check Actors/Entities valid
-                    else
-                    {
-                        // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Attacker/Target Actor/Entity became invalid before post-attack logic."));
-                    }
                 }); // End AsyncTask Lambda
              } // End prerequisite check
           } // End IsValid(Actor)

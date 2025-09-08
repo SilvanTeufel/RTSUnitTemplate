@@ -121,24 +121,23 @@ void UUnitSightProcessor::Execute(
             // filter by team
             if (Det.Stats->TeamId == Tgt.Stats->TeamId) 
                 continue;
-
-            //const float DistSqr = FVector::DistSquared(Det.Location, Tgt.Location);
+            
             const float DistSqr = FVector::DistSquared2D(Det.Location, Tgt.Location);
             if (DistSqr > FMath::Square(Det.Stats->SightRadius)) 
                 continue;
-
-            // accumulate per-detector & per-team overlap counts
+            
             if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
             {
                 Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
             }
-
-            //UE_LOG(LogTemp, Log, TEXT("THIS IS IN SIGHT!"));
+            
             Tgt.Sight->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
         }
     }
 
-    // 4) Emit signals & update invisibility
+
+    int Rounds = 0;
+    
     for (auto& Detector : AllEntities)
     {
         const int32 DetectorTeamId = Detector.Stats->TeamId;
@@ -148,7 +147,7 @@ void UUnitSightProcessor::Execute(
             if (Target.Stats->TeamId == Detector.Stats->TeamId) continue;
             
             const int32 SightCount = Target.Sight->TeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
-            //UE_LOG(LogTemp, Log, TEXT("SightCount: %d"), SightCount);
+            
             if (SightCount > 0)
             {
                 PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
@@ -156,20 +155,25 @@ void UUnitSightProcessor::Execute(
             else
             {
 
-                // FOR Units that Attack
                 int32 AttackingSightCount = Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId);
-                if (AttackingSightCount > 0) Target.Sight->AttackerSightTimer += ExecutionInterval;
-
-                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer > Target.Sight->AttackerRevealTime)
-                {
-                    Target.Sight->AttackerTeamOverlapsPerTeam.FindOrAdd(DetectorTeamId)--;
-                }
                 
-                if (AttackingSightCount > 0 && Target.Sight->AttackerSightTimer <= Target.Sight->AttackerRevealTime)
+                if (AttackingSightCount > 0 )
                 {
-                    PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
+                    // 2. If so, check if this specific detector is within the TARGET's lose-sight radius.
+                    const float DistSqr = FVector::DistSquared2D(Detector.Location, Target.Location);
+                    if (DistSqr <= FMath::Square(Target.Stats->SightRadius))
+                    {
+                        // The target is revealed to this detector due to nearby combat.
+                        PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
+                    }
+                    else
+                    {
+                        // The detector is too far away to see the revealed target.
+                        PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitExitSight);
+                    }
                 }else
                 {
+                    // Not in direct sight and not revealed by combat, so this detector can't see the target.
                     PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitExitSight);
                 }
             }
@@ -184,8 +188,9 @@ void UUnitSightProcessor::Execute(
             {
                 Target.Char->bIsInvisible = true;
             }
-            // clear for next tick
         }
+
+        Rounds++;
     }
 
 
@@ -193,7 +198,7 @@ void UUnitSightProcessor::Execute(
     {
         Target.Sight->DetectorOverlapsPerTeam = Target.Sight->DetectorOverlapsPerTeam;
         Target.Sight->ConsistentTeamOverlapsPerTeam = Target.Sight->TeamOverlapsPerTeam;
-         Target.Sight->ConsistentAttackerTeamOverlapsPerTeam = Target.Sight->AttackerTeamOverlapsPerTeam;
+        Target.Sight->ConsistentAttackerTeamOverlapsPerTeam = Target.Sight->AttackerTeamOverlapsPerTeam;
         Target.Sight->TeamOverlapsPerTeam.Empty();
         Target.Sight->DetectorOverlapsPerTeam.Empty();
     }
