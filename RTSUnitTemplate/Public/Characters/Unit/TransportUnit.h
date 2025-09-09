@@ -42,10 +42,10 @@ public:
 	void UnloadAllUnits();
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
-	void LoadedUnit();
+	void LoadedUnit(int RemainingUnitCount);
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
-	void UnloadedUnit(); 
+	void UnloadedUnit(int RemainingUnitCount); 
 	
 	// Replication of properties.
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

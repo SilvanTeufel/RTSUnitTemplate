@@ -123,7 +123,6 @@ void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-
     
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -219,7 +218,7 @@ void UDetectionProcessor::Execute(
     for (auto& Det : DetectorUnits)
     {
         const float Now = World->GetTimeSeconds();
-
+        
         FMassEntityHandle BestEntity;
         FVector BestLocation = FVector::ZeroVector;
         bool bFoundNew = false;
@@ -227,7 +226,16 @@ void UDetectionProcessor::Execute(
         FVector CurrentLocation = FVector::ZeroVector;
         float DetectorSight = FMath::Square(Det.Stats->SightRadius);
         const int32 DetectorTeamId = Det.Stats->TeamId;
+
+        if (!Det.State->CanAttack)
+        {
+            Det.TargetFrag->TargetEntity.Reset();
+            Det.TargetFrag->bHasValidTarget = false;
+            continue;
+        }
+        
         InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
+   
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not allready inside
         if (!Det.TargetFrag->IsFocusedOnTarget)
         {
@@ -239,7 +247,6 @@ void UDetectionProcessor::Execute(
                 // skip friendly
                 if (Tgt.Stats->TeamId == Det.Stats->TeamId)
                     continue;
-                
 
                 // skip too‐young / too‐old
                 const float TgtAge = Now - Tgt.State->BirthTime;
@@ -274,7 +281,7 @@ void UDetectionProcessor::Execute(
                     bCurrentStillViable = true;
                 }
 
-
+                
                 if (!bFoundNew && !bCurrentStillViable)
                 {
    
@@ -288,57 +295,8 @@ void UDetectionProcessor::Execute(
                     }
                     
                 }
+                
             }
-
-            /*
-            // "Call to Arms" logic: If no target was found in sight, check for allies needing help.
-            if (!bFoundNew && !bCurrentStillViable)
-            {
-                // New variable to track the closest "assist" target. Initialize to a very large value.
-                float BestAssistDistSq = TNumericLimits<float>::Max();
-
-                for (auto& Tgt : TargetUnits)
-                {
-                    // Basic checks (don't assist against friendlies, etc.)
-                    if (Tgt.Entity == Det.Entity || Tgt.Stats->TeamId == DetectorTeamId || Tgt.Stats->Health <= 0)
-                        continue;
-                    
-                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
-
-                    // Check if an ally is attacking this target
-                    if (AttackingSightCount && *AttackingSightCount > 0)
-                    {
-                        const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
-
-                        // Is this "assist" target closer than the previous best "assist" target?
-                        if (DistSq < FMath::Square(Tgt.Stats->LoseSightRadius) && DistSq < BestAssistDistSq)
-                        {
-                            BestEntity       = Tgt.Entity;
-                            BestLocation     = Tgt.Location;
-                            bFoundNew        = true;
-                            // IMPORTANT: Update the closest distance so we can compare against it.
-                            BestAssistDistSq = DistSq;
-                        }
-                    }
-                }
-            }
-            */
-            /*
-            if (!bFoundNew && !bCurrentStillViable)
-            {
-                for (auto& Tgt : TargetUnits)
-                {
-                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
-
-                    float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->LoseSightRadius))
-                    {
-                        BestEntity     = Tgt.Entity;
-                        BestLocation   = Tgt.Location;
-                        bFoundNew      = true;
-                    }
-                }
-            }*/
         }
         else
         {

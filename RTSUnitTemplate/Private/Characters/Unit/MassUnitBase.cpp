@@ -406,6 +406,128 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 }
 
 
+bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
+{
+			FMassEntityManager* EntityManager;
+			FMassEntityHandle EntityHandle;
+			
+			if (!GetMassEntityData(EntityManager, EntityHandle))
+			{
+				// Error already logged in GetMassEntityData
+				UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+			
+				return false;
+			}
+
+			if (!EntityManager->IsEntityValid(EntityHandle))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+				return false;
+			}
+	
+				// Update the AI's stored location
+				if (FMassAIStateFragment* AiStatePtr = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+				{
+					AiStatePtr->StoredLocation = UnloadLocation;
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("UpdateEntityStateOnUnload: Entity %s does not have an FMassAIStateFragment."), *EntityHandle.DebugGetDescription());
+				}
+
+				// Update the movement target
+				if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+				{
+					MoveTarget->Center = UnloadLocation;
+				}
+                
+				// Allow the entity to move again by removing the stop tag
+				EntityManager->Defer().RemoveTag<FMassStateStopMovementTag>(EntityHandle);
+			
+	return true;
+	
+}
+
+bool AMassUnitBase::EditUnitDetection(bool HasDetection)
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	if (HasDetection)
+		EntityManager->Defer().AddTag<FMassStateDetectTag>(EntityHandle);
+	else
+		EntityManager->Defer().RemoveTag<FMassStateDetectTag>(EntityHandle);
+	
+	return true;
+}
+
+bool AMassUnitBase::EditUnitDetectable(bool IsDetectable)
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	if (!IsDetectable)
+		EntityManager->Defer().AddTag<FMassStopUnitDetectionTag>(EntityHandle);
+	else
+		EntityManager->Defer().RemoveTag<FMassStopUnitDetectionTag>(EntityHandle);
+	
+	return true;
+}
+
+bool AMassUnitBase::IsUnitDetectable()
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	
+	return !DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStopUnitDetectionTag::StaticStruct());
+}
+
 
 bool AMassUnitBase::FocusEntityTarget(AUnitBase* TargetUnit)
 {

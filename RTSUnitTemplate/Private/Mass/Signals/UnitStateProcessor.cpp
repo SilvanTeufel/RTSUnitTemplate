@@ -747,8 +747,6 @@ FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* Ta
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(TargetActor);
 	CollisionParams.AddIgnoredActors(ActorsToIgnore);
-	// Use bTraceComplex for more accurate landscape hits, but it's slightly more expensive.
-	// CollisionParams.bTraceComplex = true; 
 
 	if (World->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, CollisionParams))
 	{
@@ -845,6 +843,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         			RegisterBuildingAsObstacle(StrongUnitActor);
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
+        		
         		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
         		AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
         	}
@@ -852,7 +851,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
             if (CombatStatsFrag && AttributeSet)
             {
-                // Sicherstellen, dass GetHealth/GetShield in deinem AttributeSet existieren
                 CombatStatsFrag->Health = AttributeSet->GetHealth();
                 CombatStatsFrag->Shield = AttributeSet->GetShield();
             	CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
@@ -879,26 +877,21 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             	{
             		if (PatrolFrag->TargetWaypointLocation != StrongUnitActor->NextWaypoint->GetActorLocation())
             		{
-            			// <<< REPLACE Properties with your actual variable names >>>
 						PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
 						PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
 						PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
 						PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
 						PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
 						PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
-
-
             		}
 				}
 
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
             	{
             		
-            		bool UpdateMovement = false;
             		if (ResourceGameMode && !StrongUnitActor->Base)
             		{
             			StrongUnitActor->Base = ResourceGameMode->GetClosestBaseFromArray(StrongUnitActor, ResourceGameMode->WorkAreaGroups.BaseAreas);
-            			UpdateMovement = true;
             		}
             		
             		if (StrongUnitActor->Base && StrongUnitActor->Base->GetUnitState() != UnitData::Dead)
@@ -951,17 +944,8 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 		            {
 		            	WorkerStats->AutoMining	= false;
 		            }
-
-            		//if (UpdateMovement)
-            		{
-            			//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
-            		}
             	}
             }
-        }
-        else
-        {
-            //UE_LOG(LogTemp, Warning, TEXT("SynchronizeStatsFromActorToFragment (GameThread): Actor oder Entity %d:%d wurde ungültig vor der Synchronisation."), CapturedEntity.Index, CapturedEntity.SerialNumber);
         }
     }); // Ende AsyncTask Lambda
 }

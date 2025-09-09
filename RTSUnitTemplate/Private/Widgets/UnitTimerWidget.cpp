@@ -31,7 +31,7 @@ void UUnitTimerWidget::TimerTick()
 			if(!DisableBuild)
 			{
 				
-				IsVisible = true;
+				MyWidgetIsVisible = true;
 				AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
 
 				if(!UnitBase || !UnitBase->UnitControlTimer || !WorkingUnitBase || !WorkingUnitBase->BuildArea || !WorkingUnitBase->BuildArea->BuildTime) return;
@@ -43,7 +43,7 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	case UnitData::ResourceExtraction:
 		{
-			IsVisible = true;
+			MyWidgetIsVisible = true;
 			AWorkingUnitBase* WorkingUnitBase = Cast<AWorkingUnitBase>(OwnerCharacter);
 			TimerBar->SetPercent(UnitBase->UnitControlTimer / WorkingUnitBase->ResourceExtractionTime);
 			TimerBar->SetFillColorAndOpacity(ExtractionColor);
@@ -51,7 +51,7 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	case UnitData::Casting:
 		{
-			IsVisible = true;
+			MyWidgetIsVisible = true;
 			TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
 			TimerBar->SetFillColorAndOpacity(CastingColor);
 		}
@@ -60,7 +60,7 @@ void UUnitTimerWidget::TimerTick()
 		{
 			if(!DisableAutoAttack)
 			{
-				IsVisible = true;
+				MyWidgetIsVisible = true;
 				TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->PauseDuration);
 				TimerBar->SetFillColorAndOpacity(PauseColor);
 			}
@@ -68,15 +68,13 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	default:
 		{
-			if (UnitBase && UnitBase->CurrentUnitsLoaded > 0)
+			if (UnitBase)
 			{
-				IsVisible = true;
 				TimerBar->SetPercent(static_cast<float>(UnitBase->CurrentUnitsLoaded) / static_cast<float>(UnitBase->MaxTransportUnits));
-				//TimerBar->SetPercent(UnitBase->MaxTransportUnits / UnitBase->CurrentUnitsLoaded);
 				TimerBar->SetFillColorAndOpacity(TransportColor);
 			}else
 			{
-				IsVisible = false;
+				MyWidgetIsVisible = false;
 			}
 		}
 		break;
@@ -84,10 +82,10 @@ void UUnitTimerWidget::TimerTick()
 	
 
 
-	if(!IsVisible)
+	if(!MyWidgetIsVisible)
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Collapsed);
-	}else if(IsVisible)
+	}else
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Visible);
 	}

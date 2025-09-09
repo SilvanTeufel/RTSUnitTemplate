@@ -71,27 +71,6 @@ void AProjectile::InitISMComponent(FTransform Transform)
 	// Create a single instance for this projectile actor in its own ISM component
 	if (ISMComponent && ISMComponent->GetStaticMesh())
 	{
-		//ISMComponent->ClearInstances();
-
-		/*
-		// Create a new transform based on the actor's spawn transform, but with our custom scale.
-		FTransform NewInstanceTransform = Transform;
-		NewInstanceTransform.SetScale3D(ScaleISM); // Use the scale variable
-
-		if (InstanceIndex == INDEX_NONE)
-		{
-			// This is the first time; add a new instance.
-			InstanceIndex = ISMComponent->AddInstance(NewInstanceTransform, true);
-		}
-		else
-		{
-			FTransform MyTransform;
-			ISMComponent->GetInstanceTransform(InstanceIndex,MyTransform, true);
-			// An instance already exists; just update its transform.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, MyTransform, true, true, true);
-		}
-		*/
-
 		const FTransform LocalIdentityTransform = FTransform::Identity;
 
 		if (InstanceIndex == INDEX_NONE)
@@ -299,7 +278,6 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 	{
 		ISMComponent->UpdateInstanceTransform(InstanceIndex, NewTransform, true, false, false);
 	}
-	//SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics)
 
 	// Manually move Niagara_A, preserving its relative offset
 	if (Niagara_A)
@@ -578,6 +556,12 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
+	if (!UnitToHit->IsUnitDetectable())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("!!!Unit is not Detectable!!!!"));
+		return;
+	}
+	
 	if(UnitToHit && ShootingUnit)
 	{
 		float NewDamage = Damage;

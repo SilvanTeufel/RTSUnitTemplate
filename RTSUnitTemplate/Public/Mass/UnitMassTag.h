@@ -55,6 +55,7 @@ USTRUCT() struct FMassReachedDestinationTag : public FMassTag { GENERATED_BODY()
 USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() }; 
 
 USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() };
 
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
@@ -424,7 +425,7 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanOnlyAttackGround = true;
-
+	
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsInvisible = false;
 

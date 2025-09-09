@@ -31,12 +31,11 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 		class UProgressBar* TimerBar;
 
-	bool IsVisible = false;
 	
 public:
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool SetVisible = false;
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
+	bool MyWidgetIsVisible = false;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	FLinearColor CastingColor = FLinearColor::Red; // Replace with your desired color

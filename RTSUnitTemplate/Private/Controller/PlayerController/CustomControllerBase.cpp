@@ -410,7 +410,7 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 				{
 					Client_UpdateHUDSelection(NewSelection, SelectableTeamId);
 				},
-				1.0f,  // Delay time in seconds (change as needed)
+				0.25f,  // Delay time in seconds (change as needed)
 				false  // Do not loop
 			);
 			return true;

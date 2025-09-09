@@ -86,8 +86,20 @@ public:
 	bool SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder);
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool UpdateEntityStateOnUnload(const FVector& UnloadLocation);
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool EditUnitDetection(bool HasDetection);
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool EditUnitDetectable(bool IsDetectable);
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool FocusEntityTarget(AUnitBase* TargetUnit);
 
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool IsUnitDetectable();
+	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveFocusEntityTarget();
 	

@@ -270,21 +270,6 @@ public:
 	float EvadeDistanceChase = 150.f;
 /////////////////////////////
 
-// SelectedIcon related /////////
-	/*
-protected:
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedCharacterIcon", Keywords = "RTSUnitTemplate SelectedCharacterIcon"), Category = TopDownRTSTemplate)
-	class ASelectedIcon* SelectedIcon;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<class ASelectedIcon> SelectedIconBaseClass;
-	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SpawnSelectedIcon", Keywords = "RTSUnitTemplate SpawnSelectedIcon"), Category = TopDownRTSTemplate)
-	void SpawnSelectedIcon();
-	*/
-//////////////////////////////////////
-
-
 // Projectile related /////////
 public:
 
