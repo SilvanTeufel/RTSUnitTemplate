@@ -112,9 +112,11 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
             FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity);
             
-            const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation)+TargetCharFrag->CapsuleRadius/2.f;
-      
-                if (Dist <= Stats.AttackRange) // --- In Range ---
+            const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+
+            float AttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
+            
+                if (Dist <= AttackRange) // --- In Range ---
                 {
                     if (StateFrag.StateTimer >= Stats.PauseDuration  && !StateFrag.SwitchingState)
                     {

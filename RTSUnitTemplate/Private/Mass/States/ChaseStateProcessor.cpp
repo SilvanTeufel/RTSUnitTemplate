@@ -101,7 +101,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference. Capture World for helper functions.
         // Do NOT capture LocalSignalSubsystem directly here.
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates
@@ -148,10 +148,11 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
 
             // --- Distance Check ---
-            const float EffectiveAttackRange = Stats.AttackRange;
     
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-            
+
+            FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+            const float EffectiveAttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---

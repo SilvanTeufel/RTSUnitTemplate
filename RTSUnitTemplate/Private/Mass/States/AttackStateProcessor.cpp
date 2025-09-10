@@ -70,7 +70,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture PendingSignals by reference, DO NOT capture SignalSubsystem directly
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
+        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext) // Removed SignalSubsystem capture here
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -110,7 +110,10 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-                if (Dist <= Stats.AttackRange)
+                FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+                const float AttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
+            
+                if (Dist <= AttackRange)
                 {
                     // --- Melee Impact Check ---
                     if (StateFrag.StateTimer <= Stats.AttackDuration)
