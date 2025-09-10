@@ -1317,7 +1317,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                    [this, AttackerEntity, TargetEntity, // Capture entity handles
                     WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
-                    AttackAbilities, ThrowAbilities, OffensiveAbilities, AttackerRange]() mutable
+                    AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable // AttackerRange
                 {
                     // --- Get Strong Pointers ---
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
@@ -1334,14 +1334,16 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
 					   if (AttackerTransformFrag && TargetTransformFrag)
 					   {
-						   const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
-						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
-						   const float DistanceSquared = FVector::DistSquared(CurrentAttackerLocation, CurrentTargetLocation);
-						   const float AttackRangeSquared = AttackerRange * AttackerRange; // AttackerRange was captured
+						   //const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
+						   //const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
+						   //const float DistanceSquared = FVector::DistSquared(CurrentAttackerLocation, CurrentTargetLocation);
+
+
+							//const float AttackRangeSquared = AttackerRange * AttackerRange; // AttackerRange was captured
 		   				
 
-							if (DistanceSquared > AttackRangeSquared)
-							{
+							//if (DistanceSquared > AttackRangeSquared)
+							//{
 	      
 								FMassAIStateFragment* AttackerStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
 								if(AttackerStateFrag)
@@ -1349,12 +1351,12 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 									 AttackerStateFrag->SwitchingState = false;
 								}
 								return; // Abort the attack as target is out of range
-							}
+							//}
 					   }
                     	
                         UWorld* World = StrongAttacker->GetWorld();
                         if (!World) { return; }
-                        UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>(); // Get once
+                        //UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>(); // Get once
 
 
                         // --- Perform Core Actor Actions ---
