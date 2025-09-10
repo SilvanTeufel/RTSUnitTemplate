@@ -1317,7 +1317,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                    [this, AttackerEntity, TargetEntity, // Capture entity handles
                     WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
-                    AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable // AttackerRange
+                    AttackAbilities, ThrowAbilities, OffensiveAbilities, AttackerRange]() mutable // AttackerRange
                 {
                     // --- Get Strong Pointers ---
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
@@ -1331,19 +1331,19 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     {
                        const FTransformFragment* AttackerTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity);
 					   const FTransformFragment* TargetTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
-
-					   if (AttackerTransformFrag && TargetTransformFrag)
+                    	FMassAgentCharacteristicsFragment* TargetCharFrag = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
+					   if (AttackerTransformFrag && TargetTransformFrag && TargetCharFrag)
 					   {
-						   //const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
-						   //const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
-						   //const float DistanceSquared = FVector::DistSquared(CurrentAttackerLocation, CurrentTargetLocation);
+						   const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
+						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
+						   const float DistanceSquared = FVector::DistSquared2D(CurrentAttackerLocation, CurrentTargetLocation);
 
-
-							//const float AttackRangeSquared = AttackerRange * AttackerRange; // AttackerRange was captured
+					   		float RangeWithCapsule = AttackerRange + TargetCharFrag->CapsuleRadius/2.f;
+							const float AttackRangeSquared = FMath::Square(RangeWithCapsule); // AttackerRange was captured
 		   				
 
-							//if (DistanceSquared > AttackRangeSquared)
-							//{
+							if (DistanceSquared > AttackRangeSquared)
+							{
 	      
 								FMassAIStateFragment* AttackerStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
 								if(AttackerStateFrag)
@@ -1351,7 +1351,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 									 AttackerStateFrag->SwitchingState = false;
 								}
 								return; // Abort the attack as target is out of range
-							//}
+							}
 					   }
                     	
                         UWorld* World = StrongAttacker->GetWorld();
