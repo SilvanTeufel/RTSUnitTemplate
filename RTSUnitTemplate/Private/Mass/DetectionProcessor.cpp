@@ -90,9 +90,10 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                 FMassAIStateFragment* TgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentTargetEntity);
                 const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentTargetEntity);
                 const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CurrentTargetEntity);
+                const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(CurrentTargetEntity);
 
                 // Ensure all data is valid before adding
-                if (TgtTransformFrag && TgtState && TgtStats && TgtChar)
+                if (TgtTransformFrag && TgtState && TgtStats && TgtChar && SightFragment)
                 {
                     if (TgtStats->Health >= 0)
                     {
@@ -101,7 +102,8 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                             TgtTransformFrag->GetTransform().GetLocation(),
                             TgtState,
                             TgtStats,
-                            TgtChar
+                            TgtChar,
+                            SightFragment
                             });
                     }
                 }
@@ -162,6 +164,12 @@ void UDetectionProcessor::Execute(
         const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TgtEntity);
         const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TgtEntity);
         const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(TgtEntity);
+
+        if (!TgtTransformFrag || !TgtState || !TgtStats || !TgtChar || !SightFragment)
+        {
+            continue;
+        }
+        
         const float Age = World->GetTimeSeconds() - TgtState->BirthTime;
         if (Age < 1.f) 
             continue;
