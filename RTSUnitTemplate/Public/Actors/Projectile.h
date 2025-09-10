@@ -20,9 +20,10 @@ private:
 public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	float OverlapCheckInterval = 0.1f;
-
+	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool DebugTargetLocation = false;
+	
 	// Sets default values for this actor's properties
 	AProjectile();
 
@@ -103,15 +104,7 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RotationSpeed = FVector(0.5f);
-
-	/*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UStaticMeshComponent* Mesh_A;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UStaticMeshComponent* Mesh_B;
-	*/
-
+	
 	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void Multicast_UpdateISMTransform(const FTransform& NewTransform);
 	
@@ -138,12 +131,6 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ScaleImpactSound = 1.f;
-
-	
-	//UStaticMeshComponent* GetMesh(){ return Mesh_A; };
-	
-	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	//UMaterialInterface* Material;
 
 	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Damage;

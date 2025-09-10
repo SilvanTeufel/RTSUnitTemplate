@@ -33,15 +33,20 @@
 void ARTSGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
-	
 
 	FillUnitArrays();
 
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+
+	FTimerHandle TimerHandleStartDataTable;
+	GetWorldTimerManager().SetTimer(TimerHandleStartDataTable, this, &ARTSGameModeBase::DataTableTimerStart, GatherControllerTimer+5.f, false);
 	
+}
+
+void ARTSGameModeBase::DataTableTimerStart()
+{
+	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
 }
 
 void ARTSGameModeBase::NavInitialisation()
@@ -80,26 +85,11 @@ void ARTSGameModeBase::NavInitialisation()
                     UE_LOG(LogTemp, Warning, TEXT("Pawn does not implement INavAgentInterface."));
                     return;
                 }
-                /*
-                // Create a new instance of the navigation query filter.
-                UNavigationQueryFilter* NavQueryFilterObj = NewObject<UNavigationQueryFilter>(this, UNavigationQueryFilter::StaticClass());
-                if (!NavQueryFilterObj)
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Failed to create a navigation query filter object."));
-                    return;
-                }*/
-
-                // Call the non-static GetQueryFilter member function with the required parameters.
-               // FSharedConstNavQueryFilter QueryFilter = NavQueryFilterObj->GetQueryFilter(*NavData, this);
 
 
             	// Create a default query filter
             	FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
-
-            	// Construct the pathfinding query.
-            	// Note: The first parameter (QueryUser) is often your pawn or actor.
             	
-
             	
                 // Now create the dummy pathfinding query with the proper parameters.
                 FPathFindingQuery DummyQuery(*NavAgent, *NavData, PointA.Location, PointB.Location, QueryFilter);
@@ -387,15 +377,6 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 							// Now call SpawnUnits_Implementation with all the parameters
 							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase);
 						};
-						/*
-						// Use SpawnParameter by value in the lambda
-						auto TimerCallback = [WeakThis, SpawnParameter, Location, UnitToChase]()
-						{
-							// Check if the GameMode is still valid
-							if (!WeakThis.IsValid()) return;
-
-							WeakThis->SpawnUnits_Implementation(SpawnParameter, Location, UnitToChase, 0, nullptr, 0, nullptr, -1);
-						};*/
 					
 						FTimerHandle TimerHandle;
 						//SpawnTimerHandles.Add(TimerHandle);

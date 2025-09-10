@@ -602,7 +602,8 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     bool IsBouncingBack,
     bool DisableAutoZOffset,
     float ZOffset,
-    float Scale
+    float Scale,
+    FVector SpawnOffset
 )
 {
     if (!Aim || !Attacker || !ProjectileClass) return;
@@ -643,7 +644,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             SpawnXf.SetLocation(
             ShootingUnitLocation
                 + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
-                + ProjectileSpawnOffset
+                + ProjectileSpawnOffset + SpawnOffset
             );
 
             const FVector Dir          = (LocationToShoot - ShootingUnitLocation).GetSafeNormal();

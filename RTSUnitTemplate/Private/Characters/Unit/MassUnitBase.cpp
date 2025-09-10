@@ -448,6 +448,36 @@ bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
 	
 }
 
+
+
+bool AMassUnitBase::ResetTarget()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+			
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+			
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	if (FMassAITargetFragment* TargetFrag = EntityManager->GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle))
+	{
+		TargetFrag->TargetEntity.Reset();
+		TargetFrag->bHasValidTarget = false;
+		return true;
+	}
+
+	return false;
+}
+
 bool AMassUnitBase::EditUnitDetection(bool HasDetection)
 {
 

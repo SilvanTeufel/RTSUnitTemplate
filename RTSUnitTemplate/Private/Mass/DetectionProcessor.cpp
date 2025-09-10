@@ -178,7 +178,6 @@ void UDetectionProcessor::Execute(
                 TgtEntity,
                 TgtTransformFrag->GetTransform().GetLocation(),
                 TgtState,
-                //AiTgtFrag,
                 TgtStats,
                 TgtChar,
                 SightFragment

@@ -56,6 +56,9 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	virtual void BeginPlay() override;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DataTableTimerStart();
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool PathfindingIsRdy = false;
 

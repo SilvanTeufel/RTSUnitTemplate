@@ -89,6 +89,9 @@ public:
 	bool UpdateEntityStateOnUnload(const FVector& UnloadLocation);
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool ResetTarget();
+	
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool EditUnitDetection(bool HasDetection);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)

@@ -36,12 +36,6 @@ AProjectile::AProjectile()
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(SceneRoot);
 	
-	// Collision settings for Mesh
-	//Mesh_A->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	//Mesh_A->SetCollisionProfileName(TEXT("Trigger"));
-	//Mesh_A->SetGenerateOverlapEvents(true);
-
-	// Optionally, initialize Niagara properties here
 	SceneRoot->SetVisibility(false, true);
 
 	bReplicates = true;
@@ -71,8 +65,8 @@ void AProjectile::InitISMComponent(FTransform Transform)
 	// Create a single instance for this projectile actor in its own ISM component
 	if (ISMComponent && ISMComponent->GetStaticMesh())
 	{
-		const FTransform LocalIdentityTransform = FTransform::Identity;
-
+		FTransform LocalIdentityTransform = FTransform::Identity;
+		
 		if (InstanceIndex == INDEX_NONE)
 		{
 			// Add a new instance at the component's local origin.
@@ -100,11 +94,9 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 	{
 		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 		{
-
 			TargetLocation = UnitTarget->GetMassActorLocation();
 		}
 	}
-	
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	if(ShootingUnit)
@@ -140,7 +132,6 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		}
 		else
 		{
-			// Non‐unit targets just give their root location
 			TargetLocation = Target->GetActorLocation();
 		}
 	}
@@ -558,7 +549,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 
 	if (!UnitToHit->IsUnitDetectable())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("!!!Unit is not Detectable!!!!"));
+		ShootingUnit->ResetTarget();
 		return;
 	}
 	
