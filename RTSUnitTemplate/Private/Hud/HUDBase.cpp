@@ -112,7 +112,7 @@ void AHUDBase::DrawHUD()
              const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
              
              // Filter for units that are selectable and use skeletal movement
-             if(Controller && Unit && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
+             if(Controller && Unit && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
              {
                 // Get the unit's center location in the world
                 const FVector UnitWorldLocation = Unit->GetActorLocation();
@@ -161,7 +161,7 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
         AUnitBase* Unit = *It;
     	//AUnitBase* Unit = FriendlyUnits[i];
     	
-        if (Unit->bUseSkeletalMovement || Unit->TeamId != Controller->SelectableTeamId)
+        if (Unit->bUseSkeletalMovement || Unit->TeamId != Controller->SelectableTeamId || !Unit->CanBeSelected)
             continue;
 
     	//UE_LOG(LogTemp, Error, TEXT("Unit '%s': TeamId=%d"), *Unit->GetName(), CombatStats->TeamId);

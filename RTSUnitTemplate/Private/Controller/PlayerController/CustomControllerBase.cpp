@@ -395,10 +395,12 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 		AActor* HitActor = Hit_Pawn.GetActor();
 		
 		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
-
-		LoadUnitsMass(SelectedUnits, UnitBase);
+	
+		if (!UnitBase || !UnitBase->CanBeSelected) return false;
 	
 		if (UnitBase && UnitBase->IsATransporter){
+			LoadUnitsMass(SelectedUnits, UnitBase);
+			
 			UnitBase->RemoveFocusEntityTarget();
 			TArray<AUnitBase*> NewSelection;
 
@@ -809,7 +811,7 @@ void ACustomControllerBase::LeftClickPressedMass()
             AUnitBase* HitUnit = Cast<AUnitBase>(HitActor);
             ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
 
-            if (HitUnit && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
+            if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
             {
             	if (IsCtrlPressed)
             	{

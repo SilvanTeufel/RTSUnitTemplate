@@ -343,10 +343,31 @@ void AProjectile::Tick(float DeltaTime)
 	}
 	if(LifeTime > MaxLifeTime && !FollowTarget)
 	{
+		if (Shooter && Target)
+		{
+			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
+			if (!UnitToHit->IsUnitDetectable())
+			{
+				ShootingUnit->ResetTarget();
+				ShootingUnit->UnitToChase = nullptr;
+				return;
+			}
+		}
 		Destroy(true, false);
 	}else if(LifeTime > MaxLifeTime && FollowTarget)
 	{
-		//Impact(Target);
+		if (Shooter && Target)
+		{
+			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
+			if (!UnitToHit->IsUnitDetectable())
+			{
+				ShootingUnit->ResetTarget();
+				ShootingUnit->UnitToChase = nullptr;
+				return;
+			}
+		}
 		Destroy(true, false);
 	}else if(Target)
 	{
@@ -550,6 +571,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	if (!UnitToHit->IsUnitDetectable())
 	{
 		ShootingUnit->ResetTarget();
+		ShootingUnit->UnitToChase = nullptr;
 		return;
 	}
 	
@@ -601,6 +623,13 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
+	
+	if (!UnitToHit->IsUnitDetectable())
+	{
+		ShootingUnit->ResetTarget();
+		ShootingUnit->UnitToChase = nullptr;
+		return;
+	}
 	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
 	if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
 	{

@@ -20,6 +20,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool IsInitialized = true;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool CanBeSelected = true;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void BindTransportOverlap();
@@ -72,15 +75,10 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	float InstantLoadRange = 300.f;
-
-	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
-	FVector VoidLocation = FVector(-50000.f, -50000.f, -50000.f);
-
-
+	
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	FVector UnloadOffset = FVector(0.f, 0.f, 100.f);
-
-
+	
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	float UnloadVariationMin = 100.f;
 

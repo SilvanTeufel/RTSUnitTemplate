@@ -68,9 +68,13 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
+		UnitToLoad->CanAttack = false;
+		UnitToLoad->IsInitialized = false;
+		UnitToLoad->CanActivateAbilities = false;
+		UnitToLoad->CanBeSelected = false;
 		UnitToLoad->AddStopMovementTagToEntity();
 		UnitToLoad->SetCollisionAndVisibility(false);
-		UnitToLoad->SetActorLocation(VoidLocation);
+		UnitToLoad->SetActorLocation(GetMassActorLocation());
 		UnitToLoad->EnableDynamicObstacle(false);
 		UnitToLoad->EditUnitDetectable(false);
 		
@@ -105,7 +109,7 @@ void ATransportUnit::UnloadNextUnit()
 {
 	if (LoadedUnits.Num() > 0)
 	{
-		ATransportUnit* LoadedUnit = LoadedUnits[0];
+		AUnitBase* LoadedUnit = Cast<AUnitBase>(LoadedUnits[0]);
 		
 		if (LoadedUnit)
 		{
@@ -152,6 +156,10 @@ void ATransportUnit::UnloadNextUnit()
 			LoadedUnit->SetCollisionAndVisibility(true);
 			LoadedUnit->UpdateEntityStateOnUnload(FinalUnloadLocation);
 			LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
+			LoadedUnit->CanAttack = true;
+			LoadedUnit->IsInitialized = true;
+			LoadedUnit->CanActivateAbilities = true;
+			LoadedUnit->CanBeSelected = true;
 		}
 		
 		LoadedUnits.RemoveAt(0);
@@ -173,6 +181,7 @@ void ATransportUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATransportUnit, MaxTransportUnits);
 	DOREPLIFETIME(ATransportUnit, LoadedUnits);
 	DOREPLIFETIME(ATransportUnit, IsInitialized);
+	DOREPLIFETIME(ATransportUnit, CanBeSelected);
 	DOREPLIFETIME(ATransportUnit, InstantLoadRange);
 	DOREPLIFETIME(ATransportUnit, RdyForTransport);
 	DOREPLIFETIME(ATransportUnit, IsATransporter);

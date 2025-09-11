@@ -156,7 +156,7 @@ bool AMassUnitBase::EnableDynamicObstacle(bool Enable)
 		return false;
 	}
 
-	if (Enable)
+	if (!Enable)
 	{
 		EntityManager->Defer().AddTag<FMassStateDisableObstacleTag>(EntityHandle);
 	}
