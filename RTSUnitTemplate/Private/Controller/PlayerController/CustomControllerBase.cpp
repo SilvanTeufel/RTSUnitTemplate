@@ -370,8 +370,9 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 					}
 				}
 			}
-			
-			SetUnitState_Replication(Transporter,0);
+
+			if (Transporter->GetUnitState() != UnitData::Casting)
+				SetUnitState_Replication(Transporter,0);
 
 		}else
 		{
@@ -621,7 +622,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 			else
 			{
 				ABuildingBase* BuildingBase = Cast<ABuildingBase>(U);
-				if (!BuildingBase || !BuildingBase->HasWaypoint)
+				if (!BuildingBase || (!BuildingBase->HasWaypoint && BuildingBase->CancelsAbilityOnRightClick))
 					CancelCurrentAbility(U);
 			}
     	}
