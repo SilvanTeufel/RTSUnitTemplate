@@ -69,6 +69,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool EnableDynamicObstacle(bool Enable);
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetUnitAvoidanceEnabled(bool bEnable);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveStopGameplayEffectTagToEntity();

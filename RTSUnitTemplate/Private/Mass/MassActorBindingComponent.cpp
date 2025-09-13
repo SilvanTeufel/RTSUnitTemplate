@@ -208,7 +208,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
 		FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
-    
     	
 		FMassAIStateFragment::StaticStruct(),
     	FMassSightFragment::StaticStruct(),

@@ -5,6 +5,7 @@
 #include "MassExecutionContext.h"
 #include "MassCommonTypes.h"
 #include "MassNavigationFragments.h"
+#include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
 
 
@@ -40,14 +41,8 @@ void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
     ObstacleQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
     ObstacleQuery.AddTagRequirement<FMassStateDisableObstacleTag>(EMassFragmentPresence::None);
-	//ObstacleQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);  // READ the target location/speed
-	//ObstacleQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite); // WRITE desired velocity
-	//ObstacleQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite);
-	//ObstacleQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-
-	// Add a tag requirement if you only want to register specific entities
-	// ObstacleQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	ObstacleQuery.RegisterWithProcessor(*this);
+    
 }
 // --- Main Execution ---
 

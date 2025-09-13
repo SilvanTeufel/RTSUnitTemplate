@@ -168,6 +168,28 @@ bool AMassUnitBase::EnableDynamicObstacle(bool Enable)
 	return true;
 }
 
+bool AMassUnitBase::SetUnitAvoidanceEnabled(bool bEnable)
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle) || !EntityManager->IsEntityValid(EntityHandle))
+		return false;
+
+	auto& Defer = EntityManager->Defer();
+
+	if (bEnable)
+	{
+		Defer.RemoveTag<FMassDisableAvoidanceTag>(EntityHandle);
+	}
+	else
+	{
+		Defer.AddTag<FMassDisableAvoidanceTag>(EntityHandle);
+	}
+
+	return true;
+}
+
 bool AMassUnitBase::RemoveStopGameplayEffectTagToEntity()
 {
 	FMassEntityManager* EntityManager;
