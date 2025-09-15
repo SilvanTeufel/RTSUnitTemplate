@@ -89,7 +89,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || (!TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState))
             {
                   // Queue signal instead of sending directly
                   UpdateMoveTarget(

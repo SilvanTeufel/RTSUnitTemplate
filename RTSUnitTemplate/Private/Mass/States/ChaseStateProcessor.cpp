@@ -133,7 +133,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 continue;
             }
             
-            if (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState )
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 // Queue signal instead of sending directly
                 UpdateMoveTarget(

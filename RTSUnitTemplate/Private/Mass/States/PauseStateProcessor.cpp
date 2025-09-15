@@ -92,7 +92,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                TargetFrag.bHasValidTarget = false;
             }
             
-            if (!TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
                 SightFrag.AttackerTeamOverlapsPerTeam.Empty();
                 UpdateMoveTarget(

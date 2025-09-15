@@ -68,7 +68,7 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	default:
 		{
-			if (UnitBase)
+			if (UnitBase && UnitBase->IsATransporter)
 			{
 				TimerBar->SetPercent(static_cast<float>(UnitBase->CurrentUnitsLoaded) / static_cast<float>(UnitBase->MaxTransportUnits));
 				TimerBar->SetFillColorAndOpacity(TransportColor);
