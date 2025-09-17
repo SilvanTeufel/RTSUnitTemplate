@@ -23,7 +23,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool DebugTargetLocation = false;
-	
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Movement")
+	float ArcHeight = 0.f;
 	// Sets default values for this actor's properties
 	AProjectile();
 
@@ -71,6 +73,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool UseAttributeDamage = true;
+
+	UPROPERTY(Replicated)
+	TArray<TObjectPtr<AActor>> PiercedActors;
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "Target", Keywords = "RTSUnitTemplate Target"), Category = RTSUnitTemplate)
 	AActor* Target;
@@ -164,7 +169,13 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	
+	void InitArc(FVector ArcBeginLocation);
 
+	FVector ArcStartLocation;
+	float ArcTotalDistance;
+	float ArcTravelTime = 0.f;
+	
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -182,10 +193,13 @@ public:
 	float CollisionRadius = 0.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void FlyToUnitTarget();
+	void FlyToUnitTarget(float DeltaSeconds);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void FlyToLocationTarget(float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void FlyInArc(float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate) //UFUNCTION(Server, Reliable)
 	void Impact(AActor* ImpactTarget);

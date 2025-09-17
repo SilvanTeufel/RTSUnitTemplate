@@ -114,6 +114,8 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 			ShootingUnit->ISMComponent->GetInstanceTransform( ShootingUnit->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
 			ShooterLocation = InstanceXform.GetLocation();
 		}
+		
+		InitArc(ShooterLocation);
 	}
 	
 }
@@ -147,6 +149,8 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		UseAttributeDamage = false;
 		TeamId = ShootingUnit->TeamId;
 	}
+
+	InitArc(ShooterLocation);
 	
 }
 
@@ -193,7 +197,7 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 		return;
 	}
 
-
+	InitArc(ShooterLocation);
 	bIsInitialized = true;
 }
 
@@ -219,11 +223,19 @@ void AProjectile::BeginPlay()
 	SetReplicateMovement(true);
 }
 
+void AProjectile::InitArc(FVector ArcBeginLocation)
+{
+	if (ArcHeight <= 0.f) return;
+
+	ArcStartLocation = ArcBeginLocation; // <<< ADD THIS
+}
+
 void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AProjectile, Target);
 	DOREPLIFETIME(AProjectile, Shooter);
+	DOREPLIFETIME(AProjectile, ArcHeight);
 
 	DOREPLIFETIME(AProjectile, ImpactSound);
 	DOREPLIFETIME(AProjectile, ImpactVFX);
@@ -248,6 +260,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, BouncedBack);
 	DOREPLIFETIME(AProjectile, ProjectileEffect); // Added for Build
 	DOREPLIFETIME(AProjectile, UseAttributeDamage);
+	DOREPLIFETIME(AProjectile, PiercedActors);
 
 	DOREPLIFETIME(AProjectile, ScaleImpactVFX);
 	DOREPLIFETIME(AProjectile, ScaleImpactSound);
@@ -369,9 +382,13 @@ void AProjectile::Tick(float DeltaTime)
 			}
 		}
 		Destroy(true, false);
+	}
+	else if (ArcHeight > 0.f)
+	{
+		FlyInArc(DeltaTime);
 	}else if(Target)
 	{
-		FlyToUnitTarget();
+		FlyToUnitTarget(DeltaTime);
 	}else
 	{
 		FlyToLocationTarget(DeltaTime);
@@ -407,7 +424,7 @@ bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
 }
 
 
-void AProjectile::FlyToUnitTarget()
+void AProjectile::FlyToUnitTarget(float DeltaSeconds)
 {
     if (!HasAuthority()) return;
 
@@ -439,7 +456,7 @@ void AProjectile::FlyToUnitTarget()
 
 
     // --- 3. Calculate this frame's movement ---
-    const float FrameSpeed = MovementSpeed * GetWorld()->GetDeltaSeconds() * 10.f; // The * 10.f is very fast, ensure this is intended.
+    const float FrameSpeed = MovementSpeed * DeltaSeconds * 10.f; // The * 10.f is very fast, ensure this is intended.
     const FVector FrameMovement = FlightDirection * FrameSpeed;
 
 
@@ -454,7 +471,6 @@ void AProjectile::FlyToUnitTarget()
     if (Distance <= FrameSpeed + CollisionRadius)
     {
        Impact(Target);
-       Destroy(true, false);
     }
 }
 
@@ -483,7 +499,6 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 	}
 	
     const FVector FrameMovement = FlightDirection * MovementSpeed * GetWorld()->GetDeltaSeconds() * 10.f;
-
     // The potential new location after this frame's movement
     const FVector EndLocation = CurrentLocation + FrameMovement;
 
@@ -561,9 +576,111 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
     }
 }
 
+
+void AProjectile::FlyInArc(float DeltaTime)
+{
+    if (!HasAuthority()) return;
+
+    // --- 1. Get the current instance transform ---
+    FTransform CurrentTransform;
+    if (!ISMComponent || !ISMComponent->IsValidInstance(InstanceIndex))
+    {
+        return; // Safety check
+    }
+    ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/ true);
+
+    // --- 2. Update target location if it's a moving target ---
+    if (FollowTarget && Target)
+    {
+        if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
+        {
+            if (UnitTarget->GetUnitState() != UnitData::Dead)
+            {
+                TargetLocation = UnitTarget->GetMassActorLocation();
+            }
+        }
+    }
+
+    // --- 3. Calculate Arc Progression ---
+    const float TotalDistance = FVector::Dist(ArcStartLocation, TargetLocation);
+    // Avoid division by zero if speed is not set
+    const float TotalTravelTime = MovementSpeed > 0 ? TotalDistance / MovementSpeed : 1.0f;
+
+    ArcTravelTime += DeltaTime*10.f; // The * 10.f matches your existing movement speed multiplier
+
+    // Alpha is our progress along the arc, from 0.0 to 1.0
+    const float Alpha = FMath::Clamp(ArcTravelTime / TotalTravelTime, 0.f, 1.f);
+
+    // --- 4. Calculate the new position ---
+    // The X and Y position is a simple linear interpolation between start and end
+    FVector NewLocation = FMath::Lerp(ArcStartLocation, TargetLocation, Alpha);
+
+    // The Z position is offset by a sine wave to create the arc
+    // Sin(0) = 0, Sin(PI/2) = 1 (peak), Sin(PI) = 0 (end)
+    float ZOffset = FMath::Sin(Alpha * PI) * ArcHeight;
+    NewLocation.Z += ZOffset;
+    
+    FTransform NewTransform = CurrentTransform;
+    NewTransform.SetLocation(NewLocation);
+
+    // --- 5. Make the projectile look towards its flight path ---
+    if (Alpha < 0.99f) // Don't update rotation at the very end to prevent weird flips
+    {
+        FVector Direction = (NewLocation - CurrentTransform.GetLocation()).GetSafeNormal();
+        if (!Direction.IsNearlyZero())
+        {
+            NewTransform.SetRotation(Direction.Rotation().Quaternion());
+        }
+    }
+
+	OverlapCheckTimer += DeltaTime;
+	if (OverlapCheckTimer >= OverlapCheckInterval)
+	{
+		OverlapCheckTimer = 0.f;
+		TArray<AActor*> ActorsToIgnore;
+		ActorsToIgnore.Add(this);
+		ActorsToIgnore.Add(Shooter);
+
+		TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+		ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+       
+		TArray<AActor*> OutActors;
+		UKismetSystemLibrary::SphereOverlapActors(
+		   GetWorld(),
+		   NewLocation, // Check at the new location
+		   CollisionRadius,
+		   ObjectTypesToQuery,
+		   nullptr,
+		   ActorsToIgnore,
+		   OutActors
+		);
+
+		for (AActor* HitActor : OutActors)
+		{
+			Impact(HitActor);
+			return; // Exit the function early since the projectile is destroyed.
+		}
+	}
+	
+    // --- 6. Update and Replicate Transform ---
+    Multicast_UpdateISMTransform(NewTransform);
+
+    // --- 7. Check for Impact ---
+    // Impact happens when the arc is complete (Alpha is 1.0)
+    if (Alpha >= 1.0f)
+    {
+    	DestroyProjectileWithDelay();
+    }
+}
+
 void AProjectile::Impact(AActor* ImpactTarget)
 {
 	if (!HasAuthority()) return;
+
+	if (PiercedActors.Contains(ImpactTarget))
+	{
+		return;
+	}
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
@@ -577,6 +694,8 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	
 	if(UnitToHit && ShootingUnit)
 	{
+		PiercedActors.Add(ImpactTarget);
+		
 		float NewDamage = Damage;
 		if (UseAttributeDamage)
 		{
@@ -612,6 +731,35 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
+
+
+		bool bShouldPierceAndContinue = PiercedTargets < MaxPiercedTargets -1 && !IsBouncingNext && !IsBouncingBack;
+
+		if (bShouldPierceAndContinue && (Target == ImpactTarget || Target == nullptr))
+		{
+			FTransform CurrentTransform;
+			if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+			{
+				ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
+			}
+			else
+			{
+				CurrentTransform = GetActorTransform();
+			}
+			
+			const FVector CurrentLocation = CurrentTransform.GetLocation();
+			FVector NewDirection = FVector(FlightDirection.X, FlightDirection.Y, 0.0f);
+			TargetLocation = CurrentLocation + NewDirection * 10000.f;
+
+
+			if (Target != nullptr)
+			{
+				Target = nullptr;
+				bIsInitialized = true;
+			}
+			
+		}
+		
 		DestroyWhenMaxPierced();
 	}			
 }
@@ -730,7 +878,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			ImpactEvent();
 			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
-			DestroyProjectileWithDelay();
+			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && IsHealing)
 		{
 			ImpactEvent();
@@ -739,7 +887,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			ImpactEvent();
 			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
-			DestroyProjectileWithDelay();
+			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
 			ImpactEvent();
