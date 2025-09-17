@@ -558,7 +558,7 @@ bool AMassUnitBase::EditUnitDetectable(bool IsDetectable)
 
 bool AMassUnitBase::IsUnitDetectable()
 {
-
+	
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 	
@@ -833,9 +833,11 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 
 bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle)
 {
+
+	
 	OutEntityManager = nullptr;
 	OutEntityHandle.Reset();
-
+	
 	const UWorld* World = GetWorld();
 	if (!World)
 	{

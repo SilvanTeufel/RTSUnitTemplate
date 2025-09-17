@@ -16,6 +16,18 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 {
 	GENERATED_BODY()
 	
+	public:
+	UFUNCTION(Server, Reliable)
+	void Server_TravelToMap(const FString& MapName);
+
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_UpdateCameraUnitMovement(AUnitBase* Unit, const FVector& TargetLocation);
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
+
+
 	ACameraControllerBase();
 
 public:

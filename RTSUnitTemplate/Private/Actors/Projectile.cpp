@@ -360,7 +360,8 @@ void AProjectile::Tick(float DeltaTime)
 		{
 			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
-			if (!UnitToHit->IsUnitDetectable())
+	
+			if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 			{
 				ShootingUnit->ResetTarget();
 				ShootingUnit->UnitToChase = nullptr;
@@ -374,7 +375,7 @@ void AProjectile::Tick(float DeltaTime)
 		{
 			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
-			if (!UnitToHit->IsUnitDetectable())
+			if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 			{
 				ShootingUnit->ResetTarget();
 				ShootingUnit->UnitToChase = nullptr;
@@ -685,7 +686,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
-	if (!UnitToHit->IsUnitDetectable())
+	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
 		ShootingUnit->ResetTarget();
 		ShootingUnit->UnitToChase = nullptr;
@@ -772,7 +773,7 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 	
-	if (!UnitToHit->IsUnitDetectable())
+	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
 		ShootingUnit->ResetTarget();
 		ShootingUnit->UnitToChase = nullptr;

@@ -1,5 +1,54 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "Characters/Unit/UnitBase.h" // Include UnitBase for the RPC
+
+
+bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(AUnitBase* Unit, const FVector& TargetLocation)
+{
+	return Unit != nullptr;
+}
+
+void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(AUnitBase* Unit, const FVector& TargetLocation)
+{
+	if (!Unit || !Unit->Attributes) return;
+
+
+	if (Unit->GetUnitState() != UnitData::Casting)
+	{
+
+        	
+		if (CameraUnitWithTag)
+		{
+			bool bNavMod = false;
+			FVector ValidatedLocation = TraceRunLocation(TargetLocation, bNavMod); // Projiziert die Position auf das Navmesh/den Boden.
+
+			if (bNavMod)
+			{
+				// Position ist ungültig, keine Bewegung ausführen.
+				return;
+			}
+
+			//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
+			const float Speed = Unit->Attributes->GetBaseRunSpeed();
+			CorrectSetUnitMoveTarget(GetWorld(), Unit, ValidatedLocation, Speed, 40.f);
+		}
+	}
+}
+
+
+void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& MapName)
+{
+	// This code now runs on the SERVER
+	if (HasAuthority())
+	{
+		if (!MapName.IsEmpty())
+		{
+			GetWorld()->ServerTravel(MapName);
+		}
+	}
+}
 #include "AIController.h"
 #include "Actors/AutoCamWaypoint.h"
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
@@ -933,9 +982,25 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 {
 	if( SelectedUnits.Num() && SelectedUnits[Index])
 	{
-		FVector SelectedActorLocation = SelectedUnits[Index]->GetActorLocation();
-		
-		CameraBase->LockOnUnit(SelectedUnits[Index]);
+		AUnitBase* TargetUnit = SelectedUnits[Index];
+		FVector TargetLocation = TargetUnit->GetActorLocation();
+
+		// --- Interpolation Logic ---
+		if(CameraBase)
+		{
+			const float DeltaTime = GetWorld()->GetDeltaSeconds();
+			const float InterpSpeed = 5.0f; // Adjust this value for faster or slower interpolation
+
+			// Calculate the desired camera position (you might want to adjust the Z value or add an offset)
+			FVector DesiredCameraLocation = FVector(TargetLocation.X, TargetLocation.Y, CameraBase->GetActorLocation().Z);
+
+			// Interpolate the camera's current location to the desired location smoothly
+			FVector NewCameraLocation = FMath::VInterpTo(CameraBase->GetActorLocation(), DesiredCameraLocation, DeltaTime, InterpSpeed);
+
+			CameraBase->SetActorLocation(NewCameraLocation);
+		}
+		// --- End Interpolation Logic ---
+
 
 		if(ScrollZoomCount > 0.f)
 		{
@@ -1137,17 +1202,14 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	if(CameraBase->CurrentCamSpeed.X == 0.0f && SIsPressedState == 2) SIsPressedState = 0;
         	if(CameraBase->CurrentCamSpeed.Y == 0.0f && DIsPressedState == 2) DIsPressedState = 0;
         	if(CameraBase->CurrentCamSpeed.Y == 0.0f && AIsPressedState == 2) AIsPressedState = 0;
-
-
-        	if (CameraUnitWithTag->GetUnitState() != UnitData::Casting)
-        	{
-        		const bool bIsIdle = (CameraBase->CurrentCamSpeed.Size() <= 0.1f);
-        		
-        		UnitData::EState NewState = bIsIdle ? UnitData::Idle : UnitData::Run;
-        		CameraUnitWithTag->SetUnitState(NewState);
         	
-        		MoveCameraUnit();
-        	}
+        		const FVector MoveTargetLocation = GetPawn()->GetActorLocation();
+        	
+        		if (!MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
+        		{
+        			LastCameraUnitMovementLocation = MoveTargetLocation;
+        			Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);
+        		}
         	
         	if (ScrollZoomCount > 0.f)
             {

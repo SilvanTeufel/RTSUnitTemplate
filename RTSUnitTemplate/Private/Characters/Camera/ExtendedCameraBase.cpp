@@ -799,10 +799,9 @@ void AExtendedCameraBase::HandleState_MoveW_NoStrg(ACameraControllerBase* Camera
 
 void AExtendedCameraBase::HandleState_StopMoveW_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
-    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
-
-	//CameraControllerBase->CameraUnitTimer = 100.f;
+    //if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+    	//CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
+	
     CameraControllerBase->WIsPressedState = 2;
 }
 
@@ -810,7 +809,6 @@ void AExtendedCameraBase::HandleState_MoveS_NoStrg(ACameraControllerBase* Camera
 {
     CameraControllerBase->SIsPressedState = 1;
     CameraControllerBase->LockCameraToUnit = false;
-	//CameraControllerBase->CameraUnitTimer = 100.f;
 
     if (GetCameraState() != CameraData::LockOnCharacterWithTag)
         SetCameraState(CameraData::MoveWASD);
@@ -819,10 +817,9 @@ void AExtendedCameraBase::HandleState_MoveS_NoStrg(ACameraControllerBase* Camera
 void AExtendedCameraBase::HandleState_StopMoveS_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
 
-    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
-
-	//CameraControllerBase->CameraUnitTimer = 100.f;
+    //if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+    	//CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
+	
     CameraControllerBase->SIsPressedState = 2;
 }
 
@@ -831,7 +828,6 @@ void AExtendedCameraBase::HandleState_MoveA_NoStrg(ACameraControllerBase* Camera
 
     CameraControllerBase->AIsPressedState = 1;
     CameraControllerBase->LockCameraToUnit = false;
-	//CameraControllerBase->CameraUnitTimer = 100.f;
 	
     if (GetCameraState() != CameraData::LockOnCharacterWithTag)
         SetCameraState(CameraData::MoveWASD);
@@ -839,10 +835,9 @@ void AExtendedCameraBase::HandleState_MoveA_NoStrg(ACameraControllerBase* Camera
 
 void AExtendedCameraBase::HandleState_StopMoveA_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
-    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
-
-	//CameraControllerBase->CameraUnitTimer = 100.f;
+    //if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+    	//CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
+	
     CameraControllerBase->AIsPressedState = 2;
 }
 
@@ -859,8 +854,8 @@ void AExtendedCameraBase::HandleState_MoveD_NoStrg(ACameraControllerBase* Camera
 
 void AExtendedCameraBase::HandleState_StopMoveD_NoStrg(ACameraControllerBase* CameraControllerBase)
 {
-    if (GetCameraState() == CameraData::LockOnCharacterWithTag)
-    	CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
+    //if (GetCameraState() == CameraData::LockOnCharacterWithTag)
+    	//CameraControllerBase->SetUnitState_Replication( CameraControllerBase->CameraUnitWithTag, 0);
 
 	//CameraControllerBase->CameraUnitTimer = 100.f;
     CameraControllerBase->DIsPressedState = 2;

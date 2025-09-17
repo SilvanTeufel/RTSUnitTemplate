@@ -642,7 +642,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         auto* U = P.Key;
         FVector Loc = P.Value;
         if (!U || U == CameraUnitWithTag || U->UnitState == UnitData::Dead) continue;
-
+    	
         bool bNavMod;
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue;
