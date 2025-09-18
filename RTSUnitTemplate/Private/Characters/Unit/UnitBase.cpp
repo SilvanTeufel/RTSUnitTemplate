@@ -14,7 +14,6 @@
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GameInstances/CollisionManager.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "Navigation/CrowdAgentInterface.h"

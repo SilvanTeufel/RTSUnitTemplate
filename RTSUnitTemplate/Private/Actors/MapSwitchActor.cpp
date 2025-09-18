@@ -8,6 +8,7 @@
 #include "Widgets/MapSwitchWidget.h" // Include the widget header
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "System/MapSwitchSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "MapSwitchActor"
 
@@ -32,6 +33,11 @@ AMapSwitchActor::AMapSwitchActor()
     MarkerDisplayText = LOCTEXT("DefaultMarkerName", "Default Marker Name");
 }
 
+FName AMapSwitchActor::GetDestinationSwitchTagToEnable() const
+{
+    return DestinationSwitchTagToEnable;
+}
+
 void AMapSwitchActor::BeginPlay()
 {
     Super::BeginPlay();
@@ -44,6 +50,27 @@ void AMapSwitchActor::BeginPlay()
     if(UMapMarkerWidget* MarkerWidget = Cast<UMapMarkerWidget>(MarkerWidgetComponent->GetUserWidgetObject()))
     {
         MarkerWidget->SetMarkerText(MarkerDisplayText);
+    }
+
+    // Apply persisted enable state from subsystem (if any)
+    if (SwitchTag != NAME_None)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            if (UGameInstance* GI = World->GetGameInstance())
+            {
+                if (UMapSwitchSubsystem* Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>())
+                {
+                    // Verwende normalisierten Levelnamen (ohne PIE-Präfix)
+                    const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(World, /*bRemovePrefixString*/ true);
+                    const bool bWasEnabled = Subsystem->IsSwitchEnabledForMap(CurrentLevelName, SwitchTag);
+                    if (bWasEnabled)
+                    {
+                        bIsEnabled = true;
+                    }
+                }
+            }
+        }
     }
 }
 

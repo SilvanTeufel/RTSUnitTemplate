@@ -18,6 +18,9 @@ class RTSUNITTEMPLATE_API AMapSwitchActor : public AActor
 public:
     AMapSwitchActor();
 
+    UFUNCTION(BlueprintPure, Category = "Map Switch")
+    FName GetDestinationSwitchTagToEnable() const;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -32,6 +35,14 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Map Switch", meta = (AllowedClasses = "World"))
     TSoftObjectPtr<UWorld> TargetMap;
+
+    // Eindeutiger Tag für diesen Switch auf der aktuellen Map
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
+    FName SwitchTag;
+
+    // Tag, der auf der Ziel-Map aktiviert werden soll, wenn dieser Switch benutzt wird
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
+    FName DestinationSwitchTagToEnable;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
     bool bIsEnabled = true;
