@@ -19,6 +19,10 @@
 #include "MassCommonFragments.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/SoftObjectPath.h"
+#include "Actors/WorkArea.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "AIController.h"
+#include "Actors/WorkResource.h"
 
 void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 {
@@ -124,6 +128,43 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         }
 
         Save->Units.Add(MoveTemp(Data));
+    }
+
+    // WorkAreas sammeln
+    Save->WorkAreas.Empty();
+    for (TActorIterator<AWorkArea> ItWA(World); ItWA; ++ItWA)
+    {
+        AWorkArea* WA = *ItWA;
+        if (!WA) continue;
+
+        FWorkAreaSaveData W;
+        W.Tag = WA->Tag;
+        W.WorkAreaClass = FSoftClassPath(WA->GetClass());
+        W.Location = WA->GetActorLocation();
+        W.Rotation = WA->GetActorRotation();
+        W.Scale3D = WA->GetActorScale3D();
+
+        W.TeamId = WA->TeamId;
+        W.IsNoBuildZone = WA->IsNoBuildZone;
+        W.Type = WA->Type;
+        W.WorkResourceClass = WA->WorkResourceClass ? FSoftClassPath(*WA->WorkResourceClass) : FSoftClassPath();
+        W.BuildingClass = WA->BuildingClass ? FSoftClassPath(*WA->BuildingClass) : FSoftClassPath();
+        W.BuildingControllerClass = WA->BuildingController ? FSoftClassPath(*WA->BuildingController) : FSoftClassPath();
+        W.BuildTime = WA->BuildTime;
+        W.CurrentBuildTime = WA->CurrentBuildTime;
+        W.AvailableResourceAmount = WA->AvailableResourceAmount;
+        W.MaxAvailableResourceAmount = WA->MaxAvailableResourceAmount;
+        W.BuildZOffset = WA->BuildZOffset;
+        W.PlannedBuilding = WA->PlannedBuilding;
+        W.StartedBuilding = WA->StartedBuilding;
+        W.DestroyAfterBuild = WA->DestroyAfterBuild;
+        W.ConstructionCost = WA->ConstructionCost;
+        W.ResetStartBuildTime = WA->ResetStartBuildTime;
+        W.ControlTimer = WA->ControlTimer;
+        W.IsPaid = WA->IsPaid;
+        W.AreaEffectClass = WA->AreaEffect ? FSoftClassPath(*WA->AreaEffect) : FSoftClassPath();
+
+        Save->WorkAreas.Add(MoveTemp(W));
     }
 
     UGameplayStatics::SaveGameToSlot(Save, SlotName, 0);
@@ -389,6 +430,149 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         if (!MatchedUnits.Contains(Existing))
         {
             Existing->Destroy();
+        }
+    }
+
+    // WorkAreas abgleichen
+    TArray<AWorkArea*> ExistingAreas;
+    TMap<FString, TArray<AWorkArea*>> ExistingByTag; // mehrere pro Tag zulassen
+    for (TActorIterator<AWorkArea> ItWA(LoadedWorld); ItWA; ++ItWA)
+    {
+        AWorkArea* WA = *ItWA;
+        if (!WA) continue;
+        ExistingAreas.Add(WA);
+        ExistingByTag.FindOrAdd(WA->Tag).Add(WA);
+    }
+
+    TSet<AWorkArea*> MatchedAreas;
+
+    // Hilfsfunktion: wähle erstes nicht gematchtes aus Liste
+    auto TakeUnusedWithSameTag = [&MatchedAreas](const TArray<AWorkArea*>& List) -> AWorkArea*
+    {
+        for (AWorkArea* Candidate : List)
+        {
+            if (Candidate && !MatchedAreas.Contains(Candidate))
+            {
+                return Candidate;
+            }
+        }
+        return nullptr;
+    };
+
+    for (const FWorkAreaSaveData& SavedWA : SaveData->WorkAreas)
+    {
+        AWorkArea* WA = nullptr;
+
+        // 1) Tag-Matching (nur wenn nicht leer)
+        if (!SavedWA.Tag.IsEmpty())
+        {
+            if (TArray<AWorkArea*>* FoundList = ExistingByTag.Find(SavedWA.Tag))
+            {
+                WA = TakeUnusedWithSameTag(*FoundList);
+            }
+        }
+
+        // 2) Fallback: per Distanz und (wenn möglich) Klasse matchen
+        if (!WA)
+        {
+            UClass* SavedClass = SavedWA.WorkAreaClass.IsValid() ? SavedWA.WorkAreaClass.TryLoadClass<AWorkArea>() : nullptr;
+            const float MaxDistSq = FMath::Square(200.f); // Toleranz
+
+            float BestDistSq = TNumericLimits<float>::Max();
+            AWorkArea* Best = nullptr;
+            for (AWorkArea* Candidate : ExistingAreas)
+            {
+                if (!Candidate || MatchedAreas.Contains(Candidate)) continue;
+
+                const float DistSq = FVector::DistSquared(Candidate->GetActorLocation(), SavedWA.Location);
+                if (DistSq > MaxDistSq) continue;
+
+                // Wenn Klasseninfo vorhanden, bevorzugt gleiche Klasse
+                const bool ClassOk = (!SavedClass) || Candidate->GetClass() == SavedClass;
+                if (!ClassOk) continue;
+
+                if (DistSq < BestDistSq)
+                {
+                    BestDistSq = DistSq;
+                    Best = Candidate;
+                }
+            }
+
+            WA = Best;
+        }
+
+        // 3) Spawnen falls kein Match gefunden
+        if (!WA)
+        {
+            UClass* WAClass = SavedWA.WorkAreaClass.IsValid() ? SavedWA.WorkAreaClass.TryLoadClass<AWorkArea>() : nullptr;
+            if (!WAClass)
+            {
+                WAClass = AWorkArea::StaticClass();
+            }
+
+            FActorSpawnParameters Params;
+            Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            WA = LoadedWorld->SpawnActor<AWorkArea>(WAClass, SavedWA.Location, SavedWA.Rotation, Params);
+            if (!WA)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ApplyLoadedData: Failed to spawn WorkArea with tag '%s'."), *SavedWA.Tag);
+                continue;
+            }
+            ExistingAreas.Add(WA);
+            ExistingByTag.FindOrAdd(SavedWA.Tag).Add(WA);
+        }
+
+        // Transform anwenden
+        WA->SetActorLocation(SavedWA.Location);
+        WA->SetActorRotation(SavedWA.Rotation);
+        WA->SetActorScale3D(SavedWA.Scale3D);
+
+        // Properties
+        WA->Tag = SavedWA.Tag;
+        WA->TeamId = SavedWA.TeamId;
+        WA->IsNoBuildZone = SavedWA.IsNoBuildZone;
+        WA->Type = SavedWA.Type;
+
+        if (UClass* WR = SavedWA.WorkResourceClass.IsValid() ? SavedWA.WorkResourceClass.TryLoadClass<AWorkResource>() : nullptr)
+        {
+            WA->WorkResourceClass = WR;
+        }
+        if (UClass* BC = SavedWA.BuildingClass.IsValid() ? SavedWA.BuildingClass.TryLoadClass<ABuildingBase>() : nullptr)
+        {
+            WA->BuildingClass = BC;
+        }
+        if (UClass* BCC = SavedWA.BuildingControllerClass.IsValid() ? SavedWA.BuildingControllerClass.TryLoadClass<AAIController>() : nullptr)
+        {
+            WA->BuildingController = BCC;
+        }
+
+        WA->BuildTime = SavedWA.BuildTime;
+        WA->CurrentBuildTime = SavedWA.CurrentBuildTime;
+        WA->AvailableResourceAmount = SavedWA.AvailableResourceAmount;
+        WA->MaxAvailableResourceAmount = SavedWA.MaxAvailableResourceAmount;
+        WA->BuildZOffset = SavedWA.BuildZOffset;
+        WA->PlannedBuilding = SavedWA.PlannedBuilding;
+        WA->StartedBuilding = SavedWA.StartedBuilding;
+        WA->DestroyAfterBuild = SavedWA.DestroyAfterBuild;
+        WA->ConstructionCost = SavedWA.ConstructionCost;
+        WA->ResetStartBuildTime = SavedWA.ResetStartBuildTime;
+        WA->ControlTimer = SavedWA.ControlTimer;
+        WA->IsPaid = SavedWA.IsPaid;
+
+        if (UClass* AEC = SavedWA.AreaEffectClass.IsValid() ? SavedWA.AreaEffectClass.TryLoadClass<UGameplayEffect>() : nullptr)
+        {
+            WA->AreaEffect = AEC;
+        }
+
+        MatchedAreas.Add(WA);
+    }
+
+    // Nicht gespeicherte WorkAreas entfernen
+    for (AWorkArea* WA : ExistingAreas)
+    {
+        if (WA && !MatchedAreas.Contains(WA))
+        {
+            WA->Destroy();
         }
     }
 

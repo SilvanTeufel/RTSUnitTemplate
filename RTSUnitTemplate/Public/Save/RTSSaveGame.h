@@ -5,6 +5,7 @@
 #include "Core/UnitData.h"
 #include "Core/Talents.h"
 #include "UObject/SoftObjectPath.h"
+#include "Actors/WorkArea.h"
 #include "RTSSaveGame.generated.h"
 
 USTRUCT(BlueprintType)
@@ -81,6 +82,87 @@ struct FMapSwitchTagsForMap
     TArray<FName> Tags;
 };
 
+USTRUCT(BlueprintType)
+struct FWorkAreaSaveData
+{
+    GENERATED_BODY()
+
+    // Identifikation
+    UPROPERTY()
+    FString Tag;
+
+    // Klasse und Transform
+    UPROPERTY()
+    FSoftClassPath WorkAreaClass;
+
+    UPROPERTY()
+    FVector Location = FVector::ZeroVector;
+
+    UPROPERTY()
+    FRotator Rotation = FRotator::ZeroRotator;
+
+    UPROPERTY()
+    FVector Scale3D = FVector(1.f, 1.f, 1.f);
+
+    // Properties
+    UPROPERTY()
+    int32 TeamId = 0;
+
+    UPROPERTY()
+    bool IsNoBuildZone = false;
+
+    UPROPERTY()
+    TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkAreaData::Primary;
+
+    UPROPERTY()
+    FSoftClassPath WorkResourceClass;
+
+    UPROPERTY()
+    FSoftClassPath BuildingClass;
+
+    UPROPERTY()
+    FSoftClassPath BuildingControllerClass;
+
+    UPROPERTY()
+    float BuildTime = 5.f;
+
+    UPROPERTY()
+    float CurrentBuildTime = 0.0f;
+
+    UPROPERTY()
+    float AvailableResourceAmount = 0.f;
+
+    UPROPERTY()
+    float MaxAvailableResourceAmount = 0.f;
+
+    UPROPERTY()
+    float BuildZOffset = 0.f;
+
+    UPROPERTY()
+    bool PlannedBuilding = false;
+
+    UPROPERTY()
+    bool StartedBuilding = false;
+
+    UPROPERTY()
+    bool DestroyAfterBuild = true;
+
+    UPROPERTY()
+    FBuildingCost ConstructionCost;
+
+    UPROPERTY()
+    float ResetStartBuildTime = 25.f;
+
+    UPROPERTY()
+    float ControlTimer = 0.f;
+
+    UPROPERTY()
+    bool IsPaid = false;
+
+    UPROPERTY()
+    FSoftClassPath AreaEffectClass;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API URTSSaveGame : public USaveGame
 {
@@ -102,6 +184,10 @@ public:
     // Einheiten-Daten
     UPROPERTY()
     TArray<FUnitSaveData> Units;
+
+    // WorkAreas auf dem Feld
+    UPROPERTY()
+    TArray<FWorkAreaSaveData> WorkAreas;
 
     // Aktivierte MapSwitch-Tags pro Map (MapKey normalisiert: Assetname)
     UPROPERTY()
