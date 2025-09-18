@@ -20,6 +20,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Map Switch")
     bool IsSwitchEnabledForMap(const FString& MapLongPackageName, FName SwitchTag) const;
 
+    // Export für SaveGame: kopiert internen Zustand in serialisierbare Map
+    void ExportStateForSave(TMap<FString, TArray<FName>>& OutMap) const;
+
+    // Import aus SaveGame: setzt internen Zustand
+    void ImportStateFromSave(const TMap<FString, TArray<FName>>& InMap);
+
 private:
     // Map-Key wird intern normalisiert (Asset-Name ohne PIE-Präfix)
     FString NormalizeMapKey(const FString& MapIdentifier) const;

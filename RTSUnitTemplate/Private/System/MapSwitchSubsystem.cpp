@@ -21,7 +21,6 @@ FString UMapSwitchSubsystem::NormalizeMapKey(const FString& MapIdentifier) const
     // 3) Entferne PIE-Präfix "UEDPIE_<n>_" falls vorhanden
     if (AssetName.StartsWith(TEXT("UEDPIE_")))
     {
-        // "UEDPIE_<n>_LevelName" => finde das zweite '_' und schneide davor ab
         const int32 FirstUnderscore = AssetName.Find(TEXT("_"));
         const int32 SecondUnderscore = AssetName.Find(TEXT("_"), ESearchCase::CaseSensitive, ESearchDir::FromStart, FirstUnderscore + 1);
         if (SecondUnderscore != INDEX_NONE)
@@ -59,4 +58,32 @@ bool UMapSwitchSubsystem::IsSwitchEnabledForMap(const FString& MapLongPackageNam
     }
 
     return false;
+}
+
+void UMapSwitchSubsystem::ExportStateForSave(TMap<FString, TArray<FName>>& OutMap) const
+{
+    OutMap.Empty(EnabledSwitchTagsByMap.Num());
+    for (const TPair<FString, TSet<FName>>& Pair : EnabledSwitchTagsByMap)
+    {
+        TArray<FName> Names;
+        Names.Reserve(Pair.Value.Num());
+        for (const FName& Name : Pair.Value)
+        {
+            Names.Add(Name);
+        }
+        OutMap.Add(Pair.Key, MoveTemp(Names));
+    }
+}
+
+void UMapSwitchSubsystem::ImportStateFromSave(const TMap<FString, TArray<FName>>& InMap)
+{
+    EnabledSwitchTagsByMap.Empty(InMap.Num());
+    for (const TPair<FString, TArray<FName>>& Pair : InMap)
+    {
+        TSet<FName>& SetRef = EnabledSwitchTagsByMap.FindOrAdd(Pair.Key);
+        for (const FName& Name : Pair.Value)
+        {
+            SetRef.Add(Name);
+        }
+    }
 }

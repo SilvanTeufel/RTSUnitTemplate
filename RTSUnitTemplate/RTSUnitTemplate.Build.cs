@@ -6,6 +6,7 @@ public class RTSUnitTemplate : ModuleRules
 {
 	public RTSUnitTemplate(ReadOnlyTargetRules Target) : base(Target)
 	{
+		PrivateDependencyModuleNames.AddRange(new string[] { "AITestSuite", "AITestSuite" });
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
