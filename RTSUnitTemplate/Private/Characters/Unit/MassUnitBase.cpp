@@ -272,6 +272,7 @@ bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
     return true;
 }
 
+
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
 	FMassEntityManager* EntityManager;

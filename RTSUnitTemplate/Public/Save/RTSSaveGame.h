@@ -4,6 +4,7 @@
 #include "GameFramework/SaveGame.h"
 #include "Core/UnitData.h"
 #include "Core/Talents.h"
+#include "UObject/SoftObjectPath.h"
 #include "RTSSaveGame.generated.h"
 
 USTRUCT(BlueprintType)
@@ -30,6 +31,24 @@ struct FUnitSaveData
     // Name des Actors als Fallback
     UPROPERTY()
     FString ActorName;
+
+    // Soft-Klassenpfad der Einheit, um sie exakt wieder zu spawnen
+    UPROPERTY()
+    FSoftClassPath UnitClassPath;
+
+    // Team-ID und Selektierbarkeit der Einheit
+    UPROPERTY()
+    uint8 TeamId = 0;
+
+    UPROPERTY()
+    bool bIsSelectable = true;
+
+    // Gespeicherter Zustand und Placeholder-Zustand der Einheit
+    UPROPERTY()
+    TEnumAsByte<UnitData::EState> UnitState = UnitData::Idle;
+
+    UPROPERTY()
+    TEnumAsByte<UnitData::EState> UnitStatePlaceholder = UnitData::Idle;
 
     UPROPERTY()
     FVector Location = FVector::ZeroVector;

@@ -5,6 +5,7 @@
 #include "GameSaveSubsystem.generated.h"
 
 class URTSSaveGame;
+class AUnitBase;
 
 /**
  * Subsystem zum Speichern und Laden von Spielzuständen inkl. Map-Wechsel.
@@ -28,6 +29,10 @@ public:
     // Liest Metadaten eines Slots (gibt true bei Erfolg)
     UFUNCTION(BlueprintCallable, Category="Save")
     bool LoadSaveSummary(const FString& SlotName, FString& OutMapAssetName, FString& OutLongPackageName, int64& OutUnixTime) const;
+
+    // Fallback-Klasse zum Spawn fehlender Einheiten (im Editor/INI konfigurierbar)
+    UPROPERTY(EditDefaultsOnly, Category="Save")
+    TSubclassOf<AUnitBase> DefaultUnitClass;
 
 private:
     UPROPERTY()

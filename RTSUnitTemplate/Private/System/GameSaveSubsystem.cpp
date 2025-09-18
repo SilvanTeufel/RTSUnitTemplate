@@ -17,6 +17,8 @@
 #include "MassEntitySubsystem.h"
 #include "MassNavigationFragments.h"
 #include "MassCommonFragments.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/SoftObjectPath.h"
 
 void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 {
@@ -70,6 +72,14 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 
         FUnitSaveData Data;
         Data.ActorName = Unit->GetName();
+        // Klasse der Einheit speichern
+        Data.UnitClassPath = FSoftClassPath(Unit->GetClass());
+        // Team und Selektierbarkeit speichern
+        Data.TeamId = Unit->TeamId;
+        Data.bIsSelectable = Unit->CanBeSelected;
+        // Zustand speichern
+        Data.UnitState = Unit->GetUnitState();
+        Data.UnitStatePlaceholder = Unit->UnitStatePlaceholder;
         Data.Location = Unit->GetActorLocation();
         Data.Rotation = Unit->GetActorRotation();
 
@@ -178,6 +188,7 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
     // Einheiten abgleichen: per UnitIndex bevorzugt, sonst per Name
     TMap<int32, AUnitBase*> UnitsByIndex;
     TMap<FString, AUnitBase*> UnitsByName;
+    TSet<AUnitBase*>          MatchedUnits;
 
     for (TActorIterator<AUnitBase> It(LoadedWorld); It; ++It)
     {
@@ -192,61 +203,192 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
 
     for (const FUnitSaveData& SavedUnit : SaveData->Units)
     {
-        AUnitBase** FoundPtr = nullptr;
+        AUnitBase* Unit = nullptr;
 
         if (SavedUnit.UnitIndex != INDEX_NONE)
         {
-            FoundPtr = UnitsByIndex.Find(SavedUnit.UnitIndex);
-        }
-        if (!FoundPtr)
-        {
-            FoundPtr = UnitsByName.Find(SavedUnit.ActorName);
-        }
-
-        if (FoundPtr && *FoundPtr)
-        {
-            AUnitBase* Unit = *FoundPtr;
-            Unit->SetActorLocation(SavedUnit.Location);
-            Unit->SetActorRotation(SavedUnit.Rotation);
-
-            if (ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit))
+            if (AUnitBase** FoundIndex = UnitsByIndex.Find(SavedUnit.UnitIndex))
             {
-                // Level- und Attributsdaten direkt anwenden
-                LevelUnit->LevelData = SavedUnit.LevelData;
-                LevelUnit->LevelUpData = SavedUnit.LevelUpData;
-                if (LevelUnit->Attributes)
-                {
-                    LevelUnit->Attributes->UpdateAttributes(SavedUnit.AttributeSaveData);
-                }
+                Unit = *FoundIndex;
+            }
+        }
+        if (!Unit)
+        {
+            if (AUnitBase** FoundByName = UnitsByName.Find(SavedUnit.ActorName))
+            {
+                Unit = *FoundByName;
+            }
+        }
+
+        if (!Unit)
+        {
+            // Einheit existiert nicht -> spawnen (bevorzugt gespeicherte Klasse)
+            UClass* SpawnClass = nullptr;
+
+            if (SavedUnit.UnitClassPath.IsValid())
+            {
+                SpawnClass = SavedUnit.UnitClassPath.TryLoadClass<AUnitBase>();
+            }
+            if (!SpawnClass)
+            {
+                SpawnClass = DefaultUnitClass ? *DefaultUnitClass : AUnitBase::StaticClass();
+            }
+            if (!SpawnClass)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ApplyLoadedData: No valid spawn class for '%s'."), *SavedUnit.ActorName);
+                continue;
             }
 
-            // Mass-Entität auf die neue Actor-Position synchronisieren
-            if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+            FActorSpawnParameters Params;
+            Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            Unit = LoadedWorld->SpawnActor<AUnitBase>(SpawnClass, SavedUnit.Location, SavedUnit.Rotation, Params);
+            if (!Unit)
             {
-                MassUnit->SetTranslationLocation(SavedUnit.Location);
+                UE_LOG(LogTemp, Warning, TEXT("ApplyLoadedData: Failed to spawn unit '%s'."), *SavedUnit.ActorName);
+                continue;
+            }
 
-                // Zusätzlich den MoveTarget und AI-Storage auf die geladene Position setzen,
-                // damit die Einheit nicht zum alten Ziel weiterläuft.
-                if (UMassEntitySubsystem* MassSubsystem = LoadedWorld->GetSubsystem<UMassEntitySubsystem>())
+            // In Maps registrieren
+            UnitsByName.Add(Unit->GetName(), Unit);
+            if (ALevelUnit* SpawnedLevel = Cast<ALevelUnit>(Unit))
+            {
+                if (SavedUnit.UnitIndex != INDEX_NONE)
                 {
-                    FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
-                    const FMassEntityHandle Handle = (MassUnit->MassActorBindingComponent)
-                        ? MassUnit->MassActorBindingComponent->GetEntityHandle()
-                        : FMassEntityHandle();
+                    SpawnedLevel->SetUnitIndex(SavedUnit.UnitIndex);
+                    UnitsByIndex.Add(SavedUnit.UnitIndex, Unit);
+                }
+            }
+        }
 
-                    if (EM.IsEntityValid(Handle))
+        // Prüfen, ob wir respawnen müssen: gespeicherter Dead-State oder aktueller Dead-Tag/State
+        bool bRespawn = (SavedUnit.UnitState == UnitData::Dead) || (Unit->GetUnitState() == UnitData::Dead);
+        if (AMassUnitBase* ExistingMass = Cast<AMassUnitBase>(Unit))
+        {
+            if (UMassEntitySubsystem* MassSubsystem = LoadedWorld->GetSubsystem<UMassEntitySubsystem>())
+            {
+                FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+                const FMassEntityHandle Handle = (ExistingMass->MassActorBindingComponent)
+                    ? ExistingMass->MassActorBindingComponent->GetEntityHandle()
+                    : FMassEntityHandle();
+
+                if (EM.IsEntityValid(Handle))
+                {
+                    // DeadTag prüfen
+                    if (DoesEntityHaveTag(EM, Handle, FMassStateDeadTag::StaticStruct()))
                     {
-                        if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EM.GetFragmentDataPtr<FMassMoveTargetFragment>(Handle))
-                        {
-                            MoveTargetFragmentPtr->Center = SavedUnit.Location;
-                        }
-                        if (FMassAIStateFragment* AiStatePtr = EM.GetFragmentDataPtr<FMassAIStateFragment>(Handle))
-                        {
-                            AiStatePtr->StoredLocation = SavedUnit.Location;
-                        }
+                        bRespawn = true;
                     }
                 }
             }
+        }
+
+        if (bRespawn)
+        {
+            // Einheit vollständig respawnen (Klasse aus Save bevorzugt)
+            UClass* SpawnClass = nullptr;
+            if (SavedUnit.UnitClassPath.IsValid())
+            {
+                SpawnClass = SavedUnit.UnitClassPath.TryLoadClass<AUnitBase>();
+            }
+            if (!SpawnClass)
+            {
+                SpawnClass = Unit->GetClass();
+            }
+            if (!SpawnClass)
+            {
+                SpawnClass = DefaultUnitClass ? *DefaultUnitClass : AUnitBase::StaticClass();
+            }
+
+            FActorSpawnParameters Params;
+            Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            AUnitBase* NewUnit = LoadedWorld->SpawnActor<AUnitBase>(SpawnClass, SavedUnit.Location, SavedUnit.Rotation, Params);
+            if (NewUnit)
+            {
+                // alte Instanz entfernen und Referenzen aktualisieren
+                Unit->Destroy();
+                Unit = NewUnit;
+
+                // Maps aktualisieren
+                UnitsByName.Add(Unit->GetName(), Unit);
+                if (SavedUnit.UnitIndex != INDEX_NONE)
+                {
+                    if (ALevelUnit* NewLevel = Cast<ALevelUnit>(Unit))
+                    {
+                        NewLevel->SetUnitIndex(SavedUnit.UnitIndex);
+                        UnitsByIndex.Add(SavedUnit.UnitIndex, Unit);
+                    }
+                }
+            }
+        }
+
+        // Transform anwenden
+        Unit->SetActorLocation(SavedUnit.Location);
+        Unit->SetActorRotation(SavedUnit.Rotation);
+
+        // Team/Selektierbarkeit anwenden
+        Unit->TeamId = SavedUnit.TeamId;
+        Unit->CanBeSelected = SavedUnit.bIsSelectable;
+
+        // Zustand anwenden
+        Unit->UnitStatePlaceholder = SavedUnit.UnitStatePlaceholder;
+        Unit->SetUnitState(SavedUnit.UnitState);
+
+        // Level-Daten anwenden (Attribute folgen danach)
+        if (ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit))
+        {
+            LevelUnit->LevelData = SavedUnit.LevelData;
+            LevelUnit->LevelUpData = SavedUnit.LevelUpData;
+        }
+
+        // Mass-Entität auf die neue Actor-Position synchronisieren, Targets anpassen und Tags setzen
+        if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+        {
+            MassUnit->SetTranslationLocation(SavedUnit.Location);
+
+            if (UMassEntitySubsystem* MassSubsystem = LoadedWorld->GetSubsystem<UMassEntitySubsystem>())
+            {
+                FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+                const FMassEntityHandle Handle = (MassUnit->MassActorBindingComponent)
+                    ? MassUnit->MassActorBindingComponent->GetEntityHandle()
+                    : FMassEntityHandle();
+
+                if (EM.IsEntityValid(Handle))
+                {
+                    if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EM.GetFragmentDataPtr<FMassMoveTargetFragment>(Handle))
+                    {
+                        MoveTargetFragmentPtr->Center = SavedUnit.Location;
+                    }
+                    if (FMassAIStateFragment* AiStatePtr = EM.GetFragmentDataPtr<FMassAIStateFragment>(Handle))
+                    {
+                        AiStatePtr->StoredLocation = SavedUnit.Location;
+                    }
+                }
+            }
+            
+            // Korrekte Mass-Tags gemäß gespeichertem Zustand setzen
+            MassUnit->SwitchEntityTagByState(SavedUnit.UnitState, SavedUnit.UnitStatePlaceholder);
+        }
+
+        // Jetzt alle gespeicherten Attribute anwenden
+        if (ALevelUnit* LevelUnitForAttr = Cast<ALevelUnit>(Unit))
+        {
+            if (LevelUnitForAttr->Attributes)
+            {
+                LevelUnitForAttr->Attributes->UpdateAttributes(SavedUnit.AttributeSaveData);
+            }
+        }
+
+        MatchedUnits.Add(Unit);
+    }
+
+    // Überzählige Einheiten entfernen (nicht im Save vorhanden)
+    for (TActorIterator<AUnitBase> ItRemove(LoadedWorld); ItRemove; ++ItRemove)
+    {
+        AUnitBase* Existing = *ItRemove;
+        if (!Existing) continue;
+        if (!MatchedUnits.Contains(Existing))
+        {
+            Existing->Destroy();
         }
     }
 
