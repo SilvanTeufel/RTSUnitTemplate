@@ -1,10 +1,10 @@
 ﻿#include "System/GameSaveSubsystem.h"
-
-#include "AITestsCommon.h"
+#include "HAL/FileManager.h"
 #include "Save/RTSSaveGame.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Engine/GameInstance.h"
 #include "Algo/Unique.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -16,9 +16,9 @@
 #include "Characters/Unit/MassUnitBase.h"
 #include "MassEntitySubsystem.h"
 #include "MassNavigationFragments.h"
-#include "MassCommonFragments.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/Package.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "AIController.h"
@@ -272,7 +272,7 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             }
             if (!SpawnClass)
             {
-                SpawnClass = DefaultUnitClass ? *DefaultUnitClass : AUnitBase::StaticClass();
+                SpawnClass = DefaultUnitClass ? DefaultUnitClass.Get() : AUnitBase::StaticClass();
             }
             if (!SpawnClass)
             {
@@ -337,7 +337,7 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             }
             if (!SpawnClass)
             {
-                SpawnClass = DefaultUnitClass ? *DefaultUnitClass : AUnitBase::StaticClass();
+                SpawnClass = DefaultUnitClass ? DefaultUnitClass.Get() : AUnitBase::StaticClass();
             }
 
             FActorSpawnParameters Params;

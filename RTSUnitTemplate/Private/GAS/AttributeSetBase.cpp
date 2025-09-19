@@ -252,6 +252,7 @@ void UAttributeSetBase::OnRep_IsAttackedSpeed(const FGameplayAttributeData& OldI
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, IsAttackedSpeed, OldIsAttackedSpeed);
 }
 
+
 void UAttributeSetBase::OnRep_RunSpeedScale(const FGameplayAttributeData& OldRunSpeedScale)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeedScale, OldRunSpeedScale);
@@ -373,6 +374,7 @@ void UAttributeSetBase::SetAttributeIsAttackedSpeed(float NewValue)
 {
     SetIsAttackedSpeed(NewValue);
 }
+
 
 void UAttributeSetBase::SetAttributeRunSpeedScale(float NewValue)
 {

@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Characters/Unit/UnitBase.h"
 #include "GameSaveSubsystem.generated.h"
 
 class URTSSaveGame;
-class AUnitBase;
 
 /**
  * Subsystem zum Speichern und Laden von Spielzuständen inkl. Map-Wechsel.

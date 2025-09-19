@@ -18,6 +18,8 @@ class RTSUNITTEMPLATE_API AMapSwitchActor : public AActor
 public:
     AMapSwitchActor();
 
+    virtual void Tick(float DeltaTime) override;
+    
     UFUNCTION(BlueprintPure, Category = "Map Switch")
     FName GetDestinationSwitchTagToEnable() const;
 
@@ -49,7 +51,16 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "UI")
     FText MarkerDisplayText;
-
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion", meta = (MakeEditWidget = true))
+    FVector CenterPoint;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion")
+    float RotationRadius = 500.f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion")
+    float RotationSpeed = 0.f;
+    
     UFUNCTION()
     void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -59,4 +70,6 @@ protected:
 private:
     UPROPERTY()
     UMapSwitchWidget* ActiveWidget;
+
+    float CurrentAngle = 0.f;
 };

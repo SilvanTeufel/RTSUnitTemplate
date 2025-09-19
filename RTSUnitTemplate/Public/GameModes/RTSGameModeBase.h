@@ -32,7 +32,6 @@ UCLASS()
 class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
-//protected:
 
 	public:
 	
@@ -41,7 +40,6 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
-	// Timer handle for spawning units
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FTimerHandleMapping> SpawnTimerHandleMap;
 	

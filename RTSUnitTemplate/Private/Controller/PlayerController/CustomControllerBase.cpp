@@ -7,7 +7,6 @@
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
-
 #include "MassEntitySubsystem.h"     // Needed for FMassEntityManager, UMassEntitySubsystem
 #include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
@@ -18,11 +17,13 @@
 #include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "Mass/Signals/MySignals.h"
 #include "Actors/MinimapActor.h" 
 #include "Characters/Unit/BuildingBase.h"
 #include "NavAreas/NavArea_Null.h"
 #include "NavMesh/RecastNavMesh.h"
+#include "System/PlayerTeamSubsystem.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -1168,4 +1169,25 @@ void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Uni
     		}
 
 	Client_ReceiveCooldown(AbilityIndex, RTime);
+}
+
+void ACustomControllerBase::RequestSetTeam(int32 NewTeamId)
+{
+	// On the client, we call the server RPC.
+	// We don't need to check Role here, as calling a Server RPC from the server
+	// will just execute the function locally.
+	Server_SetPendingTeam(NewTeamId);
+}
+
+
+void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
+{
+	// This code now runs ONLY ON THE SERVER.
+	UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>();
+	if (TeamSubsystem)
+	{
+		// Because this is running on the server, it's updating the
+		// server's authoritative version of the subsystem.
+		TeamSubsystem->SetTeamForPlayer(this, TeamId);
+	}
 }

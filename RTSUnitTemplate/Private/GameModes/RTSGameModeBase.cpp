@@ -18,6 +18,7 @@
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "System/PlayerTeamSubsystem.h"
 
 #include "NavigationSystem.h"
 #include "Actors/FogActor.h"
@@ -286,59 +287,106 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
 	UE_LOG(LogTemp, Log, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
 	
+	// Sammle alle PlayerStarts im Level
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
 	{
 		PlayerStarts.Add(*It);
 	}
 
-	int32 PlayerStartIndex = 0;
+	// Subsystem für Teamzuweisungen (Server)
+	UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>() : nullptr;
+
+	int32 CamneraUnitIndex = 0;
+	
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
-		
 		AController* PlayerController = It->Get();
 		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(PlayerController);
-
-		
-		
-		if (CameraControllerBase && PlayerStarts.IsValidIndex(PlayerStartIndex))
+		if (!CameraControllerBase)
 		{
-			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = true;
-
-			
-			APlayerStartBase* CustomPlayerStart = PlayerStarts[PlayerStartIndex];
-
-			ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
-			
-			UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), 
-				CustomPlayerStart->SelectableTeamId, *CameraControllerBase->GetName());
-			
-			SetTeamIdAndDefaultWaypoint_Implementation(CustomPlayerStart->SelectableTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
-
-			UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"), 
-			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
-			UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
-
-			
-			CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
-			CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
-
-			FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerStartIndex));
-			FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
-
-			CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
-			CameraControllerBase->Multi_HideEnemyWaypoints();
-			CameraControllerBase->Multi_InitFogOfWar();
-			CameraControllerBase->Multi_SetupPlayerMiniMap();
-			//UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!!!!!!!!!!"));
-			if (CameraControllerBase->CameraBase) CameraControllerBase->CameraBase->BlockControls = false;
-	
-			CameraControllerBase->AgentInit();
-		
-
-			//UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!"));
-			PlayerStartIndex++;  // Move to the next PlayerStart for the next iteration
+			continue;
 		}
+
+		if (CameraControllerBase->CameraBase)
+		{
+			CameraControllerBase->CameraBase->BlockControls = true;
+		}
+
+		// 1) TeamId aus Lobby-Subsystem holen (falls vorhanden)
+		int32 LobbyTeamId = 0;
+		if (TeamSubsystem && CameraControllerBase->PlayerState)
+		{
+			UE_LOG(LogTemp, Error, TEXT("TeamSubsystem FOUND!"));
+			// bConsume=true: Eintrag wird nach Verwendung entfernt
+			TeamSubsystem->GetTeamForPlayer(CameraControllerBase, LobbyTeamId, true);
+			UE_LOG(LogTemp, Error, TEXT("LobbyTeamId: %d"), LobbyTeamId);
+		}
+
+		// 2) Passenden PlayerStart anhand SelectableTeamId suchen
+		APlayerStartBase* CustomPlayerStart = nullptr;
+		if (LobbyTeamId != 0)
+		{
+			for (APlayerStartBase* Start : PlayerStarts)
+			{
+				if (Start && Start->SelectableTeamId == LobbyTeamId)
+				{
+					CustomPlayerStart = Start;
+					break;
+				}
+			}
+		}
+
+		// Fallback: wenn keine Lobby-Auswahl vorhanden war oder kein passender Start gefunden wurde
+		if (!CustomPlayerStart && PlayerStarts.Num() > 0)
+		{
+			CustomPlayerStart = PlayerStarts[0];
+			LobbyTeamId = CustomPlayerStart->SelectableTeamId; // TeamId aus dem Start übernehmen
+		}
+
+		if (!CustomPlayerStart)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("No suitable PlayerStart found for controller %s"), *CameraControllerBase->GetName());
+			if (CameraControllerBase->CameraBase)
+			{
+				CameraControllerBase->CameraBase->BlockControls = false;
+			}
+			continue;
+		}
+
+		// 3) Anpassungen vom PlayerStart anwenden und Team/Waypoint setzen
+		ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
+
+		const int32 FinalTeamId = CustomPlayerStart->SelectableTeamId;
+		UE_LOG(LogTemp, Error, TEXT("Assigning TeamId: %d to Controller: %s"), FinalTeamId, *CameraControllerBase->GetName());
+
+		SetTeamIdAndDefaultWaypoint_Implementation(FinalTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
+
+		UE_LOG(LogTemp, Error, TEXT("TeamId is now: %d from Controller: %s"),
+			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
+		UE_LOG(LogTemp, Error, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
+
+		// 4) Übrige Initialisierung
+		CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
+		CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
+
+		// Kameraeinheit über TeamId-Tag finden (statt sequentiellem Index)
+		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), CamneraUnitIndex));
+		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
+		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
+
+		CameraControllerBase->Multi_HideEnemyWaypoints();
+		CameraControllerBase->Multi_InitFogOfWar();
+		CameraControllerBase->Multi_SetupPlayerMiniMap();
+
+		if (CameraControllerBase->CameraBase)
+		{
+			CameraControllerBase->CameraBase->BlockControls = false;
+		}
+
+		CameraControllerBase->AgentInit();
+
+		CamneraUnitIndex++;
 	}
 
 	NavInitialisation();

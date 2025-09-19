@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "Actors/MapSwitchActor.h"
 #include "Misc/Paths.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // Include Player Controller

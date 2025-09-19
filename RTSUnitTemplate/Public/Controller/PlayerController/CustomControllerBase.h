@@ -152,4 +152,10 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_RequestCooldown(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RequestSetTeam(int32 NewTeamId);
+	
+	UFUNCTION(Server, Reliable)
+	void Server_SetPendingTeam(int32 TeamId);
 };

@@ -8,13 +8,14 @@
 #include "Widgets/MapSwitchWidget.h" // Include the widget header
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "System/MapSwitchSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "MapSwitchActor"
 
 AMapSwitchActor::AMapSwitchActor()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
 
     OverlapCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("OverlapCapsule"));
     RootComponent = OverlapCapsule;
@@ -74,6 +75,33 @@ void AMapSwitchActor::BeginPlay()
     }
 }
 
+
+void AMapSwitchActor::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    // --- Circular Rotation Logic ---
+
+    // Condition to disable rotation: If speed is 0, do nothing.
+    // Using FMath::IsNearlyZero is safer for floating-point comparisons.
+    if (FMath::IsNearlyZero(RotationSpeed))
+    {
+        return;
+    }
+
+    // Update the current angle based on speed and the time elapsed since the last frame
+    // This makes the rotation frame-rate independent.
+    CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f); // Convert degrees/sec to radians/sec
+
+    // Calculate the new X and Y positions on the circle
+    // Z position is kept constant from the CenterPoint's Z value.
+    FVector NewLocation = CenterPoint;
+    NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
+    NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
+
+    // Apply the new location to the actor
+    SetActorLocation(NewLocation);
+}
 void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     AUnitBase* Unit = Cast<AUnitBase>(OtherActor);

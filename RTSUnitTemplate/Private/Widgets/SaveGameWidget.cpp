@@ -5,6 +5,7 @@
 #include "Components/ScrollBox.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "Actors/SaveGameActor.h"
 #include "System/GameSaveSubsystem.h"
 #include "Misc/DateTime.h"
