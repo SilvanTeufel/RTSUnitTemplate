@@ -20,45 +20,43 @@ public:
 
     virtual void Tick(float DeltaTime) override;
     
-    UFUNCTION(BlueprintPure, Category = "Map Switch")
+    UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
     FName GetDestinationSwitchTagToEnable() const;
 
 protected:
     virtual void BeginPlay() override;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
     UCapsuleComponent* OverlapCapsule;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
     UWidgetComponent* MarkerWidgetComponent;
 
     UPROPERTY(EditAnywhere, Category = "UI")
     TSubclassOf<UMapSwitchWidget> MapSwitchWidgetClass;
 
-    UPROPERTY(EditAnywhere, Category = "Map Switch", meta = (AllowedClasses = "World"))
+    UPROPERTY(EditAnywhere, Category = RTSUnitTemplate, meta = (AllowedClasses = "World"))
     TSoftObjectPtr<UWorld> TargetMap;
-
-    // Eindeutiger Tag für diesen Switch auf der aktuellen Map
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     FName SwitchTag;
-
-    // Tag, der auf der Ziel-Map aktiviert werden soll, wenn dieser Switch benutzt wird
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     FName DestinationSwitchTagToEnable;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Switch")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     bool bIsEnabled = true;
 
     UPROPERTY(EditAnywhere, Category = "UI")
     FText MarkerDisplayText;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion", meta = (MakeEditWidget = true))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MakeEditWidget = true))
     FVector CenterPoint;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     float RotationRadius = 500.f;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Circular Motion")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     float RotationSpeed = 0.f;
     
     UFUNCTION()

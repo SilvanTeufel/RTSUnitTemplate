@@ -39,36 +39,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClass(FVector Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f);
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Ability)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool UseAbilityQue = true;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Ability)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool RotateToAbilityClick = true;
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
-	//FText ToolTipText = FText::FromString("PrimaryResource: 100 / SecondaryResource: 200 // Keyboard X");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString AbilityName = "Ability X: \n\n";
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost = FBuildingCost{0, 0, 0, 0, 0, 0};
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString KeyboardKey = "X";
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FText ToolTipText;
 
-	UFUNCTION(BlueprintCallable, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FText Type;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FText Description;
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateTooltipText();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int ClickCount = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool RotateToMouseWithMouseEvent = false;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Range = 0.f;
 	
 private:

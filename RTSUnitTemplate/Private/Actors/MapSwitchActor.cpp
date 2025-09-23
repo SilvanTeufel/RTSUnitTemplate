@@ -24,12 +24,11 @@ AMapSwitchActor::AMapSwitchActor()
 
     MarkerWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("MarkerWidgetComponent"));
     MarkerWidgetComponent->SetupAttachment(RootComponent);
-    MarkerWidgetComponent->SetWidgetSpace(EWidgetSpace::World); // Widget exists in the 3D world
-    MarkerWidgetComponent->SetDrawAtDesiredSize(true); // Prevents distortion
-    MarkerWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 150.f)); // Position it above the capsule
+    MarkerWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+    MarkerWidgetComponent->SetDrawAtDesiredSize(true);
+    MarkerWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 150.f));
 
     bReplicates = true;
-
 
     MarkerDisplayText = LOCTEXT("DefaultMarkerName", "Default Marker Name");
 }
@@ -42,18 +41,15 @@ FName AMapSwitchActor::GetDestinationSwitchTagToEnable() const
 void AMapSwitchActor::BeginPlay()
 {
     Super::BeginPlay();
-
-    // Bind overlap events on both client and server to handle UI locally
+    
     OverlapCapsule->OnComponentBeginOverlap.AddDynamic(this, &AMapSwitchActor::OnOverlapBegin);
     OverlapCapsule->OnComponentEndOverlap.AddDynamic(this, &AMapSwitchActor::OnOverlapEnd);
-
-    // Set the text on the world-space marker widget
+    
     if(UMapMarkerWidget* MarkerWidget = Cast<UMapMarkerWidget>(MarkerWidgetComponent->GetUserWidgetObject()))
     {
         MarkerWidget->SetMarkerText(MarkerDisplayText);
     }
-
-    // Apply persisted enable state from subsystem (if any)
+    
     if (SwitchTag != NAME_None)
     {
         if (UWorld* World = GetWorld())
@@ -62,7 +58,6 @@ void AMapSwitchActor::BeginPlay()
             {
                 if (UMapSwitchSubsystem* Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>())
                 {
-                    // Verwende normalisierten Levelnamen (ohne PIE-Präfix)
                     const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(World, /*bRemovePrefixString*/ true);
                     const bool bWasEnabled = Subsystem->IsSwitchEnabledForMap(CurrentLevelName, SwitchTag);
                     if (bWasEnabled)
@@ -73,6 +68,18 @@ void AMapSwitchActor::BeginPlay()
             }
         }
     }
+
+
+    if (!FMath::IsNearlyZero(RotationSpeed))
+    {
+        CurrentAngle = FMath::RandRange(0.f, 2.f * PI);
+        
+        FVector NewLocation = CenterPoint;
+        NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
+        NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
+
+        SetActorLocation(NewLocation);
+    }
 }
 
 
@@ -80,26 +87,17 @@ void AMapSwitchActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // --- Circular Rotation Logic ---
-
-    // Condition to disable rotation: If speed is 0, do nothing.
-    // Using FMath::IsNearlyZero is safer for floating-point comparisons.
     if (FMath::IsNearlyZero(RotationSpeed))
     {
         return;
     }
 
-    // Update the current angle based on speed and the time elapsed since the last frame
-    // This makes the rotation frame-rate independent.
-    CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f); // Convert degrees/sec to radians/sec
+    CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f);
 
-    // Calculate the new X and Y positions on the circle
-    // Z position is kept constant from the CenterPoint's Z value.
     FVector NewLocation = CenterPoint;
     NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
     NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
 
-    // Apply the new location to the actor
     SetActorLocation(NewLocation);
 }
 void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -122,7 +120,6 @@ void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor
         return;
     }
 
-    // We only want to show the widget if the overlapping unit belongs to the local player's team.
     if (Unit->TeamId == CustomPC->SelectableTeamId)
     {
         if (MapSwitchWidgetClass && !ActiveWidget)
@@ -152,7 +149,6 @@ void AMapSwitchActor::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* 
         return;
     }
 
-    // Only remove the widget if the unit leaving the overlap belongs to the local player's team
     if (Unit->TeamId == CustomPC->SelectableTeamId)
     {
         if (ActiveWidget)
