@@ -5,180 +5,74 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "GameplayTagContainer.h" // Include for FGameplayTag
 #include "TaggedUnitSelector.generated.h"
 
 /**
- * 
- */
+ * */
 UCLASS()
 class RTSUNITTEMPLATE_API UTaggedUnitSelector : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	// Constructor
-	UTaggedUnitSelector(const FObjectInitializer& ObjectInitializer);
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AExtendedControllerBase* ControllerBase;
-	
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    AExtendedControllerBase* ControllerBase;
+    
 protected:
-	virtual void NativeConstruct() override;
+    virtual void NativeConstruct() override;
 
-	// --- Ctrl 1-6 ---
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl1;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl2;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl3;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl4;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl5;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrl6;
-
-	// --- Alt 1-6 ---
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt1;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt2;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt3;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt4;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt5;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonAlt6;
-
-	// --- Ctrl Q, W, E, R ---
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrlQ;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrlW;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrlE;
-
-	UPROPERTY(meta = (BindWidget))
-	class UButton* TagButtonCtrlR;
-
-	// --- Icons (one per button) ---
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl1;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl2;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl3;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl4;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl5;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrl6;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt1;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt2;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt3;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt4;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt5;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconAlt6;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrlQ;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrlW;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrlE;
-
-	UPROPERTY(meta = (BindWidget))
-	class UImage* IconCtrlR;
+    // A single function to handle clicks from ANY of our TaggedUnitButton widgets.
+    UFUNCTION()
+    void HandleTaggedUnitButtonClicked(FGameplayTag UnitTag);
 
 protected:
-	// Override to build the Slate layout manually
-	//virtual TSharedRef<SWidget> RebuildWidget() override;
+    // We now only need pointers to our custom UTaggedUnitButton widgets.
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl1;
 
-	// Example function to handle a click event (Ctrl1). 
-	// You can replicate this pattern for other buttons if desired.
-	// --- Click handlers for Ctrl1..6 ---
-	UFUNCTION()
-	void OnTagButtonCtrl1Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl2;
 
-	UFUNCTION()
-	void OnTagButtonCtrl2Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl3;
 
-	UFUNCTION()
-	void OnTagButtonCtrl3Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl4;
 
-	UFUNCTION()
-	void OnTagButtonCtrl4Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl5;
 
-	UFUNCTION()
-	void OnTagButtonCtrl5Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrl6;
+    
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt1;
 
-	UFUNCTION()
-	void OnTagButtonCtrl6Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt2;
 
-	// --- Click handlers for CtrlQ, CtrlW, CtrlE, CtrlR ---
-	UFUNCTION()
-	void OnTagButtonCtrlQClicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt3;
 
-	UFUNCTION()
-	void OnTagButtonCtrlWClicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt4;
 
-	UFUNCTION()
-	void OnTagButtonCtrlEClicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt5;
 
-	UFUNCTION()
-	void OnTagButtonCtrlRClicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonAlt6;
 
-	// --- Click handlers for Alt1..6 ---
-	UFUNCTION()
-	void OnTagButtonAlt1Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrlQ;
 
-	UFUNCTION()
-	void OnTagButtonAlt2Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrlW;
 
-	UFUNCTION()
-	void OnTagButtonAlt3Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrlE;
 
-	UFUNCTION()
-	void OnTagButtonAlt4Clicked();
-
-	UFUNCTION()
-	void OnTagButtonAlt5Clicked();
-
-	UFUNCTION()
-	void OnTagButtonAlt6Clicked();
+    UPROPERTY(meta = (BindWidget))
+    class UTaggedUnitButton* TagButtonCtrlR;
 };

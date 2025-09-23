@@ -57,7 +57,7 @@ void UResourceWidget::PopulateResourceList()
     ResourceEntriesBox->ClearChildren();
 
     // Get the Enum object to convert enum values to strings
-    const UEnum* EnumPtr = FindObject<UEnum>(ANY_PACKAGE, TEXT("EResourceType"), true);
+    const UEnum* EnumPtr = StaticEnum<EResourceType>();
     if (!EnumPtr) return;
 
     // Loop through the game state's resource data to create a widget for each type
@@ -88,7 +88,7 @@ void UResourceWidget::UpdateWidget()
         return;
     }
 
-    const UEnum* EnumPtr = FindObject<UEnum>(ANY_PACKAGE, TEXT("EResourceType"), true);
+    const UEnum* EnumPtr = StaticEnum<EResourceType>();
     if (!EnumPtr)
     {
         return;

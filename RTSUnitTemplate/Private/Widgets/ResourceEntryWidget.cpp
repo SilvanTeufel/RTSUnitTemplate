@@ -24,22 +24,6 @@ void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 	WorkerCountText->SetText(FText::AsNumber(NewWorkerCount));
 }
 
-void UResourceEntryWidget::NativeConstruct()
-{
-	Super::NativeConstruct();
-
-	// Bind the internal handler functions to the button's OnClicked event
-	if (AddWorkerButton)
-	{
-		AddWorkerButton->OnClicked.AddDynamic(this, &UResourceEntryWidget::HandleAddWorkerClicked);
-	}
-
-	if (RemoveWorkerButton)
-	{
-		RemoveWorkerButton->OnClicked.AddDynamic(this, &UResourceEntryWidget::HandleRemoveWorkerClicked);
-	}
-}
-
 void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId)
 {
 	ResourceType = InResourceType;
@@ -60,14 +44,3 @@ void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const F
 		TeamId = PlayerTeamId;	
 }
 
-void UResourceEntryWidget::HandleAddWorkerClicked()
-{
-	// Broadcast the delegate, notifying any listeners (the parent widget)
-	OnAddWorkerRequested.Broadcast(ResourceType);
-}
-
-void UResourceEntryWidget::HandleRemoveWorkerClicked()
-{
-	// Broadcast the delegate
-	OnRemoveWorkerRequested.Broadcast(ResourceType);
-}

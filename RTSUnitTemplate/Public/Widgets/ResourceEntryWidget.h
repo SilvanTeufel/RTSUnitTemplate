@@ -24,45 +24,30 @@ public:
 	void SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId);
 
 	/** The type of resource this widget entry represents. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resource")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	EResourceType ResourceType;
-
-	// Delegates for button clicks
-	UPROPERTY(BlueprintAssignable, Category = "Events")
-	FOnWorkerChangeRequested OnAddWorkerRequested;
-
-	UPROPERTY(BlueprintAssignable, Category = "Events")
-	FOnWorkerChangeRequested OnRemoveWorkerRequested;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 TeamId = 0;
 
-	UFUNCTION(BlueprintCallable, Category = "Resource")
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateWorkerCount(int32 AmountToAdd);
+	
 protected:
-	virtual void NativeConstruct() override;
 
 	// UI elements bound from the UMG Editor
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* ResourceNameText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* ResourceAmountText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* WorkerCountText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UButton* AddWorkerButton;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UButton* RemoveWorkerButton;
-
-private:
-	// Functions to handle button clicks internally
-	UFUNCTION()
-	void HandleAddWorkerClicked();
-
-	UFUNCTION()
-	void HandleRemoveWorkerClicked();
 };

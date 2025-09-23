@@ -39,10 +39,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 TeamId;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UPanelWidget* ResourceEntriesBox;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* TeamIdText;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Widget Setup")
