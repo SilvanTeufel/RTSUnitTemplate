@@ -111,7 +111,6 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 		SwitchResourceArea(UnitBase, ResourceGameMode);
 	}
 	
-	
 }
 
 void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, int32 RecursionCount)

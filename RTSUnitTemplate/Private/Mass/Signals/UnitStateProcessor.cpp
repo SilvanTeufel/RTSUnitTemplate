@@ -848,7 +848,6 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
         	}
         	
-            // Fragment und AttributeSet auf Gültigkeit prüfen, BEVOR darauf zugegriffen wird
             if (CombatStatsFrag && AttributeSet)
             {
                 CombatStatsFrag->Health = AttributeSet->GetHealth();
@@ -947,13 +946,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             	}
             }
         }
-    }); // Ende AsyncTask Lambda
+    }); 
 }
 
 void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 {
-	// UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState!"));
-    // --- Vorab-Checks außerhalb des AsyncTasks ---
     if (!EntitySubsystem)
     {
         UE_LOG(LogTemp, Error, TEXT("SynchronizeUnitState: EntitySubsystem ist null!"));
@@ -964,7 +961,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 
     if (!EntityManager.IsEntityValid(Entity))
     {
-        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeUnitState: Entity %d:%d ist ungültig."), Entity.Index, Entity.SerialNumber);
         return;
     }
 
@@ -972,22 +968,17 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     const AActor* Actor = ActorFrag ? ActorFrag->Get() : nullptr;
     const AUnitBase* UnitActor = Cast<AUnitBase>(Actor);
 
-    // Prüfen auf gültigen Actor
-    if (!IsValid(UnitActor)) // Attributes Check hier vielleicht nicht nötig
+
+    if (!IsValid(UnitActor))
     {
-        //UE_LOG(LogTemp, Warning, TEXT("SynchronizeUnitState: Konnte keinen gültigen AUnitBase Actor für Entity %d:%d finden."), Entity.Index, Entity.SerialNumber);
         return;
     }
-
-    // --- Notwendige Daten für den AsyncTask erfassen ---
+	
     TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
     FMassEntityHandle CapturedEntity = Entity;
-
-    // --- AsyncTask an den GameThread senden ---
-    // EntityManager aus Capture entfernt, nur 'this' benötigt
+	
     AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity, &EntityManager]() mutable
     {
-        // --- Code in dieser Lambda läuft jetzt im GameThread ---
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
     	if (!StrongUnitActor) return;
@@ -1021,21 +1012,16 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	
     			if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
-    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
     				State->StateTimer = 0.f;
     				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
-    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
     				State->StateTimer = 0.f;
 					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
-    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
-    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}else if(StrongUnitActor->IsWorker && StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
-    				//UpdateUnitMovement(CapturedEntity , StrongUnitActor);
     			}
 
 
@@ -1624,12 +1610,11 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase && UnitBase->ResourcePlace && IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->WorkResourceClass)
 					{
-						SpawnWorkResource(UnitBase->ExtractingWorkResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
-						//UnitBase->UnitControlTimer = 0;
-						//UnitBase->SetUEPathfinding = true;
+						WorkAreaData::WorkAreaType PlaceType = UnitBase->ResourcePlace->Type;
+						EResourceType CorrectResourceType = ConvertToResourceType(PlaceType);
+						UnitBase->ExtractingWorkResourceType = CorrectResourceType;
+						SpawnWorkResource(CorrectResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
-
-						
 					}
 				}
 			}

@@ -297,8 +297,8 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	// Subsystem für Teamzuweisungen (Server)
 	UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>() : nullptr;
 
-	int32 CamneraUnitIndex = 0;
-	
+	int32 PlayerIndex = 0;
+
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
 		AController* PlayerController = It->Get();
@@ -340,7 +340,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		// Fallback: wenn keine Lobby-Auswahl vorhanden war oder kein passender Start gefunden wurde
 		if (!CustomPlayerStart && PlayerStarts.Num() > 0)
 		{
-			CustomPlayerStart = PlayerStarts[0];
+			CustomPlayerStart = PlayerStarts[PlayerIndex];
 			LobbyTeamId = CustomPlayerStart->SelectableTeamId; // TeamId aus dem Start übernehmen
 		}
 
@@ -371,7 +371,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
 
 		// Kameraeinheit über TeamId-Tag finden (statt sequentiellem Index)
-		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), CamneraUnitIndex));
+		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
 		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
 		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
 
@@ -386,7 +386,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 		CameraControllerBase->AgentInit();
 
-		CamneraUnitIndex++;
+		PlayerIndex++;
 	}
 
 	NavInitialisation();
