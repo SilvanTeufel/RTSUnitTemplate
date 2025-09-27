@@ -33,11 +33,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void UpdateAttributes(const FAttributeSaveData SourceData);
-	//virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
-	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	
-//protected:
-	//AIndicatorActor* IndicatorActorRef;
+	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
 	
 public:
