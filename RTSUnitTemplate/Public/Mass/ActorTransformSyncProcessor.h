@@ -25,7 +25,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float AccumulatedTimeB = 0.0f;
 	
-	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VerticalInterpSpeed = 10.f;
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
 	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)

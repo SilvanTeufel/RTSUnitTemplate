@@ -150,31 +150,103 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
             const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = Hit.ImpactPoint.Z + HeightOffset;
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
+
+            // Pitch-only Slope-Alignment: richte die Vorwärtsachse auf die Projektion auf der Bodenebene aus,
+            // rotiere dabei ausschließlich um die Right-Achse (kein Roll), Yaw bleibt erhalten.
+            const FVector SurfaceUp = Hit.ImpactNormal.GetSafeNormal();
+
+            // Yaw-Only Basis aus aktueller Rotation
+            const FRotator CurrentRot = MassTransform.GetRotation().Rotator();
+            const FRotator YawOnlyRot(0.f, CurrentRot.Yaw, 0.f);
+            const FQuat BaseYawQuat = YawOnlyRot.Quaternion();
+
+            const FVector YawForward = BaseYawQuat.GetForwardVector(); // bereits ohne Pitch/Roll
+            const FVector RightAxis = BaseYawQuat.GetRightVector();
+
+            FVector SlopeForward = FVector::VectorPlaneProject(YawForward, SurfaceUp).GetSafeNormal();
+
+            if (!SlopeForward.IsNearlyZero())
+            {
+                // Signierter Winkel um die Right-Achse zwischen YawForward und SlopeForward
+                const FVector Cross = FVector::CrossProduct(YawForward, SlopeForward);
+                const float Sin = FVector::DotProduct(Cross, RightAxis);
+                const float Cos = FVector::DotProduct(YawForward, SlopeForward);
+                const float PitchAngleRad = FMath::Atan2(Sin, Cos);
+
+                const FQuat PitchQuat(RightAxis, PitchAngleRad);
+                const FQuat DesiredQuat = PitchQuat * BaseYawQuat;
+
+                // Interpolation zur Zielrotation (nur Pitch ändert sich)
+                const float GroundSlopeRotationSpeedDegrees = 360.0f; // ggf. als UPROPERTY konfigurieren
+                const FQuat NewRotQuat = FMath::QInterpConstantTo(
+                    MassTransform.GetRotation(),
+                    DesiredQuat,
+                    ActualDeltaTime,
+                    FMath::DegreesToRadians(GroundSlopeRotationSpeedDegrees)
+                );
+                MassTransform.SetRotation(NewRotQuat);
+            }
         }
-        else if (!CharFragment.bIsFlying)
+        else if (!CharFragment.bIsFlying) // Not on a valid ground hit, but not flying (e.g., walking off a ledge, or on another unit)
         {
             const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = CharFragment.LastGroundLocation + HeightOffset;
-            
+
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
+
+            // Revert pitch and roll to zero (level) if not on valid ground
+            FRotator CurrentRotation = MassTransform.GetRotation().Rotator();
+            FRotator DesiredRotator(0.f, CurrentRotation.Yaw, 0.f); // Only keep yaw
+            const float GroundSlopeRotationSpeedDegrees = 360.0f;
+            FQuat NewRotQuat = FMath::QInterpConstantTo(
+                MassTransform.GetRotation(),
+                DesiredRotator.Quaternion(),
+                ActualDeltaTime,
+                FMath::DegreesToRadians(GroundSlopeRotationSpeedDegrees)
+            );
+            MassTransform.SetRotation(NewRotQuat);
         }
-        else if (IsValid(HitActor) && CharFragment.bIsFlying)
+        else if (IsValid(HitActor) && CharFragment.bIsFlying) // Flying, but a hit occurred (e.g., flying over terrain)
         {
             const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = Hit.ImpactPoint.Z + CharFragment.FlyHeight;
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
+
+            // For flying units, maintain flat pitch/roll unless specific flight controls dictate otherwise
+            FRotator CurrentRotation = MassTransform.GetRotation().Rotator();
+            FRotator DesiredRotator(0.f, CurrentRotation.Yaw, 0.f); // Only keep yaw
+            const float GroundSlopeRotationSpeedDegrees = 360.0f; // Or a specific flying rotation speed
+            FQuat NewRotQuat = FMath::QInterpConstantTo(
+                MassTransform.GetRotation(),
+                DesiredRotator.Quaternion(),
+                ActualDeltaTime,
+                FMath::DegreesToRadians(GroundSlopeRotationSpeedDegrees)
+            );
+            MassTransform.SetRotation(NewRotQuat);
         }
     }
-    else
+    else // No ground hit detected (e.g., entirely in air)
     {
         if (CharFragment.bIsFlying)
         {
             InOutFinalLocation.Z = CharFragment.LastGroundLocation + CharFragment.FlyHeight;
         }
-        else
+        else // Not flying and no ground hit (e.g., falling or airborne)
         {
             InOutFinalLocation.Z = CharFragment.LastGroundLocation + HeightOffset;
+
+            // Revert pitch and roll to zero (level)
+            FRotator CurrentRotation = MassTransform.GetRotation().Rotator();
+            FRotator DesiredRotator(0.f, CurrentRotation.Yaw, 0.f); // Only keep yaw
+            const float GroundSlopeRotationSpeedDegrees = 360.0f;
+            FQuat NewRotQuat = FMath::QInterpConstantTo(
+                MassTransform.GetRotation(),
+                DesiredRotator.Quaternion(),
+                ActualDeltaTime,
+                FMath::DegreesToRadians(GroundSlopeRotationSpeedDegrees)
+            );
+            MassTransform.SetRotation(NewRotQuat);
         }
     }
 }
