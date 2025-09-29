@@ -24,7 +24,15 @@ public:
 	void ClearAll();
 
 private:
-	// The map now stores PlayerId -> TeamId
+	// PlayerId -> TeamId (kann über Travel neu vergeben werden)
 	UPROPERTY()
 	TMap<int32, int32> PendingTeams;
+
+	// Spielername -> TeamId (robuster bei non-seamless Travel, sofern Namen stabil/unique sind)
+	UPROPERTY()
+	TMap<FString, int32> PendingTeamsByName;
+
+	// Netzwerkadresse (z.B. "IP:Port") -> TeamId als letzter Fallback
+	UPROPERTY()
+	TMap<FString, int32> PendingTeamsByNetworkAddress;
 };
