@@ -51,6 +51,8 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 			CMesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);  // Overlap with dynamic objects
 		}
 	
+	bReplicates = true;          
+	SetReplicatingMovement(true);
 }
 
 // BeginPlay implementation

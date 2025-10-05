@@ -555,6 +555,12 @@ void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
 			}
 		}
 	}
+
+	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
+	{
+		SetActorLocation(ProposedLocation);
+		return;
+	}
 	
 	// --- SAFE BOUNDARY CHECK using Clamping ---
 	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
@@ -608,6 +614,12 @@ void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
 				ProposedLocation.Z = HitResult.Location.Z+10.f;
 			}
 		}
+	}
+
+	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
+	{
+		SetActorLocation(ProposedLocation);
+		return;
 	}
 	
 	// --- SAFE BOUNDARY CHECK using Clamping ---
@@ -668,6 +680,12 @@ void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
 	}
 	
 	// --- SAFE BOUNDARY CHECK using Clamping ---
+	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
+	{
+		SetActorLocation(ProposedLocation);
+		return;
+	}
+	
 	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
 	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
 
@@ -720,6 +738,12 @@ void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
 			}
 		}
 
+	}
+
+	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
+	{
+		SetActorLocation(ProposedLocation);
+		return;
 	}
 	
 	// --- SAFE BOUNDARY CHECK using Clamping ---
