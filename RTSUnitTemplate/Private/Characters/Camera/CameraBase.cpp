@@ -14,7 +14,30 @@
 #include "UnrealEngine.h"
 #include "Engine/GameViewportClient.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Net/UnrealNetwork.h"
 
+
+void ACameraBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ACameraBase, CameraPositionMin);
+	DOREPLIFETIME(ACameraBase, CameraPositionMax);
+	DOREPLIFETIME(ACameraBase, SpringArmRotator);
+	DOREPLIFETIME(ACameraBase, CamSpeed);
+	DOREPLIFETIME(ACameraBase, CurrentCamSpeed);
+	DOREPLIFETIME(ACameraBase, ZoomSpeed);
+	DOREPLIFETIME(ACameraBase, FastZoomSpeed);
+	DOREPLIFETIME(ACameraBase, AutoZoomSpeed);
+	DOREPLIFETIME(ACameraBase, ZoomAccelerationRate);
+	DOREPLIFETIME(ACameraBase, ZoomDecelerationRate);
+	DOREPLIFETIME(ACameraBase, SpringArmMinRotator);
+	DOREPLIFETIME(ACameraBase, SpringArmMaxRotator);
+	DOREPLIFETIME(ACameraBase, SpringArmStartRotator);
+	DOREPLIFETIME(ACameraBase, SpringArmRotatorSpeed);
+	DOREPLIFETIME(ACameraBase, SpringArmRotatorMaxSpeed);
+	DOREPLIFETIME(ACameraBase, SpringArmRotatorAcceleration);
+}
 
 // Called when the game starts or when spawned
 void ACameraBase::BeginPlay()
@@ -61,6 +84,7 @@ void ACameraBase::CreateCameraComp()
 	SpringArm->bDoCollisionTest = false;
 	SpringArm->bUsePawnControlRotation = false;
 	SpringArm->SetRelativeRotation(SpringArmRotator);
+	SpringArm->SetIsReplicated(true);
 
 	CameraComp = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
 	CameraComp->SetupAttachment(SpringArm);
@@ -115,8 +139,7 @@ void ACameraBase::ZoomOut(float ZoomMultiplier, bool Decelerate) {
 	
 	if(SpringArm)
 		SpringArm->TargetArmLength += zoomAmount;
-
-	//SetControlWidgetLocation();
+	
 }
 
 void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
@@ -135,8 +158,7 @@ void ACameraBase::ZoomIn(float ZoomMultiplier, bool Decelerate) {
 	
 	if(SpringArm && SpringArm->TargetArmLength > 100.f)
 		SpringArm->TargetArmLength += zoomAmount;
-
-	//SetControlWidgetLocation();
+	
 }
 
 
@@ -220,9 +242,9 @@ bool ACameraBase::RotateFree(FVector MouseLocation)
 }
 
 
-
-bool ACameraBase::RotateCamLeft(float Add, bool stopCam) // CamRotationOffset
+bool ACameraBase::RotateCamera(float Direction, float Add, bool stopCam)
 {
+	// Direction: 1.0f = Left, -1.0f = Right
 
 	if(stopCam && CurrentRotationValue > 0.f)
 	{
@@ -230,62 +252,36 @@ bool ACameraBase::RotateCamLeft(float Add, bool stopCam) // CamRotationOffset
 			CurrentRotationValue = 0.0000f;
 		else
 			CurrentRotationValue -= RotationIncreaser*3;
-		
-	}else if(CurrentRotationValue < Add)
+	}
+	else if(CurrentRotationValue < Add)
+	{
 		CurrentRotationValue += RotationIncreaser;
-	
-	SpringArmRotator.Yaw += CurrentRotationValue;
+	}
+
+	// Apply rotation based on direction
+	SpringArmRotator.Yaw += CurrentRotationValue * Direction;
 
 	if(CurrentRotationValue >= 1.0f)
 		SpringArmRotator.Yaw = floor(SpringArmRotator.Yaw+0.5);
 
-	SpringArm->SetRelativeRotation(SpringArmRotator);
+	// Normalize Yaw to [0, 360)
+	if (SpringArmRotator.Yaw >= 360.f) 
+		SpringArmRotator.Yaw = FMath::Fmod(SpringArmRotator.Yaw, 360.f);
+	if (SpringArmRotator.Yaw < 0.f) 
+		SpringArmRotator.Yaw = 360.f + FMath::Fmod(SpringArmRotator.Yaw, 360.f);
 
-	//SetControlWidgetLocation();
-	
-	if (SpringArmRotator.Yaw >= 360) SpringArmRotator.Yaw = 0.f;
-	
+	if(SpringArm)
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+
+	// Check if we've reached a camera angle
 	if (FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[0], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[3], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[2], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[1], RotationIncreaser))
-	{
-		return true;
-	}
-	
-	return false;
-}
-
-bool ACameraBase::RotateCamRight(float Add, bool stopCam) // CamRotationOffset
-{
-	if(stopCam && CurrentRotationValue > 0.f)
-	{
-		if(FMath::IsNearlyEqual(CurrentRotationValue, 0.f, RotationIncreaser*3))
-			CurrentRotationValue = 0.0000f;
-		else
-			CurrentRotationValue -= RotationIncreaser*3;
-		
-	}else if(CurrentRotationValue < Add)
-		CurrentRotationValue += RotationIncreaser;
-	
-	SpringArmRotator.Yaw -= CurrentRotationValue;
-
-	if(CurrentRotationValue >= 1.0f)
-		SpringArmRotator.Yaw = floor(SpringArmRotator.Yaw+0.5);
-
-	SpringArm->SetRelativeRotation(SpringArmRotator);
-	
-	if (SpringArmRotator.Yaw <= -1) SpringArmRotator.Yaw = 359.f;
-
-	if (FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[0], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[3], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[2], RotationIncreaser) ||
-	FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[1], RotationIncreaser))
+		FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[1], RotationIncreaser) ||
+		FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[2], RotationIncreaser) ||
+		FMath::IsNearlyEqual(SpringArmRotator.Yaw, CameraAngles[3], RotationIncreaser))
 	{
 		return true;
 	}
 
-	
 	return false;
 }
 
@@ -507,249 +503,95 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 	SetActorLocation(NewPawnLocation);
 }
 
-void ACameraBase::MoveCamToForward(float DeltaTime, bool Decelerate)
+void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 {
-	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw*PI/180);
-	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw*PI/180);
-	
-	const FVector NewPawnLocation = FVector(0.3*CosYaw,  0.3*SinYaw, 0);
-
-	// Accelerate the camera's speed until it reaches the maximum speed
-	if (!Decelerate && CurrentCamSpeed.X < CamSpeed)
+	FString NetModeStr = TEXT("UNKNOWN");
+	if (GetWorld())
 	{
-		CurrentCamSpeed.X  += AccelerationRate * DeltaTime;
-		CurrentCamSpeed.X  = FMath::Min(CurrentCamSpeed.X , CamSpeed);
-	}else if(Decelerate && CurrentCamSpeed.X > 0.f)
-	{
-		CurrentCamSpeed.X  -= DecelerationRate * DeltaTime;
-		CurrentCamSpeed.X  = FMath::Min(CurrentCamSpeed.X , CamSpeed);
-	}else if(Decelerate)
-	{
-		CurrentCamSpeed.X = 0.f;
+		switch (GetWorld()->GetNetMode())
+		{
+			case NM_Standalone: NetModeStr = TEXT("Standalone"); break;
+			case NM_DedicatedServer: NetModeStr = TEXT("DedicatedServer"); break;
+			case NM_ListenServer: NetModeStr = TEXT("ListenServer"); break;
+			case NM_Client: NetModeStr = TEXT("Client"); break;
+		}
 	}
 
-	// Calculate the proposed new location.
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.X * DeltaTime);
+	UE_LOG(LogTemp, Warning, TEXT("=== MoveInDirection START [%s] ==="), *NetModeStr);
+	UE_LOG(LogTemp, Warning, TEXT("  Input Direction: %s, DeltaTime: %f"), *Direction.ToString(), DeltaTime);
+	UE_LOG(LogTemp, Warning, TEXT("  Current Location: %s"), *GetActorLocation().ToString());
+	UE_LOG(LogTemp, Warning, TEXT("  CamSpeed: %f"), CamSpeed);
 
-	// Perform a line trace to get the correct Z location.
-	// Define start and end for the trace - here we use 1000 units above and below.
+	if (Direction.IsNearlyZero())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("  Direction is nearly zero, returning early"));
+		return;
+	}
+
+	// Normalize the direction
+	Direction.Normalize();
+	UE_LOG(LogTemp, Warning, TEXT("  Normalized Direction: %s"), *Direction.ToString());
+
+	// Calculate the movement direction relative to the SpringArm rotation
+	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180.f);
+	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180.f);
+
+	UE_LOG(LogTemp, Warning, TEXT("  SpringArmRotator.Yaw: %f, CosYaw: %f, SinYaw: %f"), SpringArmRotator.Yaw, CosYaw, SinYaw);
+
+	// Transform the input direction based on camera rotation
+	// Forward/Backward uses Cos/Sin, Left/Right uses Sin/Cos with appropriate signs
+	FVector WorldDirection;
+	WorldDirection.X = Direction.X * CosYaw - Direction.Y * SinYaw;
+	WorldDirection.Y = Direction.X * SinYaw + Direction.Y * CosYaw;
+	WorldDirection.Z = 0.f;
+
+	UE_LOG(LogTemp, Warning, TEXT("  WorldDirection: %s"), *WorldDirection.ToString());
+
+	// Always use direct location manipulation since AddMovementInput doesn't work for camera
+	UE_LOG(LogTemp, Warning, TEXT("  Using direct location manipulation"));
+
+	FVector ProposedLocation = GetActorLocation() + (WorldDirection * CamSpeed * DeltaTime);
+	UE_LOG(LogTemp, Warning, TEXT("  Proposed Location (before trace): %s"), *ProposedLocation.ToString());
+
+	// Perform line trace for Z adjustment
 	const float TraceVerticalRange = 3000.f;
 	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
-	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
+	const FVector TraceEnd = ProposedLocation - FVector(0, 0, TraceVerticalRange);
 
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
+	QueryParams.AddIgnoredActor(this);
 
 	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
-		// If the camera's proposed Z is lower than the hit location's Z, update it.
+		UE_LOG(LogTemp, Warning, TEXT("  Line trace HIT at: %s"), *HitResult.Location.ToString());
 		AActor* HitActor = HitResult.GetActor();
 		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
 			if (ProposedLocation.Z < HitResult.Location.Z)
 			{
-				// Optionally you may add an extra offset if needed.
-				ProposedLocation.Z = HitResult.Location.Z+10.f;
+				float OldZ = ProposedLocation.Z;
+				ProposedLocation.Z = HitResult.Location.Z + 10.f;
+				UE_LOG(LogTemp, Warning, TEXT("  Adjusted Z from %f to %f"), OldZ, ProposedLocation.Z);
 			}
 		}
 	}
 
-	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
+	// Apply boundary clamping if limits are set
+	if (CameraPositionMin.X != 0.f || CameraPositionMax.X != 0.f)
 	{
-		SetActorLocation(ProposedLocation);
-		return;
+		FVector BeforeClamp = ProposedLocation;
+		ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
+		ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
+		UE_LOG(LogTemp, Warning, TEXT("  Clamped location from %s to %s"), *BeforeClamp.ToString(), *ProposedLocation.ToString());
 	}
-	
-	// --- SAFE BOUNDARY CHECK using Clamping ---
-	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
-	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
-	
+
+	UE_LOG(LogTemp, Warning, TEXT("  Setting Actor Location to: %s"), *ProposedLocation.ToString());
 	SetActorLocation(ProposedLocation);
+
+	UE_LOG(LogTemp, Warning, TEXT("  Final Location: %s"), *GetActorLocation().ToString());
+	UE_LOG(LogTemp, Warning, TEXT("=== MoveInDirection END ==="));
 }
 
-void ACameraBase::MoveCamToBackward(float DeltaTime, bool Decelerate)
-{
-	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw*PI/180);
-	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw*PI/180);
-	
-	const FVector NewPawnLocation = FVector(0.3*CosYaw*(-1),  0.3*SinYaw*(-1), 0);
 
-	// Accelerate the camera's speed until it reaches the maximum speed
-	if (!Decelerate && CurrentCamSpeed.X > -CamSpeed)
-	{
-		CurrentCamSpeed.X -= AccelerationRate * DeltaTime;
-		CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
-	}else if(Decelerate && CurrentCamSpeed.X  < 0.f)
-	{
-		CurrentCamSpeed.X += DecelerationRate * DeltaTime;
-		CurrentCamSpeed.X = FMath::Min(CurrentCamSpeed.X, CamSpeed);
-	}else if(Decelerate)
-	{
-		CurrentCamSpeed.X = 0.f;
-	}
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.X * DeltaTime);
-
-	// Perform a line trace to get the correct Z location.
-	// Define start and end for the trace - here we use 1000 units above and below.
-	const float TraceVerticalRange = 3000.f;
-	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
-	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
-
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
-	if (bHit)
-	{
-		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		AActor* HitActor = HitResult.GetActor();
-		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
-		{
-			if (ProposedLocation.Z < HitResult.Location.Z)
-			{
-				// Optionally you may add an extra offset if needed.
-				ProposedLocation.Z = HitResult.Location.Z+10.f;
-			}
-		}
-	}
-
-	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
-	{
-		SetActorLocation(ProposedLocation);
-		return;
-	}
-	
-	// --- SAFE BOUNDARY CHECK using Clamping ---
-	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
-	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
-    
-	
-	SetActorLocation(ProposedLocation);
-}
-
-void ACameraBase::MoveCamToLeft(float DeltaTime, bool Decelerate)
-{
-
-	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw*PI/180);
-	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw*PI/180);
-	
-	const FVector NewPawnLocation = FVector(0.3*SinYaw,  0.3*CosYaw*(-1), 0);
-
-	// Accelerate the camera's speed until it reaches the maximum speed
-	if (!Decelerate && CurrentCamSpeed.Y > -CamSpeed)
-	{
-		CurrentCamSpeed.Y -= AccelerationRate * DeltaTime;
-		CurrentCamSpeed.Y = FMath::Min(CurrentCamSpeed.Y, CamSpeed);
-	}else if(Decelerate && CurrentCamSpeed.Y < 0.f)
-	{
-		CurrentCamSpeed.Y += DecelerationRate * DeltaTime;
-		CurrentCamSpeed.Y = FMath::Min(CurrentCamSpeed.Y, CamSpeed);
-	}else if(Decelerate)
-	{
-		CurrentCamSpeed.Y = 0.f;
-	}
-
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * (-1) * CurrentCamSpeed.Y * DeltaTime);
-
-	// Perform a line trace to get the correct Z location.
-	// Define start and end for the trace - here we use 1000 units above and below.
-	const float TraceVerticalRange = 3000.f;
-	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
-	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
-
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
-	if (bHit)
-	{
-		// If the camera's proposed Z is lower than the hit location's Z, update it.
-		AActor* HitActor = HitResult.GetActor();
-		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
-		{
-			if (ProposedLocation.Z < HitResult.Location.Z)
-			{
-				// Optionally you may add an extra offset if needed.
-				ProposedLocation.Z = HitResult.Location.Z+10.f;
-			}
-		}
-	}
-	
-	// --- SAFE BOUNDARY CHECK using Clamping ---
-	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
-	{
-		SetActorLocation(ProposedLocation);
-		return;
-	}
-	
-	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
-	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
-
-	SetActorLocation(ProposedLocation);
-}
-
-void ACameraBase::MoveCamToRight(float DeltaTime, bool Decelerate)
-{
-	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw*PI/180);
-	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw*PI/180);
-	
-	const FVector NewPawnLocation = FVector(0.3*SinYaw*(-1),  0.3*CosYaw, 0);
-
-	// Accelerate the camera's speed until it reaches the maximum speed
-	if (!Decelerate && CurrentCamSpeed.Y < CamSpeed)
-	{
-		CurrentCamSpeed.Y += AccelerationRate * DeltaTime;
-		CurrentCamSpeed.Y = FMath::Min(CurrentCamSpeed.Y, CamSpeed);
-	}else if(Decelerate && CurrentCamSpeed.Y > 0.f)
-	{
-		CurrentCamSpeed.Y -= DecelerationRate * DeltaTime;
-		CurrentCamSpeed.Y = FMath::Min(CurrentCamSpeed.Y, CamSpeed);
-	}else if(Decelerate)
-	{
-		CurrentCamSpeed.Y = 0.f;
-	}
-
-	FVector ProposedLocation = GetActorLocation() + (NewPawnLocation * CurrentCamSpeed.Y * DeltaTime);
-
-	// Perform a line trace to get the correct Z location.
-	// Define start and end for the trace - here we use 1000 units above and below.
-	const float TraceVerticalRange = 3000.f;
-	const FVector TraceStart = ProposedLocation + FVector(0, 0, TraceVerticalRange);
-	const FVector TraceEnd   = ProposedLocation - FVector(0, 0, TraceVerticalRange);
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // Ignore self during the trace.
-
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
-	if (bHit)
-	{
-		AActor* HitActor = HitResult.GetActor();
-		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
-		{
-			if (ProposedLocation.Z < HitResult.Location.Z)
-			{
-				// Optionally you may add an extra offset if needed.
-				ProposedLocation.Z = HitResult.Location.Z+10.f;
-			}
-		}
-
-	}
-
-	if (CameraPositionMin.X  == 0 && CameraPositionMax.X == 0)
-	{
-		SetActorLocation(ProposedLocation);
-		return;
-	}
-	
-	// --- SAFE BOUNDARY CHECK using Clamping ---
-	ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
-	ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
-    
-
-	SetActorLocation(ProposedLocation);
-}

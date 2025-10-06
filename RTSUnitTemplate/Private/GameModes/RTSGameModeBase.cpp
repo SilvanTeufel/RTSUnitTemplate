@@ -374,7 +374,8 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
 		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
 		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
-
+		CameraControllerBase->Multi_SetCameraOnly();
+		
 		CameraControllerBase->Multi_HideEnemyWaypoints();
 		CameraControllerBase->Multi_InitFogOfWar();
 		CameraControllerBase->Multi_SetupPlayerMiniMap();

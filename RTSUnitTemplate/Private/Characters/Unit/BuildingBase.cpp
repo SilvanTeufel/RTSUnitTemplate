@@ -217,6 +217,10 @@ void ABuildingBase::DespawnWorkResource(AWorkResource* ResourceToDespawn)
 
 void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
 {
+	//if (!CanMove && bVisible == false) return;
+	Super::MulticastSetEnemyVisibility_Implementation(DetectingActor, bVisible);
+
+	/*
 	if (!CanMove && bVisible == false) return;
 	if (IsMyTeam) return;
 	if (IsVisibleEnemy == bVisible) return;
@@ -238,5 +242,6 @@ void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit*
 				IsVisibleEnemy = bVisible;
 			}
 		}
+	*/
 }
 

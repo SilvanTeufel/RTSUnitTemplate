@@ -44,6 +44,9 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerSetCameraUnit(AUnitBase* CameraUnit, int TeamId);
 	
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetCameraOnly();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation);
 	
@@ -152,12 +155,45 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector CameraUnitMovementLocation = FVector::ZeroVector;
 	
-	//UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	//float CameraUnitTimer = 0.f;
-	
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	//float MoveCameraUnitReExecutionTime = 1.f;
-	
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
+	void Server_MoveInDirection(FVector Direction, float DeltaTime);
+
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
+	void Server_RotateCamera(float Direction, float Add, bool stopCam);
+
+	UFUNCTION(Server, Reliable)
+	void Server_MoveCamToPosition(float DeltaSeconds, FVector Destination);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetCameraLocation(FVector NewLocation);
+
+	UFUNCTION(Server, Reliable)
+	void Server_MoveCamToClick(float DeltaSeconds, FVector Destination);
+
+	UFUNCTION(Server, Reliable)
+	void Server_MoveCam(float DeltaSeconds, FVector Destination);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RotateSpringArm(bool Invert);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomIn(float Value, bool Stop);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomOut(float Value, bool Stop);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomInToPosition(float Distance, FVector OptionalLocation);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomOutToPosition(float Distance, FVector OptionalLocation);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomInToThirdPerson(FVector SelectedActorLocation);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ZoomOutAutoCam(float Position);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockZDistanceToCharacter();
 
@@ -197,4 +233,5 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "ScrollZoomCount", Keywords = "TopDownRTSCamLib ScrollZoomCount"), Category = RTSUnitTemplate)
 	float ScrollZoomCount = 0.f;
 	
+
 };

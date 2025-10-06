@@ -9,7 +9,6 @@
 #include "GameFramework/Character.h"
 #include "Core/UnitData.h"
 #include "Actors/DijkstraCenter.h"
-#include "Actors/FogOfWarManager.h"
 #include "Core/DijkstraMatrix.h"
 #include "Actors/Projectile.h"
 #include "Components/PointLightComponent.h"

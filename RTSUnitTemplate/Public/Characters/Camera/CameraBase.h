@@ -33,6 +33,8 @@ public:
 	// Sets default values for this character's properties
 	//ACameraBase(const FObjectInitializer& ObjectInitializer);
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UCapsuleComponent* GetCameraBaseCapsule() const {
 		return GetCapsuleComponent();
 	}
@@ -42,10 +44,10 @@ public:
 
 
 	// In your ACameraBase.h within the class declaration:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Camera Limits")
 	FVector2D CameraPositionMin = FVector2D(-10000.0f, -10000.0f); // Example minimum limits for X and Y
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Camera Limits")
 	FVector2D CameraPositionMax = FVector2D(10000.0f, 10000.0f); 
 protected:
 	// Called when the game starts or when spawned
@@ -75,7 +77,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpringArm", Keywords = "RTSUnitTemplate SpringArm"), Category = RTSUnitTemplate)
 		USpringArmComponent* SpringArm;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpringArmRotator", Keywords = "RTSUnitTemplate SpringArmRotator"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, meta = (DisplayName = "SpringArmRotator", Keywords = "RTSUnitTemplate SpringArmRotator"), Category = RTSUnitTemplate)
 		FRotator SpringArmRotator = FRotator(-50, 0, 0);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraComp", Keywords = "RTSUnitTemplate CameraComp"), Category = RTSUnitTemplate)
@@ -105,7 +107,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "GetViewPortScreenSizesState", Keywords = "RTSUnitTemplate GetViewPortScreenSizesState"), Category = RTSUnitTemplate)
 		int GetViewPortScreenSizesState = 1;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		FVector CurrentCamSpeed = FVector(0.0f, 0.0f, 0.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -113,50 +115,50 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ForceRespawnZLocation = -100.0f;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float AccelerationRate = 7500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float DecelerationRate = 15000.0f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float CamSpeed = 7000.f; // 120
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float ZoomSpeed = 120.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float FastZoomSpeed = 250.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite,  Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float AutoZoomSpeed = 25.f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float ZoomAccelerationRate = 10.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float ZoomDecelerationRate = 15.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "EdgeScrollCamSpeed", Keywords = "RTSUnitTemplate EdgeScrollCamSpeed"), Category = RTSUnitTemplate)
 		float EdgeScrollCamSpeed = 200.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmMinRotator = -10.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmMaxRotator = -50.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmStartRotator = 500.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmRotatorSpeed = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmRotatorMaxSpeed = 0.4f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
 		float SpringArmRotatorAcceleration = 0.05f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -180,11 +182,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool RotateFree(FVector MouseLocation);
 	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateCamLeft", Keywords = "RTSUnitTemplate RotateCamLeft"), Category = TopDownRTSCamLib)
-		bool RotateCamLeft(float Add, bool stopCam = false); // CamRotationOffset
-	
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateCamRight", Keywords = "RTSUnitTemplate RotateCamRight"), Category = TopDownRTSCamLib)
-		bool RotateCamRight(float Add, bool stopCam = false); // CamRotationOffset
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		bool RotateCamera(float Direction, float Add, bool stopCam = false);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateCamLeft", Keywords = "RTSUnitTemplate RotateCamLeft"), Category = TopDownRTSCamLib)
 		bool RotateCamLeftTo(float Position, float Add);
@@ -274,18 +273,9 @@ public:
 		}
 		return IsInAngle;
 	}
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveCamToForward", Keywords = "TopDownRTSCamLib MoveCamToForward"), Category = RTSUnitTemplate)
-		void MoveCamToForward(float DeltaTime, bool Decelerate = false);
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveCamToBackward", Keywords = "TopDownRTSCamLib MoveCamToBackward"), Category = RTSUnitTemplate)
-		void MoveCamToBackward(float DeltaTime, bool Decelerate = false);
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveCamToLeft", Keywords = "TopDownRTSCamLib MoveCamToLeft"), Category = RTSUnitTemplate)
-		void MoveCamToLeft(float DeltaTime, bool Decelerate = false);
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveCamToRight", Keywords = "TopDownRTSCamLib MoveCamToRight"), Category = RTSUnitTemplate)
-		void MoveCamToRight(float DeltaTime, bool Decelerate = false);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveInDirection(FVector Direction, float DeltaTime);
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "StartTime", Keywords = "TopDownRTSCamLib StartTime"), Category = RTSUnitTemplate)
 		float StartTime = 0.f;

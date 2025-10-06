@@ -119,6 +119,11 @@ void ACameraControllerBase::ServerSetCameraUnit_Implementation(AUnitBase* Camera
 		CameraBase->SetCameraState(CameraData::LockOnCharacterWithTag);
 }
 
+void ACameraControllerBase::Multi_SetCameraOnly_Implementation()
+{
+	CameraBase = Cast<ACameraBase>(GetPawn());
+}
+
 void ACameraControllerBase::ClientSetCameraUnit_Implementation(AUnitBase* CameraUnit, int TeamId)
 {
 	if (GetNetMode() == NM_Client) 	UE_LOG(LogTemp, Log, TEXT("!!!!EXECUTED ON CLIENT!!!!!!!!!!"));
@@ -147,7 +152,6 @@ void ACameraControllerBase::Tick(float DeltaSeconds)
 	CheckSpeakingUnits();
 	RotateCam(DeltaSeconds);
 	CameraBaseMachine(DeltaSeconds);
-
 }
 
 void ACameraControllerBase::MoveCamToLocation(ACameraBase* Camera, const FVector& DestinationLocation)
@@ -420,7 +424,16 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					return;
 				}
 				
-				CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				// Client-Side Prediction
+				if (IsLocalController())
+				{
+					CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				}
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_ZoomInToPosition(CameraBase->ZoomPosition, FVector::ZeroVector);
+				}
 			}
 			break;
 		case CameraData::MoveWASD:
@@ -428,30 +441,83 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 
 				LockCameraToCharacter = false;
 				
-				if(AIsPressedState == 1) CameraBase->MoveCamToLeft(DeltaTime);
-				if(DIsPressedState == 1) CameraBase->MoveCamToRight(DeltaTime);
-				if(WIsPressedState == 1) CameraBase->MoveCamToForward(DeltaTime);
-				if(SIsPressedState == 1) CameraBase->MoveCamToBackward(DeltaTime);
+				// Calculate movement direction based on input states
+				// Only add direction when state is 1 (active press), not 2 (decelerate)
+				FVector MoveDirection = FVector::ZeroVector;
 
-				if(AIsPressedState == 2) CameraBase->MoveCamToLeft(DeltaTime, true);
-				if(DIsPressedState == 2) CameraBase->MoveCamToRight(DeltaTime, true);
-				if(WIsPressedState == 2) CameraBase->MoveCamToForward(DeltaTime, true);
-				if(SIsPressedState == 2) CameraBase->MoveCamToBackward(DeltaTime, true);
+				if(WIsPressedState == 1)
+				{
+					MoveDirection.X += 1.0f; // Forward
+				}
+				if(SIsPressedState == 1)
+				{
+					MoveDirection.X -= 1.0f; // Backward
+				}
+				if(AIsPressedState == 1)
+				{
+					MoveDirection.Y -= 1.0f; // Left
+				}
+				if(DIsPressedState == 1)
+				{
+					MoveDirection.Y += 1.0f; // Right
+				}
 
-				if(CameraBase->CurrentCamSpeed.X == 0.0f && WIsPressedState == 2) WIsPressedState = 0;
-				if(CameraBase->CurrentCamSpeed.X == 0.0f && SIsPressedState == 2) SIsPressedState = 0;
-				if(CameraBase->CurrentCamSpeed.Y == 0.0f && DIsPressedState == 2) DIsPressedState = 0;
-				if(CameraBase->CurrentCamSpeed.Y == 0.0f && AIsPressedState == 2) AIsPressedState = 0;
-
-				if(CamIsRotatingLeft) CameraBase->RotateCamLeft(CameraBase->AddCamRotation, !CamIsRotatingLeft);
-				if(CamIsRotatingRight) CameraBase->RotateCamRight(CameraBase->AddCamRotation, !CamIsRotatingRight);
-				
-					if(CameraBase->CurrentCamSpeed.X == 0.0f &&
-						CameraBase->CurrentCamSpeed.Y == 0.0f &&
-						CameraBase->CurrentRotationValue == 0.0f)
+				// Bewegung lokal ausführen für sofortige Reaktion (Client-Side Prediction)
+				if (!MoveDirection.IsNearlyZero())
+				{
+					// Lokal ausführen für alle lokalen Controller (Client und Server)
+					if (IsLocalController() && CameraBase)
 					{
-						CameraBase->SetCameraState(CameraData::UseScreenEdges);
+						CameraBase->MoveInDirection(MoveDirection, DeltaTime);
 					}
+
+					// Zusätzlich an Server senden für Synchronisierung (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_MoveInDirection(MoveDirection, DeltaTime);
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("MoveWASD: MoveDirection is ZERO! AIsPressedState=%d, DIsPressedState=%d, WIsPressedState=%d, SIsPressedState=%d"), 
+						AIsPressedState, DIsPressedState, WIsPressedState, SIsPressedState);
+				}
+
+				// Keep the rotation logic with new RotateCamera function
+				if(CamIsRotatingLeft)
+				{
+					// Client-Side Prediction
+					if (IsLocalController() && CameraBase)
+					{
+						CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation, !CamIsRotatingLeft);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_RotateCamera(1.0f, CameraBase->AddCamRotation, !CamIsRotatingLeft);
+					}
+				}
+
+				if(CamIsRotatingRight)
+				{
+					// Client-Side Prediction
+					if (IsLocalController() && CameraBase)
+					{
+						CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, !CamIsRotatingRight);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, !CamIsRotatingRight);
+					}
+				}
+
+				// Check if movement has stopped to return to UseScreenEdges state
+				if(MoveDirection.IsNearlyZero() && CameraBase->CurrentRotationValue == 0.0f)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("MoveWASD: Switching to UseScreenEdges state because movement stopped"));
+					CameraBase->SetCameraState(CameraData::UseScreenEdges);
+				}
 
 				// Sanity check that we have at least one "SelectedUnit"
 				if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
@@ -465,7 +531,16 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					return;
 				}
 				
-				CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				// Client-Side Prediction
+				if (IsLocalController())
+				{
+					CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				}
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_ZoomInToPosition(CameraBase->ZoomPosition, FVector::ZeroVector);
+				}
 
 		
 			}
@@ -473,8 +548,32 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		case CameraData::ZoomIn:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("ZoomIn"));
-				if(CamIsZoomingInState == 1)CameraBase->ZoomIn(1.f);
-				if(CamIsZoomingInState == 2)CameraBase->ZoomIn(1.f, true);
+				if(CamIsZoomingInState == 1)
+				{
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomIn(1.f);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomIn(1.f, false);
+					}
+				}
+				if(CamIsZoomingInState == 2)
+				{
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomIn(1.f, true);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomIn(1.f, true);
+					}
+				}
 				if(CamIsZoomingInState != 1 && CameraBase->CurrentCamSpeed.Z == 0.f) CamIsZoomingInState = 0;
 
 				if(CamIsZoomingInState != 1 && CamIsZoomingOutState == 1)SetCameraState(CameraData::ZoomOut);
@@ -487,8 +586,32 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		case CameraData::ZoomOut:
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("ZoomOut"));
-				if(CamIsZoomingOutState == 1)CameraBase->ZoomOut(1.f);
-				if(CamIsZoomingOutState == 2)CameraBase->ZoomOut(1.f, true);
+				if(CamIsZoomingOutState == 1)
+				{
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomOut(1.f);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomOut(1.f, false);
+					}
+				}
+				if(CamIsZoomingOutState == 2)
+				{
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomOut(1.f, true);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomOut(1.f, true);
+					}
+				}
 				if(CamIsZoomingOutState != 1 && CameraBase->CurrentCamSpeed.Z == 0.f) CamIsZoomingOutState = 0;
 
 				if(CamIsZoomingOutState != 1 && CamIsZoomingInState == 1)SetCameraState(CameraData::ZoomIn);
@@ -502,14 +625,36 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				//UE_LOG(LogTemp, Warning, TEXT("ScrollZoomIn %f"), ScrollZoomCount);
 				if(ScrollZoomCount > 0.f)
 				{
-					CameraBase->ZoomIn(1.f);
-					CameraBase->RotateSpringArm();
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomIn(1.f);
+						CameraBase->RotateSpringArm();
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomIn(1.f, false);
+						Server_RotateSpringArm(false);
+					}
+
 					SetCameraZDistance(0);
 				}
 				if(ScrollZoomCount <= 0.f)
 				{
-					CameraBase->ZoomIn(1.f, true);
-					CameraBase->RotateSpringArm();
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomIn(1.f, true);
+						CameraBase->RotateSpringArm();
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomIn(1.f, true);
+						Server_RotateSpringArm(false);
+					}
+
 					SetCameraZDistance(0);
 				}
 				
@@ -528,8 +673,6 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				if(LockCameraToCharacter)
 				{
 					LockCamToCharacter(0);
-					//CameraBase->SetCameraState(CameraData::LockOnCharacter);
-					//CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - SelectedUnits[0]->GetActorLocation().Z);
 				}
 			}
 			break;
@@ -537,14 +680,36 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 			{
 				if(ScrollZoomCount < 0.f)
 				{
-					CameraBase->ZoomOut(1.f);
-					CameraBase->RotateSpringArm(true);
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomOut(1.f);
+						CameraBase->RotateSpringArm(true);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomOut(1.f, false);
+						Server_RotateSpringArm(true);
+					}
+
 					SetCameraZDistance(0);
 				}
 				if(ScrollZoomCount >= 0.f)
 				{
-					CameraBase->ZoomOut(1.f, true);
-					CameraBase->RotateSpringArm(true);
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomOut(1.f, true);
+						CameraBase->RotateSpringArm(true);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomOut(1.f, true);
+						Server_RotateSpringArm(true);
+					}
+
 					SetCameraZDistance(0);
 				}
 					
@@ -570,9 +735,21 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 		case CameraData::ZoomOutPosition:
 			{
 				ZoomOutToPosition = true;
-				CameraBase->ZoomOutToPosition(CameraBase->ZoomOutPosition);
-				CameraBase->RotateSpringArm(true);
-				CameraBase->RotateSpringArm(true);
+
+				// Client-Side Prediction
+				if (IsLocalController())
+				{
+					CameraBase->ZoomOutToPosition(CameraBase->ZoomOutPosition);
+					CameraBase->RotateSpringArm(true);
+					CameraBase->RotateSpringArm(true);
+				}
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_ZoomOutToPosition(CameraBase->ZoomOutPosition, FVector::ZeroVector);
+					Server_RotateSpringArm(true);
+					Server_RotateSpringArm(true);
+				}
 			}
 			break;
 		case CameraData::ZoomInPosition:
@@ -580,7 +757,19 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				ZoomOutToPosition = false;
 				ZoomInToPosition = true;
 				
-				if(CameraBase->ZoomInToPosition(CameraBase->ZoomPosition))
+				bool bZoomComplete = false;
+				// Client-Side Prediction
+				if (IsLocalController())
+				{
+					bZoomComplete = CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				}
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_ZoomInToPosition(CameraBase->ZoomPosition, FVector::ZeroVector);
+				}
+
+				if(bZoomComplete)
 				{
 					SetCameraZDistance(0);
 					ZoomInToPosition = false;
@@ -599,14 +788,24 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					CameraBase->SetCameraState(CameraData::LockOnCharacter);
 				}
 				
-				CameraBase->RotateCamLeft(CameraBase->AddCamRotation, !CamIsRotatingLeft); // CameraBase->AddCamRotation
-				
+				// Client-Side Prediction
+				if (IsLocalController() && CameraBase)
+				{
+					CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation, !CamIsRotatingLeft);
+				}
+
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_RotateCamera(1.0f, CameraBase->AddCamRotation, !CamIsRotatingLeft);
+				}
+
 				if(!CamIsRotatingLeft && CameraBase->CurrentRotationValue == 0.f)
 				{
 					CameraBase->CurrentRotationValue = 0.f;
 					CameraBase->SetCameraState(CameraData::UseScreenEdges);
 				}
-				
+
 			}
 			break;
 		case CameraData::HoldRotateRight:
@@ -620,8 +819,18 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					CameraBase->CurrentRotationValue = 0.f;
 					CameraBase->SetCameraState(CameraData::LockOnCharacter);
 				}
-				
-				CameraBase->RotateCamRight(CameraBase->AddCamRotation, !CamIsRotatingRight); // CameraBase->AddCamRotation
+
+				// Client-Side Prediction
+				if (IsLocalController() && CameraBase)
+				{
+					CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, !CamIsRotatingRight);
+				}
+
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, !CamIsRotatingRight);
+				}
 		
 				if(!CamIsRotatingRight  && CameraBase->CurrentRotationValue == 0.f)
 				{
@@ -639,12 +848,25 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 
 				if(LockCameraToCharacter) CameraBase->SetCameraState(CameraData::LockOnCharacter);
 				
-				if(CameraBase->RotateCamLeft(CameraBase->AddCamRotation)) // CameraBase->AddCamRotation
+				bool bRotationComplete = false;
+				// Client-Side Prediction
+				if (IsLocalController() && CameraBase)
+				{
+					bRotationComplete = CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+				}
+
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+				}
+
+				if(bRotationComplete)
 				{
 					CamIsRotatingLeft = false;
 					if(!LockCameraToCharacter)CameraBase->SetCameraState(CameraData::UseScreenEdges);
 				}
-				
+
 			}
 			break;
 		case CameraData::RotateRight:
@@ -654,7 +876,21 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				//UE_LOG(LogTemp, Warning, TEXT("RotateRight"));
 
 				if(LockCameraToCharacter) CameraBase->SetCameraState(CameraData::LockOnCharacter);
-				if(CameraBase->RotateCamRight(CameraBase->AddCamRotation)) // CameraBase->AddCamRotation
+
+				bool bRotationComplete = false;
+				// Client-Side Prediction
+				if (IsLocalController() && CameraBase)
+				{
+					bRotationComplete = CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+				}
+
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+				}
+
+				if(bRotationComplete)
 				{
 					CamIsRotatingRight = false;
 					if(!LockCameraToCharacter)CameraBase->SetCameraState(CameraData::UseScreenEdges);
@@ -687,9 +923,35 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 			{
 				//UE_LOG(LogTemp, Warning, TEXT("ZoomToNormalPosition"));
 				
-				if(CameraBase->ZoomOutToPosition(CameraBase->ZoomPosition))
+				bool bZoomComplete = false;
+				// Client-Side Prediction
+				if (IsLocalController())
 				{
-					if(CameraBase->RotateCamRight(CameraBase->AddCamRotation))
+					bZoomComplete = CameraBase->ZoomOutToPosition(CameraBase->ZoomPosition);
+				}
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_ZoomOutToPosition(CameraBase->ZoomPosition, FVector::ZeroVector);
+				}
+
+				if(bZoomComplete)
+				{
+					bool bRotationComplete = false;
+
+					// Client-Side Prediction
+					if (IsLocalController() && CameraBase)
+					{
+						bRotationComplete = CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+					}
+
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+					}
+
+					if(bRotationComplete)
 					{
 						CamIsRotatingRight = false;
 						CamIsRotatingLeft = false;
@@ -710,12 +972,38 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					CameraBase->LockOnUnit(SelectedUnits[0]);
 					if (!CameraBase->IsCameraInAngle())
 					{
-						CameraBase->RotateCamRight(CameraBase->AddCamRotation);
-					}else if(CameraBase->ZoomInToThirdPerson(SelectedActorLocation))
+						// Client-Side Prediction
+						if (IsLocalController() && CameraBase)
+						{
+							CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+						}
+
+						// Server-RPC (nur wenn Client)
+						if (IsLocalController() && !HasAuthority())
+						{
+							Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+						}
+					}
+					else
 					{
-						LockCameraToCharacter = false;
-						CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - SelectedUnits[0]->GetActorLocation().Z);
-						CameraBase->SetCameraState(CameraData::ThirdPerson);
+						bool bZoomComplete = false;
+						// Client-Side Prediction
+						if (IsLocalController())
+						{
+							bZoomComplete = CameraBase->ZoomInToThirdPerson(SelectedActorLocation);
+						}
+						// Server-RPC (nur wenn Client)
+						if (IsLocalController() && !HasAuthority())
+						{
+							Server_ZoomInToThirdPerson(SelectedActorLocation);
+						}
+
+						if(bZoomComplete)
+						{
+							LockCameraToCharacter = false;
+							CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - SelectedUnits[0]->GetActorLocation().Z);
+							CameraBase->SetCameraState(CameraData::ThirdPerson);
+						}
 					}
 		
 				}
@@ -731,6 +1019,8 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 	
 					CameraBase->LockOnUnit(SelectedUnits[0]);
 					
+					// Note: RotateCamRightTo/RotateCamLeftTo are kept as they use a target position
+					// These would need different implementation if full prediction is needed
 					if(YawCamera-YawActor < -90)
 						CameraBase->RotateCamRightTo(YawActor, CameraBase->AddCamRotation/3);
 					else if(YawCamera-YawActor > 90)
@@ -751,7 +1041,17 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					if (FMath::IsNearlyEqual(CameraBase->SpringArmRotator.Yaw, CameraBase->CameraAngles[0], CameraBase->RotationIncreaser))
 						CameraBase->SetCameraState(CameraData::MoveToPosition);
 				
-					CameraBase->RotateCamLeft(CameraBase->AddCamRotation/3);
+					// Client-Side Prediction
+					if (IsLocalController() && CameraBase)
+					{
+						CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation/3, false);
+					}
+
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_RotateCamera(1.0f, CameraBase->AddCamRotation/3, false);
+					}
 		
 				}
 			break;
@@ -808,12 +1108,29 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				
 				if(UnitCountInRange >= UnitCountToZoomOut)
 				{
-					// Log message when zooming out
-					CameraBase->ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*UnitCountInRange);
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*UnitCountInRange);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*UnitCountInRange);
+					}
 				}
-				else{
-					// Log message when zooming in
-					CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+				else
+				{
+					// Client-Side Prediction
+					if (IsLocalController())
+					{
+						CameraBase->ZoomInToPosition(CameraBase->ZoomPosition);
+					}
+					// Server-RPC (nur wenn Client)
+					if (IsLocalController() && !HasAuthority())
+					{
+						Server_ZoomInToPosition(CameraBase->ZoomPosition, FVector::ZeroVector);
+					}
 				}
 				
 				if(AIsPressedState || DIsPressedState || WIsPressedState || SIsPressedState)
@@ -847,71 +1164,188 @@ void ACameraControllerBase::OrbitAtLocation(FVector Destination, float OrbitSpee
 	CameraBase->SetCameraState(CameraData::RotateToStart);
 }
 
-void ACameraControllerBase::MoveCamToPosition(float DeltaSeconds, FVector Destination)
+void ACameraControllerBase::Server_MoveCamToPosition_Implementation(float DeltaSeconds, FVector Destination)
 {
-    
+	if (!CameraBase)
+	{
+		return;
+	}
+
 	const FVector CamLocation = CameraBase->GetActorLocation();
-	
+
 	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
-	
-	const float Distance = FVector::Distance(CamLocation, Destination); // Use FVector::Distance for distance calculation
-	const FVector ADirection = (Destination - CamLocation).GetSafeNormal(); // Use subtraction and GetSafeNormal for direction
+
+	const float Distance = FVector::Distance(CamLocation, Destination);
+	const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
 
 	if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
 		CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
 	else
-		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f; // Adjust this to control movement speed
+		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
 
 	CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
 
-	
 	if (Distance <= 50.f) {
 		CameraBase->SetCameraState(CameraData::OrbitAtPosition);
 	}
 }
 
-void ACameraControllerBase::MoveCamToClick(float DeltaSeconds, FVector Destination)
+void ACameraControllerBase::Server_SetCameraLocation_Implementation(FVector NewLocation)
 {
-    
-	const FVector CamLocation = CameraBase->GetActorLocation();
-	
-	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
-	
-	const float Distance = FVector::Distance(CamLocation, Destination); // Use FVector::Distance for distance calculation
-	const FVector ADirection = (Destination - CamLocation).GetSafeNormal(); // Use subtraction and GetSafeNormal for direction
+	if (CameraBase)
+	{
+		CameraBase->SetActorLocation(NewLocation);
+	}
+}
 
-	//if (Distance <= 1000.f && CameraBase->CamSpeed+400.f > 200.f)
-		//CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 100.f : 0.f;
-	//else
-		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 2000.0f? 200.f : 0.f; // Adjust this to control movement speed
+void ACameraControllerBase::MoveCamToPosition(float DeltaSeconds, FVector Destination)
+{
+	if (!CameraBase)
+	{
+		return;
+	}
+
+	// Client-Side Prediction - Lokale Ausführung für sofortige Reaktion
+	if (IsLocalController())
+	{
+		const FVector CamLocation = CameraBase->GetActorLocation();
+
+		Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+
+		const float Distance = FVector::Distance(CamLocation, Destination);
+		const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
+
+		if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
+			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
+		else
+			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
+
+		CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
+
+		if (Distance <= 50.f) {
+			CameraBase->SetCameraState(CameraData::OrbitAtPosition);
+		}
+	}
+
+	// Server-RPC (nur wenn Client)
+	if (IsLocalController() && !HasAuthority())
+	{
+		Server_MoveCamToPosition(DeltaSeconds, Destination);
+	}
+}
+
+void ACameraControllerBase::Server_MoveCamToClick_Implementation(float DeltaSeconds, FVector Destination)
+{
+	if (!CameraBase)
+	{
+		return;
+	}
+
+	const FVector CamLocation = CameraBase->GetActorLocation();
+
+	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+
+	const float Distance = FVector::Distance(CamLocation, Destination);
+	const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
+
+	CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 2000.0f? 200.f : 0.f;
 
 	CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
 
-	
 	if (Distance <= 50.f) {
 		CameraBase->SetCameraState(CameraData::LockOnActor);
 	}
 }
 
-void ACameraControllerBase::MoveCam(float DeltaSeconds, FVector Destination)
+void ACameraControllerBase::MoveCamToClick(float DeltaSeconds, FVector Destination)
 {
-	
-	
+	if (!CameraBase)
+	{
+		return;
+	}
+
+	// Client-Side Prediction
+	if (IsLocalController())
+	{
+		const FVector CamLocation = CameraBase->GetActorLocation();
+
+		Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+
+		const float Distance = FVector::Distance(CamLocation, Destination);
+		const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
+
+		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 2000.0f? 200.f : 0.f;
+
+		CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
+
+		if (Distance <= 50.f) {
+			CameraBase->SetCameraState(CameraData::LockOnActor);
+		}
+	}
+
+	// Server-RPC (nur wenn Client)
+	if (IsLocalController() && !HasAuthority())
+	{
+		Server_MoveCamToClick(DeltaSeconds, Destination);
+	}
+}
+
+void ACameraControllerBase::Server_MoveCam_Implementation(float DeltaSeconds, FVector Destination)
+{
+	if (!CameraBase)
+	{
+		return;
+	}
+
 	const FVector CamLocation = CameraBase->GetActorLocation();
-	
+
 	Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
-	
-	const float Distance = FVector::Distance(CamLocation, Destination); // Use FVector::Distance for distance calculation
+
+	const float Distance = FVector::Distance(CamLocation, Destination);
 	if (Distance <= 50.f) return;
-	
-	const FVector ADirection = (Destination - CamLocation).GetSafeNormal(); // Use subtraction and GetSafeNormal for direction
+
+	const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
 
 	if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
 		CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
 	else
-		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f; // Adjust this to control movement speed
+		CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
 
 	CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
+}
+
+void ACameraControllerBase::MoveCam(float DeltaSeconds, FVector Destination)
+{
+	if (!CameraBase)
+	{
+		return;
+	}
+
+	// Client-Side Prediction
+	if (IsLocalController())
+	{
+		const FVector CamLocation = CameraBase->GetActorLocation();
+
+		Destination = FVector(Destination.X, Destination.Y, CamLocation.Z);
+
+		const float Distance = FVector::Distance(CamLocation, Destination);
+		if (Distance <= 50.f) return;
+
+		const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
+
+		if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
+			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
+		else
+			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
+
+		CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
+	}
+
+	// Server-RPC (nur wenn Client)
+	if (IsLocalController() && !HasAuthority())
+	{
+		Server_MoveCam(DeltaSeconds, Destination);
+	}
 }
 
 void ACameraControllerBase::ToggleLockCamToCharacter()
@@ -956,19 +1390,87 @@ void ACameraControllerBase::LockCamToSpecificUnit(AUnitBase* SUnit)
 		CameraBase->LockOnUnit(Unit);
 
 		CamIsRotatingLeft = true;
-		CameraBase->RotateCamLeft(CameraBase->AddCamRotationSpeaking/100);
+
+		// Client-Side Prediction
+		if (IsLocalController() && CameraBase)
+		{
+			CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotationSpeaking/100, false);
+		}
+
+		// Server-RPC (nur wenn Client)
+		if (IsLocalController() && !HasAuthority())
+		{
+			Server_RotateCamera(1.0f, CameraBase->AddCamRotationSpeaking/100, false);
+		}
 		
 		if(CamIsZoomingInState)
 		{
-			CameraBase->ZoomIn(1.f);
-		}else if(CamIsZoomingOutState)
-			CameraBase->ZoomOut(1.f);
-		else if(ZoomOutToPosition) CameraBase->ZoomOutToPosition(CameraBase->ZoomOutPosition, SelectedActorLocation);
-		else if(ZoomInToPosition && CameraBase->ZoomInToPosition(CameraBase->ZoomPosition,SelectedActorLocation)) ZoomInToPosition = false;
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				CameraBase->ZoomIn(1.f);
+			}
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_ZoomIn(1.f, false);
+			}
+		}
+		else if(CamIsZoomingOutState)
+		{
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				CameraBase->ZoomOut(1.f);
+			}
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_ZoomOut(1.f, false);
+			}
+		}
+		else if(ZoomOutToPosition)
+		{
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				CameraBase->ZoomOutToPosition(CameraBase->ZoomOutPosition, SelectedActorLocation);
+			}
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_ZoomOutToPosition(CameraBase->ZoomOutPosition, SelectedActorLocation);
+			}
+		}
+		else if(ZoomInToPosition)
+		{
+			bool bZoomComplete = false;
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				bZoomComplete = CameraBase->ZoomInToPosition(CameraBase->ZoomPosition, SelectedActorLocation);
+			}
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_ZoomInToPosition(CameraBase->ZoomPosition, SelectedActorLocation);
+			}
+
+			if(bZoomComplete) ZoomInToPosition = false;
+		}
 		else if(CameraBase->IsCharacterDistanceTooHigh(Unit->SpeakZoomPosition, SelectedActorLocation))
 		{
-			CameraBase->ZoomInToPosition(Unit->SpeakZoomPosition, SelectedActorLocation);
-			CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - Unit->GetActorLocation().Z);
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				CameraBase->ZoomInToPosition(Unit->SpeakZoomPosition, SelectedActorLocation);
+				CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - Unit->GetActorLocation().Z);
+			}
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_ZoomInToPosition(Unit->SpeakZoomPosition, SelectedActorLocation);
+			}
 		}
 
 	}else
@@ -989,15 +1491,23 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 		if(CameraBase)
 		{
 			const float DeltaTime = GetWorld()->GetDeltaSeconds();
-			const float InterpSpeed = 5.0f; // Adjust this value for faster or slower interpolation
+			const float InterpSpeed = 5.0f;
 
-			// Calculate the desired camera position (you might want to adjust the Z value or add an offset)
 			FVector DesiredCameraLocation = FVector(TargetLocation.X, TargetLocation.Y, CameraBase->GetActorLocation().Z);
 
-			// Interpolate the camera's current location to the desired location smoothly
 			FVector NewCameraLocation = FMath::VInterpTo(CameraBase->GetActorLocation(), DesiredCameraLocation, DeltaTime, InterpSpeed);
 
-			CameraBase->SetActorLocation(NewCameraLocation);
+			// Client-Side Prediction
+			if (IsLocalController())
+			{
+				CameraBase->SetActorLocation(NewCameraLocation);
+			}
+
+			// Server-RPC (nur wenn Client)
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_SetCameraLocation(NewCameraLocation);
+			}
 		}
 		// --- End Interpolation Logic ---
 
@@ -1018,23 +1528,50 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 
 			if(!FMath::IsNearlyEqual(CameraYaw, ActorYaw, 10.f))
 			{
-				if(DeltaYaw > 0)
-					CameraBase->RotateCamRight(CameraBase->AddCamRotation*2);
-				else
-					CameraBase->RotateCamLeft(CameraBase->AddCamRotation*2);
+				float RotationDirection = (DeltaYaw > 0) ? -1.0f : 1.0f;
+
+				// Client-Side Prediction
+				if (IsLocalController() && CameraBase)
+				{
+					CameraBase->RotateCamera(RotationDirection, CameraBase->AddCamRotation*2, false);
+				}
+
+				// Server-RPC (nur wenn Client)
+				if (IsLocalController() && !HasAuthority())
+				{
+					Server_RotateCamera(RotationDirection, CameraBase->AddCamRotation*2, false);
+				}
 			}
 		}
 
 		if(CamIsRotatingRight)
 		{
 			CamIsRotatingLeft = false;
-			CameraBase->RotateCamRight(CameraBase->AddCamRotation); // CameraBase->AddCamRotation
+			// Client-Side Prediction
+			if (IsLocalController() && CameraBase)
+			{
+				CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+			}
+			// Server-RPC
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+			}
 		}
-		
+
 		if(CamIsRotatingLeft)
 		{
 			CamIsRotatingRight = false;
-			CameraBase->RotateCamLeft(CameraBase->AddCamRotation); // CameraBase->AddCamRotation
+			// Client-Side Prediction
+			if (IsLocalController() && CameraBase)
+			{
+				CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+			}
+			// Server-RPC
+			if (IsLocalController() && !HasAuthority())
+			{
+				Server_RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+			}
 		}
 	}else
 	{
@@ -1182,66 +1719,209 @@ void ACameraControllerBase::SetCameraUnitTransform_Implementation(FVector Target
 	CameraUnitWithTag->SyncTranslation();
 }
 
+void ACameraControllerBase::Server_MoveInDirection_Implementation(FVector Direction, float DeltaTime)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Server_MoveInDirection called - Direction: %s, DeltaTime: %f"), *Direction.ToString(), DeltaTime);
+
+	if (CameraBase)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraBase is valid, calling MoveInDirection"));
+		CameraBase->MoveInDirection(Direction, DeltaTime);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("CameraBase is NULL in Server_MoveInDirection!"));
+	}
+}
+
+void ACameraControllerBase::Server_RotateCamera_Implementation(float Direction, float Add, bool stopCam)
+{
+	if (CameraBase)
+	{
+		CameraBase->RotateCamera(Direction, Add, stopCam);
+	}
+}
+
+void ACameraControllerBase::Server_RotateSpringArm_Implementation(bool Invert)
+{
+	if (CameraBase)
+	{
+		CameraBase->RotateSpringArm(Invert);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomIn_Implementation(float Value, bool Stop)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomIn(Value, Stop);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomOut_Implementation(float Value, bool Stop)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomOut(Value, Stop);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomInToPosition_Implementation(float Distance, FVector OptionalLocation)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomInToPosition(Distance, OptionalLocation);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomOutToPosition_Implementation(float Distance, FVector OptionalLocation)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomOutToPosition(Distance, OptionalLocation);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomInToThirdPerson_Implementation(FVector SelectedActorLocation)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomInToThirdPerson(SelectedActorLocation);
+	}
+}
+
+void ACameraControllerBase::Server_ZoomOutAutoCam_Implementation(float Position)
+{
+	if (CameraBase)
+	{
+		CameraBase->ZoomOutAutoCam(Position);
+	}
+}
+
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)
         {
-        	
+        	// Calculate movement direction based on input states
+        	// Only add direction when state is 1 (active press), not 2 (decelerate)
+        	FVector MoveDirection = FVector::ZeroVector;
 
-        	if(AIsPressedState == 1) CameraBase->MoveCamToLeft(DeltaTime);
-        	if(DIsPressedState == 1) CameraBase->MoveCamToRight(DeltaTime);
-        	if(WIsPressedState == 1) CameraBase->MoveCamToForward(DeltaTime);
-        	if(SIsPressedState == 1) CameraBase->MoveCamToBackward(DeltaTime);
+        	if(WIsPressedState == 1)
+        	{
+        		MoveDirection.X += 1.0f; // Forward
+        	}
+        	if(SIsPressedState == 1)
+        	{
+        		MoveDirection.X -= 1.0f; // Backward
+        	}
+        	if(AIsPressedState == 1)
+        	{
+        		MoveDirection.Y -= 1.0f; // Left
+        	}
+        	if(DIsPressedState == 1)
+        	{
+        		MoveDirection.Y += 1.0f; // Right
+        	}
 
-        	if(AIsPressedState == 2) CameraBase->MoveCamToLeft(DeltaTime, true);
-        	if(DIsPressedState == 2) CameraBase->MoveCamToRight(DeltaTime, true);
-        	if(WIsPressedState == 2) CameraBase->MoveCamToForward(DeltaTime, true);
-        	if(SIsPressedState == 2) CameraBase->MoveCamToBackward(DeltaTime, true);
+        	// Execute movement locally for immediate response (Client-Side Prediction)
+        	if (!MoveDirection.IsNearlyZero())
+        	{
+        		// Execute locally for all local controllers (Client and Server)
+        		if (IsLocalController() && CameraBase)
+        		{
+        			CameraBase->MoveInDirection(MoveDirection, DeltaTime);
+        		}
 
-        	if(CameraBase->CurrentCamSpeed.X == 0.0f && WIsPressedState == 2) WIsPressedState = 0;
-        	if(CameraBase->CurrentCamSpeed.X == 0.0f && SIsPressedState == 2) SIsPressedState = 0;
-        	if(CameraBase->CurrentCamSpeed.Y == 0.0f && DIsPressedState == 2) DIsPressedState = 0;
-        	if(CameraBase->CurrentCamSpeed.Y == 0.0f && AIsPressedState == 2) AIsPressedState = 0;
-        	
+        		// Additionally send to Server for synchronization (only if Client)
+        		if (IsLocalController() && !HasAuthority())
+        		{
+        			Server_MoveInDirection(MoveDirection, DeltaTime);
+        		}
+
         		const FVector MoveTargetLocation = GetPawn()->GetActorLocation();
-        	
+
         		if (!MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
         		{
         			LastCameraUnitMovementLocation = MoveTargetLocation;
         			Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);
         		}
+        	}
         	
         	if (ScrollZoomCount > 0.f)
             {
         		if(ScrollZoomCount > 0.f)
         		{
         			CameraBase->ZoomIn(1.f);
-        			CameraBase->RotateSpringArm();
+
+        			// Client-Side Prediction
+        			if (IsLocalController())
+        			{
+        				CameraBase->RotateSpringArm();
+        			}
+        			// Server-RPC (nur wenn Client)
+        			if (IsLocalController() && !HasAuthority())
+        			{
+        				Server_RotateSpringArm(false);
+        			}
+
         			SetCameraZDistance(0);
         		}
         		if(ScrollZoomCount <= 0.f)
         		{
         			CameraBase->ZoomIn(1.f, true);
-        			CameraBase->RotateSpringArm();
+
+        			// Client-Side Prediction
+        			if (IsLocalController())
+        			{
+        				CameraBase->RotateSpringArm();
+        			}
+        			// Server-RPC (nur wenn Client)
+        			if (IsLocalController() && !HasAuthority())
+        			{
+        				Server_RotateSpringArm(false);
+        			}
+
         			SetCameraZDistance(0);
         		}
-				
+
         		if(ScrollZoomCount > 0.f)
         			ScrollZoomCount -= 0.25f;
-				
+
             }
             else if (ScrollZoomCount < 0.f)
             {
             	if(ScrollZoomCount < 0.f)
             	{
             		CameraBase->ZoomOut(1.f);
-            		CameraBase->RotateSpringArm(true);
+
+            		// Client-Side Prediction
+            		if (IsLocalController())
+            		{
+            			CameraBase->RotateSpringArm(true);
+            		}
+            		// Server-RPC (nur wenn Client)
+            		if (IsLocalController() && !HasAuthority())
+            		{
+            			Server_RotateSpringArm(true);
+            		}
+
             		SetCameraZDistance(0);
             	}
             	if(ScrollZoomCount >= 0.f)
             	{
             		CameraBase->ZoomOut(1.f, true);
-            		CameraBase->RotateSpringArm(true);
+
+            		// Client-Side Prediction
+            		if (IsLocalController())
+            		{
+            			CameraBase->RotateSpringArm(true);
+            		}
+            		// Server-RPC (nur wenn Client)
+            		if (IsLocalController() && !HasAuthority())
+            		{
+            			Server_RotateSpringArm(true);
+            		}
+
             		SetCameraZDistance(0);
             	}
 					
@@ -1260,23 +1940,50 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 
                 if (!FMath::IsNearlyEqual(CameraYaw, ActorYaw, 10.f))
                 {
-                    if (DeltaYaw > 0)
-                        CameraBase->RotateCamRight(CameraBase->AddCamRotation * 2);
-                    else
-                        CameraBase->RotateCamLeft(CameraBase->AddCamRotation * 2);
+                    float RotationDirection = (DeltaYaw > 0) ? -1.0f : 1.0f;
+
+                    // Client-Side Prediction
+                    if (IsLocalController() && CameraBase)
+                    {
+                        CameraBase->RotateCamera(RotationDirection, CameraBase->AddCamRotation * 2, false);
+                    }
+
+                    // Server-RPC (nur wenn Client)
+                    if (IsLocalController() && !HasAuthority())
+                    {
+                        Server_RotateCamera(RotationDirection, CameraBase->AddCamRotation * 2, false);
+                    }
                 }
             }
 
             if (CamIsRotatingRight)
             {
                 CamIsRotatingLeft = false;
-                CameraBase->RotateCamRight(CameraBase->AddCamRotation);
+                // Client-Side Prediction
+                if (IsLocalController() && CameraBase)
+                {
+                    CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+                }
+                // Server-RPC
+                if (IsLocalController() && !HasAuthority())
+                {
+                    Server_RotateCamera(-1.0f, CameraBase->AddCamRotation, false);
+                }
             }
 
             if (CamIsRotatingLeft)
             {
                 CamIsRotatingRight = false;
-                CameraBase->RotateCamLeft(CameraBase->AddCamRotation);
+                // Client-Side Prediction
+                if (IsLocalController() && CameraBase)
+                {
+                    CameraBase->RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+                }
+                // Server-RPC
+                if (IsLocalController() && !HasAuthority())
+                {
+                    Server_RotateCamera(1.0f, CameraBase->AddCamRotation, false);
+                }
             }
           
         }
@@ -1308,7 +2015,17 @@ void ACameraControllerBase::LockZDistanceToCharacter()
 		const float SinYaw = FMath::Sin(CameraBase->SpringArmRotator.Yaw*PI/180);
 		const FVector NewPawnLocation = FVector(SelectedActorLocation.X - CameraBase->CameraDistanceToCharacter * 0.7*CosYaw, SelectedActorLocation.Y - CameraBase->CameraDistanceToCharacter * 0.7*SinYaw, CameraBaseLocation.Z+ZChange);
 
-		CameraBase->SetActorLocation(NewPawnLocation);
-		CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - SelectedUnits[0]->GetActorLocation().Z);
+		// Client-Side Prediction
+		if (IsLocalController())
+		{
+			CameraBase->SetActorLocation(NewPawnLocation);
+			CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - SelectedUnits[0]->GetActorLocation().Z);
+		}
+
+		// Server-RPC (nur wenn Client)
+		if (IsLocalController() && !HasAuthority())
+		{
+			Server_SetCameraLocation(NewPawnLocation);
+		}
 	}
 }

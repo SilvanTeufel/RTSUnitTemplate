@@ -9,7 +9,6 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Runtime/MoviePlayer/Public/MoviePlayer.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "Actors/FogOfWarManager.h"
 #include "HUDBase.generated.h"
 
 
@@ -35,9 +34,6 @@ public:
 		void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		AFogOfWarManager* FogManager;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bSelectFullSquad = false;
