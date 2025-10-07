@@ -108,6 +108,78 @@ public:
 	void CameraBaseMachine(float DeltaTime);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_UseScreenEdges();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_MoveWASD(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomIn();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomOut();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ScrollZoomIn();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ScrollZoomOut();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomOutPosition();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomInPosition();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_HoldRotateLeft();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_HoldRotateRight();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_RotateLeft();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_RotateRight();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_LockOnCharacter();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_LockOnCharacterWithTag(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_LockOnSpeaking();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomToNormalPosition();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ZoomToThirdPerson();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_ThirdPerson();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_RotateToStart();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_MoveToPosition(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_OrbitAtPosition();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_MoveToClick(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_LockOnActor();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CameraState_OrbitAndMove(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RotateCam(float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -233,5 +305,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "ScrollZoomCount", Keywords = "TopDownRTSCamLib ScrollZoomCount"), Category = RTSUnitTemplate)
 	float ScrollZoomCount = 0.f;
 	
+private:
+	// Helper functions for scroll zoom logic
+	void HandleScrollZoomIn();
+	void HandleScrollZoomOut();
 
 };
