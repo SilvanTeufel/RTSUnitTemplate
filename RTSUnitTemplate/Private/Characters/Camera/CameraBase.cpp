@@ -99,29 +99,85 @@ void ACameraBase::PanMoveCamera(const FVector& NewPanDirection) {
 
 void ACameraBase::RotateSpringArm(bool Invert)
 {
-	if(!Invert && SpringArmRotator.Pitch <= SpringArmMinRotator && SpringArm->TargetArmLength < SpringArmStartRotator)
+	if(!SpringArm) return;
+
+	if(!Invert && SpringArm->TargetArmLength < SpringArmStartRotator)
 	{
+		// Zoom In: Rotiere nach oben (Pitch wird größer)
+
+		// Prüfe ob wir bereits am oder über dem Limit sind
+		if(SpringArmRotator.Pitch >= SpringArmMinRotator)
+		{
+			SpringArmRotator.Pitch = SpringArmMinRotator;
+			SpringArmRotatorSpeed = 0.f;
+			SpringArm->SetRelativeRotation(SpringArmRotator);
+			return;
+		}
+
+		// Initialisiere Speed falls negativ
 		if(SpringArmRotatorSpeed <= 0.f)
 			SpringArmRotatorSpeed = 0.f;	
-		
+
+		// Beschleunige
 		if(SpringArmRotatorSpeed < SpringArmRotatorMaxSpeed)
-		SpringArmRotatorSpeed += SpringArmRotatorAcceleration;
-		
-		SpringArmRotator.Pitch += SpringArmRotatorSpeed;
+			SpringArmRotatorSpeed += SpringArmRotatorAcceleration;
+
+		float NewPitch = SpringArmRotator.Pitch + SpringArmRotatorSpeed;
+
+		// Begrenze sanft auf das Minimum
+		if(NewPitch >= SpringArmMinRotator)
+		{
+			SpringArmRotator.Pitch = SpringArmMinRotator;
+			SpringArmRotatorSpeed = 0.f;
+		}
+		else
+		{
+			SpringArmRotator.Pitch = NewPitch;
+		}
+
 		SpringArm->SetRelativeRotation(SpringArmRotator);
-	}else if(Invert && SpringArmRotator.Pitch >= SpringArmMaxRotator)
+	}
+	else if(Invert)
 	{
+		// Zoom Out: Rotiere nach unten (Pitch wird kleiner)
+
+		// Prüfe ob wir bereits am oder unter dem Limit sind
+		if(SpringArmRotator.Pitch <= SpringArmMaxRotator)
+		{
+			SpringArmRotator.Pitch = SpringArmMaxRotator;
+			SpringArmRotatorSpeed = 0.f;
+			SpringArm->SetRelativeRotation(SpringArmRotator);
+			return;
+		}
+
+		// Initialisiere Speed falls positiv
 		if(SpringArmRotatorSpeed >= 0.f)
 			SpringArmRotatorSpeed = 0.f;	
-			
+
+		// Beschleunige (negativ)
 		if(SpringArmRotatorSpeed > -SpringArmRotatorMaxSpeed)
 			SpringArmRotatorSpeed -= SpringArmRotatorAcceleration;
-		
-		SpringArmRotator.Pitch += SpringArmRotatorSpeed;
+
+		float NewPitch = SpringArmRotator.Pitch + SpringArmRotatorSpeed;
+
+		// Begrenze sanft auf das Maximum
+		if(NewPitch <= SpringArmMaxRotator)
+		{
+			SpringArmRotator.Pitch = SpringArmMaxRotator;
+			SpringArmRotatorSpeed = 0.f;
+		}
+		else
+		{
+			SpringArmRotator.Pitch = NewPitch;
+		}
+
 		SpringArm->SetRelativeRotation(SpringArmRotator);
-	}else
+	}
+	else
 	{
+		// Stoppe die Rotation
 		SpringArmRotatorSpeed = 0.f;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
 	}
 	
 }

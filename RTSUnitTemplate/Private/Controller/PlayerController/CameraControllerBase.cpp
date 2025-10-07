@@ -629,7 +629,7 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					if (IsLocalController())
 					{
 						CameraBase->ZoomIn(1.f);
-						CameraBase->RotateSpringArm();
+						//CameraBase->RotateSpringArm();
 					}
 					// Server-RPC (nur wenn Client)
 					if (IsLocalController() && !HasAuthority())
@@ -646,7 +646,7 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					if (IsLocalController())
 					{
 						CameraBase->ZoomIn(1.f, true);
-						CameraBase->RotateSpringArm();
+						//CameraBase->RotateSpringArm();
 					}
 					// Server-RPC (nur wenn Client)
 					if (IsLocalController() && !HasAuthority())
@@ -684,7 +684,7 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					if (IsLocalController())
 					{
 						CameraBase->ZoomOut(1.f);
-						CameraBase->RotateSpringArm(true);
+						//CameraBase->RotateSpringArm(true);
 					}
 					// Server-RPC (nur wenn Client)
 					if (IsLocalController() && !HasAuthority())
@@ -701,7 +701,7 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 					if (IsLocalController())
 					{
 						CameraBase->ZoomOut(1.f, true);
-						CameraBase->RotateSpringArm(true);
+						//CameraBase->RotateSpringArm(true);
 					}
 					// Server-RPC (nur wenn Client)
 					if (IsLocalController() && !HasAuthority())
@@ -740,14 +740,11 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 				if (IsLocalController())
 				{
 					CameraBase->ZoomOutToPosition(CameraBase->ZoomOutPosition);
-					CameraBase->RotateSpringArm(true);
-					CameraBase->RotateSpringArm(true);
 				}
 				// Server-RPC (nur wenn Client)
 				if (IsLocalController() && !HasAuthority())
 				{
 					Server_ZoomOutToPosition(CameraBase->ZoomOutPosition, FVector::ZeroVector);
-					Server_RotateSpringArm(true);
 					Server_RotateSpringArm(true);
 				}
 			}
@@ -1856,7 +1853,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         			// Client-Side Prediction
         			if (IsLocalController())
         			{
-        				CameraBase->RotateSpringArm();
+        				//CameraBase->RotateSpringArm();
         			}
         			// Server-RPC (nur wenn Client)
         			if (IsLocalController() && !HasAuthority())
@@ -1873,7 +1870,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         			// Client-Side Prediction
         			if (IsLocalController())
         			{
-        				CameraBase->RotateSpringArm();
+        				//CameraBase->RotateSpringArm();
         			}
         			// Server-RPC (nur wenn Client)
         			if (IsLocalController() && !HasAuthority())
@@ -1897,7 +1894,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
             		// Client-Side Prediction
             		if (IsLocalController())
             		{
-            			CameraBase->RotateSpringArm(true);
+            			//CameraBase->RotateSpringArm(true);
             		}
             		// Server-RPC (nur wenn Client)
             		if (IsLocalController() && !HasAuthority())
@@ -1914,7 +1911,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
             		// Client-Side Prediction
             		if (IsLocalController())
             		{
-            			CameraBase->RotateSpringArm(true);
+            			//CameraBase->RotateSpringArm(true);
             		}
             		// Server-RPC (nur wenn Client)
             		if (IsLocalController() && !HasAuthority())
