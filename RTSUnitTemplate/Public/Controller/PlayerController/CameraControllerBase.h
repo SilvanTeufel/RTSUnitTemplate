@@ -26,8 +26,7 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
-
-
+	
 	ACameraControllerBase();
 
 public:
@@ -229,6 +228,9 @@ public:
 	
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_MoveInDirection(FVector Direction, float DeltaTime);
+
+	UFUNCTION(Server, Unreliable)
+	void Server_SyncCameraPosition(FVector NewPosition);
 
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_RotateCamera(float Direction, float Add, bool stopCam);

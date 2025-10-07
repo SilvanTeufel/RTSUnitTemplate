@@ -52,7 +52,7 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 		}
 	
 	bReplicates = true;          
-	SetReplicatingMovement(true);
+	SetReplicatingMovement(false);
 }
 
 // BeginPlay implementation

@@ -20,23 +20,6 @@
 void ACameraBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ACameraBase, CameraPositionMin);
-	DOREPLIFETIME(ACameraBase, CameraPositionMax);
-	DOREPLIFETIME(ACameraBase, SpringArmRotator);
-	DOREPLIFETIME(ACameraBase, CamSpeed);
-	DOREPLIFETIME(ACameraBase, CurrentCamSpeed);
-	DOREPLIFETIME(ACameraBase, ZoomSpeed);
-	DOREPLIFETIME(ACameraBase, FastZoomSpeed);
-	DOREPLIFETIME(ACameraBase, AutoZoomSpeed);
-	DOREPLIFETIME(ACameraBase, ZoomAccelerationRate);
-	DOREPLIFETIME(ACameraBase, ZoomDecelerationRate);
-	DOREPLIFETIME(ACameraBase, SpringArmMinRotator);
-	DOREPLIFETIME(ACameraBase, SpringArmMaxRotator);
-	DOREPLIFETIME(ACameraBase, SpringArmStartRotator);
-	DOREPLIFETIME(ACameraBase, SpringArmRotatorSpeed);
-	DOREPLIFETIME(ACameraBase, SpringArmRotatorMaxSpeed);
-	DOREPLIFETIME(ACameraBase, SpringArmRotatorAcceleration);
 }
 
 // Called when the game starts or when spawned

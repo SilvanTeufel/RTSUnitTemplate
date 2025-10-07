@@ -44,10 +44,10 @@ public:
 
 
 	// In your ACameraBase.h within the class declaration:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Camera Limits")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
 	FVector2D CameraPositionMin = FVector2D(-10000.0f, -10000.0f); // Example minimum limits for X and Y
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Camera Limits")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
 	FVector2D CameraPositionMax = FVector2D(10000.0f, 10000.0f); 
 protected:
 	// Called when the game starts or when spawned
@@ -77,7 +77,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpringArm", Keywords = "RTSUnitTemplate SpringArm"), Category = RTSUnitTemplate)
 		USpringArmComponent* SpringArm;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, meta = (DisplayName = "SpringArmRotator", Keywords = "RTSUnitTemplate SpringArmRotator"), Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpringArmRotator", Keywords = "RTSUnitTemplate SpringArmRotator"), Category = RTSUnitTemplate)
 		FRotator SpringArmRotator = FRotator(-50, 0, 0);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraComp", Keywords = "RTSUnitTemplate CameraComp"), Category = RTSUnitTemplate)
@@ -107,7 +107,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "GetViewPortScreenSizesState", Keywords = "RTSUnitTemplate GetViewPortScreenSizesState"), Category = RTSUnitTemplate)
 		int GetViewPortScreenSizesState = 1;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		FVector CurrentCamSpeed = FVector(0.0f, 0.0f, 0.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -122,43 +122,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float DecelerationRate = 15000.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
-		float CamSpeed = 7000.f; // 120
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float CamSpeed = 5000.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomSpeed = 120.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float FastZoomSpeed = 250.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float AutoZoomSpeed = 25.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomAccelerationRate = 10.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomDecelerationRate = 15.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "EdgeScrollCamSpeed", Keywords = "RTSUnitTemplate EdgeScrollCamSpeed"), Category = RTSUnitTemplate)
 		float EdgeScrollCamSpeed = 200.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmMinRotator = -10.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmMaxRotator = -50.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmStartRotator = 500.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmRotatorSpeed = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmRotatorMaxSpeed = 0.4f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float SpringArmRotatorAcceleration = 0.05f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
