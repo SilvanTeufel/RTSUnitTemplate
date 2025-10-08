@@ -34,6 +34,7 @@ ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
 void ABuildingBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	/*
 	// In your actor's constructor or initialization method
 	static float LogTimer = 0.0f;
 	LogTimer += DeltaTime;
@@ -111,7 +112,7 @@ void ABuildingBase::Tick(float DeltaTime)
 		UE_LOG(LogTemp, Warning, TEXT("  IsLocallyControlled: %s"), IsLocallyControlled() ? TEXT("TRUE") : TEXT("FALSE"));
 		UE_LOG(LogTemp, Warning, TEXT("====================================="));
 	}
-
+	*/
 }
 
 void ABuildingBase::BeginPlay()
