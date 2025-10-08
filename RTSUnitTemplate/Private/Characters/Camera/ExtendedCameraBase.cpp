@@ -88,13 +88,10 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelecto
 
 void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
-	UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget0!"));
 		if(ResourceWidget)
 		{
-			UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget!"));
 			if(CameraControllerBase)
 			{
-				UE_LOG(LogTemp, Log, TEXT("SetupResourceWidget - TeamId is now: %d"), CameraControllerBase->SelectableTeamId);
 				ResourceWidget->SetTeamId(CameraControllerBase->SelectableTeamId);
 				ResourceWidget->StartUpdateTimer();
 			}

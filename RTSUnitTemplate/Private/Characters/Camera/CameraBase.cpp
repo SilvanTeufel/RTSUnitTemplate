@@ -544,39 +544,19 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 
 void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 {
-	FString NetModeStr = TEXT("UNKNOWN");
-	if (GetWorld())
-	{
-		switch (GetWorld()->GetNetMode())
-		{
-			case NM_Standalone: NetModeStr = TEXT("Standalone"); break;
-			case NM_DedicatedServer: NetModeStr = TEXT("DedicatedServer"); break;
-			case NM_ListenServer: NetModeStr = TEXT("ListenServer"); break;
-			case NM_Client: NetModeStr = TEXT("Client"); break;
-		}
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("=== MoveInDirection START [%s] ==="), *NetModeStr);
-	UE_LOG(LogTemp, Warning, TEXT("  Input Direction: %s, DeltaTime: %f"), *Direction.ToString(), DeltaTime);
-	UE_LOG(LogTemp, Warning, TEXT("  Current Location: %s"), *GetActorLocation().ToString());
-	UE_LOG(LogTemp, Warning, TEXT("  CamSpeed: %f"), CamSpeed);
-
+	
 	if (Direction.IsNearlyZero())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("  Direction is nearly zero, returning early"));
 		return;
 	}
 
 	// Normalize the direction
 	Direction.Normalize();
-	UE_LOG(LogTemp, Warning, TEXT("  Normalized Direction: %s"), *Direction.ToString());
 
 	// Calculate the movement direction relative to the SpringArm rotation
 	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180.f);
 	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180.f);
-
-	UE_LOG(LogTemp, Warning, TEXT("  SpringArmRotator.Yaw: %f, CosYaw: %f, SinYaw: %f"), SpringArmRotator.Yaw, CosYaw, SinYaw);
-
+	
 	// Transform the input direction based on camera rotation
 	// Forward/Backward uses Cos/Sin, Left/Right uses Sin/Cos with appropriate signs
 	FVector WorldDirection;
@@ -584,13 +564,7 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 	WorldDirection.Y = Direction.X * SinYaw + Direction.Y * CosYaw;
 	WorldDirection.Z = 0.f;
 
-	UE_LOG(LogTemp, Warning, TEXT("  WorldDirection: %s"), *WorldDirection.ToString());
-
-	// Always use direct location manipulation since AddMovementInput doesn't work for camera
-	UE_LOG(LogTemp, Warning, TEXT("  Using direct location manipulation"));
-
 	FVector ProposedLocation = GetActorLocation() + (WorldDirection * CamSpeed * DeltaTime);
-	UE_LOG(LogTemp, Warning, TEXT("  Proposed Location (before trace): %s"), *ProposedLocation.ToString());
 
 	// Perform line trace for Z adjustment
 	const float TraceVerticalRange = 3000.f;
@@ -604,7 +578,6 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams);
 	if (bHit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("  Line trace HIT at: %s"), *HitResult.Location.ToString());
 		AActor* HitActor = HitResult.GetActor();
 		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 		{
@@ -612,7 +585,6 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 			{
 				float OldZ = ProposedLocation.Z;
 				ProposedLocation.Z = HitResult.Location.Z + 10.f;
-				UE_LOG(LogTemp, Warning, TEXT("  Adjusted Z from %f to %f"), OldZ, ProposedLocation.Z);
 			}
 		}
 	}
@@ -623,14 +595,9 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 		FVector BeforeClamp = ProposedLocation;
 		ProposedLocation.X = FMath::Clamp(ProposedLocation.X, CameraPositionMin.X, CameraPositionMax.X);
 		ProposedLocation.Y = FMath::Clamp(ProposedLocation.Y, CameraPositionMin.Y, CameraPositionMax.Y);
-		UE_LOG(LogTemp, Warning, TEXT("  Clamped location from %s to %s"), *BeforeClamp.ToString(), *ProposedLocation.ToString());
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("  Setting Actor Location to: %s"), *ProposedLocation.ToString());
+	
 	SetActorLocation(ProposedLocation);
-
-	UE_LOG(LogTemp, Warning, TEXT("  Final Location: %s"), *GetActorLocation().ToString());
-	UE_LOG(LogTemp, Warning, TEXT("=== MoveInDirection END ==="));
 }
 
 

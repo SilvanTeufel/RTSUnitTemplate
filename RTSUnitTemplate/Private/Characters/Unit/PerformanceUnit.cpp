@@ -431,14 +431,7 @@ void APerformanceUnit::CheckTimerVisibility()
 	}
 }
 
-bool APerformanceUnit::IsNetVisible() const
-{
-	// Server’s own visibility logic:
-	const bool ServerVis = ComputeLocalVisibility();
 
-	// OR in the last‐reported client result:
-	return ServerVis || bClientIsVisible;
-}
 void APerformanceUnit::SetClientVisibility(bool bVisible)
 {
 	bClientIsVisible = bVisible;

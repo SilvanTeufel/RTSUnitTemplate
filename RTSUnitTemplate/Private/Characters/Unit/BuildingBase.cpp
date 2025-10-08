@@ -34,8 +34,83 @@ ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
 void ABuildingBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 	// In your actor's constructor or initialization method
+	static float LogTimer = 0.0f;
+	LogTimer += DeltaTime;
+	
+	if (LogTimer >= 2.0f && GetWorld()->GetNetMode() == NM_Client)
+	{
+		LogTimer = 0.0f;
+		
+		// Get controller info
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		AControllerBase* ControllerBase = PC ? Cast<AControllerBase>(PC) : nullptr;
+		ACustomControllerBase* CustomController = PC ? Cast<ACustomControllerBase>(PC) : nullptr;
+		
+		UE_LOG(LogTemp, Warning, TEXT("=== Building %s Visibility Debug ==="), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("  TeamId: %d"), TeamId);
+		UE_LOG(LogTemp, Warning, TEXT("  CanMove: %s"), CanMove ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  IsMyTeam: %s"), IsMyTeam ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  IsVisibleEnemy: %s"), IsVisibleEnemy ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  IsOnViewport: %s"), IsOnViewport ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  EnableFog: %s"), EnableFog ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  StopVisibilityTick: %s"), StopVisibilityTick ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  bClientIsVisible: %s"), bClientIsVisible ? TEXT("TRUE") : TEXT("FALSE"));
+		
+		// Controller info
+		if (PC)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  PlayerController: Valid (%s)"), *PC->GetName());
+			
+			if (ControllerBase)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  ControllerBase Cast: SUCCESS"));
+				UE_LOG(LogTemp, Warning, TEXT("  SelectableTeamId: %d"), ControllerBase->SelectableTeamId);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  ControllerBase Cast: FAILED"));
+			}
+			
+			if (CustomController)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  CustomControllerBase Cast: SUCCESS"));
+				UE_LOG(LogTemp, Warning, TEXT("  SelectableTeamId: %d"), CustomController->SelectableTeamId);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  CustomControllerBase Cast: FAILED"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  PlayerController: NULL"));
+		}
+		
+		// Mesh visibility
+		if (GetMesh())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  Mesh Visibility: %s"), GetMesh()->IsVisible() ? TEXT("TRUE") : TEXT("FALSE"));
+			UE_LOG(LogTemp, Warning, TEXT("  Mesh HiddenInGame: %s"), GetMesh()->bHiddenInGame ? TEXT("TRUE") : TEXT("FALSE"));
+		}
+		
+		if (ISMComponent)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  ISM Visibility: %s"), ISMComponent->IsVisible() ? TEXT("TRUE") : TEXT("FALSE"));
+			UE_LOG(LogTemp, Warning, TEXT("  ISM HiddenInGame: %s"), ISMComponent->bHiddenInGame ? TEXT("TRUE") : TEXT("FALSE"));
+		}
+		
+		// Network info
+		UE_LOG(LogTemp, Warning, TEXT("  NetMode: %s"), 
+			GetWorld()->GetNetMode() == NM_Client ? TEXT("Client") :
+			GetWorld()->GetNetMode() == NM_ListenServer ? TEXT("ListenServer") :
+			GetWorld()->GetNetMode() == NM_DedicatedServer ? TEXT("DedicatedServer") :
+			TEXT("Standalone"));
+		
+		UE_LOG(LogTemp, Warning, TEXT("  HasAuthority: %s"), HasAuthority() ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("  IsLocallyControlled: %s"), IsLocallyControlled() ? TEXT("TRUE") : TEXT("FALSE"));
+		UE_LOG(LogTemp, Warning, TEXT("====================================="));
+	}
 
 }
 
@@ -217,7 +292,7 @@ void ABuildingBase::DespawnWorkResource(AWorkResource* ResourceToDespawn)
 
 void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
 {
-	//if (!CanMove && bVisible == false) return;
+	if (!CanMove && bVisible == false) return;
 	Super::MulticastSetEnemyVisibility_Implementation(DetectingActor, bVisible);
 
 	/*
