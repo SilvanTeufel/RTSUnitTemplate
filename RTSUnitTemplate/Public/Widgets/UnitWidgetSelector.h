@@ -20,6 +20,7 @@ class RTSUNITTEMPLATE_API UUnitWidgetSelector : public UUserWidget
 {
 	GENERATED_BODY()
 
+	
 	virtual void NativeConstruct() override;
 
 	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -33,6 +34,7 @@ private:
 	void StartUpdateTimer();
 public:
 
+	void InitWidget(ACustomControllerBase* InController);
 	// Replaces rarity keywords in text with specified values
 	UFUNCTION(BlueprintCallable, Category = "Text Processing")
 	FText ReplaceRarityKeywords(

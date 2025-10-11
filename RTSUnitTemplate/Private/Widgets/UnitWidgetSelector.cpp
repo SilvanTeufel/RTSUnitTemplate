@@ -12,9 +12,7 @@ void UUnitWidgetSelector::NativeConstruct()
 	GetButtonsFromBP();
 	SetButtonIds();
 	SetVisibleButtonCount(ShowButtonCount);
-	SetButtonLabelCount(ShowButtonCount);
-	ControllerBase = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
-	StartUpdateTimer();
+	SetButtonLabelCount(ShowButtonCount);;
 }
 
 
@@ -277,6 +275,20 @@ void UUnitWidgetSelector::StartUpdateTimer()
 	GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UUnitWidgetSelector::UpdateSelectedUnits, UpdateInterval, true);
 }
 
+void UUnitWidgetSelector::InitWidget(ACustomControllerBase* InController)
+{
+	if (InController)
+	{
+		ControllerBase = InController;
+		StartUpdateTimer(); // Now it's safe to start the timer
+		UE_LOG(LogTemp, Log, TEXT("UnitWidgetSelector Initialized Successfully!"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("UnitWidgetSelector was given an invalid controller!"));
+	}
+}
+
 void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 {
 	for (int32 i = 0; i < AbilityButtonWidgets.Num(); i++)
@@ -427,8 +439,6 @@ void UUnitWidgetSelector::SetButtonIds()
 
 void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
 {
-
-	
 	for (int32 i = 0; i < SelectButtonWidgets.Num(); i++)
 	{
 		if (SelectButtonWidgets[i])

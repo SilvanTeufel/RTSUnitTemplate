@@ -12,8 +12,14 @@ AMinimapActor::AMinimapActor()
 {
     PrimaryActorTick.bCanEverTick = false; // No ticking needed, updates are event-driven.
     bReplicates = true;
-    SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent")));
+    //SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent")));
 
+    MapBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("MapBoundsComponent"));
+    SetRootComponent(MapBoundsComponent);
+    MapBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+
+    
     // --- NEU: Scene Capture Komponente erstellen ---
     SceneCaptureComponent = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("SceneCaptureComponent"));
     SceneCaptureComponent->SetupAttachment(RootComponent);
@@ -23,14 +29,26 @@ AMinimapActor::AMinimapActor()
     SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_BaseColor;   // Nur die "Unlit"-Farben der Karte, ohne Licht/Schatten
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
+
+
 }
 
 void AMinimapActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
-    MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
+    //MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
+    //MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
+
+    if (GetLocalRole() == ROLE_Authority && MapBoundsComponent)
+    {
+        const FVector Origin = MapBoundsComponent->GetComponentLocation();
+        const FVector Extent = MapBoundsComponent->GetScaledBoxExtent();
+
+        MinimapMinBounds = FVector2D(Origin.X - Extent.X, Origin.Y - Extent.Y);
+        MinimapMaxBounds = FVector2D(Origin.X + Extent.X, Origin.Y + Extent.Y);
+    }
+
     
     InitMinimapTexture();
 
@@ -85,6 +103,8 @@ void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AMinimapActor, TeamId);
+    DOREPLIFETIME(AMinimapActor, MinimapMinBounds);
+    DOREPLIFETIME(AMinimapActor, MinimapMinBounds);
 }
 
 void AMinimapActor::InitMinimapTexture()

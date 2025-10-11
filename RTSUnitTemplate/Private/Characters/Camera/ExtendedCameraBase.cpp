@@ -256,6 +256,16 @@ void AExtendedCameraBase::UpdateSelectorWidget()
 	}
 }
 
+bool AExtendedCameraBase::InitUnitSelectionWidget(ACustomControllerBase* WithPC)
+{
+	if (!UnitSelectorWidget->ControllerBase)
+	{
+		UnitSelectorWidget->InitWidget(WithPC);
+		return true;
+	}
+
+	return false;
+}
 
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {

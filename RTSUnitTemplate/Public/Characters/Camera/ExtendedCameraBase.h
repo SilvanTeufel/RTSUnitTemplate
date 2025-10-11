@@ -121,6 +121,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateSelectorWidget();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool InitUnitSelectionWidget(ACustomControllerBase* WithPC);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);

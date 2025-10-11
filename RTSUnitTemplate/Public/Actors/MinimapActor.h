@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Characters/Unit/UnitBase.h"
 #include "GameFramework/Actor.h"
+#include "Components/BoxComponent.h"
 #include "MinimapActor.generated.h"
 
 UCLASS()
@@ -24,6 +25,9 @@ protected:
     /** Die Textur, in die das "Foto" der Karte gerendert wird. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
     UTextureRenderTarget2D* TopographyRenderTarget;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+    UBoxComponent* MapBoundsComponent;
 public:
 
     UFUNCTION(BlueprintCallable, Category = "Minimap")
@@ -64,16 +68,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor EnemyUnitColor = FColor(255, 0, 0, 255);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
-    float Size = 250.f;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    //float Size = 250.f;
     /** World-space bounds for the minimap. Should match your FogActor's bounds. */
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Minimap")
-    FVector2D MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Replicated, Category = "Minimap")
+    FVector2D MinimapMinBounds = FVector2D(-250*40.f, -250*40.f);
+    //FVector2D MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
 
     /** World-space bounds for the minimap. Should match your FogActor's bounds. */
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Minimap")
-    FVector2D MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
-
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Replicated,Category = "Minimap")
+    FVector2D MinimapMaxBounds = FVector2D(250*40.f, 250*40.f);
+   // FVector2D MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
+    
     UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = "Minimap")
     void Multicast_UpdateMinimap(
         const TArray<AUnitBase*>& UnitRefs, // NEUER PARAMETER

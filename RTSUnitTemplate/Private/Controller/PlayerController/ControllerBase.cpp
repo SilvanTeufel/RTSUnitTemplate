@@ -183,7 +183,6 @@ void AControllerBase::SelectUnit(int Index)
 	if(ExtendedCameraBase && SelectedUnits[0])
 	{
 		ExtendedCameraBase->UpdateSelectorWidget();
-		
 	}
 }
 
