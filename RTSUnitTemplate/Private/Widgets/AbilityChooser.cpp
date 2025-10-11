@@ -15,16 +15,22 @@ void UAbilityChooser::NativeConstruct()
     InitializeButtonArray(ButtonPreFixes[3], ThrowAbilityButtons);
     InitializeAbilityIconArray("Ability", SelectAbilityIcons, SelectAbilityButtons);
     SetVisibility(ESlateVisibility::Hidden);
-
-    ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
-   // StartUpdateTimer();
 }
-/*
-void UAbilityChooser::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+
+void UAbilityChooser::InitWidget(ACustomControllerBase* InController)
 {
-    Super::NativeTick(MyGeometry, InDeltaTime);
-    UpdateAbilityDisplay();
-}*/
+    if (InController)
+    {
+        ControllerBase = InController;
+        StartUpdateTimer();
+        UE_LOG(LogTemp, Log, TEXT("UTaggedUnitSelector Initialized Successfully!"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("UTaggedUnitSelector was given an invalid controller!"));
+    }
+}
+
 
 void UAbilityChooser::SetOwnerActor(AAbilityUnit* NewOwner)
 {

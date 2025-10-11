@@ -5,7 +5,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Characters/Unit/AbilityUnit.h"
-#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "AbilityChooser.generated.h"
 
 UCLASS()
@@ -31,7 +31,8 @@ public:
 	void StopTimer();
 	
 	virtual void NativeConstruct() override;
-	
+
+	void InitWidget(ACustomControllerBase* InController);
 	//virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	// Interval in seconds for how often to update the resource display
@@ -109,6 +110,6 @@ public:
 	void ClearAbilityArray();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AExtendedControllerBase* ControllerBase;
+	ACustomControllerBase* ControllerBase;
 	
 };

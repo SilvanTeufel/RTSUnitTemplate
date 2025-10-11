@@ -202,9 +202,6 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 {
-
-
-	
 	
 	if(!TalentChooserWidget) return;
 
@@ -256,14 +253,47 @@ void AExtendedCameraBase::UpdateSelectorWidget()
 	}
 }
 
-bool AExtendedCameraBase::InitUnitSelectionWidget(ACustomControllerBase* WithPC)
+bool AExtendedCameraBase::InitUnitSelectorWidgetController(ACustomControllerBase* WithPC)
 {
-	if (!UnitSelectorWidget->ControllerBase)
+	if (!WithPC)
+		return false;
+	
+	if (UnitSelectorWidget && !UnitSelectorWidget->ControllerBase)
 	{
 		UnitSelectorWidget->InitWidget(WithPC);
 		return true;
 	}
+	
+	return false;
+}
 
+
+bool AExtendedCameraBase::InitTaggedSelectorWidgetController(ACustomControllerBase* WithPC)
+{
+	if (!WithPC)
+		return false;
+	
+	if (TaggedSelectorWidget && !TaggedSelectorWidget->ControllerBase)
+	{
+		TaggedSelectorWidget->InitWidget(WithPC);
+		return true;
+	}
+	
+	return false;
+}
+
+
+bool AExtendedCameraBase::InitAbiltiyChooserWidgetController(ACustomControllerBase* WithPC)
+{
+	if (!WithPC)
+		return false;
+	
+	if (AbilityChooserWidget && !AbilityChooserWidget->ControllerBase)
+	{
+		AbilityChooserWidget->InitWidget(WithPC);
+		return true;
+	}
+	
 	return false;
 }
 

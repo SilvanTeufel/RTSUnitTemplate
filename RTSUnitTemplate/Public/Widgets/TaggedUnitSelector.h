@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "GameplayTagContainer.h" // Include for FGameplayTag
 #include "TaggedUnitSelector.generated.h"
 
@@ -17,11 +17,13 @@ class RTSUNITTEMPLATE_API UTaggedUnitSelector : public UUserWidget
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-    AExtendedControllerBase* ControllerBase;
+    ACustomControllerBase* ControllerBase;
+
+    UFUNCTION()
+    void InitWidget(ACustomControllerBase* InController);
     
 protected:
-    virtual void NativeConstruct() override;
-
+   
     // A single function to handle clicks from ANY of our TaggedUnitButton widgets.
     UFUNCTION()
     void HandleTaggedUnitButtonClicked(FGameplayTag UnitTag);

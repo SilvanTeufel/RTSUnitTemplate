@@ -123,8 +123,14 @@ public:
 	void UpdateSelectorWidget();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool InitUnitSelectionWidget(ACustomControllerBase* WithPC);
-	
+	bool InitUnitSelectorWidgetController(ACustomControllerBase* WithPC);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool InitTaggedSelectorWidgetController(ACustomControllerBase* WithPC);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool InitAbiltiyChooserWidgetController(ACustomControllerBase* WithPC);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
 
