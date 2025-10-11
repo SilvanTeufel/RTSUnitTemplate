@@ -136,7 +136,7 @@ void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         MinimapImage->SetRenderTransformAngle(CurrentMapAngle);
     }
 }
-/*
+
 void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry)
 {
     if (!MinimapActorRef) return;
@@ -226,123 +226,5 @@ void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosi
     const FVector NewLocation(TargetWorldX, TargetWorldY, TargetWorldZ);
     
     PlayerPawn->SetActorLocation(NewLocation);
-    CameraPC->Server_SetCameraLocation(NewLocation);
-}*/
-
-
-void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry)
-{
-    // Define a log category, or use an existing one like LogTemp.
-    // Make sure "LogTemp" is defined in your project's logging setup.
-    const FString LogPrefix = FString::Printf(TEXT("MinimapClick [%s]:"), *UKismetSystemLibrary::GetDisplayName(this));
-
-    if (!MinimapActorRef)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s Aborting: MinimapActorRef is null."), *LogPrefix);
-        return;
-    }
-    APawn* PlayerPawn = GetOwningPlayerPawn();
-    if (!PlayerPawn)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s Aborting: GetOwningPlayerPawn is null."), *LogPrefix);
-        return;
-    }
-
-    ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(PlayerPawn->GetController());
-    if (!CameraPC)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s Aborting: PlayerController is not of type ACameraControllerBase."), *LogPrefix);
-        return;
-    }
-    
-    const FVector2D WidgetSize = WidgetGeometry.GetLocalSize();
-    if (WidgetSize.X <= 0 || WidgetSize.Y <= 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s Aborting: WidgetSize is invalid (%s)."), *LogPrefix, *WidgetSize.ToString());
-        return;
-    }
-
-    // --- LOG INITIAL INPUTS ---
-    UE_LOG(LogTemp, Log, TEXT("%s 1. Initial Inputs: LocalMousePosition=%s, WidgetSize=%s"), *LogPrefix, *LocalMousePosition.ToString(), *WidgetSize.ToString());
-
-    // --- DYNAMISCHE ROTATIONS-LOGIK ---
-
-    // 1. Den Mittelpunkt des Widgets berechnen.
-    const FVector2D Center(WidgetSize.X * 0.5f, WidgetSize.Y * 0.5f);
-
-    // 2. Die Klick-Position relativ zum Mittelpunkt berechnen.
-    const float dx = LocalMousePosition.X - Center.X;
-    const float dy = LocalMousePosition.Y - Center.Y;
-
-    // --- LOG PRE-ROTATION DATA ---
-    UE_LOG(LogTemp, Log, TEXT("%s 2. Pre-Rotation: Center=%s, RelativeClick(dx,dy)=(%f, %f), CurrentMapAngle=%f"), *LogPrefix, *Center.ToString(), dx, dy, CurrentMapAngle);
-
-    // 3. Die "Gegen-Rotation" berechnen, um den Klick zu korrigieren.
-    const float AngleRad = FMath::DegreesToRadians(-CurrentMapAngle);
-    const float CosAngle = FMath::Cos(AngleRad);
-    const float SinAngle = FMath::Sin(AngleRad);
-
-    // 4. Die volle 2D-Rotationsformel anwenden, um die korrigierte Position zu finden.
-    const float RotatedX_relative = dx * CosAngle - dy * SinAngle;
-    const float RotatedY_relative = dx * SinAngle + dy * CosAngle;
-
-    // 5. Die rotierten Koordinaten zurück in den lokalen Widget-Raum umrechnen.
-    const FVector2D CorrectedLocalPosition(RotatedX_relative + Center.X, RotatedY_relative + Center.Y);
-    
-    // --- LOG POST-ROTATION DATA ---
-    UE_LOG(LogTemp, Log, TEXT("%s 3. Post-Rotation: CorrectedLocalPosition=%s"), *LogPrefix, *CorrectedLocalPosition.ToString());
-    
-    // 6. Die finalen UVs berechnen.
-    const float U = FMath::Clamp(CorrectedLocalPosition.X / WidgetSize.X, 0.f, 1.f);
-    const float V = FMath::Clamp(CorrectedLocalPosition.Y / WidgetSize.Y, 0.f, 1.f);
-
-    // --- LOG UV AND WORLD BOUNDS ---
-    const FVector2D& Min = MinimapActorRef->MinimapMinBounds;
-    const FVector2D& Max = MinimapActorRef->MinimapMaxBounds;
-    UE_LOG(LogTemp, Log, TEXT("%s 4. UV Coords: (U,V)=(%f, %f). World Bounds: Min=%s, Max=%s"), *LogPrefix, U, V, *Min.ToString(), *Max.ToString());
-
-    const float WorldExtentX = Max.X - Min.X;
-    const float WorldExtentY = Max.Y - Min.Y;
-
-    const float TargetWorldX = Min.X + (U * WorldExtentX);
-    const float TargetWorldY = Min.Y + (V * WorldExtentY);
-
-    const FVector CurrentLocation = PlayerPawn->GetActorLocation();
-    
-    // --- MODIFIED: LineTrace to find Ground Z-Coordinate only if not flying ---
-    float TargetWorldZ = CurrentLocation.Z; 
-    
-    ACharacter* PlayerCharacter = Cast<ACharacter>(PlayerPawn);
-    UCharacterMovementComponent* MovementComponent = PlayerCharacter ? PlayerCharacter->GetCharacterMovement() : nullptr;
-
-    if (MovementComponent && MovementComponent->MovementMode != EMovementMode::MOVE_Flying)
-    {
-        UWorld* World = GetWorld();
-        if (World)
-        {
-            const FVector TraceStart(TargetWorldX, TargetWorldY, 10000.0f);
-            const FVector TraceEnd(TargetWorldX, TargetWorldY, -10000.0f);
-
-            FHitResult HitResult;
-            FCollisionQueryParams QueryParams;
-            QueryParams.AddIgnoredActor(PlayerPawn);
-
-            if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
-            {
-                // If we hit the ground, use that Z-coordinate.
-                TargetWorldZ = HitResult.ImpactPoint.Z + PlayerCharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-            }
-        }
-    }
-    
-    const FVector NewLocation(TargetWorldX, TargetWorldY, TargetWorldZ);
-    
-    // --- LOG FINAL LOCATION BEFORE SENDING ---
-    UE_LOG(LogTemp, Log, TEXT("%s 5. FINAL CLIENT LOCATION: NewLocation=%s. Sending to server..."), *LogPrefix, *NewLocation.ToString());
-
-    // This sets the location locally for immediate feedback.
-    PlayerPawn->SetActorLocation(NewLocation); 
-    
-    // This sends the calculated location to the server for authoritative movement.
     CameraPC->Server_SetCameraLocation(NewLocation);
 }
