@@ -55,10 +55,22 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 		EntityQuery.RegisterWithProcessor(*this);
 
 		ClientEntityQuery.Initialize(EntityManager);
+		ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+		ClientEntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
+		ClientEntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
+		ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+		ClientEntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
+		ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+		ClientEntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+		ClientEntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+		ClientEntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+
+	/*
 		ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 		ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+	*/
 		ClientEntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -392,8 +404,83 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 	}
 }
 
+void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
+    if (!ShouldProceedWithTick(ActualDeltaTime)) return;
 
+    TArray<FActorTransformUpdatePayload> PendingActorUpdates;
+    PendingActorUpdates.Reserve(ClientEntityQuery.GetNumMatchingEntities());
 
+    ClientEntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+            
+        TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
+        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+        const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+        const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            // Mirror server: skip updates for entities not visible
+            if (LODFragments[i].LOD == EMassLOD::Off) continue;
+
+            AActor* Actor = ActorFragments[i].GetMutable();
+            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+            if (!IsValid(UnitBase)) continue;
+
+            FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
+            const FQuat CurrentRotation = MassTransform.GetRotation();
+            FVector FinalLocation = MassTransform.GetLocation();
+            
+            // Determine the actor's current location once
+            FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
+
+            // 1. Adjust height for ground snapping or flying
+            HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation);
+            
+            // 2. Adjust rotation based on state (moving vs. attacking)
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+
+            if (UnitBase->ShouldRotateToAbilityClick())
+            {
+                RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }
+            else if (!bIsAttackingOrPaused)
+            {
+                RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }
+            else
+            {
+                RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+            }
+            
+            // 3. Apply final location and cache the result
+            MassTransform.SetLocation(FinalLocation);
+            CharList[i].PositionedTransform = MassTransform;
+
+            const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
+            const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.025f);
+
+            if (bLocationChanged || bRotationChanged)
+            {
+                PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+            }
+        }
+    });
+
+    DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
+}
+
+/*
 void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
@@ -444,7 +531,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
     });
 
     DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
-}
+}*/
 
 void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
