@@ -108,7 +108,7 @@ void AUnitBase::BeginPlay()
 	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 	SetupTimerWidget();
 	
-	
+	SetReplicateMovement(true);
 	/*
 		//SpawnSelectedIcon();
 		GetCharacterMovement()->GravityScale = 1;

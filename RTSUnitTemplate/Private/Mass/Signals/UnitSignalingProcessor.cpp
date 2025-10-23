@@ -98,32 +98,13 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
     const float Now = World->GetTimeSeconds();
 
     if (Now <= 2.f) return;
-
-    ARTSGameModeBase* GameMode = World->GetAuthGameMode<ARTSGameModeBase>();
-    if (!GameMode)
-    {
-        // GameMode doesn't exist yet, wait.
-        //UE_LOG(LogTemp, Log, TEXT("Waiting for pathfinding readiness signal from GameMode..."));
-        return;
-    }
-
-    //if (!GameMode->IsPathfindingRdy()) return;
-    
-    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-    if (!NavSys) return;
     
     if (ActorsToCreateThisFrame.IsEmpty())
     {
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));
         return;
     }
-
-    /*
-    // Get the EntityManager once to use inside the loop.
-    UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-    if (!EntitySubsystem) return;
-    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-    */
+	
     // It is now SAFE to call synchronous creation functions.
     for (AUnitBase* Unit : ActorsToCreateThisFrame)
     {

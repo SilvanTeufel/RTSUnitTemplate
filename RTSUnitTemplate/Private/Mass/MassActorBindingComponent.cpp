@@ -61,11 +61,12 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	}
 
 	// Only on Server!
+	/*
 	if (World->GetNetMode() == NM_Client)
 	{
 		return; // We are a client, do not create a Mass entity. Wait for replication.
 	}
-
+	*/
 	
 	if(!MassEntitySubsystemCache)
 	{

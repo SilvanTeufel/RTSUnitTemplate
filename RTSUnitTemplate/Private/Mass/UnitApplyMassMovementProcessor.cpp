@@ -17,7 +17,7 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery(
 	//ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Movement;
 	ExecutionOrder.ExecuteAfter.Add(UE::Mass::ProcessorGroupNames::Avoidance);
-	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server);
+	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 	bAutoRegisterWithProcessingPhases = true;
 	bRequiresGameThreadExecution = true;
@@ -30,104 +30,172 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
-
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); 
 	
-	// Input from the steering/pathfinding processor
-	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); // <<< ADDED (ReadOnly)
-	//EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-
-	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);     // Execute if this tag is present...
-	EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
+	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any); 
+	EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
 	EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
 	
-	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);   // ...OR if this tag is present.
+	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any); 
-	//EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::Any);
-	
 	EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
 	EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
-	// Tag requirements
-	//EntityQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None); // <<< Only Moves on Screen
 	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
-	//EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);     // Dont Execute if this tag is present...
-	//EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);   // ...OR if this tag is present.
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
-	// Shared fragment requirement
-	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All); // <<< ADDED BACK
+	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
 	
 	EntityQuery.RegisterWithProcessor(*this);
+
+	ClientEntityQuery.Initialize(EntityManager);
+	ClientEntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
+	ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+	ClientEntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	//ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	ClientEntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
+	// Mirror relevant state tags on client to limit work to moving entities
+	/*
+	ClientEntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
+	ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+	*/
+	ClientEntityQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
-    if (DeltaTime <= 0.0f) // Avoid division by zero or no-op
+    if (DeltaTime <= 0.0f)
     {
         return;
     }
 
-    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& Context)
+	UWorld* World = GetWorld();
+	if (!World) return;
+	
+ if (World->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitApplyMassMovementProcessor::Execute 00"));
+	
+    if (World->IsNetMode(NM_Client))
     {
-        const int32 NumEntities = Context.GetNumEntities();
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
+    UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitApplyMassMovementProcessor::Execute (Matching=%d)"), ClientEntityQuery.GetNumMatchingEntities());
+
+    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    {
+        const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
-        
-        // --- Get required data ---
-        const FMassMovementParameters& MovementParams = Context.GetConstSharedFragment<FMassMovementParameters>();
-        const TConstArrayView<FMassSteeringFragment> SteeringList = Context.GetFragmentView<FMassSteeringFragment>(); // Get Steering
-        const TArrayView<FTransformFragment> LocationList = Context.GetMutableFragmentView<FTransformFragment>();
-        const TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
-        const TArrayView<FMassVelocityFragment> VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
-    	
+
+        const FMassMovementParameters& MovementParams = LocalContext.GetConstSharedFragment<FMassMovementParameters>();
+        const TConstArrayView<FMassSteeringFragment> SteeringList = LocalContext.GetFragmentView<FMassSteeringFragment>();
+        const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
+        const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
+        const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
             FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
-            const FMassSteeringFragment& Steering = SteeringList[EntityIndex]; 
+            const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
-            // --- NEU: Vertikale Geschwindigkeit sichern und alle Berechnungen in 2D durchführen ---
 
-            // 1. Sichere die aktuelle Z-Geschwindigkeit. Diese wollen wir unberührt lassen.
             const float OriginalZVelocity = Velocity.Value.Z;
-
-            // --- Core Movement Logic (modifiziert für 2D) ---
             const FVector DesiredVelocity = Steering.DesiredVelocity;
-            const FVector AvoidanceForce = Force.Value; 
-            const float MaxSpeed = MovementParams.MaxSpeed; 
+            const FVector AvoidanceForce = Force.Value;
+            const float MaxSpeed = MovementParams.MaxSpeed;
             const float Acceleration = MovementParams.MaxAcceleration;
 
-            // 2. Erstelle 2D-Versionen der Vektoren für eine saubere horizontale Berechnung.
-            const FVector CurrentHorizontalVelocity = FVector(Velocity.Value.X, Velocity.Value.Y, 0.f);
-            const FVector DesiredHorizontalVelocity = FVector(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
-            const FVector HorizontalAvoidanceForce = FVector(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
+            const FVector CurrentHorizontalVelocity(Velocity.Value.X, Velocity.Value.Y, 0.f);
+            const FVector DesiredHorizontalVelocity(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
+            const FVector HorizontalAvoidanceForce(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
 
-            // 3. Führe die Beschleunigungs- und Kraftberechnung ausschließlich auf der X/Y-Ebene durch.
             FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-            
             FVector HorizontalVelocityDelta = (AccelInput + HorizontalAvoidanceForce) * DeltaTime * 4.f;
 
-            // Update der horizontalen Geschwindigkeit
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
-
-            // Begrenze die horizontale Geschwindigkeit
             NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
-            
-            // --- NEU: FINALE GESCHWINDIGKEIT ZUSAMMENSETZEN ---
-            
-            // 4. Kombiniere die neue horizontale Geschwindigkeit mit der ursprünglichen vertikalen Geschwindigkeit.
+
             Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
 
-            // --- Apply final velocity to position (unverändert) ---
-            FVector CurrentLocation = CurrentTransform.GetLocation();
-            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            const FVector CurrentLocation = CurrentTransform.GetLocation();
+            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
             CurrentTransform.SetTranslation(NewLocation);
 
-            // Reset force for the next frame
+            Force.Value = FVector::ZeroVector;
+        }
+    });
+}
+
+void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
+
+    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    {
+        const int32 NumEntities = LocalContext.GetNumEntities();
+        if (NumEntities == 0) return;
+
+        const FMassMovementParameters& MovementParams = LocalContext.GetConstSharedFragment<FMassMovementParameters>();
+        const TConstArrayView<FMassSteeringFragment> SteeringList = LocalContext.GetFragmentView<FMassSteeringFragment>();
+        const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
+        const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
+        const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+
+        for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
+        {
+            FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
+            const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
+            FMassForceFragment& Force = ForceList[EntityIndex];
+            FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+
+            const float OriginalZVelocity = Velocity.Value.Z;
+            const FVector DesiredVelocity = Steering.DesiredVelocity;
+            const FVector AvoidanceForce = Force.Value;
+            const float MaxSpeed = MovementParams.MaxSpeed;
+            const float Acceleration = MovementParams.MaxAcceleration;
+
+            const FVector CurrentHorizontalVelocity(Velocity.Value.X, Velocity.Value.Y, 0.f);
+            const FVector DesiredHorizontalVelocity(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
+            const FVector HorizontalAvoidanceForce(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
+
+            FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
+            AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
+            FVector HorizontalVelocityDelta = (AccelInput + HorizontalAvoidanceForce) * DeltaTime * 4.f;
+
+            FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
+            NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
+
+            Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+
+            const FVector CurrentLocation = CurrentTransform.GetLocation();
+            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            CurrentTransform.SetTranslation(NewLocation);
+
             Force.Value = FVector::ZeroVector;
         }
     });

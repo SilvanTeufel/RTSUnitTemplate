@@ -5,6 +5,10 @@
 #include "MassProcessor.h"
 #include "UnitApplyMassMovementProcessor.generated.h"
 
+// Forward declarations
+struct FMassEntityManager;
+struct FMassExecutionContext;
+
 /**
  * 
  */
@@ -22,4 +26,9 @@ protected:
 private:
 	FMassEntityQuery EntityQuery;
 
+	FMassEntityQuery ClientEntityQuery;
+
+	// Separated execution paths
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 };

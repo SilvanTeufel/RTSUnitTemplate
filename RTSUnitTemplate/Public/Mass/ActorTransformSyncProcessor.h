@@ -53,11 +53,17 @@ protected:
 private:
 	FMassEntityQuery EntityQuery;
 
+	FMassEntityQuery ClientEntityQuery;
+	
 	// Cache subsystem pointer for efficiency
 	UPROPERTY(Transient)
 	UMassRepresentationSubsystem* RepresentationSubsystem; // Example if using Representation Subsystem
 
 
+	// Separated execution paths
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	
     //----------------------------------------------------------------------//
     // HELPER FUNCTIONS for Execute()                                       //
     //----------------------------------------------------------------------//

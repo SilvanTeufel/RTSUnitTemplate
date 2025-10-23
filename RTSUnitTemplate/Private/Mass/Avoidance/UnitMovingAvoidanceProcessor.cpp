@@ -276,7 +276,7 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server);
 
 	// Does not require Game Thread
-	bRequiresGameThreadExecution = false;
+	bRequiresGameThreadExecution = true;
 }
 
 void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

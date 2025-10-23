@@ -63,9 +63,28 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+	// Client-side prediction mirror for movement request
+	UFUNCTION(Client, Reliable)
+	void Client_CorrectSetUnitMoveTarget(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTargetForAbility(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
+	// Client-side prediction mirror for ability movement request
+	UFUNCTION(Client, Reliable)
+	void Client_CorrectSetUnitMoveTargetForAbility(
 		UObject* WorldContextObject,
 		AUnitBase* Unit,
 		const FVector& NewTargetLocation,

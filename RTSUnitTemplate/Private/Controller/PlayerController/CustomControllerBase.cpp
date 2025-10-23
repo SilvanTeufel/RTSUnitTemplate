@@ -129,6 +129,7 @@ void ACustomControllerBase::AgentInit_Implementation()
 
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
+	// Server authoritative path. Also dispatch a client-side prediction request.
 	if (!Unit) return;
 	
 	if (!Unit->IsInitialized) return;
@@ -210,7 +211,46 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+ EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+	// Send to owning client for client-side prediction as well
+	Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+}
+
+void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
+{
+	if (!IsLocalController()) return;
+	if (!Unit) return;
+	if (!Unit->IsInitialized || !Unit->CanMove) return;
+
+	// Client-side prediction: update local Mass fragments minimally
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+	if (!World->IsNetMode(NM_Client)) return;
+
+	UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTarget for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
+
+	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+			{
+				// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
+				MoveTargetFragmentPtr->Center = NewTargetLocation;
+				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+				MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
+				// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
+			}
+			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+			{
+				AiStatePtr->StoredLocation = NewTargetLocation;
+				AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+			}
+		}
+	}
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -285,8 +325,44 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+	// Send to owning client for client-side prediction as well
+	Client_CorrectSetUnitMoveTargetForAbility(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
 }
 
+void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
+{
+	if (!IsLocalController()) return;
+	if (!Unit) return;
+	if (!Unit->IsInitialized || !Unit->CanMove) return;
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+	if (!World->IsNetMode(NM_Client)) return;
+
+	UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTargetForAbility for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
+
+	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+			{
+				// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
+				MoveTargetFragmentPtr->Center = NewTargetLocation;
+				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+				// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
+			}
+			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+			{
+				AiStatePtr->StoredLocation = NewTargetLocation;
+				AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+			}
+		}
+	}
+}
 
 void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
 {

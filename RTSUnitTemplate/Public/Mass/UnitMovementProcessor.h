@@ -46,15 +46,21 @@ protected:
 private:
     FMassEntityQuery EntityQuery;
 
+	FMassEntityQuery ClientEntityQuery;
+	
     float TimeSinceLastRun = 0.0f;
 
     // Add Acceptance Radius if not using the one from MoveTarget
     UPROPERTY(EditDefaultsOnly, Category = "Movement")
     float PathWaypointAcceptanceRadius = 100.f; // Example value, adjust as needed
 
-    UPROPERTY(Transient)
+	UPROPERTY(Transient)
     TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
     // Optional: Store NavData pointer if performance is critical
     // TWeakObjectPtr<ANavigationData> CachedNavData = nullptr;
+
+    // Separated execution paths
+    void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+    void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 };
 
