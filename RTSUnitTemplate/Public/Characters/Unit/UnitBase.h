@@ -268,9 +268,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EvadeDistanceChase = 150.f;
-/////////////////////////////
-
-// Projectile related /////////
+	/////////////////////////////
+	
+	// Projectile related /////////
 public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SpawnProjectile", Keywords = "RTSUnitTemplate SpawnProjectile"), Category = RTSUnitTemplate)
@@ -338,7 +338,7 @@ public:
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true);
+		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);

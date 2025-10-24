@@ -9,6 +9,8 @@
 // Forward declarations
 class UTextBlock;
 class UButton;
+class UImage;
+class UTexture2D;
 
 // Declare a delegate that the parent widget can bind to.
 // This allows the entry widget to tell the parent when a button is clicked.
@@ -21,7 +23,7 @@ class RTSUNITTEMPLATE_API UResourceEntryWidget : public UUserWidget
 
 public:
 	/** Sets the data for this widget and updates its visual representation. */
-	void SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId);
+	void SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId, UTexture2D* InIconTexture = nullptr);
 
 	/** The type of resource this widget entry represents. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
@@ -38,6 +40,10 @@ protected:
 	// UI elements bound from the UMG Editor
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* ResourceNameText;
+
+	// Optional icon image (set up in the UMG designer)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional), Category = RTSUnitTemplate)
+	UImage* ResourceIcon;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = RTSUnitTemplate)
 	UTextBlock* ResourceAmountText;

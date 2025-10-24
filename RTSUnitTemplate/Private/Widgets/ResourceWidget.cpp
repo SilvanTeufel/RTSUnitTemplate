@@ -7,11 +7,15 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Engine/Engine.h" // For UEnum
+#include "Engine/Texture2D.h"
 
 void UResourceWidget::NativeConstruct()
 {
     Super::NativeConstruct();
-    // Population now happens after TeamId is set, to ensure we have the correct data.
+    // Try an initial population so the widget shows something even before SetTeamId is called.
+    // This will be safely overwritten when SetTeamId is invoked later.
+    PopulateResourceList();
+    UpdateWidget();
 }
 
 
@@ -61,21 +65,35 @@ void UResourceWidget::PopulateResourceList()
     if (!EnumPtr) return;
 
     // Loop through the game state's resource data to create a widget for each type
+    int32 AddedCount = 0;
     for (const FResourceArray& ResourceArray : ResourceGameState->TeamResources)
     {
+        if (MaxResourcesToDisplay > 0 && AddedCount >= MaxResourcesToDisplay)
+        {
+            break;
+        }
+
         UResourceEntryWidget* EntryWidget = CreateWidget<UResourceEntryWidget>(this, ResourceEntryWidgetClass);
         if (EntryWidget)
         {
             float ResourceAmount = ResourceArray.Resources.IsValidIndex(TeamId) ? ResourceArray.Resources[TeamId] : 0.0f;
             int32 WorkerCount = ResourceArray.MaxWorkers.IsValidIndex(TeamId) ? ResourceArray.MaxWorkers[TeamId] : 0;
-            FText ResourceName = EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(ResourceArray.ResourceType));
+
+            // Name override or default from enum
+            FText ResourceName = ResourceDisplayNames.Contains(ResourceArray.ResourceType)
+                ? ResourceDisplayNames[ResourceArray.ResourceType]
+                : EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(ResourceArray.ResourceType));
+
+            // Icon override (may be null)
+            UTexture2D* const* FoundIcon = ResourceIcons.Find(ResourceArray.ResourceType);
+            UTexture2D* IconTexture = FoundIcon ? *FoundIcon : nullptr;
 
             // Set the data on the new widget
-            EntryWidget->SetResourceData(ResourceArray.ResourceType, ResourceName, ResourceAmount, WorkerCount, TeamId);
+            EntryWidget->SetResourceData(ResourceArray.ResourceType, ResourceName, ResourceAmount, WorkerCount, TeamId, IconTexture);
 
             // Add the newly created widget to our vertical box
-            //ResourceEntriesBox->AddChildToVerticalBox(EntryWidget);
             ResourceEntriesBox->AddChild(EntryWidget);
+            ++AddedCount;
         }
     }
 }
@@ -112,9 +130,16 @@ void UResourceWidget::UpdateWidget()
                 const FResourceArray* ResourceArray = *FoundData;
                 const float ResourceAmount = ResourceArray->Resources.IsValidIndex(TeamId) ? ResourceArray->Resources[TeamId] : 0.0f;
                 const int32 WorkerCount = ResourceArray->MaxWorkers.IsValidIndex(TeamId) ? ResourceArray->MaxWorkers[TeamId] : 0;
-                const FText ResourceNameText = EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(ResourceArray->ResourceType));
+                // Name override or default
+                FText ResourceNameText = ResourceDisplayNames.Contains(ResourceArray->ResourceType)
+                    ? ResourceDisplayNames[ResourceArray->ResourceType]
+                    : EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(ResourceArray->ResourceType));
+
+                // Icon override
+                UTexture2D* const* FoundIcon = ResourceIcons.Find(ResourceArray->ResourceType);
+                UTexture2D* IconTexture = FoundIcon ? *FoundIcon : nullptr;
                 
-                Entry->SetResourceData(ResourceArray->ResourceType, ResourceNameText, ResourceAmount, WorkerCount, TeamId);
+                Entry->SetResourceData(ResourceArray->ResourceType, ResourceNameText, ResourceAmount, WorkerCount, TeamId, IconTexture);
             }
         }
     }

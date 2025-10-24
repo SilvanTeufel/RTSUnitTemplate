@@ -173,7 +173,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
 	DOREPLIFETIME(AUnitBase, bHoldPosition);
 
-	DOREPLIFETIME(AUnitBase, bIsMassUnit)
+	DOREPLIFETIME(AUnitBase, bIsMassUnit);
 }
 
 
@@ -796,7 +796,7 @@ TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
+int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad)
 {
 	FUnitSpawnParameter SpawnParameter;
 	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
@@ -815,7 +815,12 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 
 	if(!GameMode) return;
 
-	GameMode->HighestSquadId++;
+	int32 SharedSquadId = 0;
+	if (SpawnAsSquad)
+	{
+		GameMode->HighestSquadId++;
+		SharedSquadId = GameMode->HighestSquadId;
+	}
 	for(int i = 0; i < UnitCount; i++)
 	{
 		FTransform UnitTransform;
@@ -888,7 +893,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously)
 			//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 
 			UnitBase->InitializeAttributes();
-			UnitBase->SquadId = GameMode->HighestSquadId;
+			UnitBase->SquadId = (SpawnAsSquad ? SharedSquadId : 0);
 			
 			if(Waypoint)
 				UnitBase->NextWaypoint = Waypoint;

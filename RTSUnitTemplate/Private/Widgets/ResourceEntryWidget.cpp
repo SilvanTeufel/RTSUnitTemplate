@@ -2,6 +2,7 @@
 #include "Widgets/ResourceEntryWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Components/Image.h"
 
 void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 {
@@ -24,7 +25,7 @@ void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 	WorkerCountText->SetText(FText::AsNumber(NewWorkerCount));
 }
 
-void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId)
+void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId, UTexture2D* InIconTexture)
 {
 	ResourceType = InResourceType;
 
@@ -41,6 +42,19 @@ void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const F
 		WorkerCountText->SetText(FText::AsNumber(InWorkerCount));
 	}
 
-		TeamId = PlayerTeamId;	
+	if (ResourceIcon)
+	{
+		if (InIconTexture)
+		{
+			ResourceIcon->SetBrushFromTexture(InIconTexture, true);
+		}
+		else
+		{
+			// If no texture is provided, you may clear or leave existing brush
+			// ResourceIcon->SetBrush(FSlateBrush());
+		}
+	}
+
+	TeamId = PlayerTeamId;	
 }
 
