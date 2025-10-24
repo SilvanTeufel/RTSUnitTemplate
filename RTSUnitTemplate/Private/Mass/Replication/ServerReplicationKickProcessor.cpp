@@ -45,7 +45,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("net.RTS.ServerReplicationKick.LogLevel"),
-	1,
+	2,
 	TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 

@@ -173,32 +173,45 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			// Server: assign NetID and update authoritative registry so clients can reconcile
 			if (UWorld* WorldPtr = GetWorld())
 			{
-				if (WorldPtr->GetNetMode() != NM_Client)
-				{
-					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
-					{
-						if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
-						{
-							const uint32 NewID = Reg->GetNextNetID();
-							NetFrag->NetID = FMassNetworkID(NewID);
-							const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
-							if (FUnitRegistryItem* Existing = Reg->Registry.FindByOwner(OwnerName))
-							{
-								Existing->NetID = NetFrag->NetID;
-								Reg->Registry.MarkItemDirty(*Existing);
-							}
-							else
-							{
-								const int32 NewIdx = Reg->Registry.Items.AddDefaulted();
-								Reg->Registry.Items[NewIdx].OwnerName = OwnerName;
-								Reg->Registry.Items[NewIdx].NetID = NetFrag->NetID;
-								Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx]);
-							}
-							Reg->Registry.MarkArrayDirty();
-							Reg->ForceNetUpdate();
-						}
-					}
-				}
+    if (WorldPtr->GetNetMode() != NM_Client)
+    {
+    	if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
+    	{
+    		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
+    		{
+    			const uint32 NewID = Reg->GetNextNetID();
+    			NetFrag->NetID = FMassNetworkID(NewID);
+    			const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
+    			const int32 UnitIndex = (Cast<AUnitBase>(MyOwner)) ? Cast<AUnitBase>(MyOwner)->UnitIndex : INDEX_NONE;
+    			FUnitRegistryItem* Existing = nullptr;
+    			if (UnitIndex != INDEX_NONE)
+    			{
+    				Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
+    			}
+    			if (!Existing)
+    			{
+    				Existing = Reg->Registry.FindByOwner(OwnerName);
+    			}
+    			if (Existing)
+    			{
+    				Existing->OwnerName = OwnerName;
+    				Existing->UnitIndex = UnitIndex;
+    				Existing->NetID = NetFrag->NetID;
+    				Reg->Registry.MarkItemDirty(*Existing);
+    			}
+    			else
+    			{
+    				const int32 NewIdx2 = Reg->Registry.Items.AddDefaulted();
+    				Reg->Registry.Items[NewIdx2].OwnerName = OwnerName;
+    				Reg->Registry.Items[NewIdx2].UnitIndex = UnitIndex;
+    				Reg->Registry.Items[NewIdx2].NetID = NetFrag->NetID;
+    				Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx2]);
+    			}
+    			Reg->Registry.MarkArrayDirty();
+    			Reg->ForceNetUpdate();
+    		}
+    	}
+    }
 			}
 		}
     }
@@ -359,8 +372,25 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
 	{
 		FMassReplicationSharedFragment RepShared;
-		// Set custom replicator so UMassReplicationProcessor delegates to our class
-		RepShared.CachedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+		// Share a single replicator instance per world so entities can batch into the same chunk
+		{
+			static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
+			UWorld* W = GetWorld();
+			UMassUnitReplicatorBase* SharedReplicator = nullptr;
+			if (W)
+			{
+				if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
+				{
+					SharedReplicator = Found->Get();
+				}
+				if (!SharedReplicator)
+				{
+					SharedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+					GReplicatorPerWorld.Add(W, SharedReplicator);
+				}
+			}
+			RepShared.CachedReplicator = SharedReplicator;
+		}
 
 		// Resolve BubbleInfo class handle as early as possible
 		if (UWorld* WorldPtr = GetWorld())

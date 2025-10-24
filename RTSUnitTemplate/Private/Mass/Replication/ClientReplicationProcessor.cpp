@@ -42,6 +42,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_LogLevel(
 #include "MassReplicationFragments.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
@@ -134,6 +135,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	//    Throttle registry actor lookup to once per second and cache between ticks.
 	AUnitRegistryReplicator* RegistryActor = nullptr;
 	TMap<FName, FMassNetworkID> AuthoritativeByOwnerName;
+	TMap<int32, FMassNetworkID> AuthoritativeByUnitIndex;
 	{
 		static TWeakObjectPtr<AUnitRegistryReplicator> GCachedRegistry;
 		static double GLastLookup = 0.0;
@@ -159,6 +161,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			for (const FUnitRegistryItem& Item : RegistryActor->Registry.Items)
 			{
 				AuthoritativeByOwnerName.Add(Item.OwnerName, Item.NetID);
+				if (Item.UnitIndex != INDEX_NONE)
+				{
+					AuthoritativeByUnitIndex.Add(Item.UnitIndex, Item.NetID);
+				}
 			}
 			// Log the mapping we see on the client this tick (limited, verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -306,7 +312,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
-	EntityQuery.ForEachEntityChunk(Context, [AuthoritativeByOwnerName, BubbleByOwnerName](FMassExecutionContext& Context)
+ EntityQuery.ForEachEntityChunk(Context, [AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -341,24 +347,47 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				// Duplicate NetID detection: ensure per-chunk uniqueness
 				const uint32 CurrentID = NetIDList[EntityIdx].NetID.GetValue();
 
-				// 0) Authoritative mapping by OwnerName (preferred over proximity)
+				// 0) Authoritative mapping by UnitIndex first, then OwnerName, then Bubble fallback
 				if (AActor* OwnerActor = ActorList[EntityIdx].GetMutable())
 				{
-					const FName OwnerName = OwnerActor->GetFName();
-					if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
+					// Try UnitIndex if this is a UnitBase
+					int32 OwnerUnitIndex = INDEX_NONE;
+					if (const AUnitBase* AsUnit = Cast<AUnitBase>(OwnerActor))
 					{
-						if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
+						OwnerUnitIndex = AsUnit->UnitIndex;
+					}
+					bool bSet = false;
+					if (OwnerUnitIndex != INDEX_NONE)
+					{
+						if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(OwnerUnitIndex))
 						{
-							NetIDList[EntityIdx].NetID = *AuthoritativeId;
+							if (NetIDList[EntityIdx].NetID != *ByIdx)
+							{
+								NetIDList[EntityIdx].NetID = *ByIdx;
+							}
+							bSet = true;
 						}
 					}
-					else
+					if (!bSet)
 					{
-						if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
+						const FName OwnerName = OwnerActor->GetFName();
+						if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
 						{
-							if (NetIDList[EntityIdx].NetID != *BubbleId)
+							if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
 							{
-								NetIDList[EntityIdx].NetID = *BubbleId;
+								NetIDList[EntityIdx].NetID = *AuthoritativeId;
+							}
+							bSet = true;
+						}
+						else
+						{
+							if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
+							{
+								if (NetIDList[EntityIdx].NetID != *BubbleId)
+								{
+									NetIDList[EntityIdx].NetID = *BubbleId;
+								}
+								bSet = true;
 							}
 						}
 					}

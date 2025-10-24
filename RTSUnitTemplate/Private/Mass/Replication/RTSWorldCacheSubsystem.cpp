@@ -6,6 +6,7 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
+#include "Characters/Unit/UnitBase.h"
 
 URTSWorldCacheSubsystem::URTSWorldCacheSubsystem()
 {
@@ -33,6 +34,7 @@ void URTSWorldCacheSubsystem::ClearAll()
 	CachedRegistry.Reset();
 	CachedBubble.Reset();
 	BindingByOwnerName.Reset();
+	BindingByUnitIndex.Reset();
 	LastBindingRebuildTime = -1000.0;
 }
 
@@ -109,11 +111,19 @@ void URTSWorldCacheSubsystem::RebuildBindingCacheIfNeeded(float IntervalSeconds)
 		return;
 	}
 	BindingByOwnerName.Reset();
+	BindingByUnitIndex.Reset();
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		if (UMassActorBindingComponent* Bind = It->FindComponentByClass<UMassActorBindingComponent>())
 		{
 			BindingByOwnerName.Add(It->GetFName(), Bind);
+			if (const AUnitBase* Unit = Cast<AUnitBase>(*It))
+			{
+				if (Unit->UnitIndex != INDEX_NONE)
+				{
+					BindingByUnitIndex.Add(Unit->UnitIndex, Bind);
+				}
+			}
 		}
 	}
 	LastBindingRebuildTime = Now;
@@ -122,6 +132,15 @@ void URTSWorldCacheSubsystem::RebuildBindingCacheIfNeeded(float IntervalSeconds)
 UMassActorBindingComponent* URTSWorldCacheSubsystem::FindBindingByOwnerName(FName OwnerName)
 {
 	if (TWeakObjectPtr<UMassActorBindingComponent>* Found = BindingByOwnerName.Find(OwnerName))
+	{
+		return Found->Get();
+	}
+	return nullptr;
+}
+
+UMassActorBindingComponent* URTSWorldCacheSubsystem::FindBindingByUnitIndex(int32 UnitIndex)
+{
+	if (TWeakObjectPtr<UMassActorBindingComponent>* Found = BindingByUnitIndex.Find(UnitIndex))
 	{
 		return Found->Get();
 	}

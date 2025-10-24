@@ -28,8 +28,10 @@ public:
 	// Rebuild OwnerName->BindingComponent cache if needed (throttled by interval seconds)
 	void RebuildBindingCacheIfNeeded(float IntervalSeconds = 1.0f);
 
-	// Find a binding component by stable owner name using the cache (call RebuildBindingCacheIfNeeded before heavy loops)
+ // Find a binding component by stable owner name using the cache (call RebuildBindingCacheIfNeeded before heavy loops)
 	UMassActorBindingComponent* FindBindingByOwnerName(FName OwnerName);
+	// Find a binding by UnitIndex (preferred unique key)
+	UMassActorBindingComponent* FindBindingByUnitIndex(int32 UnitIndex);
 
 	// Clear caches explicitly
 	void ClearAll();
@@ -38,5 +40,6 @@ private:
 	TWeakObjectPtr<AUnitRegistryReplicator> CachedRegistry;
 	TWeakObjectPtr<AUnitClientBubbleInfo> CachedBubble;
 	TMap<FName, TWeakObjectPtr<UMassActorBindingComponent>> BindingByOwnerName;
+	TMap<int32, TWeakObjectPtr<UMassActorBindingComponent>> BindingByUnitIndex;
 	double LastBindingRebuildTime = -1000.0;
 };

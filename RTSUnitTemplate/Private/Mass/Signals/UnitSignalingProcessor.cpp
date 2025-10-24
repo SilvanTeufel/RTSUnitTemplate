@@ -115,7 +115,16 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     {
                         const int32 Idx = (Start + Processed) % Num;
                         const FUnitRegistryItem& It = Items[Idx];
-                        if (UMassActorBindingComponent* Bind = CacheSub->FindBindingByOwnerName(It.OwnerName))
+                        UMassActorBindingComponent* Bind = nullptr;
+                        if (It.UnitIndex != INDEX_NONE)
+                        {
+                            Bind = CacheSub->FindBindingByUnitIndex(It.UnitIndex);
+                        }
+                        if (!Bind)
+                        {
+                            Bind = CacheSub->FindBindingByOwnerName(It.OwnerName);
+                        }
+                        if (Bind)
                         {
                             Bind->RequestClientMassLink();
                         }
