@@ -88,9 +88,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 {
     UWorld* World = GetWorld();
     if (!World) return;
-
-	if (World->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor::Execute 00"));
-	
+    
     // Lazy-init EntitySubsystem on first Execute in case InitializeInternal ran before world subsystems were ready (common on clients)
     if (!EntitySubsystem)
     {
@@ -104,8 +102,7 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
 
     if (World->IsNetMode(NM_Client))
     {
-    	UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor::Execute 0"));
-        ExecuteClient(EntityManager, Context);
+        //ExecuteClient(EntityManager, Context);
     }
     else
     {

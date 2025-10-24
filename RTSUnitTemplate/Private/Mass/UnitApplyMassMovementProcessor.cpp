@@ -88,11 +88,9 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 	UWorld* World = GetWorld();
 	if (!World) return;
 	
- if (World->IsNetMode(NM_Client)) UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitApplyMassMovementProcessor::Execute 00"));
-	
     if (World->IsNetMode(NM_Client))
     {
-        ExecuteClient(EntityManager, Context);
+        //ExecuteClient(EntityManager, Context);
     }
     else
     {

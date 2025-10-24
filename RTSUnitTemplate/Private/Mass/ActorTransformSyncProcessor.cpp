@@ -395,8 +395,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 {
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Client UActorTransformSyncProcessor"));
-		ExecuteClient(EntityManager, Context);
+	    ExecuteRepClient(EntityManager, Context);
+		//ExecuteClient(EntityManager, Context);
 	}
 	else
 	{
@@ -480,8 +480,8 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
     DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
 }
 
-/*
-void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+
+void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
     if (!ShouldProceedWithTick(ActualDeltaTime)) return;
@@ -531,7 +531,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
     });
 
     DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
-}*/
+}
 
 void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {

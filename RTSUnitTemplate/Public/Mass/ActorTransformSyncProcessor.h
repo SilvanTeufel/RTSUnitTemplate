@@ -62,6 +62,7 @@ private:
 
 	// Separated execution paths
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteRepClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	
     //----------------------------------------------------------------------//
