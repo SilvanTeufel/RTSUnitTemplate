@@ -1296,14 +1296,18 @@ void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* Worl
 	if (!World) return;
 	if (!World->IsNetMode(NM_Client)) return;
 
+	UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 0"));
 	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
+		UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 1"));
 		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
 		if (EntityManager.IsEntityValid(MassEntityHandle))
 		{
+			UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 2"));
 			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
 			{
+				UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 3"));
 				// Mirror movement target on client
 				MoveTargetFragmentPtr->Center = NewTargetLocation;
 				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
