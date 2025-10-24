@@ -1,11 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
+/*
 #if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG
 #define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
 #endif
-
+*/
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
 
@@ -181,6 +181,20 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Build quick lookup maps from current client Mass entities
 	TMap<uint32, TWeakObjectPtr<AActor>> ByNetID;
 	TMap<FName, TWeakObjectPtr<AActor>> ByOwnerName;
+
+	// Build additional authoritative mapping from Bubble payload (client-replicated)
+	TMap<FName, FMassNetworkID> BubbleByOwnerName;
+	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+	{
+		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+		{
+			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
+			{
+				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
+			}
+		}
+	}
+
 	EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
@@ -292,7 +306,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
-	EntityQuery.ForEachEntityChunk(Context, [AuthoritativeByOwnerName](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(Context, [AuthoritativeByOwnerName, BubbleByOwnerName](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -336,6 +350,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
 						{
 							NetIDList[EntityIdx].NetID = *AuthoritativeId;
+						}
+					}
+					else
+					{
+						if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
+						{
+							if (NetIDList[EntityIdx].NetID != *BubbleId)
+							{
+								NetIDList[EntityIdx].NetID = *BubbleId;
+							}
 						}
 					}
 				}

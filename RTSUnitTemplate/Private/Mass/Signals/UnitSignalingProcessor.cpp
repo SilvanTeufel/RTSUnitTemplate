@@ -7,6 +7,10 @@
 #include "Characters/Unit/UnitBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "Mass/Replication/ReplicationSettings.h"
+#include "Mass/Replication/RTSWorldCacheSubsystem.h"
+#include "Mass/Replication/UnitRegistryReplicator.h"
+#include "EngineUtils.h"
 
 UUnitSignalingProcessor::UUnitSignalingProcessor()
 {
@@ -84,6 +88,42 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     {
         // Add the newly spawned actors to our internal queue.
         ActorsToCreateThisFrame.Append(PendingActors);
+    }
+
+    // Client-side proactive registry reconciliation for Mass replication mode
+    const bool bIsClient = World->GetNetMode() == NM_Client;
+    if (bIsClient && RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass)
+    {
+        URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>();
+        if (CacheSub)
+        {
+            // Rebuild binding cache at throttled interval
+            CacheSub->RebuildBindingCacheIfNeeded(1.0f);
+            if (AUnitRegistryReplicator* Registry = CacheSub->GetRegistry(false))
+            {
+                const TArray<FUnitRegistryItem>& Items = Registry->Registry.Items;
+                static int32 RollingIndex = 0;
+
+                const int32 Num = Items.Num();
+                if (Num > 0)
+                {
+                    const int32 BudgetPerTick = 16; // small rolling slice
+                    const int32 ToProcess = FMath::Clamp(BudgetPerTick, 1, Num);
+                    const int32 Start = (RollingIndex % Num);
+                    int32 Processed = 0;
+                    for (; Processed < ToProcess; ++Processed)
+                    {
+                        const int32 Idx = (Start + Processed) % Num;
+                        const FUnitRegistryItem& It = Items[Idx];
+                        if (UMassActorBindingComponent* Bind = CacheSub->FindBindingByOwnerName(It.OwnerName))
+                        {
+                            Bind->RequestClientMassLink();
+                        }
+                    }
+                    RollingIndex = (Start + Processed) % Num;
+                }
+            }
+        }
     }
 }
 

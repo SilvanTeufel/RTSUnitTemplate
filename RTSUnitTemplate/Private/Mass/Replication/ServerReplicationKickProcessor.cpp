@@ -1,9 +1,9 @@
-﻿
+﻿/*
 #if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG
 #define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
 #endif
-
+*/
 #include "Mass/Replication/ServerReplicationKickProcessor.h"
 
 #include "MassCommonFragments.h"

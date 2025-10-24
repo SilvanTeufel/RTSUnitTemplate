@@ -35,6 +35,12 @@
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
+// Replication pipeline helpers
+#include "Mass/Replication/ReplicationSettings.h"
+#include "Mass/Replication/RTSWorldCacheSubsystem.h"
+#include "Mass/Replication/UnitRegistryReplicator.h"
+#include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "EngineUtils.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -161,6 +167,37 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			bNeedsMassUnitSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
+
+			// Server: assign NetID and update authoritative registry so clients can reconcile
+			if (UWorld* WorldPtr = GetWorld())
+			{
+				if (WorldPtr->GetNetMode() != NM_Client)
+				{
+					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
+					{
+						if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
+						{
+							const uint32 NewID = Reg->GetNextNetID();
+							NetFrag->NetID = FMassNetworkID(NewID);
+							const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
+							if (FUnitRegistryItem* Existing = Reg->Registry.FindByOwner(OwnerName))
+							{
+								Existing->NetID = NetFrag->NetID;
+								Reg->Registry.MarkItemDirty(*Existing);
+							}
+							else
+							{
+								const int32 NewIdx = Reg->Registry.Items.AddDefaulted();
+								Reg->Registry.Items[NewIdx].OwnerName = OwnerName;
+								Reg->Registry.Items[NewIdx].NetID = NetFrag->NetID;
+								Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx]);
+							}
+							Reg->Registry.MarkArrayDirty();
+							Reg->ForceNetUpdate();
+						}
+					}
+				}
+			}
 		}
     }
 	
@@ -754,7 +791,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-	/*	
+	/*
 	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassUnitSetup)
 	{
 		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
@@ -765,6 +802,62 @@ void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
 	}
 	*/
+}
+
+void UMassActorBindingComponent::RequestClientMassLink()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	// Only meaningful on clients; but allow call on server to be a no-op
+	if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwner()))
+	{
+		if (UnitBase->CanMove)
+		{
+			bNeedsMassUnitSetup = true;
+			bNeedsMassBuildingSetup = false;
+		}
+		else
+		{
+			bNeedsMassBuildingSetup = true;
+			bNeedsMassUnitSetup = false;
+		}
+		if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
+		{
+			SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
+		}
+	}
+}
+
+void UMassActorBindingComponent::RequestClientMassUnlink()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	if (World->GetNetMode() != NM_Client)
+	{
+		return; // Only meaningful on clients
+	}
+	if (MassEntitySubsystemCache == nullptr)
+	{
+		MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+	}
+	if (MassEntitySubsystemCache && MassEntityHandle.IsValid())
+	{
+		FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+		if (EM.IsEntityValid(MassEntityHandle))
+		{
+			EM.Defer().DestroyEntity(MassEntityHandle);
+		}
+	}
+	MassEntityHandle.Reset();
+	bNeedsMassUnitSetup = false;
+	bNeedsMassBuildingSetup = false;
+	UE_LOG(LogTemp, Log, TEXT("Client Mass unlink requested for %s"), *GetOwner()->GetName());
 }
 
 void UMassActorBindingComponent::CleanupMassEntity()

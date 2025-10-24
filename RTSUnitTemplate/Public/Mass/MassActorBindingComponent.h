@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "MassEntitySubsystem.h"
 #include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "MassEntityTypes.h"
 #include "MassRepresentationTypes.h"
 #include "Mass/UnitMassTag.h"
@@ -68,6 +69,14 @@ public:
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 	
 	FMassEntityHandle CreateAndLinkBuildingToMassEntity();
+
+	// Client-side request to queue safe Mass link after server creation
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	void RequestClientMassLink();
+
+	// Client-side request to unlink/destroy the Mass entity when server unregistered
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	void RequestClientMassUnlink();
 
 	// Helpers to build archetype and shared values
 	bool BuildArchetypeAndSharedValues(FMassArchetypeHandle& OutArchetype,
