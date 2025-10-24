@@ -66,6 +66,9 @@ namespace UnitSignals
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 
 	const FName InitUnit(TEXT("InitUnit"));
+	// Client-side navigation mirror signals
+	const FName MirrorMoveTarget(TEXT("MirrorMoveTarget"));
+	const FName MirrorStopMovement(TEXT("MirrorStopMovement"));
 }
 
 USTRUCT()

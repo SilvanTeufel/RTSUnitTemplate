@@ -17,6 +17,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Controller\PlayerController\CustomControllerBase.h"
 
 
 UChaseStateProcessor::UChaseStateProcessor(): EntityQuery()
@@ -141,6 +142,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
+                SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
                 
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
@@ -160,6 +162,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 // Queue signal instead of sending directly
                 StopMovement(MoveTarget, World);
+                SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
                 continue;
@@ -169,7 +172,9 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
            // You might want to adjust Min/Max Radius based on unit size or target.
            FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
-           UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
+           StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
+           UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
+           SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
 
         }
     }); // End ForEachEntityChunk

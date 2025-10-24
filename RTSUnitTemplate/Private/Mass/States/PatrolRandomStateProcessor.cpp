@@ -73,7 +73,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
     EntityQuery.ForEachEntityChunk(Context,
 
-        [&PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer reset
@@ -111,6 +111,10 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                     PendingSignals.Emplace(Entity, UnitSignals::PatrolIdle);
                     StateFrag.StateTimer = 0.f;
                     StopMovement(MoveTarget, World);
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                    }
 
                     continue;
                 }

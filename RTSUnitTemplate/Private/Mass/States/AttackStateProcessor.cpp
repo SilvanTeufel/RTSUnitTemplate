@@ -15,6 +15,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Controller\PlayerController\CustomControllerBase.h"
 
 
 UAttackStateProcessor::UAttackStateProcessor(): EntityQuery()
@@ -97,6 +98,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                    StateFrag.StoredLocation,
                    Stats.RunSpeed,
                    World);
+                SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
                 
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Adjust UnitSignals::Run based on payload struct

@@ -119,6 +119,10 @@ private:
 	FDelegateHandle FogParametersDelegateHandle;
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
+	
+	// Mirror movement signals
+	FDelegateHandle MirrorMoveTargetDelegateHandle;
+	FDelegateHandle MirrorStopMovementDelegateHandle;
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -245,15 +249,20 @@ private:
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
+	// Mirror movement handlers
+	UFUNCTION()
+	void HandleMirrorMoveTarget(FName SignalName, TArray<FMassEntityHandle>& Entities);
+	UFUNCTION()
+	void HandleMirrorStopMovement(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	FDelegateHandle UpdateWorkerMovementDelegateHandle;
-	
+		
 	UFUNCTION()
 	void UpdateWorkerMovement(FName SignalName, TArray<FMassEntityHandle>& Entities);
 	
 	UFUNCTION()
 	void UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
-
+	
 	UFUNCTION()
 	void UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
 	

@@ -213,8 +213,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
  EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 
-	// Send to owning client for client-side prediction as well
-	Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+	// Multicast to all connected clients for client-side navigation mirror
+	if (UWorld* PCWorld = World)
+	{
+		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+			{
+				PC->Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+			}
+		}
+	}
 }
 
 void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -285,49 +294,58 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
         return;
     }
 
-    // --- Access the PER-ENTITY fragment ---
-    FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
-	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+   	// --- Access the PER-ENTITY fragment ---
+   	FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+   	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 	
-    if (!MoveTargetFragmentPtr || !AiStatePtr)
-    {
-        UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
-        return;
-    }
-
-	AiStatePtr->StoredLocation = NewTargetLocation;
-	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-
-	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+   	if (!MoveTargetFragmentPtr || !AiStatePtr)
+   	{
+   		UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
+   		return;
+   	}
 	
-	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+   	AiStatePtr->StoredLocation = NewTargetLocation;
+   	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 	
-	if (AttackT)
-	{
-		if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
-	}else
-	{
-		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
-	}
-
-	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
-	//EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
-	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
-
-	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
-	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-
-	// Send to owning client for client-side prediction as well
-	Client_CorrectSetUnitMoveTargetForAbility(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+   	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	
+   	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+	
+   	if (AttackT)
+   	{
+   		if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+   	}else
+   	{
+   		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+   	}
+	
+   	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+   	//EntityManager.Defer().RemoveTag<FMassStateDeadTag>(MassEntityHandle); 
+   	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+	
+   	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+   	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+	
+   	// Multicast to all connected clients for client-side navigation mirror (ability)
+   	if (UWorld* PCWorld = World)
+   	{
+   		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+   		{
+   			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+   			{
+   				PC->Client_CorrectSetUnitMoveTargetForAbility(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+   			}
+   		}
+   	}
 }
 
 void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -1266,4 +1284,74 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 		// server's authoritative version of the subsystem.
 		TeamSubsystem->SetTeamForPlayer(this, TeamId);
 	}
+}
+
+// === Client mirror helpers ===
+void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
+{
+	if (!IsLocalController()) return;
+	if (!Unit) return;
+	if (!Unit->IsInitialized || !Unit->CanMove) return;
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+	if (!World->IsNetMode(NM_Client)) return;
+
+	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+			{
+				// Mirror movement target on client
+				MoveTargetFragmentPtr->Center = NewTargetLocation;
+				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+				MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
+				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
+			}
+			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+			{
+				AiStatePtr->StoredLocation = NewTargetLocation;
+				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
+			}
+		}
+	}
+	// Also mirror the high-level Unit state values for UI/logic expectations
+	Unit->UnitState = static_cast<UnitData::EState>(UnitState);
+	Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+}
+
+void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& StopLocation, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
+{
+	if (!IsLocalController()) return;
+	if (!Unit) return;
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+	if (!World->IsNetMode(NM_Client)) return;
+
+	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+			{
+				// Perform a client-side stop similar to StopMovement helper
+				MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Stand, *World);
+				MoveTargetFragmentPtr->Center = StopLocation;
+				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+				MoveTargetFragmentPtr->DesiredSpeed.Set(0.f);
+			}
+			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+			{
+				AiStatePtr->StoredLocation = StopLocation;
+				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
+			}
+		}
+	}
+	// Mirror high-level unit states as well
+	Unit->UnitState = static_cast<UnitData::EState>(UnitState);
+	Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
 }

@@ -141,6 +141,12 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
     	UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
+
+		// Mirror movement delegates
+		MirrorMoveTargetDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::MirrorMoveTarget)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleMirrorMoveTarget));
+		MirrorStopMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::MirrorStopMovement)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleMirrorStopMovement));
     	
     }
 }
@@ -328,6 +334,20 @@ void UUnitStateProcessor::BeginDestroy()
             
 		UpdateWorkerMovementDelegateHandle.Reset();
 	}
+
+	// Mirror delegates
+	if (SignalSubsystem && MirrorMoveTargetDelegateHandle.IsValid())
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::MirrorMoveTarget)
+			.Remove(MirrorMoveTargetDelegateHandle);
+		MirrorMoveTargetDelegateHandle.Reset();
+	}
+	if (SignalSubsystem && MirrorStopMovementDelegateHandle.IsValid())
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::MirrorStopMovement)
+			.Remove(MirrorStopMovementDelegateHandle);
+		MirrorStopMovementDelegateHandle.Reset();
+	}
 	
     SignalSubsystem = nullptr; // Null out pointers if needed
     EntitySubsystem = nullptr;
@@ -339,6 +359,87 @@ void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 {
 	EntityQuery.Initialize(EntityManager);
     EntityQuery.RegisterWithProcessor(*this);
+}
+
+void UUnitStateProcessor::HandleMirrorMoveTarget(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!World || !SignalSubsystem || !EntitySubsystem) return;
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	UE_LOG(LogTemp, Error, TEXT("HandleMirrorMoveTarget!"));
+	for (FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) continue;
+		FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+		FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+		if (!ActorFrag || !MoveTargetFrag || !StateFrag) continue;
+		AActor* Actor = ActorFrag->GetMutable();
+		AUnitBase* Unit = Actor ? Cast<AUnitBase>(Actor) : nullptr;
+		if (!Unit) continue;
+		const FVector Target = StateFrag->StoredLocation;
+		const float Speed = MoveTargetFrag->DesiredSpeed.Get();
+		const float Slack = MoveTargetFrag->SlackRadius;
+
+		// Defer the RPC to the game thread
+		TWeakObjectPtr<UWorld> WorldPtr = World;
+		TWeakObjectPtr<AUnitBase> UnitPtr = Unit;
+		UE_LOG(LogTemp, Error, TEXT("HandleMirrorMoveTarget! Loop Entitys"));
+		AsyncTask(ENamedThreads::GameThread, [WorldPtr, UnitPtr, Target, Speed, Slack, PlaceholderSignal = StateFrag->PlaceholderSignal]()
+		{
+			if (!WorldPtr.IsValid() || !UnitPtr.IsValid()) return;
+			UWorld* World = WorldPtr.Get();
+			AUnitBase* Unit = UnitPtr.Get();
+			UE_LOG(LogTemp, Error, TEXT("Loop ACustomControllerBase!"));
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+				{
+					UE_LOG(LogTemp, Error, TEXT("Loop ACustomControllerBase!"));
+					PC->Client_MirrorMoveTarget(World, Unit, Target, Speed, Slack,
+						static_cast<int32>(Unit->UnitState), static_cast<int32>(Unit->UnitStatePlaceholder), PlaceholderSignal);
+				}
+			}
+		});
+	}
+}
+
+void UUnitStateProcessor::HandleMirrorStopMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!World || !SignalSubsystem || !EntitySubsystem) return;
+
+	TWeakObjectPtr<UWorld> WorldPtr = World;
+	TWeakObjectPtr<UMassEntitySubsystem> EntitySubsystemPtr = EntitySubsystem;
+	TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+	AsyncTask(ENamedThreads::GameThread, [WorldPtr, EntitySubsystemPtr, EntitiesCopy = MoveTemp(EntitiesCopy)]() mutable
+	{
+		if (!WorldPtr.IsValid() || !EntitySubsystemPtr.IsValid()) return;
+		UWorld* World = WorldPtr.Get();
+		FMassEntityManager& EntityManager = EntitySubsystemPtr->GetMutableEntityManager();
+		for (const FMassEntityHandle& Entity : EntitiesCopy)
+		{
+			if (!EntityManager.IsEntityValid(Entity)) continue;
+			FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+			const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+			if (!ActorFrag || !MoveTargetFrag || !TransformFrag) continue;
+			AActor* Actor = ActorFrag->GetMutable();
+			AUnitBase* Unit = Actor ? Cast<AUnitBase>(Actor) : nullptr;
+			if (!Unit) continue;
+			const FVector StopAt = TransformFrag->GetTransform().GetLocation();
+			const float Slack = MoveTargetFrag->SlackRadius;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+				{
+					FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+					const FName PlaceholderSignal = AiStatePtr ? AiStatePtr->PlaceholderSignal : NAME_None;
+					PC->Client_MirrorStopMovement(World, Unit, StopAt, Slack,
+						static_cast<int32>(Unit->UnitState), static_cast<int32>(Unit->UnitStatePlaceholder), PlaceholderSignal);
+				}
+			}
+		}
+	});
 }
 
 void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -2651,6 +2752,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					{
 						PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
 						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+						// Mirror this initial patrol move to clients
+						if (SignalSubsystem) { SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, E); }
 					}
 				}
 				
@@ -2670,13 +2773,17 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					{
 						FVector ResourcePosition = FindGroundLocationForActor(this, Unit->ResourcePlace, {Unit, Unit->ResourcePlace});
 						WorkerStatsFrag->ResourcePosition = ResourcePosition;
-						UpdateMoveTarget(MoveTarget, ResourcePosition, StatsFrag.RunSpeed, World);
+					      StateFrag.StoredLocation = ResourcePosition;
+					      UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+					      SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, E);
 						SwitchState(UnitSignals::GoToResourceExtraction, E, EntityManager);
 					}else if (Unit->Base)
 					{
 						FVector BasePosition = FindGroundLocationForActor(this, Unit->Base, {Unit, Unit->Base});
 						WorkerStatsFrag->ResourcePosition = BasePosition;
-						UpdateMoveTarget(MoveTarget, BasePosition, StatsFrag.RunSpeed, World);
+					      StateFrag.StoredLocation = BasePosition;
+					      UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+					      SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, E);
 						SwitchState(UnitSignals::GoToBase, E, EntityManager);
 					}else
 					{
@@ -2748,27 +2855,39 @@ void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEnt
 					{
 						FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity);
 						FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+						FMassAIStateFragment* StateFragPtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 						const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
 
-						if (!WorkerStatsFrag || !MoveTargetPtr || !StatsFragPtr) return;
+						if (!WorkerStatsFrag || !MoveTargetPtr || !StatsFragPtr || !StateFragPtr) return;
 						
 						FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr;
+						FMassAIStateFragment& StateFrag = *StateFragPtr;
 						const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
 				
 						if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 						{
-							UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
-						}else if (UnitBase->UnitState == UnitData::GoToBase)
+							StateFrag.StoredLocation = WorkerStatsFrag->ResourcePosition;
+							UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+							if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+						}
+						else if (UnitBase->UnitState == UnitData::GoToBase)
 						{
 							TArray<FMassEntityHandle> CapturedEntitys;
 							CapturedEntitys.Emplace(Entity);
 							HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
-		
+				
 							if (UnitBase->WorkResource)
-							UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
-						}else if (UnitBase->UnitState == UnitData::GoToBuild)
+							{
+								StateFrag.StoredLocation = WorkerStatsFrag->BasePosition;
+								UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+								if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+							}
+						}
+						else if (UnitBase->UnitState == UnitData::GoToBuild)
 						{
-							UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition,  StatsFrag.RunSpeed, World);
+							StateFrag.StoredLocation = WorkerStatsFrag->BuildAreaPosition;
+							UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+							if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
 						}
 					}
 				}
@@ -2812,7 +2931,12 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 			// If there are more waypoints, update the move target to the next one
 			if (UnitBase->RunLocationArray.Num() > 0)
 			{
+				if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+				{
+					StateFrag->StoredLocation = UnitBase->RunLocationArray[0];
+				}
 				UpdateMoveTarget(*MoveTargetFrag, UnitBase->RunLocationArray[0], StatsFrag->RunSpeed, GetWorld());
+				if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
 				SwitchState(UnitSignals::Run, Entity, EntityManager);
 			}
 		}
@@ -2845,16 +2969,24 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
+			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToResourceExtraction!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
-		}else if (UnitBase->UnitState == UnitData::GoToBase)
+			if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+		}
+		else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
+			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToBase!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
-			UpdateMoveTarget(MoveTarget,  WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
-		}else if (UnitBase->UnitState == UnitData::GoToBuild)
+			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
+			if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+		}
+		else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
+			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToBuild!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
-			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition,  StatsFrag.RunSpeed, World);
+			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition, StatsFrag.RunSpeed, World);
+			if (SignalSubsystem) SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
 		}
 	}
 }

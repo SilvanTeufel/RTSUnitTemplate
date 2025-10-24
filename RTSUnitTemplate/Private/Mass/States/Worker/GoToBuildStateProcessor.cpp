@@ -115,7 +115,12 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance)
             {
                 AIState.SwitchingState = true;
-
+                // Stop movement immediately and mirror to all clients
+                StopMovement(MoveTarget, World);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                }
                 PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
                 continue;
             }

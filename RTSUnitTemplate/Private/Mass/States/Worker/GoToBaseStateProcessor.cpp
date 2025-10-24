@@ -75,7 +75,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &PendingSignals](FMassExecutionContext& Context)
+        [this, World, &PendingSignals](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
         
@@ -83,6 +83,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetFragmentView<FMassWorkerStatsFragment>();
         const TConstArrayView<FMassCombatStatsFragment> CombatStatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
+        const TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
       
         const int32 NumEntities = Context.GetNumEntities();
 
@@ -110,6 +111,13 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance) // && !AIState.SwitchingState
             {
                 AIState.SwitchingState = true;
+                // Stop movement immediately and mirror to all clients
+                FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                StopMovement(MoveTarget, World);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                }
                 // Queue signal for reaching the base
                 PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
                 continue;

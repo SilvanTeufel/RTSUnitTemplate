@@ -63,8 +63,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     }
     TimeSinceLastRun -= ExecutionInterval;
     
-    //UWorld* World = Context.GetWorld(); // Get World via Context
-   // if (!World) return;
+    UWorld* World = Context.GetWorld(); // Get World via Context
+    if (!World) return;
 
     if (!SignalSubsystem) return;
 
@@ -73,13 +73,14 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture World for helper functions
-        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
+        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
             
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
             //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
@@ -115,6 +116,13 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f))
             {
                 AIState.SwitchingState = true;
+                // Stop movement and mirror to clients when reaching the resource
+                FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                StopMovement(MoveTarget, World);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                }
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
             }
             

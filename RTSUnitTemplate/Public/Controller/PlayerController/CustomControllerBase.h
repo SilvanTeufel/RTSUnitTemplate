@@ -177,4 +177,26 @@ public:
 	
 	UFUNCTION(Server, Reliable)
 	void Server_SetPendingTeam(int32 TeamId);
+
+	// Dedicated mirror RPCs for client-side navigation
+	UFUNCTION(Client, Reliable)
+	void Client_MirrorMoveTarget(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		int32 UnitState = 0,
+		int32 UnitStatePlaceholder = 0,
+		FName PlaceholderSignal = NAME_None);
+
+	UFUNCTION(Client, Reliable)
+	void Client_MirrorStopMovement(
+		UObject* WorldContextObject,
+		AUnitBase* Unit,
+		const FVector& StopLocation,
+		float AcceptanceRadius = 50.0f,
+		int32 UnitState = 0,
+		int32 UnitStatePlaceholder = 0,
+		FName PlaceholderSignal = NAME_None);
 };

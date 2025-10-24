@@ -12,6 +12,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Controller\PlayerController\CustomControllerBase.h"
 
 UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
 {
@@ -100,6 +101,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
+            SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
 
                 
                 StateFrag.SwitchingState = true;
