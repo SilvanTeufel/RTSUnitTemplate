@@ -113,8 +113,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		return; // disabled via CVAR
 	}
 	EnsureServerKickCleanupRegistered();
-	// Ensure bubble class is registered and registry actor exists early
-	RTSReplicationBootstrap::RegisterForWorld(*World);
+	// Ensure registry actor exists; bubble class registration is handled in URTSWorldCacheSubsystem::Initialize
 	AUnitRegistryReplicator::GetOrSpawn(*World);
 
 	UMassLODSubsystem* LODSub = World->GetSubsystem<UMassLODSubsystem>();

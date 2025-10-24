@@ -41,6 +41,8 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "EngineUtils.h"
+#include "Mass/Replication/MassUnitReplicatorBase.h"
+#include "Mass/Replication/ReplicationBootstrap.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -225,6 +227,11 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
     	FMassNetworkIDFragment::StaticStruct(),         // REQUIRED: Uniquely identifies an entity across the network.
     	FMassReplicatedAgentFragment::StaticStruct(),
+    	FMassReplicationViewerInfoFragment::StaticStruct(),
+    	FMassReplicationLODFragment::StaticStruct(),
+    	FMassReplicationGridCellLocationFragment::StaticStruct(),
+    	FMassInReplicationGridTag::StaticStruct(),
+    	FUnitReplicatedTransformFragment::StaticStruct(),
     	// --- END OF ADDITIONS ---
     	
     	// Core Movement & State
@@ -260,11 +267,9 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
-
-    	FUnitReplicatedTransformFragment::StaticStruct(),
+    	
         //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
-
 	
 	if(UnitBase->AddEffectTargetFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
@@ -351,6 +356,37 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
 	SharedValues.Add(StandingAvoidanceParamSharedFragment);
 
+	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
+	{
+		FMassReplicationSharedFragment RepShared;
+		// Set custom replicator so UMassReplicationProcessor delegates to our class
+		RepShared.CachedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+
+		// Resolve BubbleInfo class handle as early as possible
+		if (UWorld* WorldPtr = GetWorld())
+		{
+			// First, try our bootstrap-registered handle
+			FMassBubbleInfoClassHandle Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
+			// If still invalid on server, ask the replication subsystem for the handle (avoid late registration on clients)
+			if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
+			{
+				if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
+				{
+					const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
+					Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
+					if (!RepSub->IsBubbleClassHandleValid(Handle))
+					{
+						// As a last resort (early in world start), register it here on the server
+						Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
+					}
+				}
+			}
+			RepShared.BubbleInfoClassHandle = Handle;
+		}
+
+		FSharedStruct SharedRep = EntityManager.GetOrCreateSharedFragment(RepShared);
+		SharedValues.Add(SharedRep);
+	}
 
     SharedValues.Sort();
 	

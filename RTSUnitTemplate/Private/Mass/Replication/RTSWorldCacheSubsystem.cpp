@@ -5,9 +5,21 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "Mass/Replication/ReplicationBootstrap.h"
 
 URTSWorldCacheSubsystem::URTSWorldCacheSubsystem()
 {
+}
+
+void URTSWorldCacheSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	UWorld* World = GetWorld();
+	if (World && World->GetNetMode() != NM_Client)
+	{
+		// Ensure bubble info class is registered before any clients are added
+		RTSReplicationBootstrap::RegisterForWorld(*World);
+	}
 }
 
 void URTSWorldCacheSubsystem::Deinitialize()

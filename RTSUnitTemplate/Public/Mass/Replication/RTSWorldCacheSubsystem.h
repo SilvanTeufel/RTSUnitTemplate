@@ -2,11 +2,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "UObject/WeakObjectPtr.h"
-#include "RTSWorldCacheSubsystem.generated.h"
-
+class FSubsystemCollectionBase;
 class AUnitRegistryReplicator;
 class AUnitClientBubbleInfo;
 class UMassActorBindingComponent;
+
+#include "RTSWorldCacheSubsystem.generated.h"
 
 UCLASS()
 class RTSUNITTEMPLATE_API URTSWorldCacheSubsystem : public UWorldSubsystem
@@ -15,6 +16,7 @@ class RTSUNITTEMPLATE_API URTSWorldCacheSubsystem : public UWorldSubsystem
 public:
 	URTSWorldCacheSubsystem();
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
 	// Returns cached registry replicator; may spawn on server when allowed.
