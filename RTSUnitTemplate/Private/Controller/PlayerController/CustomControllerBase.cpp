@@ -24,6 +24,8 @@
 #include "NavAreas/NavArea_Null.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "System/PlayerTeamSubsystem.h"
+#include "TimerManager.h"
+#include "Templates/Function.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -1291,23 +1293,56 @@ void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* Worl
 {
 	if (!IsLocalController()) return;
 	if (!Unit) return;
-	if (!Unit->IsInitialized || !Unit->CanMove) return;
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World) return;
 	if (!World->IsNetMode(NM_Client)) return;
 
-	UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 0"));
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	// Retry-safe application: client may receive mirror before Mass entity is ready.
+	TWeakObjectPtr<UWorld> WorldPtr = World;
+	TWeakObjectPtr<AUnitBase> UnitPtr = Unit;
+	// Limit retries to avoid infinite loops (e.g., ~1s total)
+	constexpr int32 MaxAttempts = 20; // 20 x 0.05s = 1s
+	constexpr float RetryDelaySec = 0.05f;
+
+	// Define a recursive lambda using TSharedRef to allow rebinding in timer
+	TSharedRef<TFunction<void(int32)>> TryApplyRef = MakeShared<TFunction<void(int32)>>();
+	*TryApplyRef = [this, WorldPtr, UnitPtr, NewTargetLocation, DesiredSpeed, AcceptanceRadius, UnitState, UnitStatePlaceholder, PlaceholderSignal, TryApplyRef](int32 AttemptsLeft)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 1"));
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager.IsEntityValid(MassEntityHandle))
+		if (!WorldPtr.IsValid() || !UnitPtr.IsValid()) return;
+		UWorld* LWorld = WorldPtr.Get();
+		AUnitBase* LUnit = UnitPtr.Get();
+		if (!LWorld || !LUnit)
 		{
-			UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 2"));
+			return;
+		}
+
+		// If the Unit isn't initialized or movable yet, retry later
+		if (!LUnit->IsInitialized || !LUnit->CanMove)
+		{
+			if (AttemptsLeft <= 0) return;
+			FTimerDelegate Del;
+			Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
+			FTimerHandle Th;
+			LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
+			return;
+		}
+
+		if (UMassEntitySubsystem* MassSubsystem = LWorld->GetSubsystem<UMassEntitySubsystem>())
+		{
+			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+			const FMassEntityHandle MassEntityHandle = LUnit->MassActorBindingComponent->GetMassEntityHandle();
+			if (!EntityManager.IsEntityValid(MassEntityHandle))
+			{
+				if (AttemptsLeft <= 0) return;
+				FTimerDelegate Del;
+				Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
+				FTimerHandle Th;
+				LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
+				return;
+			}
+
 			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
 			{
-				UE_LOG(LogTemp, Error, TEXT("Client_MirrorMoveTarget_Implementation! 3"));
 				// Mirror movement target on client
 				MoveTargetFragmentPtr->Center = NewTargetLocation;
 				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
@@ -1320,10 +1355,13 @@ void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* Worl
 				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
 			}
 		}
-	}
-	// Also mirror the high-level Unit state values for UI/logic expectations
-	Unit->UnitState = static_cast<UnitData::EState>(UnitState);
-	Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+		// Also mirror the high-level Unit state values for UI/logic expectations
+		LUnit->UnitState = static_cast<UnitData::EState>(UnitState);
+		LUnit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+	};
+
+	// Kick off with retries
+	(*TryApplyRef)(MaxAttempts);
 }
 
 void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& StopLocation, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
