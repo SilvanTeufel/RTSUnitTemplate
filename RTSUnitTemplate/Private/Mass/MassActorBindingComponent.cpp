@@ -34,6 +34,7 @@
 #include "MassReplicationTypes.h" 
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/Traits/UnitReplicationFragments.h"
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -222,7 +223,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
-    	
+
+    	FUnitReplicatedTransformFragment::StaticStruct(),
         //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
 
