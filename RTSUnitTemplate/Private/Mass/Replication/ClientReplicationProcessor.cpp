@@ -357,40 +357,49 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						OwnerUnitIndex = AsUnit->UnitIndex;
 					}
 					bool bSet = false;
-					if (OwnerUnitIndex != INDEX_NONE)
-					{
-						if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(OwnerUnitIndex))
-						{
-							if (NetIDList[EntityIdx].NetID != *ByIdx)
-							{
-								NetIDList[EntityIdx].NetID = *ByIdx;
-							}
-							bSet = true;
-						}
-					}
-					if (!bSet)
-					{
-						const FName OwnerName = OwnerActor->GetFName();
-						if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
-						{
-							if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
-							{
-								NetIDList[EntityIdx].NetID = *AuthoritativeId;
-							}
-							bSet = true;
-						}
-						else
-						{
-							if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
-							{
-								if (NetIDList[EntityIdx].NetID != *BubbleId)
-								{
-									NetIDList[EntityIdx].NetID = *BubbleId;
-								}
-								bSet = true;
-							}
-						}
-					}
+ 				if (OwnerUnitIndex != INDEX_NONE)
+ 				{
+ 					if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(OwnerUnitIndex))
+ 					{
+ 						if (NetIDList[EntityIdx].NetID != *ByIdx)
+ 						{
+ 							UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s UnitIndex=%d Old=%u New=%u (source=UnitIndex)"),
+ 								ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), OwnerUnitIndex,
+ 								NetIDList[EntityIdx].NetID.GetValue(), ByIdx->GetValue());
+ 							NetIDList[EntityIdx].NetID = *ByIdx;
+ 						}
+ 						bSet = true;
+ 					}
+ 				}
+ 				if (!bSet)
+ 				{
+ 					const FName OwnerName = OwnerActor->GetFName();
+ 					if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
+ 					{
+ 						if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
+ 						{
+ 							UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=OwnerName)"),
+ 								ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
+ 								NetIDList[EntityIdx].NetID.GetValue(), AuthoritativeId->GetValue());
+ 							NetIDList[EntityIdx].NetID = *AuthoritativeId;
+ 						}
+ 						bSet = true;
+ 					}
+ 					else
+ 					{
+ 						if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
+ 						{
+ 							if (NetIDList[EntityIdx].NetID != *BubbleId)
+ 							{
+ 								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
+ 									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
+ 									NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
+ 								NetIDList[EntityIdx].NetID = *BubbleId;
+ 							}
+ 							bSet = true;
+ 						}
+ 					}
+ 				}
 				}
 				if (CurrentID != 0)
 				{
@@ -515,6 +524,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 				// Copy into Mass transform
 				TransformList[EntityIdx].SetTransform(FinalXf);
+
+				// Detailed client log: what transform we applied and from which source
+				{
+					const AActor* OA = ActorList[EntityIdx].GetMutable();
+					const int32 UnitIndex = (OA && OA->IsA<AUnitBase>()) ? static_cast<const AUnitBase*>(OA)->UnitIndex : INDEX_NONE;
+					UE_LOG(LogTemp, Log, TEXT("ClientApplyXf: Actor=%s UnitIndex=%d NetID=%u Src=%s Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
+						OA ? *OA->GetName() : TEXT("<none>"), UnitIndex, NetIDList[EntityIdx].NetID.GetValue(),
+						bFromCache ? TEXT("Cache") : (bFromBubble ? TEXT("Bubble") : (bActorFallback ? TEXT("ActorFallback") : TEXT("ReplicatedFrag"))),
+						FinalXf.GetLocation().X, FinalXf.GetLocation().Y, FinalXf.GetLocation().Z,
+						FinalXf.Rotator().Pitch, FinalXf.Rotator().Yaw, FinalXf.Rotator().Roll,
+						FinalXf.GetScale3D().X, FinalXf.GetScale3D().Y, FinalXf.GetScale3D().Z);
+				}
 
 				// Self-heal if NetID repeatedly missing on client
 				AActor* OwnerActor = ActorList[EntityIdx].GetMutable();

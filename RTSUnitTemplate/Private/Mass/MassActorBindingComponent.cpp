@@ -238,7 +238,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
         // Fragments & tags as before, plus a one-shot init tag
 
     	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
-    	FMassNetworkIDFragment::StaticStruct(),         // REQUIRED: Uniquely identifies an entity across the network.
+    	FMassNetworkIDFragment::StaticStruct(),
     	FMassReplicatedAgentFragment::StaticStruct(),
     	FMassReplicationViewerInfoFragment::StaticStruct(),
     	FMassReplicationLODFragment::StaticStruct(),
@@ -599,8 +599,13 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
         // Fragments & tags as before, plus a one-shot init tag
 
     	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
-    	FMassNetworkIDFragment::StaticStruct(),         // REQUIRED: Uniquely identifies an entity across the network.
+    	FMassNetworkIDFragment::StaticStruct(),
 		FMassReplicatedAgentFragment::StaticStruct(),
+		FMassReplicationViewerInfoFragment::StaticStruct(),
+		FMassReplicationLODFragment::StaticStruct(),
+		FMassReplicationGridCellLocationFragment::StaticStruct(),
+		FMassInReplicationGridTag::StaticStruct(),
+		FUnitReplicatedTransformFragment::StaticStruct(),
 		// --- END OF ADDITIONS ---
     	
     	// Core Movement & State
@@ -655,6 +660,51 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 	
 	FMassArchetypeSharedFragmentValues SharedValues;
 
+	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
+	{
+		FMassReplicationSharedFragment RepShared;
+    	// Share a single replicator instance per world so entities can batch into the same chunk
+	    {
+			static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
+			UWorld* W = GetWorld();
+			UMassUnitReplicatorBase* SharedReplicator = nullptr;
+			if (W)
+			{
+				if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
+				{
+					SharedReplicator = Found->Get();
+				}
+				if (!SharedReplicator)
+				{
+					SharedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+					GReplicatorPerWorld.Add(W, SharedReplicator);
+				}
+			}
+			RepShared.CachedReplicator = SharedReplicator;
+	    }
+
+    	// Resolve BubbleInfo class handle as early as possible
+    	if (UWorld* WorldPtr = GetWorld())
+    	{
+    		// First, try our bootstrap-registered handle
+    		FMassBubbleInfoClassHandle Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
+    		// If still invalid on server, ask the replication subsystem for the handle (avoid late registration on clients)
+    		if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
+    		{
+    			if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
+    			{
+    				const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
+    				Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
+    				if (!RepSub->IsBubbleClassHandleValid(Handle))
+    				{
+    					// As a last resort (early in world start), register it here on the server
+    					Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
+    				}
+    			}
+    		}
+    		RepShared.BubbleInfoClassHandle = Handle;
+    	}
+	}
 	
     SharedValues.Sort();
 

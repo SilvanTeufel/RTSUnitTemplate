@@ -222,6 +222,16 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
         const TConstArrayView<FMassNetworkIDFragment> NetIDList = Context.GetFragmentView<FMassNetworkIDFragment>();
 
+        // Build a quick lookup from NetID->(OwnerName,UnitIndex) using the authoritative registry for logging
+        TMap<uint32, TPair<FName,int32>> ByID;
+        if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+        {
+            for (const FUnitRegistryItem& It : Reg->Registry.Items)
+            {
+                ByID.Add(It.NetID.GetValue(), TPair<FName,int32>(It.OwnerName, It.UnitIndex));
+            }
+        }
+
         // Update every bubble we found so clients receive replicated items
         for (AUnitClientBubbleInfo* BubbleInfo : Bubbles)
         {
@@ -233,6 +243,18 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 const FRotator Rot = Xf.Rotator();
                 const FVector Sca = Xf.GetScale3D();
                 const FMassNetworkID& NetID = NetIDList[Idx].NetID;
+
+                // Detailed server log for diagnostics: which NetID/transform we are replicating with identity from registry
+                FName OwnerName = NAME_None;
+                int32 OwnerUnitIndex = INDEX_NONE;
+                if (const TPair<FName,int32>* FoundPair = ByID.Find(NetID.GetValue()))
+                {
+                    OwnerName = FoundPair->Key;
+                    OwnerUnitIndex = FoundPair->Value;
+                }
+                UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
+                    NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
+                    Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
 
                 FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
                 if (!Item)

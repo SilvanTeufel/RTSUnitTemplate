@@ -122,7 +122,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	{
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
 		{
-			UE_LOG(LogTemp, Verbose, TEXT("ServerKick: Waiting for subsystems (LOD=%p Rep=%p)"), LODSub, RepSub);
+			UE_LOG(LogTemp, Log, TEXT("ServerKick: Waiting for subsystems (LOD=%p Rep=%p)"), LODSub, RepSub);
 		}
 		return;
 	}
@@ -245,7 +245,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				if (i > 0) { IdList += TEXT(", "); }
 				IdList += FString::Printf(TEXT("%u"), NetIDs[i].NetID.GetValue());
 			}
-			UE_LOG(LogTemp, Verbose, TEXT("ServerReplicationKick: %d entities. NetIDs[%d]: %s%s"),
+			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: %d entities. NetIDs[%d]: %s%s"),
 				Num, MaxLog, *IdList, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
 		}
 
