@@ -11,6 +11,34 @@
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
+
+// CVARs for tuning client registration throughput
+static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_BudgetPerTick(
+    TEXT("net.RTS.UnitSignaling.BudgetPerTick"),
+    64,
+    TEXT("Max registry items processed per tick (rolling)."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_InitialBurstBudget(
+    TEXT("net.RTS.UnitSignaling.InitialBurstBudget"),
+    256,
+    TEXT("Startup burst budget per tick for the first N seconds."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_InitialBurstDuration(
+    TEXT("net.RTS.UnitSignaling.InitialBurstDuration"),
+    3.0f,
+    TEXT("Seconds to use the higher initial burst budget after world start."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_CacheRebuildSeconds(
+    TEXT("net.RTS.UnitSignaling.CacheRebuildSeconds"),
+    0.25f,
+    TEXT("Seconds between cache rebuilds for OwnerName/UnitIndex -> Binding map."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_ExecInterval(
+    TEXT("net.RTS.UnitSignaling.ExecInterval"),
+    0.1f,
+    TEXT("Seconds between runs of UnitSignalingProcessor Execute."),
+    ECVF_Default);
 
 UUnitSignalingProcessor::UUnitSignalingProcessor()
 {
@@ -61,12 +89,14 @@ void UUnitSignalingProcessor::BeginDestroy()
 void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     //UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
+    // Allow CVAR to override execution cadence for faster ramp-up
+    const float DesiredInterval = FMath::Max(0.02f, CVarRTS_UnitSignaling_ExecInterval.GetValueOnGameThread());
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-    if (TimeSinceLastRun < ExecutionInterval)
+    if (TimeSinceLastRun < DesiredInterval)
     {
         return; 
     }
-    TimeSinceLastRun -= ExecutionInterval;
+    TimeSinceLastRun -= DesiredInterval;
     
     UWorld* World = GetWorld();
 
@@ -98,7 +128,8 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         if (CacheSub)
         {
             // Rebuild binding cache at throttled interval
-            CacheSub->RebuildBindingCacheIfNeeded(1.0f);
+            // Cache rebuild interval is configurable
+            CacheSub->RebuildBindingCacheIfNeeded(CVarRTS_UnitSignaling_CacheRebuildSeconds.GetValueOnGameThread());
             if (AUnitRegistryReplicator* Registry = CacheSub->GetRegistry(false))
             {
                 const TArray<FUnitRegistryItem>& Items = Registry->Registry.Items;
@@ -107,8 +138,12 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 const int32 Num = Items.Num();
                 if (Num > 0)
                 {
-                    const int32 BudgetPerTick = 16; // small rolling slice
-                    const int32 ToProcess = FMath::Clamp(BudgetPerTick, 1, Num);
+                    const float WorldTime = World->GetTimeSeconds();
+                    const float BurstDuration = CVarRTS_UnitSignaling_InitialBurstDuration.GetValueOnGameThread();
+                    const bool bInBurst = (WorldTime < BurstDuration);
+                    const int32 Budget = bInBurst ? CVarRTS_UnitSignaling_InitialBurstBudget.GetValueOnGameThread()
+                                                  : CVarRTS_UnitSignaling_BudgetPerTick.GetValueOnGameThread();
+                    const int32 ToProcess = FMath::Clamp(Budget, 1, Num);
                     const int32 Start = (RollingIndex % Num);
                     int32 Processed = 0;
                     for (; Processed < ToProcess; ++Processed)

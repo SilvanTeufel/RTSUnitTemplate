@@ -31,6 +31,12 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_LogLevel(
     1,
     TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
     ECVF_Default);
+// Debounce window to wait after last registry chunk before unlinking missing entities
+static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSeconds(
+    TEXT("net.RTS.ClientReplication.UnlinkDebounceSeconds"),
+    0.10f,
+    TEXT("Seconds to wait after the registry changes before executing unlink reconciliation."),
+    ECVF_Default);
 
 #include "MassCommonFragments.h"
 #include "MassEntityTypes.h"
@@ -190,6 +196,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	// Build additional authoritative mapping from Bubble payload (client-replicated)
 	TMap<FName, FMassNetworkID> BubbleByOwnerName;
+	TSet<uint32> BubbleIDs;
 	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
 	{
 		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
@@ -197,10 +204,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
 			{
 				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
+				BubbleIDs.Add(Item.NetID.GetValue());
 			}
 		}
 	}
-
+	
 	EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
@@ -215,15 +223,34 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			}
 		}
 	});
-	// Build set of registry NetIDs for fast contains checks
+	// Build set of registry NetIDs for fast contains checks and track stability
 	TSet<uint32> RegistryIDs;
+	double NowSeconds = World->GetTimeSeconds();
+	static TMap<const AUnitRegistryReplicator*, uint64> GLastRegistrySignatureByActor;
+	static TMap<const AUnitRegistryReplicator*, double> GLastRegistryChangeTimeByActor;
+	bool bRegistryStable = true; // default stable when no registry or no change detected
 	if (RegistryActor)
 	{
+		uint64 Hash = 1469598103934665603ull; // FNV-1a 64-bit
 		for (const FUnitRegistryItem& It : RegistryActor->Registry.Items)
 		{
-			RegistryIDs.Add(It.NetID.GetValue());
+			const uint32 IdVal = It.NetID.GetValue();
+			RegistryIDs.Add(IdVal);
+			Hash ^= (uint64)IdVal; Hash *= 1099511628211ull;
 		}
+		uint64* PrevHash = GLastRegistrySignatureByActor.Find(RegistryActor);
+		if (!PrevHash || *PrevHash != Hash)
+		{
+			GLastRegistrySignatureByActor.Add(RegistryActor, Hash);
+			GLastRegistryChangeTimeByActor.Add(RegistryActor, NowSeconds);
+		}
+		const double* LastChange = GLastRegistryChangeTimeByActor.Find(RegistryActor);
+		const float Debounce = CVarRTS_ClientReplication_UnlinkDebounceSeconds.GetValueOnGameThread();
+		bRegistryStable = (LastChange == nullptr) || ((NowSeconds - *LastChange) >= Debounce);
 	}
+	// Build the full authoritative remote ID set as union of Registry and Bubble IDs
+	TSet<uint32> FullRemoteIDs = RegistryIDs;
+	for (uint32 Bid : BubbleIDs) { FullRemoteIDs.Add(Bid); }
 	// Create any missing client entities by OwnerName
  int32 Actions = 0;
  int32 Budget = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
@@ -291,21 +318,31 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			}
 		}
 	}
-	// Unlink any local client entities that are not present in the registry
-	for (uint32 LocalID : ExistingIDs)
+	// Unlink any local client entities that are not present in the aggregated remote set
+	if (!bRegistryStable)
 	{
-		if (Actions >= MaxActionsPerTick) { break; }
-		if (!RegistryIDs.Contains(LocalID) && LocalID != 0)
+		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 		{
-			if (TWeakObjectPtr<AActor>* Found = ByNetID.Find(LocalID))
+			UE_LOG(LogTemp, Verbose, TEXT("ClientReconcile: Skipping unlink this tick (registry not stable yet)"));
+		}
+	}
+	else
+	{
+		for (uint32 LocalID : ExistingIDs)
+		{
+			if (Actions >= MaxActionsPerTick) { break; }
+			if (!FullRemoteIDs.Contains(LocalID) && LocalID != 0)
 			{
-				if (AActor* Act = Found->Get())
+				if (TWeakObjectPtr<AActor>* Found = ByNetID.Find(LocalID))
 				{
-					if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
+					if (AActor* Act = Found->Get())
 					{
-						UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Extra local NetID %u on %s -> RequestClientMassUnlink"), LocalID, *Act->GetName());
-						Bind->RequestClientMassUnlink();
-						Actions++;
+						if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
+						{
+							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Extra local NetID %u on %s -> RequestClientMassUnlink"), LocalID, *Act->GetName());
+							Bind->RequestClientMassUnlink();
+							Actions++;
+						}
 					}
 				}
 			}
@@ -324,7 +361,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassNetworkIDFragment> NetIDList = Context.GetMutableFragmentView<FMassNetworkIDFragment>();
 			const TConstArrayView<FMassRepresentationLODFragment> LODList = Context.GetFragmentView<FMassRepresentationLODFragment>();
 
-			// Log registered NetIDs on client for this chunk
+			// Log registered NetIDs on client for this chunk (verbose only)
+			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 			{
 				const int32 NumIDs = NumEntities;
 				const int32 MaxLog = FMath::Min(20, NumIDs);
@@ -334,7 +372,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					if (i > 0) { IdList += TEXT(", "); }
 					IdList += FString::Printf(TEXT("%u"), NetIDList[i].NetID.GetValue());
 				}
-				UE_LOG(LogTemp, Log, TEXT("ClientReplication: %d entities in chunk. NetIDs[%d]: %s%s"),
+				UE_LOG(LogTemp, Verbose, TEXT("ClientReplication: %d entities in chunk. NetIDs[%d]: %s%s"),
 					NumIDs, MaxLog, *IdList, (NumIDs > MaxLog ? TEXT(" ...") : TEXT("")));
 			}
 

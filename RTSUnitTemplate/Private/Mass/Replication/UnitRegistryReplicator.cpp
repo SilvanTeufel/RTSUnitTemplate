@@ -45,6 +45,15 @@ void AUnitRegistryReplicator::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 void AUnitRegistryReplicator::OnRep_Registry()
 {
 	Registry.OwnerActor = this;
+	// Track client-side update timing to help debounce reconciliation
+	if (GetNetMode() == NM_Client)
+	{
+		ClientOnRepCounter++;
+		if (UWorld* W = GetWorld())
+		{
+			ClientLastOnRepTime = W->GetTimeSeconds();
+		}
+	}
 	// Log the authoritative mapping when it updates on clients
 	#if !UE_SERVER
 	{

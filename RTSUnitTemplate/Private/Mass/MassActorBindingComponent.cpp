@@ -930,7 +930,8 @@ void UMassActorBindingComponent::RequestClientMassLink()
 	// Only meaningful on clients; but allow call on server to be a no-op
 	if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwner()))
 	{
-		if (UnitBase->CanMove)
+		const bool bCanMove = UnitBase->CanMove;
+		if (bCanMove)
 		{
 			bNeedsMassUnitSetup = true;
 			bNeedsMassBuildingSetup = false;
@@ -943,6 +944,38 @@ void UMassActorBindingComponent::RequestClientMassLink()
 		if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 		{
 			SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
+		}
+
+		// Fast path: on clients, if Mass subsystems are ready and we don't yet have an entity, create/link immediately
+		// BUT never call synchronous CreateEntity during Mass processing. Guard with EntityManager.IsProcessing()==false.
+		if (World->GetNetMode() == NM_Client)
+		{
+			if (!MassEntityHandle.IsValid())
+			{
+				if (!MassEntitySubsystemCache)
+				{
+					MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+				}
+				if (MassEntitySubsystemCache)
+				{
+					FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+					// Avoid calling too early at time 0.0 to give systems a frame to initialize
+					const float Now = World->GetTimeSeconds();
+					const bool bSafeToCreateNow = (Now > 0.05f) && (EM.IsProcessing() == false);
+					if (bSafeToCreateNow)
+					{
+						if (bCanMove)
+						{
+							CreateAndLinkOwnerToMassEntity();
+						}
+						else
+						{
+							CreateAndLinkBuildingToMassEntity();
+						}
+					}
+					// If not safe, we rely on the end-of-phase CreatePendingEntities() via the spawner registration above.
+				}
+			}
 		}
 	}
 }
