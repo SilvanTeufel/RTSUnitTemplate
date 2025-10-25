@@ -544,7 +544,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	{
 		FMassArchetypeHandle Archetype;
 		FMassArchetypeSharedFragmentValues SharedValues;
-		if (!BuildArchetypeAndSharedValues(Archetype, SharedValues)) // BuildArchetypeAndSharedValuesForBuilding
+		if (!BuildArchetypeAndSharedValuesForBuilding(Archetype, SharedValues))
 		{
 			return {};
 		}
