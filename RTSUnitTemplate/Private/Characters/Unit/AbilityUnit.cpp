@@ -250,6 +250,10 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
+	// Avoid executing Blueprint events on dedicated servers to prevent crashes from server-side BP-only logic
+	const ENetMode NetMode = GetNetMode();
+	const bool bCanCallBPEvents = (NetMode != NM_DedicatedServer);
+
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||
@@ -258,36 +262,55 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		NewUnitState == UnitData::GoToResourceExtraction ||
 		NewUnitState == UnitData::GoToBuild)
 	{
-		StartedMoving();
-	}else if (NewUnitState == UnitData::Idle ||
-				NewUnitState == UnitData::PatrolIdle ||
-				NewUnitState == UnitData::Attack ||
-				NewUnitState == UnitData::Pause ||
-				NewUnitState == UnitData::Build ||
-				NewUnitState == UnitData::ResourceExtraction ||
-				NewUnitState == UnitData::Healing)
+		if (bCanCallBPEvents)
+		{
+			StartedMoving();
+		}
+	}
+	else if (NewUnitState == UnitData::Idle ||
+			 NewUnitState == UnitData::PatrolIdle ||
+			 NewUnitState == UnitData::Attack ||
+			 NewUnitState == UnitData::Pause ||
+			 NewUnitState == UnitData::Build ||
+			 NewUnitState == UnitData::ResourceExtraction ||
+			 NewUnitState == UnitData::Healing)
 	{
-		StoppedMoving();
-	} else if (NewUnitState == UnitData::IsAttacked)
+		if (bCanCallBPEvents)
+		{
+			StoppedMoving();
+		}
+	}
+	else if (NewUnitState == UnitData::IsAttacked)
 	{
-		GotAttacked();
-	}  else if (NewUnitState == UnitData::Dead)
+		if (bCanCallBPEvents)
+		{
+			GotAttacked();
+		}
+	}
+	else if (NewUnitState == UnitData::Dead)
 	{
-		//StoppedMoving();
-		//IsDead();
-	} 
+		// if (bCanCallBPEvents) { IsDead(); }
+	}
 
-	  // THIS IS NOT SAVE FOR MASS
+	// THIS IS NOT SAFE FOR MASS
 	if (IsWorker)
 	{
 		if (NewUnitState == UnitData::GoToResourceExtraction)
-			GoToResource();
+		{
+			if (bCanCallBPEvents) { GoToResource(); }
+		}
 		else if (NewUnitState == UnitData::Build)
-			GoToBuild();
+		{
+			if (bCanCallBPEvents) { GoToBuild(); }
+		}
 		else if (NewUnitState == UnitData::GoToBase)
-			GoToBase();
+		{
+			if (bCanCallBPEvents) { GoToBase(); }
+		}
 		else
-			WorkerGoToOther();
+		{
+			if (bCanCallBPEvents) { WorkerGoToOther(); }
+		}
 	}
 	
 	UnitState = NewUnitState;

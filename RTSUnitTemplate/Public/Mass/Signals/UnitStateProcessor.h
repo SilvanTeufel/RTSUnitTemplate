@@ -44,8 +44,15 @@ private:
 	FMassEntityQuery EntityQuery;
 	// Handler function for the signal (must match delegate signature)
 
-	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	// Thread-safe flag to avoid double unbinding
+	FThreadSafeBool bDelegatesUnbound = false;
 
+	// Helper functions to unbind signal delegates safely on the game thread
+	void UnbindDelegates_Internal();
+	void UnbindDelegates_GameThread();
+	
+	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	
 	UFUNCTION()
 	void IdlePatrolSwitcher(FName SignalName, TArray<FMassEntityHandle>& Entities);
 

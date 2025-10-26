@@ -30,6 +30,10 @@
 #include "Mass/States/ChaseStateProcessor.h"
 #include "Async/Async.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "EngineUtils.h"
+#include "MassReplicationFragments.h"
+#include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "Mass/Replication/UnitRegistryReplicator.h"
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
@@ -152,186 +156,165 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 }
 
 
-void UUnitStateProcessor::BeginDestroy()
+void UUnitStateProcessor::UnbindDelegates_Internal()
 {
-    
-        // --- Perform your cleanup here ---
-        // Unregister the signal handler
-    for (int i = 0; i < StateChangeSignalDelegateHandle.Num(); i++)
-    {
-        if (SignalSubsystem && StateChangeSignalDelegateHandle[i].IsValid()) // Check if subsystem and handle are valid
-        {
-            SignalSubsystem->GetSignalDelegateByName(StateChangeSignals[i])
-            .Remove(StateChangeSignalDelegateHandle[i]);
-            
-            StateChangeSignalDelegateHandle[i].Reset();
-        }
-    }
+	if (bDelegatesUnbound)
+	{
+		return;
+	}
+	bDelegatesUnbound = true;
+
+	// Unregister all signal handlers safely (must run on GameThread)
+	for (int i = 0; i < StateChangeSignalDelegateHandle.Num(); i++)
+	{
+		if (SignalSubsystem && StateChangeSignalDelegateHandle[i].IsValid())
+		{
+			SignalSubsystem->GetSignalDelegateByName(StateChangeSignals[i])
+				.Remove(StateChangeSignalDelegateHandle[i]);
+			StateChangeSignalDelegateHandle[i].Reset();
+		}
+	}
 
 	for (int i = 0; i < SightChangeRequestDelegateHandle.Num(); i++)
 	{
-		if (SignalSubsystem && SightChangeRequestDelegateHandle[i].IsValid()) // Check if subsystem and handle are valid
+		if (SignalSubsystem && SightChangeRequestDelegateHandle[i].IsValid())
 		{
 			SignalSubsystem->GetSignalDelegateByName(SightChangeSignals[i])
-			.Remove(SightChangeRequestDelegateHandle[i]);
-            
+				.Remove(SightChangeRequestDelegateHandle[i]);
 			SightChangeRequestDelegateHandle[i].Reset();
 		}
 	}
 	
-	if (SignalSubsystem && FogParametersDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && FogParametersDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
-		.Remove(FogParametersDelegateHandle);
-            
+			.Remove(FogParametersDelegateHandle);
 		FogParametersDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && SelectionCircleDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SelectionCircleDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
-		.Remove(SelectionCircleDelegateHandle);
-            
+			.Remove(SelectionCircleDelegateHandle);
 		SelectionCircleDelegateHandle.Reset();
 	}
 
-
-	
-	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
-		.Remove(SyncUnitBaseDelegateHandle);
-            
+			.Remove(SyncUnitBaseDelegateHandle);
 		SyncUnitBaseDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && SetUnitToChaseSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SetUnitToChaseSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
-		.Remove(SetUnitToChaseSignalDelegateHandle);
-            
+			.Remove(SetUnitToChaseSignalDelegateHandle);
 		SetUnitToChaseSignalDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && RangedAbilitySignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && RangedAbilitySignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UseRangedAbilitys)
-		.Remove(RangedAbilitySignalDelegateHandle);
-            
+			.Remove(RangedAbilitySignalDelegateHandle);
 		RangedAbilitySignalDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && MeleeAttackSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && MeleeAttackSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack)
-		.Remove(MeleeAttackSignalDelegateHandle);
-            
+			.Remove(MeleeAttackSignalDelegateHandle);
 		MeleeAttackSignalDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && RangedAttackSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && RangedAttackSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack)
-		.Remove(RangedAttackSignalDelegateHandle);
-            
+			.Remove(RangedAttackSignalDelegateHandle);
 		RangedAttackSignalDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && StartDeadSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && StartDeadSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartDead)
-		.Remove(StartDeadSignalDelegateHandle);
-            
+			.Remove(StartDeadSignalDelegateHandle);
 		StartDeadSignalDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && EndDeadSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && EndDeadSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead)
-		.Remove(EndDeadSignalDelegateHandle);
-            
+			.Remove(EndDeadSignalDelegateHandle);
 		EndDeadSignalDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && IdlePatrolSwitcherDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && IdlePatrolSwitcherDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher)
-		.Remove(IdlePatrolSwitcherDelegateHandle);
-            
+			.Remove(IdlePatrolSwitcherDelegateHandle);
 		IdlePatrolSwitcherDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && UnitStatePlaceholderDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && UnitStatePlaceholderDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder)
-		.Remove(UnitStatePlaceholderDelegateHandle);
-            
+			.Remove(UnitStatePlaceholderDelegateHandle);
 		UnitStatePlaceholderDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && SyncCastTimeDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SyncCastTimeDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncCastTime)
-		.Remove(SyncCastTimeDelegateHandle);
-            
+			.Remove(SyncCastTimeDelegateHandle);
 		SyncCastTimeDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && EndCastDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && EndCastDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
-		.Remove(EndCastDelegateHandle);
-            
+			.Remove(EndCastDelegateHandle);
 		EndCastDelegateHandle.Reset();
 	}
 
-
-	
-	if (SignalSubsystem && ReachedBaseDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && ReachedBaseDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase)
-		.Remove(ReachedBaseDelegateHandle);
-            
+			.Remove(ReachedBaseDelegateHandle);
 		ReachedBaseDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && GetResourceDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && GetResourceDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetResource)
-		.Remove(GetResourceDelegateHandle);
-            
+			.Remove(GetResourceDelegateHandle);
 		GetResourceDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && StartBuildActionDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && StartBuildActionDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetClosestBase)
-		.Remove(StartBuildActionDelegateHandle);
-            
+			.Remove(StartBuildActionDelegateHandle);
 		StartBuildActionDelegateHandle.Reset();
 	}
 	
-	if (SignalSubsystem && SpawnBuildingRequestDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SpawnBuildingRequestDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
-		.Remove(SpawnBuildingRequestDelegateHandle);
-            
+			.Remove(SpawnBuildingRequestDelegateHandle);
 		SpawnBuildingRequestDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && SpawnSignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && SpawnSignalDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
-		.Remove(SpawnSignalDelegateHandle);
-            
+			.Remove(SpawnSignalDelegateHandle);
 		SpawnSignalDelegateHandle.Reset();
 	}
 
-	if (SignalSubsystem && UpdateWorkerMovementDelegateHandle.IsValid()) // Check if subsystem and handle are valid
+	if (SignalSubsystem && UpdateWorkerMovementDelegateHandle.IsValid())
 	{
 		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
-		.Remove(UpdateWorkerMovementDelegateHandle);
-            
+			.Remove(UpdateWorkerMovementDelegateHandle);
 		UpdateWorkerMovementDelegateHandle.Reset();
 	}
 
@@ -348,11 +331,34 @@ void UUnitStateProcessor::BeginDestroy()
 			.Remove(MirrorStopMovementDelegateHandle);
 		MirrorStopMovementDelegateHandle.Reset();
 	}
-	
-    SignalSubsystem = nullptr; // Null out pointers if needed
-    EntitySubsystem = nullptr;
-    // --- End Cleanup ---
-    Super::BeginDestroy();
+
+	SignalSubsystem = nullptr;
+	EntitySubsystem = nullptr;
+}
+
+void UUnitStateProcessor::UnbindDelegates_GameThread()
+{
+	if (IsInGameThread())
+	{
+		UnbindDelegates_Internal();
+		return;
+	}
+
+	TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [WeakThis]()
+	{
+		if (UUnitStateProcessor* StrongThis = WeakThis.Get())
+		{
+			StrongThis->UnbindDelegates_Internal();
+		}
+	});
+}
+
+void UUnitStateProcessor::BeginDestroy()
+{
+	// Ensure delegate unbinding happens on the game thread to avoid race conditions
+	UnbindDelegates_GameThread();
+	Super::BeginDestroy();
 }
 
 void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -365,7 +371,6 @@ void UUnitStateProcessor::HandleMirrorMoveTarget(FName SignalName, TArray<FMassE
 {
 	if (!World || !SignalSubsystem || !EntitySubsystem) return;
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	UE_LOG(LogTemp, Error, TEXT("HandleMirrorMoveTarget!"));
 	for (FMassEntityHandle& Entity : Entities)
 	{
 		if (!EntityManager.IsEntityValid(Entity)) continue;
@@ -383,18 +388,15 @@ void UUnitStateProcessor::HandleMirrorMoveTarget(FName SignalName, TArray<FMassE
 		// Defer the RPC to the game thread
 		TWeakObjectPtr<UWorld> WorldPtr = World;
 		TWeakObjectPtr<AUnitBase> UnitPtr = Unit;
-		UE_LOG(LogTemp, Error, TEXT("HandleMirrorMoveTarget! Loop Entitys"));
 		AsyncTask(ENamedThreads::GameThread, [WorldPtr, UnitPtr, Target, Speed, Slack, PlaceholderSignal = StateFrag->PlaceholderSignal]()
 		{
 			if (!WorldPtr.IsValid() || !UnitPtr.IsValid()) return;
 			UWorld* World = WorldPtr.Get();
 			AUnitBase* Unit = UnitPtr.Get();
-			UE_LOG(LogTemp, Error, TEXT("Loop ACustomControllerBase!"));
 			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 			{
 				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 				{
-					UE_LOG(LogTemp, Error, TEXT("Loop ACustomControllerBase!"));
 					PC->Client_MirrorMoveTarget(World, Unit, Target, Speed, Slack,
 						static_cast<int32>(Unit->UnitState), static_cast<int32>(Unit->UnitStatePlaceholder), PlaceholderSignal);
 				}
@@ -523,6 +525,42 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         {
                         	StateFragment->DeathTime  = World->GetTimeSeconds();
 	                        EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity);
+
+                            // Unregister from Mass replication when the unit dies (server only)
+                            if (World && World->GetNetMode() != NM_Client)
+                            {
+                                // 1) Remove from client bubble replication list by NetID
+                                const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
+                                if (NetIDFrag)
+                                {
+                                    const FMassNetworkID NetID = NetIDFrag->NetID;
+                                    for (TActorIterator<AUnitClientBubbleInfo> It(World); It; ++It)
+                                    {
+                                        AUnitClientBubbleInfo* Bubble = *It;
+                                        if (Bubble && Bubble->Agents.RemoveItemByNetID(NetID))
+                                        {
+                                            Bubble->Agents.MarkArrayDirty();
+                                            Bubble->ForceNetUpdate();
+                                        }
+                                    }
+                                }
+
+                                // 2) Remove from the authoritative UnitRegistry so new clients do not link this unit
+                                if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+                                {
+                                    bool bRemoved = false;
+                                    if (UnitBase->UnitIndex != INDEX_NONE)
+                                    {
+                                        bRemoved |= Reg->Registry.RemoveByUnitIndex(UnitBase->UnitIndex);
+                                    }
+                                    bRemoved |= Reg->Registry.RemoveByOwner(UnitBase->GetFName());
+                                    if (bRemoved)
+                                    {
+                                        Reg->Registry.MarkArrayDirty();
+                                        Reg->ForceNetUpdate();
+                                    }
+                                }
+                            }
                         }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
@@ -2950,6 +2988,18 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 
 	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
 	{
+		if (World && World->GetNetMode() == NM_Client && UnitBase)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] UpdateUnitMovement: Invalid Mass entity or UnitBase for %s on client. Destroying local actor to clean up zombie."), *UnitBase->GetName());
+			TWeakObjectPtr<AUnitBase> WeakUnit(UnitBase);
+			AsyncTask(ENamedThreads::GameThread, [WeakUnit]()
+			{
+				if (AUnitBase* Strong = WeakUnit.Get())
+				{
+					Strong->Destroy();
+				}
+			});
+		}
 		return;
 	}
 	

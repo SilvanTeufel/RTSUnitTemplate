@@ -98,6 +98,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	GetCapsuleComponent()->SetIsReplicated(false);
 	GetMesh()->SetIsReplicated(false);
+	bReplicates = true;
 }
 
 // Called when the game starts or when spawned

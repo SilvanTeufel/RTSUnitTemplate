@@ -2,6 +2,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "UnitRegistryPayload.h"
+// Forward declare to avoid including TimerManager in header
+struct FTimerHandle;
 #include "UnitRegistryReplicator.generated.h"
 
 UCLASS()
@@ -24,18 +26,24 @@ public:
 	
 	// Server-only: reset NextNetID to 1 at game start
 	void ResetNetIDCounter();
-
+	
 	// Server-only: get next NetID, starting at 1 for each game session
 	uint32 GetNextNetID();
-
+	
 	// Client-side: track recent registry updates to debounce reconcile-unlink (plain members; not replicated)
 	int32 ClientOnRepCounter = 0;
 	double ClientLastOnRepTime = 0.0;
-
+	
 protected:
 	virtual void BeginPlay() override;
+	
+	// Server-only periodic diagnostics to detect unregistered Units on the field
+	void ServerDiagnosticsTick();
 
 private:
+	// Periodic diagnostics timer (server-only)
+	FTimerHandle DiagnosticsTimerHandle;
+	
 	UPROPERTY(Transient)
 	uint32 NextNetID = 1; // not replicated; authoritative on server only
 };

@@ -19,6 +19,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/UnitMassTag.h"
 #include "Actors/MinimapActor.h" 
 #include "Characters/Unit/BuildingBase.h"
 #include "NavAreas/NavArea_Null.h"
@@ -138,6 +139,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	
 	if (!Unit->CanMove) return;
 	
+	// Do not accept move orders for dead units
+	if (Unit->UnitState == UnitData::Dead) return;
+	
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
 
@@ -171,6 +175,12 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
     if (!EntityManager.IsEntityValid(MassEntityHandle))
     {
         UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
+        return;
+    }
+
+    // Do not process move if entity is marked Dead in Mass
+    if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
+    {
         return;
     }
 
@@ -244,22 +254,28 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObje
 	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
 		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager.IsEntityValid(MassEntityHandle))
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
+		if (!bValidEntity)
 		{
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
-				MoveTargetFragmentPtr->Center = NewTargetLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
-				// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = NewTargetLocation;
-				AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-			}
+			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client: %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
+			// Self-cleanup of zombie actor on client to prevent lingering unresponsive units
+			Unit->Destroy();
+			return;
+		}
+
+		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+		{
+			// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
+			MoveTargetFragmentPtr->Center = NewTargetLocation;
+			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+			MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
+			// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
+		}
+		if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+		{
+			AiStatePtr->StoredLocation = NewTargetLocation;
+			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		}
 	}
 }
@@ -271,6 +287,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	if (!Unit->IsInitialized) return;
 	
 	if (!Unit->CanMove) return;
+	
+	// Do not accept move orders for dead units (ability path)
+	if (Unit->UnitState == UnitData::Dead) return;
 	
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -365,21 +384,26 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementa
 	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
 		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager.IsEntityValid(MassEntityHandle))
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
+		if (!bValidEntity)
 		{
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
-				MoveTargetFragmentPtr->Center = NewTargetLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = NewTargetLocation;
-				AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-			}
+			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client (Ability RPC): %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
+			Unit->Destroy();
+			return;
+		}
+
+		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+		{
+			// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
+			MoveTargetFragmentPtr->Center = NewTargetLocation;
+			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+			// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
+		}
+		if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+		{
+			AiStatePtr->StoredLocation = NewTargetLocation;
+			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		}
 	}
 }
@@ -1224,45 +1248,61 @@ void ACustomControllerBase::Client_ReceiveCooldown_Implementation(int32 AbilityI
 
 void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability)
 {
-			UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	// Ensure we only execute on the server
+	if (!HasAuthority())
+	{
+		return;
+	}
 
-			UGameplayEffect* CooldownGEInstance =  Ability->GetCooldownGameplayEffect();
-			if (!CooldownGEInstance)
-			{
-				return;
-			}
+	// Validate inputs
+	if (!Unit || !Ability)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server_RequestCooldown: Invalid Unit or Ability (Unit=%p, Ability=%p)"), Unit, Ability);
+		Client_ReceiveCooldown(AbilityIndex, 0.f);
+		return;
+	}
 
-			// Step 2: Extract the UClass* from the instance
-			TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
-			if (!CooldownGEClass)
-				return;
-				
-			if (!CooldownGEClass)
-			{
-				return;
-			}
-	
-			FGameplayEffectQuery CooldownQuery;
-			CooldownQuery.EffectDefinition = CooldownGEClass;
-	
-			TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
-	
-    		float RTime = 0.f;
-    
-    		if (ActiveCooldownHandles.Num() > 0)
-    		{
-    			// Assuming only one cooldown effect per ability, take the first handle
-    			FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
-    			const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
-    			if (ActiveEffect)
-    			{
-    				// Get the current world time
-    				float CurrentTime = ASC->GetWorld()->GetTimeSeconds();
-            
-    				// Calculate the remaining duration
-    				RTime = ActiveEffect->GetTimeRemaining(CurrentTime);
-    			}
-    		}
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server_RequestCooldown: Unit has no AbilitySystemComponent."));
+		Client_ReceiveCooldown(AbilityIndex, 0.f);
+		return;
+	}
+
+	// Get cooldown GameplayEffect class from the ability
+	UGameplayEffect* CooldownGEInstance = Ability->GetCooldownGameplayEffect();
+	if (!CooldownGEInstance)
+	{
+		Client_ReceiveCooldown(AbilityIndex, 0.f);
+		return;
+	}
+
+	TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
+	if (!CooldownGEClass)
+	{
+		Client_ReceiveCooldown(AbilityIndex, 0.f);
+		return;
+	}
+
+	FGameplayEffectQuery CooldownQuery;
+	CooldownQuery.EffectDefinition = CooldownGEClass;
+
+	TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
+
+	float RTime = 0.f;
+	if (ActiveCooldownHandles.Num() > 0)
+	{
+		// Assuming only one cooldown effect per ability, take the first handle
+		const FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
+		const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
+		if (ActiveEffect)
+		{
+			UWorld* World = Unit->GetWorld();
+			const float CurrentTime = World ? World->GetTimeSeconds() : 0.f;
+			RTime = ActiveEffect->GetTimeRemaining(CurrentTime);
+		}
+	}
 
 	Client_ReceiveCooldown(AbilityIndex, RTime);
 }
@@ -1380,11 +1420,11 @@ void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* Wo
 		{
 			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
 			{
-				// Perform a client-side stop similar to StopMovement helper
-				MoveTargetFragmentPtr->CreateNewAction(EMassMovementAction::Stand, *World);
+				// Client mirror only: avoid authority-only CreateNewAction/SetDesiredAction on clients
 				MoveTargetFragmentPtr->Center = StopLocation;
 				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 				MoveTargetFragmentPtr->DesiredSpeed.Set(0.f);
+				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
 			}
 			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
 			{

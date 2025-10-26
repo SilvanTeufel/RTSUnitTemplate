@@ -142,7 +142,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
-                SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+                PendingSignals.Emplace(Entity, UnitSignals::MirrorMoveTarget);
                 
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
@@ -162,7 +162,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 // Queue signal instead of sending directly
                 StopMovement(MoveTarget, World);
-                SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                PendingSignals.Emplace(Entity, UnitSignals::MirrorStopMovement);
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::Pause);
                 continue;
@@ -174,7 +174,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
            StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
            UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-           SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+           PendingSignals.Emplace(Entity, UnitSignals::MirrorMoveTarget);
 
         }
     }); // End ForEachEntityChunk

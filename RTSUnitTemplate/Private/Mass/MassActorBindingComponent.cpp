@@ -63,6 +63,12 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 	
+	// Do not set up Mass or attempt registration for dead units
+	if (UnitBase && UnitBase->UnitState == UnitData::Dead)
+	{
+		return;
+	}
+	
 	if (!World)
 	{
 		UE_LOG(LogTemp, Error, TEXT("World not FOUND!"));
@@ -130,6 +136,16 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 {
 	UWorld* World = GetWorld();
 	
+	// Do not create or register Mass for dead units
+	AActor* Owner = GetOwner();
+	if (AUnitBase* UnitBaseLocal = Cast<AUnitBase>(Owner))
+	{
+		if (UnitBaseLocal->UnitState == UnitData::Dead)
+		{
+			return {};
+		}
+	}
+	
 	if (MassEntityHandle.IsValid())
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
@@ -171,47 +187,53 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			UnitBase->bIsMassUnit = true;
 
 			// Server: assign NetID and update authoritative registry so clients can reconcile
-			if (UWorld* WorldPtr = GetWorld())
+   if (UWorld* WorldPtr = GetWorld())
 			{
-    if (WorldPtr->GetNetMode() != NM_Client)
-    {
-    	if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
-    	{
-    		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
-    		{
-    			const uint32 NewID = Reg->GetNextNetID();
-    			NetFrag->NetID = FMassNetworkID(NewID);
-    			const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
-    			const int32 UnitIndex = (Cast<AUnitBase>(MyOwner)) ? Cast<AUnitBase>(MyOwner)->UnitIndex : INDEX_NONE;
-    			FUnitRegistryItem* Existing = nullptr;
-    			if (UnitIndex != INDEX_NONE)
-    			{
-    				Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
-    			}
-    			if (!Existing)
-    			{
-    				Existing = Reg->Registry.FindByOwner(OwnerName);
-    			}
-    			if (Existing)
-    			{
-    				Existing->OwnerName = OwnerName;
-    				Existing->UnitIndex = UnitIndex;
-    				Existing->NetID = NetFrag->NetID;
-    				Reg->Registry.MarkItemDirty(*Existing);
-    			}
-    			else
-    			{
-    				const int32 NewIdx2 = Reg->Registry.Items.AddDefaulted();
-    				Reg->Registry.Items[NewIdx2].OwnerName = OwnerName;
-    				Reg->Registry.Items[NewIdx2].UnitIndex = UnitIndex;
-    				Reg->Registry.Items[NewIdx2].NetID = NetFrag->NetID;
-    				Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx2]);
-    			}
-    			Reg->Registry.MarkArrayDirty();
-    			Reg->ForceNetUpdate();
-    		}
-    	}
-    }
+				if (WorldPtr->GetNetMode() != NM_Client)
+				{
+					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
+					{
+						// Skip registration if the owning unit is dead
+						AUnitBase* UnitBaseLocal2 = Cast<AUnitBase>(MyOwner);
+						if (UnitBaseLocal2 && UnitBaseLocal2->UnitState == UnitData::Dead)
+						{
+							// Do not assign NetID or add to registry for dead units
+						}
+						else if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
+						{
+							const uint32 NewID = Reg->GetNextNetID();
+							NetFrag->NetID = FMassNetworkID(NewID);
+							const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
+							const int32 UnitIndex = (Cast<AUnitBase>(MyOwner)) ? Cast<AUnitBase>(MyOwner)->UnitIndex : INDEX_NONE;
+							FUnitRegistryItem* Existing = nullptr;
+							if (UnitIndex != INDEX_NONE)
+							{
+								Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
+							}
+							if (!Existing)
+							{
+								Existing = Reg->Registry.FindByOwner(OwnerName);
+							}
+							if (Existing)
+							{
+								Existing->OwnerName = OwnerName;
+								Existing->UnitIndex = UnitIndex;
+								Existing->NetID = NetFrag->NetID;
+								Reg->Registry.MarkItemDirty(*Existing);
+							}
+							else
+							{
+								const int32 NewIdx2 = Reg->Registry.Items.AddDefaulted();
+								Reg->Registry.Items[NewIdx2].OwnerName = OwnerName;
+								Reg->Registry.Items[NewIdx2].UnitIndex = UnitIndex;
+								Reg->Registry.Items[NewIdx2].NetID = NetFrag->NetID;
+								Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx2]);
+							}
+							Reg->Registry.MarkArrayDirty();
+							Reg->ForceNetUpdate();
+						}
+					}
+				}
 			}
 		}
     }
@@ -930,6 +952,11 @@ void UMassActorBindingComponent::RequestClientMassLink()
 	// Only meaningful on clients; but allow call on server to be a no-op
 	if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwner()))
 	{
+		// Do not (re)create or register Mass for dead units
+		if (UnitBase->UnitState == UnitData::Dead)
+		{
+			return;
+		}
 		const bool bCanMove = UnitBase->CanMove;
 		if (bCanMove)
 		{
@@ -1011,27 +1038,53 @@ void UMassActorBindingComponent::RequestClientMassUnlink()
 
 void UMassActorBindingComponent::CleanupMassEntity()
 {
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
 
-	AActor* Owner = GetOwner(); 
-	
+	// Server-authoritative: ensure this unit is removed from replication registry before entity/actor destruction
+	if (World && World->GetNetMode() != NM_Client)
+	{
+		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+		{
+			bool bRemoved = false;
+			if (AUnitBase* UnitBase = Cast<AUnitBase>(Owner))
+			{
+				if (UnitBase->UnitIndex != INDEX_NONE)
+				{
+					bRemoved |= Reg->Registry.RemoveByUnitIndex(UnitBase->UnitIndex);
+				}
+				bRemoved |= Reg->Registry.RemoveByOwner(Owner ? Owner->GetFName() : NAME_None);
+			}
+			else
+			{
+				bRemoved |= Reg->Registry.RemoveByOwner(Owner ? Owner->GetFName() : NAME_None);
+			}
+			if (bRemoved)
+			{
+				Reg->Registry.MarkArrayDirty();
+				Reg->ForceNetUpdate();
+			}
+		}
+	}
+
 	if (MassEntityHandle.IsValid())
 	{
-		
 		// Ensure our cached subsystem pointer is still valid
+		if (!MassEntitySubsystemCache && World)
+		{
+			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+		}
 		if (MassEntitySubsystemCache)
 		{
 			FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
-
 			if (EntityManager.IsEntityValid(MassEntityHandle))
 			{
-				// 1. Queue the destruction command as normal.
+				// Queue the destruction command as normal.
 				EntityManager.Defer().DestroyEntity(MassEntityHandle);
 			}
 		}
-       
 		MassEntityHandle.Reset();
 	}
-	
 }
 // --- END ADDED ---
 

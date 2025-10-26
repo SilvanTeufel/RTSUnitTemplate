@@ -119,10 +119,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 // Stop movement and mirror to clients when reaching the resource
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 StopMovement(MoveTarget, World);
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
-                }
+                // Defer signaling to after chunk processing to avoid cross-thread access
+                PendingSignals.Emplace(Entity, UnitSignals::MirrorStopMovement);
                 PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
             }
             
