@@ -128,25 +128,18 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     }); // End ForEachEntityChunk
 
 
-    // --- Schedule Game Thread Task to Send Queued Signals ---
+    // --- Dispatch queued signals. This processor requires GameThread, so send immediately to avoid race during shutdown ---
     if (!PendingSignals.IsEmpty())
     {
-        if (SignalSubsystem)
+        if (SignalSubsystem && IsInGameThread())
         {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+            for (const FMassSignalPayload& Payload : PendingSignals)
             {
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
+                if (!Payload.SignalName.IsNone())
                 {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        if (!Payload.SignalName.IsNone())
-                        {
-                            StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                    }
+                    SignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
                 }
-            });
+            }
         }
     }
 }

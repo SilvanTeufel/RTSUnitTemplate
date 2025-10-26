@@ -25,6 +25,8 @@ UChaseStateProcessor::UChaseStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
+    // Ensure this processor executes on the Game Thread to avoid data races when signaling
+    bRequiresGameThreadExecution = true;
 }
 
 void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -180,29 +182,15 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     }); // End ForEachEntityChunk
 
 
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
+    // --- Send queued signals synchronously on the Game Thread ---
+    if (!PendingSignals.IsEmpty() && SignalSubsystem)
     {
-        if (SignalSubsystem)
+        for (const FMassSignalPayload& Payload : PendingSignals)
         {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            // Capture the weak subsystem pointer and move the pending signals list
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
+            if (!Payload.SignalName.IsNone())
             {
-                // Check if the subsystem is still valid on the Game Thread
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        // Check if the FName is valid before sending
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           // Send signal safely from the Game Thread using FName
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                    }
-                }
-            });
+                SignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+            }
         }
     }
 }
