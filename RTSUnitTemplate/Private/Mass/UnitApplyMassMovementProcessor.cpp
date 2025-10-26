@@ -101,8 +101,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
-    UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitApplyMassMovementProcessor::Execute (Matching=%d)"), ClientEntityQuery.GetNumMatchingEntities());
-
+   
     ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();

@@ -1,9 +1,9 @@
-﻿/*
+﻿
 #if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG
 #define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
 #endif
-*/
+
 #include "Mass/Replication/ServerReplicationKickProcessor.h"
 
 #include "MassCommonFragments.h"
@@ -45,7 +45,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("net.RTS.ServerReplicationKick.LogLevel"),
-	2,
+	0,
 	TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 

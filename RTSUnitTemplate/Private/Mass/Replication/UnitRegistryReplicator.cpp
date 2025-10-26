@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
+namespace { constexpr bool GRegistryImportantLogs = false; }
+
 AUnitRegistryReplicator::AUnitRegistryReplicator()
 {
 	bReplicates = true;
@@ -21,7 +23,10 @@ void AUnitRegistryReplicator::BeginPlay()
 	if (GetNetMode() != NM_Client)
 	{
 		ResetNetIDCounter();
-		UE_LOG(LogTemp, Log, TEXT("UnitRegistryReplicator: Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
+  if (GRegistryImportantLogs)
+  	{
+  		UE_LOG(LogTemp, Log, TEXT("UnitRegistryReplicator: Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
+  	}
 	}
 }
 
@@ -66,7 +71,10 @@ void AUnitRegistryReplicator::OnRep_Registry()
 			if (i > 0) { MapStr += TEXT(" | "); }
 			MapStr += FString::Printf(TEXT("%s->%u"), *It.OwnerName.ToString(), It.NetID.GetValue());
 		}
-		UE_LOG(LogTemp, Log, TEXT("ClientRegistry(OnRep): %d entries. %s%s"), Num, *MapStr, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
+  if (GRegistryImportantLogs)
+  	{
+  		UE_LOG(LogTemp, Log, TEXT("ClientRegistry(OnRep): %d entries. %s%s"), Num, *MapStr, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
+  	}
 	}
 	#endif
 }

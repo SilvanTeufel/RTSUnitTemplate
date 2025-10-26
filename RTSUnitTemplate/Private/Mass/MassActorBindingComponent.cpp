@@ -132,7 +132,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 	
 	if (MassEntityHandle.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
+		//UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
 		return MassEntityHandle;
 	}
 	
@@ -525,7 +525,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 	
 	if (MassEntityHandle.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
+		//UE_LOG(LogTemp, Warning, TEXT("Already created for %s"), *GetOwner()->GetName());
 		return MassEntityHandle;
 	}
 

@@ -23,6 +23,8 @@
 #include "Mass/Replication/UnitRegistryPayload.h"
 #include "MassRepresentationActorManagement.h"
 
+namespace { constexpr bool GRepImportantLogs = false; }
+
 // Helper: find or spawn a UnitClientBubbleInfo on the server
 static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
 {
@@ -59,6 +61,7 @@ void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
 
 void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicationContext& ReplicationContext)
 {
+    constexpr bool bEnableImportantLogs = false; // set to true temporarily when diagnosing replication issues
     UWorld* World = &ReplicationContext.World;
     if (!World || World->GetNetMode() == NM_Client)
     {
@@ -68,14 +71,23 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     AUnitClientBubbleInfo* BubbleInfo = GetOrSpawnBubble(*World);
     if (!BubbleInfo)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
+        if (bEnableImportantLogs)
+        {
+            if (GRepImportantLogs)
+            	{
+            		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
+            	}
+        }
         return;
     }
 
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
+        if (bEnableImportantLogs)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
+        }
         return;
     }
 
@@ -85,7 +97,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
     if (!NetIDFrag || !TransformFrag)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - Entity missing required fragments (NetID or Transform). Skipping registration."));
+        if (GRepImportantLogs)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - Entity missing required fragments (NetID or Transform). Skipping registration."));
+        }
         return;
     }
 
@@ -161,14 +176,20 @@ void UMassUnitReplicatorBase::RemoveEntity(FMassEntityHandle Entity, FMassReplic
     AUnitClientBubbleInfo* BubbleInfo = GetOrSpawnBubble(*World);
     if (!BubbleInfo)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
+        if (GRepImportantLogs)
+        	{
+        		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
+        	}
         return;
     }
 
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
+        if (GRepImportantLogs)
+        	{
+        		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
+        	}
         return;
     }
 
@@ -252,9 +273,12 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     OwnerName = FoundPair->Key;
                     OwnerUnitIndex = FoundPair->Value;
                 }
-                UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
-                    NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
-                    Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
+                if (GRepImportantLogs)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
+                        NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
+                        Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
+                }
 
                 FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
                 if (!Item)

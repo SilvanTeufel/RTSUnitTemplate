@@ -28,7 +28,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_BudgetPerTick(
 // 0=Off, 1=Warn, 2=Verbose
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_LogLevel(
     TEXT("net.RTS.ClientReplication.LogLevel"),
-    1,
+    0,
     TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
     ECVF_Default);
 // Debounce window to wait after last registry chunk before unlinking missing entities
@@ -70,7 +70,10 @@ UClientReplicationProcessor::UClientReplicationProcessor()
 	bRequiresGameThreadExecution = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 
-	UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Constructed. Phase=%d"), (int32)ProcessingPhase);
+ if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+ 	{
+ 		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Constructed. Phase=%d"), (int32)ProcessingPhase);
+ 	}
 }
 
 void UClientReplicationProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
@@ -78,8 +81,11 @@ void UClientReplicationProcessor::InitializeInternal(UObject& Owner, const TShar
 	Super::InitializeInternal(Owner, EntityManager);
 	UWorld* World = GetWorld();
 	const ENetMode Mode = World ? World->GetNetMode() : NM_Standalone;
-	UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: InitializeInternal. World=%s NetMode=%d AutoReg=%d"),
-		World ? *World->GetName() : TEXT("<null>"), (int32)Mode, bAutoRegisterWithProcessingPhases ? 1 : 0);
+ if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: InitializeInternal. World=%s NetMode=%d AutoReg=%d"),
+			World ? *World->GetName() : TEXT("<null>"), (int32)Mode, bAutoRegisterWithProcessingPhases ? 1 : 0);
+	}
 }
 
 void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -102,7 +108,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ClientReplicationProcessor: Execute skipped (no World)"));
+  if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+  	{
+  		UE_LOG(LogTemp, Warning, TEXT("ClientReplicationProcessor: Execute skipped (no World)"));
+  	}
 		return;
 	}
 	// Respect global replication mode: only run in custom Mass mode on clients
@@ -110,9 +119,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	{
 		return;
 	}
-	if (!World->IsNetMode(NM_Client))
+ if (!World->IsNetMode(NM_Client))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute skipped. NetMode=%d World=%s"), (int32)World->GetNetMode(), *World->GetName());
+		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute skipped. NetMode=%d World=%s"), (int32)World->GetNetMode(), *World->GetName());
+		}
 		return;
 	}
 	GExecCount++;
@@ -136,7 +148,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			ExistingIDs.Add(NetIDList[i].NetID.GetValue());
 		}
 	});
-	if (GExecCount <= 60)
+ if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && GExecCount <= 60)
 	{
 		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Query matched %d entities across %d chunks"), TotalEntities, TotalChunks);
 	}
@@ -272,7 +284,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					{
 						if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
 						{
-							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Missing NetID %u for %s -> RequestClientMassLink"), It.NetID.GetValue(), *It.OwnerName.ToString());
+       if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+       							{
+       								UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Missing NetID %u for %s -> RequestClientMassLink"), It.NetID.GetValue(), *It.OwnerName.ToString());
+       							}
 							Bind->RequestClientMassLink();
 							Actions++;
 						}
@@ -343,7 +358,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					{
 						if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
 						{
-							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Extra local NetID %u on %s -> RequestClientMassUnlink"), LocalID, *Act->GetName());
+       if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+       							{
+       								UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Extra local NetID %u on %s -> RequestClientMassUnlink"), LocalID, *Act->GetName());
+       							}
 							Bind->RequestClientMassUnlink();
 							Actions++;
 						}
@@ -403,14 +421,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  				{
  					if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(OwnerUnitIndex))
  					{
- 						if (NetIDList[EntityIdx].NetID != *ByIdx)
- 						{
- 							UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s UnitIndex=%d Old=%u New=%u (source=UnitIndex)"),
- 								ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), OwnerUnitIndex,
- 								NetIDList[EntityIdx].NetID.GetValue(), ByIdx->GetValue());
- 							NetIDList[EntityIdx].NetID = *ByIdx;
- 						}
- 						bSet = true;
+       if (NetIDList[EntityIdx].NetID != *ByIdx)
+						{
+							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+							{
+								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s UnitIndex=%d Old=%u New=%u (source=UnitIndex)"),
+									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), OwnerUnitIndex,
+									NetIDList[EntityIdx].NetID.GetValue(), ByIdx->GetValue());
+							}
+							NetIDList[EntityIdx].NetID = *ByIdx;
+						}
+						bSet = true;
  					}
  				}
  				if (!bSet)
@@ -418,14 +439,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  					const FName OwnerName = OwnerActor->GetFName();
  					if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
  					{
- 						if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
- 						{
- 							UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=OwnerName)"),
- 								ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
- 								NetIDList[EntityIdx].NetID.GetValue(), AuthoritativeId->GetValue());
- 							NetIDList[EntityIdx].NetID = *AuthoritativeId;
- 						}
- 						bSet = true;
+       if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
+						{
+							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+							{
+								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=OwnerName)"),
+									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
+									NetIDList[EntityIdx].NetID.GetValue(), AuthoritativeId->GetValue());
+							}
+							NetIDList[EntityIdx].NetID = *AuthoritativeId;
+						}
+						bSet = true;
  					}
  					else
  					{
@@ -433,10 +457,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  						{
  							if (NetIDList[EntityIdx].NetID != *BubbleId)
  							{
- 								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
- 									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
- 									NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
- 								NetIDList[EntityIdx].NetID = *BubbleId;
+         if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+								{
+									UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
+										ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
+										NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
+								}
+								NetIDList[EntityIdx].NetID = *BubbleId;
  							}
  							bSet = true;
  						}
@@ -447,7 +474,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					if (SeenIDs.Contains(CurrentID))
 					{
-						UE_LOG(LogTemp, Warning, TEXT("ClientReplication: Duplicate NetID %u detected in chunk"), CurrentID);
+      if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+      					{
+      						UE_LOG(LogTemp, Warning, TEXT("ClientReplication: Duplicate NetID %u detected in chunk"), CurrentID);
+      					}
 						if (AActor* DupActor = ActorList[EntityIdx].GetMutable())
 						{
 							if (UMassActorBindingComponent* Bind = DupActor->FindComponentByClass<UMassActorBindingComponent>())
@@ -574,7 +604,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
 					const float ErrorDistSq = PosErrorXY.SizeSquared();
 					// Thresholds and gains
-					static const float MinErrorForCorrectionSq = FMath::Square(5.f); // 5 cm
+					static const float MinErrorForCorrectionSq = FMath::Square(20.f); // 5 cm
 					static const float MaxCorrectionAccel = 3000.f; // cm/s^2
 					static const float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
 					if (ErrorDistSq > MinErrorForCorrectionSq)
@@ -598,7 +628,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 				}
 
-				// Detailed client log: what transform we compared and source
+    // Detailed client log: what transform we compared and source (disabled by default)
+				if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 				{
 					const AActor* OA = ActorList[EntityIdx].GetMutable();
 					const int32 UnitIndex = (OA && OA->IsA<AUnitBase>()) ? static_cast<const AUnitBase*>(OA)->UnitIndex : INDEX_NONE;
@@ -610,17 +641,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						FinalXf.GetScale3D().X, FinalXf.GetScale3D().Y, FinalXf.GetScale3D().Z);
 				}
 
-				// Self-heal if NetID repeatedly missing on client
-				AActor* OwnerActor = ActorList[EntityIdx].GetMutable();
-				if (OwnerActor)
+    // Self-heal if NetID repeatedly missing on client
+				AActor* OwnerActor2 = ActorList[EntityIdx].GetMutable();
+				if (OwnerActor2)
 				{
-					int32& Streak = ZeroIdStreak.FindOrAdd(OwnerActor);
+					int32& Streak = ZeroIdStreak.FindOrAdd(OwnerActor2);
 					if (NetIDList[EntityIdx].NetID.GetValue() == 0)
 					{
 						Streak++;
 						if (Streak >= 3) // three consecutive ticks
 						{
-							if (UMassActorBindingComponent* Bind = OwnerActor->FindComponentByClass<UMassActorBindingComponent>())
+							if (UMassActorBindingComponent* Bind = OwnerActor2->FindComponentByClass<UMassActorBindingComponent>())
 							{
 								Bind->RequestClientMassLink();
 							}
@@ -628,7 +659,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 					else
 					{
-						ZeroIdStreak.Remove(OwnerActor);
+						ZeroIdStreak.Remove(OwnerActor2);
 					}
 				}
 			}

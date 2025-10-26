@@ -117,9 +117,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     const bool bHasNavSystem = (NavSystem != nullptr);
 
-    		UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor::Execute 1 (HasNav=%s)"), bHasNavSystem ? TEXT("true") : TEXT("false"));
-        UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor::ClientEntityQuery Matching=%d"), ClientEntityQuery.GetNumMatchingEntities());
-
     ClientEntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
