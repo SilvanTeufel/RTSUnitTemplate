@@ -90,7 +90,7 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 	
     if (World->IsNetMode(NM_Client))
     {
-        //ExecuteClient(EntityManager, Context);
+        ExecuteClient(EntityManager, Context);
     }
     else
     {

@@ -1,11 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-/*
+
 #if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG
 #define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
 #endif
-*/
+
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
 
@@ -56,6 +56,8 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 #include "EngineUtils.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Replication/ReplicationSettings.h"
+#include "MassMovementFragments.h"
+#include "Steering/MassSteeringFragments.h"
 
 UClientReplicationProcessor::UClientReplicationProcessor()
 	: EntityQuery(*this)
@@ -87,7 +89,9 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+ EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.RegisterWithProcessor(*this);
 	
 }
@@ -560,10 +564,41 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 					}
 				}
-				// Copy into Mass transform
-				TransformList[EntityIdx].SetTransform(FinalXf);
+    // Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering instead of snapping transform
+				{
+					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
+					const FVector CurrentLoc = ClientXf.GetLocation();
+					const FVector TargetLoc = FinalXf.GetLocation();
+					FVector PosError = TargetLoc - CurrentLoc;
+					// Only correct horizontal to avoid oscillations in height; vertical handled by other processors
+					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
+					const float ErrorDistSq = PosErrorXY.SizeSquared();
+					// Thresholds and gains
+					static const float MinErrorForCorrectionSq = FMath::Square(5.f); // 5 cm
+					static const float MaxCorrectionAccel = 3000.f; // cm/s^2
+					static const float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
+					if (ErrorDistSq > MinErrorForCorrectionSq)
+					{
+						// Convert position error into a corrective acceleration vector
+						FVector Corrective = PosErrorXY.GetClampedToMaxSize(MaxCorrectionAccel / FMath::Max(1.f, Kp)) * Kp;
+						// Apply as additional force (accel) this frame; UnitApplyMassMovementProcessor consumes Force.Value
+						TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
+						TArrayView<FMassSteeringFragment> SteeringList = Context.GetMutableFragmentView<FMassSteeringFragment>();
+						if (ForceList.IsValidIndex(EntityIdx))
+						{
+							FMassForceFragment& ForceFrag = ForceList[EntityIdx];
+							ForceFrag.Value += Corrective;
+						}
+						// Also bias steering slightly toward the authoritative target to converge faster
+						if (SteeringList.IsValidIndex(EntityIdx))
+						{
+							FMassSteeringFragment& Steer = SteeringList[EntityIdx];
+							Steer.DesiredVelocity += Corrective * 0.1f; // small bias
+						}
+					}
+				}
 
-				// Detailed client log: what transform we applied and from which source
+				// Detailed client log: what transform we compared and source
 				{
 					const AActor* OA = ActorList[EntityIdx].GetMutable();
 					const int32 UnitIndex = (OA && OA->IsA<AUnitBase>()) ? static_cast<const AUnitBase*>(OA)->UnitIndex : INDEX_NONE;

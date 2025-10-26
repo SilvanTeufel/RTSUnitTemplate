@@ -394,8 +394,8 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 {
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
-	    ExecuteRepClient(EntityManager, Context);
-		//ExecuteClient(EntityManager, Context);
+	    //ExecuteRepClient(EntityManager, Context);
+		ExecuteClient(EntityManager, Context);
 	}
 	else
 	{
