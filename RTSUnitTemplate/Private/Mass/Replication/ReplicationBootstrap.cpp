@@ -10,17 +10,16 @@ namespace
 	static TMap<const UWorld*, FMassBubbleInfoClassHandle> GWorldToUnitBubbleHandle;
 }
 
-namespace RTSReplicationBootstrap
-{
-	static bool ShouldRegisterInWorld(const UWorld& World)
+	namespace RTSReplicationBootstrap
 	{
-		// Only register on server worlds (including listen server) and dedicated server. Never on pure clients.
-		const ENetMode Mode = World.GetNetMode();
-		return Mode == NM_DedicatedServer || Mode == NM_ListenServer || Mode == NM_Standalone; // Standalone safe no-op
-	}
+		static bool ShouldRegisterInWorld(const UWorld& World)
+		{
+			// Register in all worlds (server and clients). Clients also need the Bubble class handle to avoid GetBubbleInfoClassHandle errors.
+			return true;
+		}
 
-	void RegisterForWorld(UWorld& World)
-	{
+		void RegisterForWorld(UWorld& World)
+		{
 		if (!ShouldRegisterInWorld(World))
 		{
 			return;

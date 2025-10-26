@@ -20,6 +20,7 @@
 #include "Navigation/CrowdManager.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
+#include "Mass/Replication/UnitRegistryReplicator.h"
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -316,6 +317,31 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetActorEnableCollision(false);
 		SetDeselected();
 		SetUnitState(UnitData::Dead);
+
+		// Server-authoritative: immediately remove this unit from the replicated registry to avoid stale ghosts
+		if (HasAuthority())
+		{
+			if (UWorld* W = GetWorld())
+			{
+				// Late-include to avoid heavy deps in header
+				#include "Mass/Replication/UnitRegistryReplicator.h"
+				if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*W))
+				{
+					bool bRemoved = false;
+					if (UnitIndex != INDEX_NONE)
+					{
+						bRemoved |= Reg->Registry.RemoveByUnitIndex(UnitIndex);
+					}
+					bRemoved |= Reg->Registry.RemoveByOwner(GetFName());
+					if (bRemoved)
+					{
+						Reg->Registry.MarkArrayDirty();
+						Reg->ForceNetUpdate();
+					}
+				}
+			}
+		}
+
 		DeadEffectsAndEvents();
 		UnitControlTimer = 0.f;
 	}

@@ -16,9 +16,9 @@ void URTSWorldCacheSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	UWorld* World = GetWorld();
-	if (World && World->GetNetMode() != NM_Client)
+	if (World)
 	{
-		// Ensure bubble info class is registered before any clients are added
+		// Ensure bubble info class is registered for all worlds (server and clients)
 		RTSReplicationBootstrap::RegisterForWorld(*World);
 	}
 }

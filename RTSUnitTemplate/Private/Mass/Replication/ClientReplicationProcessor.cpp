@@ -37,6 +37,12 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
     0.10f,
     TEXT("Seconds to wait after the registry changes before executing unlink reconciliation."),
     ECVF_Default);
+// Toggle between full replication and reconciliation (0 = reconciliation, 1 = full replication)
+static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_FullReplication(
+    TEXT("net.RTS.ClientReplication.FullReplication"),
+    1,
+    TEXT("1 = Full transform replication (disable steering/force reconciliation). 0 = Reconciliation via steering/force."),
+    ECVF_Default);
 
 #include "MassCommonFragments.h"
 #include "MassEntityTypes.h"
@@ -128,9 +134,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		return;
 	}
 	GExecCount++;
+	// Update global replication mode from CVAR each tick for runtime switching
 	if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && GExecCount <= 60)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute #%d Time=%.2f"), GExecCount, World->GetTimeSeconds());
+  UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute #%d Time=%.2f (FullReplication=%d)"), GExecCount, World->GetTimeSeconds(), bUseFullReplication ? 1 : 0);
 	}
 
 	// 1) Gather existing client-side NetIDs so we can detect missing entities
@@ -268,9 +275,49 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	TSet<uint32> FullRemoteIDs = RegistryIDs;
 	for (uint32 Bid : BubbleIDs) { FullRemoteIDs.Add(Bid); }
 	// Create any missing client entities by OwnerName
- int32 Actions = 0;
- int32 Budget = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
- int32 MaxActionsPerTick = (World->GetTimeSeconds() < 5.0f) ? FMath::Max(64, Budget) : Budget; // CVAR-driven, with startup burst
+	int32 Actions = 0;
+	int32 Budget = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
+	int32 MaxActionsPerTick = (World->GetTimeSeconds() < 5.0f) ? FMath::Max(64, Budget) : Budget; // CVAR-driven, with startup burst
+
+	// Throttled reconciliation summary (do not spam every tick)
+	{
+		static double GLastSummaryTime = 0.0;
+		const double NowT = World->GetTimeSeconds();
+		const double Interval = 2.0; // seconds
+		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1 && (NowT - GLastSummaryTime) >= Interval)
+		{
+			GLastSummaryTime = NowT;
+			// Compute missing and extra sets relative to authoritative remote (Registry U Bubble)
+			TArray<uint32> MissingOnClient;
+			TArray<uint32> ExtraOnClient;
+			for (uint32 Id : FullRemoteIDs)
+			{
+				if (!ExistingIDs.Contains(Id) && Id != 0)
+				{
+					MissingOnClient.Add(Id);
+				}
+			}
+			for (uint32 Id : ExistingIDs)
+			{
+				if (!FullRemoteIDs.Contains(Id) && Id != 0)
+				{
+					ExtraOnClient.Add(Id);
+				}
+			}
+			const int32 LiveCount = ExistingIDs.Num();
+			const int32 RemoteCount = FullRemoteIDs.Num();
+			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+			{
+				auto JoinFew = [](const TArray<uint32>& Arr){ FString S; const int32 Max=FMath::Min(15, Arr.Num()); for (int32 i=0;i<Max;++i){ if (i>0) S+=TEXT(", "); S+=FString::Printf(TEXT("%u"), Arr[i]); } if (Arr.Num()>Max) S+=TEXT(" ..."); return S; };
+				UE_LOG(LogTemp, Log, TEXT("ClientReconcileSummary: Live=%d Remote=%d Missing=%d Extra=%d (Missing: %s) (Extra: %s)"),
+					LiveCount, RemoteCount, MissingOnClient.Num(), ExtraOnClient.Num(), *JoinFew(MissingOnClient), *JoinFew(ExtraOnClient));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("ClientReconcileSummary: Live=%d Remote=%d Missing=%d Extra=%d"), LiveCount, RemoteCount, MissingOnClient.Num(), ExtraOnClient.Num());
+			}
+		}
+	}
  if (RegistryActor && RegistryActor->Registry.Items.Num() > 0)
 	{
 		for (const FUnitRegistryItem& It : RegistryActor->Registry.Items)
@@ -371,7 +418,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
- EntityQuery.ForEachEntityChunk(Context, [AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex](FMassExecutionContext& Context)
+ EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -594,8 +641,27 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 					}
 				}
-    // Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering instead of snapping transform
+				// Replication mode: either full replication (direct set) or reconciliation via steering/force
+				if (bUseFullReplication)
 				{
+					// Disable reconciliation: directly set the Mass transform to authoritative
+					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
+					ClientXf = FinalXf;
+					// Also zero out steering/force to prevent drift from movement systems this tick
+					TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
+					TArrayView<FMassSteeringFragment> SteeringList = Context.GetMutableFragmentView<FMassSteeringFragment>();
+					if (ForceList.IsValidIndex(EntityIdx))
+					{
+						ForceList[EntityIdx].Value = FVector::ZeroVector;
+					}
+					if (SteeringList.IsValidIndex(EntityIdx))
+					{
+						SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
+					}
+				}
+				else
+				{
+					// Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
 					const FVector CurrentLoc = ClientXf.GetLocation();
 					const FVector TargetLoc = FinalXf.GetLocation();

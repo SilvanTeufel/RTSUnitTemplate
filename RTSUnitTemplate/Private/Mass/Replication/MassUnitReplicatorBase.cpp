@@ -22,8 +22,17 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/UnitRegistryPayload.h"
 #include "MassRepresentationActorManagement.h"
+#include "HAL/IConsoleManager.h"
+#include "Mass/UnitMassTag.h"
 
-namespace { constexpr bool GRepImportantLogs = false; }
+// CVAR to control server-side MassUnitReplicatorBase logging
+static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
+	TEXT("net.RTS.ServerReplicator.LogLevel"),
+	0,
+	TEXT("Logging level for MassUnitReplicatorBase: 0=Off, 1=Warn, 2=Verbose."),
+	ECVF_Default);
+
+namespace { inline int32 RepLogLevel(){ return CVarRTS_ServerReplicator_LogLevel.GetValueOnGameThread(); } }
 
 // Helper: find or spawn a UnitClientBubbleInfo on the server
 static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
@@ -71,12 +80,9 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     AUnitClientBubbleInfo* BubbleInfo = GetOrSpawnBubble(*World);
     if (!BubbleInfo)
     {
-        if (bEnableImportantLogs)
+        if (RepLogLevel() >= 1)
         {
-            if (GRepImportantLogs)
-            	{
-            		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
-            	}
+            UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
         }
         return;
     }
@@ -93,11 +99,22 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
 
     // Read fragments directly from the entity (safely)
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+    // Do not replicate dead entities on the server
+    if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
+    {
+        if (RepLogLevel() >= 2)
+        {
+            UE_LOG(LogTemp, Log, TEXT("UMassUnitReplicatorBase::AddEntity - Skipping dead entity (FMassStateDeadTag present)."));
+        }
+        return;
+    }
+
     const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
     const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
     if (!NetIDFrag || !TransformFrag)
     {
-        if (GRepImportantLogs)
+        if (RepLogLevel() >= 1)
         {
             UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::AddEntity - Entity missing required fragments (NetID or Transform). Skipping registration."));
         }
@@ -176,20 +193,20 @@ void UMassUnitReplicatorBase::RemoveEntity(FMassEntityHandle Entity, FMassReplic
     AUnitClientBubbleInfo* BubbleInfo = GetOrSpawnBubble(*World);
     if (!BubbleInfo)
     {
-        if (GRepImportantLogs)
-        	{
-        		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
-        	}
+        if (RepLogLevel() >= 1)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No AUnitClientBubbleInfo available in world %s"), *World->GetName());
+        }
         return;
     }
 
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
     {
-        if (GRepImportantLogs)
-        	{
-        		UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
-        	}
+        if (RepLogLevel() >= 1)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UMassUnitReplicatorBase::RemoveEntity - No MassEntitySubsystem available in world %s"), *World->GetName());
+        }
         return;
     }
 
@@ -253,17 +270,44 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
             }
         }
 
+        // Acquire EntityManager for tag checks
+        UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+        FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
+
         // Update every bubble we found so clients receive replicated items
         for (AUnitClientBubbleInfo* BubbleInfo : Bubbles)
         {
             bool bAnyDirty = false;
             for (int32 Idx = 0; Idx < NumEntities; ++Idx)
             {
+                const FMassNetworkID& NetID = NetIDList[Idx].NetID;
+
+                // Skip replication for dead entities (have FMassStateDeadTag). Also remove from bubble if present.
+                bool bIsDead = false;
+                if (EM)
+                {
+                    const FMassEntityHandle EntityHandle = Context.GetEntity(Idx);
+                    bIsDead = DoesEntityHaveTag(*EM, EntityHandle, FMassStateDeadTag::StaticStruct());
+                }
+                if (bIsDead)
+                {
+                    if (FUnitReplicationItem* Existing = BubbleInfo->Agents.FindItemByNetID(NetID))
+                    {
+                        // Remove dead unit's entry from replication array
+                        BubbleInfo->Agents.RemoveItemByNetID(NetID);
+                        bAnyDirty = true;
+                        if (RepLogLevel() >= 2)
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("ServerReplicate: Removing dead NetID=%u from bubble"), NetID.GetValue());
+                        }
+                    }
+                    continue; // do not replicate dead entities
+                }
+
                 const FTransform& Xf = TransformList[Idx].GetTransform();
                 const FVector Loc = Xf.GetLocation();
                 const FRotator Rot = Xf.Rotator();
                 const FVector Sca = Xf.GetScale3D();
-                const FMassNetworkID& NetID = NetIDList[Idx].NetID;
 
                 // Detailed server log for diagnostics: which NetID/transform we are replicating with identity from registry
                 FName OwnerName = NAME_None;
@@ -273,7 +317,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     OwnerName = FoundPair->Key;
                     OwnerUnitIndex = FoundPair->Value;
                 }
-                if (GRepImportantLogs)
+                if (RepLogLevel() >= 2)
                 {
                     UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
                         NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,

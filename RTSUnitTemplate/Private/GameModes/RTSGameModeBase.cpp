@@ -677,7 +677,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		UnitBase->OnRep_MeshAssetPath();
 		UnitBase->OnRep_MeshMaterialPath();
 
-		UnitBase->SetReplicateMovement(true);
+		UnitBase->SetReplicateMovement(false);
 		//SetReplicates(true);
 		//UnitBase->GetMesh()->SetIsReplicated(true);
 

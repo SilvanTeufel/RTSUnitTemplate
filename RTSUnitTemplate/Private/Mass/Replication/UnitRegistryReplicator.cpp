@@ -10,6 +10,9 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
+#include "Mass/Replication/UnitReplicationCacheSubsystem.h"
+#include "MassEntitySubsystem.h"
+#include "MassReplicationFragments.h"
 
 namespace { constexpr bool GRegistryImportantLogs = false; }
 
@@ -74,6 +77,73 @@ void AUnitRegistryReplicator::OnRep_Registry()
 	{
 		// Run diagnostics after registry update
 		ServerDiagnosticsTick(); // safe call on client - function will early return if NM_Client
+
+		// Client-side reconcile: destroy zombie actors that are not in registry or have invalid Mass binding
+		if (World->GetNetMode() == NM_Client)
+		{
+			// Build quick sets for lookup
+			TSet<int32> RegIndices;
+			TSet<FName> RegOwners;
+			RegIndices.Reserve(Registry.Items.Num());
+			RegOwners.Reserve(Registry.Items.Num());
+			for (const FUnitRegistryItem& It : Registry.Items)
+			{
+				if (It.UnitIndex != INDEX_NONE) { RegIndices.Add(It.UnitIndex); }
+				if (It.OwnerName != NAME_None) { RegOwners.Add(It.OwnerName); }
+			}
+			int32 Cleaned = 0;
+			for (TActorIterator<AUnitBase> It(World); It; ++It)
+			{
+				AUnitBase* Unit = *It;
+				if (!IsValid(Unit)) { continue; }
+				if (Unit->UnitState == UnitData::Dead)
+				{
+					Unit->Destroy();
+					++Cleaned;
+					continue;
+				}
+				const bool bInReg = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex)) || RegOwners.Contains(Unit->GetFName());
+				bool bHasValidBinding = false;
+				if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
+				{
+					bHasValidBinding = Bind->GetEntityHandle().IsSet();
+				}
+				if (!bInReg || !bHasValidBinding)
+				{
+					Unit->Destroy();
+					++Cleaned;
+				}
+			}
+			if (Cleaned > 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
+			}
+
+			// Trim client-side transform cache entries whose NetIDs are no longer present in the registry
+			{
+				TSet<FMassNetworkID> ValidIDs;
+				ValidIDs.Reserve(Registry.Items.Num());
+				for (const FUnitRegistryItem& It : Registry.Items)
+				{
+					ValidIDs.Add(It.NetID);
+				}
+				int32 Trimmed = 0;
+				TArray<FMassNetworkID> KeysToCheck;
+				UnitReplicationCache::Map().GenerateKeyArray(KeysToCheck);
+				for (const FMassNetworkID& KeyID : KeysToCheck)
+				{
+					if (!ValidIDs.Contains(KeyID))
+					{
+						UnitReplicationCache::Remove(KeyID);
+						++Trimmed;
+					}
+				}
+				if (Trimmed > 0)
+				{
+					UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
+				}
+			}
+		}
 	}
 	#endif
 }
@@ -200,7 +270,117 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 {
 	if (UWorld* W = GetWorld())
 	{
+		// First run diagnostics (visible on both server and client when invoked)
 		RunDiagnosticsForWorld(*W, Registry, TEXT("RegReplicator"));
+
+		// Server-authoritative cleanup of stale registry entries
+		if (W->GetNetMode() != NM_Client)
+		{
+			// Build sets of currently live actors' keys
+			TSet<int32> LiveIndices;
+			TSet<FName> LiveOwners;
+			for (TActorIterator<AUnitBase> It(W); It; ++It)
+			{
+				AUnitBase* Unit = *It;
+				if (!IsValid(Unit)) continue;
+				if (Unit->UnitState == UnitData::Dead) continue; // don't treat dead units as live
+				LiveOwners.Add(Unit->GetFName());
+				if (Unit->UnitIndex != INDEX_NONE)
+				{
+					LiveIndices.Add(Unit->UnitIndex);
+				}
+			}
+
+			// Build sets of registry keys for quick lookup
+			TSet<int32> RegIndices;
+			TSet<FName> RegOwners;
+			RegIndices.Reserve(Registry.Items.Num());
+			RegOwners.Reserve(Registry.Items.Num());
+			for (const FUnitRegistryItem& Itm : Registry.Items)
+			{
+				if (Itm.UnitIndex != INDEX_NONE) { RegIndices.Add(Itm.UnitIndex); }
+				if (Itm.OwnerName != NAME_None) { RegOwners.Add(Itm.OwnerName); }
+			}
+
+			// Safety net: insert any missing live units into the registry immediately
+			int32 Inserted = 0;
+			UMassEntitySubsystem* EntitySubsystem = W->GetSubsystem<UMassEntitySubsystem>();
+			FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
+			for (TActorIterator<AUnitBase> It2(W); It2; ++It2)
+			{
+				AUnitBase* Unit = *It2;
+				if (!IsValid(Unit)) continue;
+				if (Unit->UnitState == UnitData::Dead) continue;
+				const bool bMissing = (Unit->UnitIndex == INDEX_NONE || !RegIndices.Contains(Unit->UnitIndex)) && !RegOwners.Contains(Unit->GetFName());
+				if (bMissing)
+				{
+					FMassNetworkID NetIDValue;
+					bool bHaveNetID = false;
+					if (EM)
+					{
+						if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
+						{
+							const FMassEntityHandle EHandle = Bind->GetMassEntityHandle();
+							if (EHandle.IsSet() && EM->IsEntityValid(EHandle))
+							{
+								if (FMassNetworkIDFragment* NetFrag = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+								{
+									if (NetFrag->NetID.GetValue() != 0)
+									{
+										NetIDValue = NetFrag->NetID;
+										bHaveNetID = true;
+									}
+									else
+									{
+										// Assign new NetID if missing
+										NetIDValue = FMassNetworkID(GetNextNetID());
+										NetFrag->NetID = NetIDValue;
+										bHaveNetID = true;
+									}
+								}
+							}
+						}
+					}
+					if (!bHaveNetID)
+					{
+						// As a last resort, allocate a NetID to keep registry consistent
+						NetIDValue = FMassNetworkID(GetNextNetID());
+					}
+					const int32 NewIdx = Registry.Items.AddDefaulted();
+					Registry.Items[NewIdx].OwnerName = Unit->GetFName();
+					Registry.Items[NewIdx].UnitIndex = Unit->UnitIndex;
+					Registry.Items[NewIdx].NetID = NetIDValue;
+					Registry.MarkItemDirty(Registry.Items[NewIdx]);
+					Inserted++;
+				}
+			}
+
+			int32 Removed = 0;
+			for (int32 i = Registry.Items.Num() - 1; i >= 0; --i)
+			{
+				const FUnitRegistryItem& Itm = Registry.Items[i];
+				const bool bOwnerGone = (Itm.OwnerName != NAME_None) && !LiveOwners.Contains(Itm.OwnerName);
+				const bool bIndexGone = (Itm.UnitIndex != INDEX_NONE) && !LiveIndices.Contains(Itm.UnitIndex);
+				if (bOwnerGone || bIndexGone)
+				{
+					Registry.Items.RemoveAt(i);
+					++Removed;
+				}
+			}
+			if (Inserted > 0 || Removed > 0)
+			{
+				// Mark the array modified to push delta to clients
+				Registry.MarkArrayDirty();
+				if (Removed > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server pruned %d stale entries from Unit Registry."), Removed);
+				}
+				if (Inserted > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server inserted %d missing live Units into Unit Registry."), Inserted);
+				}
+			}
+		}
 	}
 }
 

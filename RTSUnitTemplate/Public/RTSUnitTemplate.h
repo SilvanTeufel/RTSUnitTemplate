@@ -12,4 +12,8 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	FDelegateHandle WorldInitHandle; // handle to unregister delegate on shutdown
+	FDelegateHandle PreWorldInitHandle;
 };

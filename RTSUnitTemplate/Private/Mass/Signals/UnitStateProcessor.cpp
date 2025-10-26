@@ -338,25 +338,38 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 
 void UUnitStateProcessor::UnbindDelegates_GameThread()
 {
-	if (IsInGameThread())
-	{
-		UnbindDelegates_Internal();
-		return;
-	}
-
+	// Always defer to the next GameThread tick to avoid removing delegates while they may be broadcasting
 	TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
 	AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 	{
 		if (UUnitStateProcessor* StrongThis = WeakThis.Get())
 		{
-			StrongThis->UnbindDelegates_Internal();
+			if (StrongThis->World)
+			{
+				FTimerDelegate TimerDel;
+				TWeakObjectPtr<UUnitStateProcessor> InnerWeak = StrongThis;
+				TimerDel.BindLambda([InnerWeak]()
+				{
+					if (UUnitStateProcessor* InnerStrong = InnerWeak.Get())
+					{
+						InnerStrong->UnbindDelegates_Internal();
+					}
+				});
+				StrongThis->World->GetTimerManager().SetTimerForNextTick(TimerDel);
+			}
+			else
+			{
+				StrongThis->UnbindDelegates_Internal();
+			}
 		}
 	});
 }
 
 void UUnitStateProcessor::BeginDestroy()
 {
-	// Ensure delegate unbinding happens on the game thread to avoid race conditions
+	// Mark shutting down so incoming signals early-out
+	bIsShuttingDown = true;
+	// Ensure delegate unbinding happens on the game thread and deferred to next tick to avoid races
 	UnbindDelegates_GameThread();
 	Super::BeginDestroy();
 }
@@ -369,6 +382,7 @@ void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
 void UUnitStateProcessor::HandleMirrorMoveTarget(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
+	if (bIsShuttingDown) return;
 	if (!World || !SignalSubsystem || !EntitySubsystem) return;
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 	for (FMassEntityHandle& Entity : Entities)
@@ -407,6 +421,7 @@ void UUnitStateProcessor::HandleMirrorMoveTarget(FName SignalName, TArray<FMassE
 
 void UUnitStateProcessor::HandleMirrorStopMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
+	if (bIsShuttingDown) return;
 	if (!World || !SignalSubsystem || !EntitySubsystem) return;
 
 	TWeakObjectPtr<UWorld> WorldPtr = World;
@@ -3056,21 +3071,18 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
-			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToResourceExtraction!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 			if (SignalSubsystem) SendSignalSafe(UnitSignals::MirrorMoveTarget, Entity);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
-			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToBase!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
 			if (SignalSubsystem) SendSignalSafe(UnitSignals::MirrorMoveTarget, Entity);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
-			UE_LOG(LogTemp, Error, TEXT("UpdateUnitMovement UnitData::GoToBuild!"));
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition, StatsFrag.RunSpeed, World);
 			if (SignalSubsystem) SendSignalSafe(UnitSignals::MirrorMoveTarget, Entity);

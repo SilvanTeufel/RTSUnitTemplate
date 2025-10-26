@@ -44,8 +44,10 @@ private:
 	FMassEntityQuery EntityQuery;
 	// Handler function for the signal (must match delegate signature)
 
-	// Thread-safe flag to avoid double unbinding
+	// Thread-safe flags for shutdown/unbinding coordination
 	FThreadSafeBool bDelegatesUnbound = false;
+	// Set to true once BeginDestroy starts so handlers can early-out during teardown
+	FThreadSafeBool bIsShuttingDown = false;
 
 	// Helper functions to unbind signal delegates safely on the game thread
 	void UnbindDelegates_Internal();

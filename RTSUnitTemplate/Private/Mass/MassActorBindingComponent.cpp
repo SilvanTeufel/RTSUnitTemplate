@@ -28,6 +28,7 @@
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
 #include "MassReplicationSubsystem.h"
 #include "Iris/ReplicationSystem/ReplicationFragment.h"
@@ -588,6 +589,54 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			bNeedsMassBuildingSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
+
+			// Server: assign NetID and update authoritative registry for buildings as well
+			if (UWorld* WorldPtr = GetWorld())
+			{
+				if (WorldPtr->GetNetMode() != NM_Client)
+				{
+					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
+					{
+						AUnitBase* UnitBaseLocal = Cast<AUnitBase>(MyOwner);
+						if (UnitBaseLocal && UnitBaseLocal->UnitState != UnitData::Dead)
+						{
+							if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
+							{
+								const uint32 NewID = Reg->GetNextNetID();
+								NetFrag->NetID = FMassNetworkID(NewID);
+								const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
+								const int32 UnitIdxVal = UnitBaseLocal ? UnitBaseLocal->UnitIndex : INDEX_NONE;
+								FUnitRegistryItem* Existing = nullptr;
+								if (UnitIdxVal != INDEX_NONE)
+								{
+									Existing = Reg->Registry.FindByUnitIndex(UnitIdxVal);
+								}
+								if (!Existing)
+								{
+									Existing = Reg->Registry.FindByOwner(OwnerName);
+								}
+								if (Existing)
+								{
+									Existing->OwnerName = OwnerName;
+									Existing->UnitIndex = UnitIdxVal;
+									Existing->NetID = NetFrag->NetID;
+									Reg->Registry.MarkItemDirty(*Existing);
+								}
+								else
+								{
+									const int32 NewIdx2 = Reg->Registry.Items.AddDefaulted();
+									Reg->Registry.Items[NewIdx2].OwnerName = OwnerName;
+									Reg->Registry.Items[NewIdx2].UnitIndex = UnitIdxVal;
+									Reg->Registry.Items[NewIdx2].NetID = NetFrag->NetID;
+									Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx2]);
+								}
+								Reg->Registry.MarkArrayDirty();
+								Reg->ForceNetUpdate();
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 	
@@ -1014,26 +1063,13 @@ void UMassActorBindingComponent::RequestClientMassUnlink()
 	{
 		return;
 	}
-	if (World->GetNetMode() != NM_Client)
+	// Prevent client-authoritative unlink to avoid desync; server drives destruction
+	if (World->GetNetMode() == NM_Client)
 	{
-		return; // Only meaningful on clients
+		return;
 	}
-	if (MassEntitySubsystemCache == nullptr)
-	{
-		MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
-	}
-	if (MassEntitySubsystemCache && MassEntityHandle.IsValid())
-	{
-		FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
-		if (EM.IsEntityValid(MassEntityHandle))
-		{
-			EM.Defer().DestroyEntity(MassEntityHandle);
-		}
-	}
-	MassEntityHandle.Reset();
-	bNeedsMassUnitSetup = false;
-	bNeedsMassBuildingSetup = false;
-	UE_LOG(LogTemp, Log, TEXT("Client Mass unlink requested for %s"), *GetOwner()->GetName());
+	// On server, fall back to proper cleanup
+	CleanupMassEntity();
 }
 
 void UMassActorBindingComponent::CleanupMassEntity()
@@ -1079,6 +1115,11 @@ void UMassActorBindingComponent::CleanupMassEntity()
 			FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 			if (EntityManager.IsEntityValid(MassEntityHandle))
 			{
+				// Before destroying, clear any client-side cached replication data for this entity's NetID
+				if (const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+				{
+					UnitReplicationCache::Remove(NetIDFrag->NetID);
+				}
 				// Queue the destruction command as normal.
 				EntityManager.Defer().DestroyEntity(MassEntityHandle);
 			}

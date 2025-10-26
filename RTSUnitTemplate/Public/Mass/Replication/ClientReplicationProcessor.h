@@ -17,6 +17,9 @@ class RTSUNITTEMPLATE_API UClientReplicationProcessor : public UMassProcessor
 public:
 	UClientReplicationProcessor();
 
+	// Global toggle: when true, use full replication (directly set transform). When false, use reconciliation via steering/force.
+	bool bUseFullReplication = true;
+
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;

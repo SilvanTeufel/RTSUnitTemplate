@@ -69,11 +69,11 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     if (!SignalSubsystem) return;
 
     
-    TArray<FMassSignalPayload> PendingSignals;
+    // Using deferred signal commands via Context, no manual arrays or AsyncTask dispatch needed
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture World for helper functions
-        [this, &PendingSignals, World](FMassExecutionContext& ChunkContext)
+        [this, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -100,14 +100,20 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             if (!WorkerStatsFrag.ResourceAvailable)
             {
                 // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                }
                 continue;
             }
             
             if (WorkerStatsFrag.BuildingAreaAvailable)
             {
                 // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::GoToBuild); // Use appropriate signal
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);
+                }
                 continue;
             }
 
@@ -119,32 +125,16 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 // Stop movement and mirror to clients when reaching the resource
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 StopMovement(MoveTarget, World);
-                // Defer signaling to after chunk processing to avoid cross-thread access
-                PendingSignals.Emplace(Entity, UnitSignals::MirrorStopMovement);
-                PendingSignals.Emplace(Entity, UnitSignals::ResourceExtraction); // Use appropriate signal name
+                // Queue signals thread-safely using the deferred command buffer
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ResourceExtraction, Entity);
+                }
             }
             
         }
     }); // End ForEachEntityChunk
 
 
-    // --- Defer queued signals to the next Game Thread tick to avoid re-entrancy in MassSignals ---
-    if (!PendingSignals.IsEmpty() && SignalSubsystem)
-    {
-        TWeakObjectPtr<UMassSignalSubsystem> WeakSignal = SignalSubsystem;
-        TArray<FMassSignalPayload> SignalsToSend = MoveTemp(PendingSignals);
-        AsyncTask(ENamedThreads::GameThread, [WeakSignal, SignalsToSend = MoveTemp(SignalsToSend)]() mutable
-        {
-            if (UMassSignalSubsystem* Strong = WeakSignal.Get())
-            {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
-                {
-                    if (!Payload.SignalName.IsNone())
-                    {
-                        Strong->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                    }
-                }
-            }
-        });
-    }
 }
