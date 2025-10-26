@@ -182,15 +182,23 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     }); // End ForEachEntityChunk
 
 
-    // --- Send queued signals synchronously on the Game Thread ---
+    // --- Defer queued signals to the next Game Thread tick to avoid re-entrancy in MassSignals ---
     if (!PendingSignals.IsEmpty() && SignalSubsystem)
     {
-        for (const FMassSignalPayload& Payload : PendingSignals)
+        TWeakObjectPtr<UMassSignalSubsystem> WeakSignal = SignalSubsystem;
+        TArray<FMassSignalPayload> SignalsToSend = MoveTemp(PendingSignals);
+        AsyncTask(ENamedThreads::GameThread, [WeakSignal, SignalsToSend = MoveTemp(SignalsToSend)]() mutable
         {
-            if (!Payload.SignalName.IsNone())
+            if (UMassSignalSubsystem* Strong = WeakSignal.Get())
             {
-                SignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                for (const FMassSignalPayload& Payload : SignalsToSend)
+                {
+                    if (!Payload.SignalName.IsNone())
+                    {
+                        Strong->SignalEntity(Payload.SignalName, Payload.TargetEntity);
+                    }
+                }
             }
-        }
+        });
     }
 }

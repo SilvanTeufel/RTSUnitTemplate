@@ -19,7 +19,7 @@ UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -101,9 +101,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
-            SignalSubsystem->SignalEntity(UnitSignals::MirrorMoveTarget, Entity);
+                PendingSignals.Emplace(Entity, UnitSignals::MirrorMoveTarget);
 
-                
                 StateFrag.SwitchingState = true;
                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
                 continue;
