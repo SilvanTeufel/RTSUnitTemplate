@@ -19,6 +19,7 @@
 
 UGoToBuildStateProcessor::UGoToBuildStateProcessor(): EntityQuery()
 {
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -73,11 +74,8 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
     if (!SignalSubsystem) return;
     
-    // Use the engine/Mass provided FMassSignalPayload struct
-    TArray<FMassSignalPayload> PendingSignals;
-
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
@@ -105,7 +103,10 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // Basic validation of data from fragment (more robust checks should be external)
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
-                 PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); // Use appropriate fallback signal FName
+                 if (SignalSubsystem)
+                 {
+                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
+                 }
                  continue;
             }
 
@@ -119,37 +120,12 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Build, Entity);
                 }
-                PendingSignals.Emplace(Entity, UnitSignals::Build); // Use appropriate signal name
                 continue;
             }
         } // End loop through entities
     }); // End ForEachEntityChunk
 
-    // --- Schedule Game Thread Task to Send Queued Signals (Same as before) ---
-    if (!PendingSignals.IsEmpty())
-    {
-      
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend) // Iterate FMassSignalPayload
-                    {
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                         else { /* Log error */ }
-                    }
-                }
-                else { /* Log error: Subsystem invalid */ }
-            });
-        }
-        else { /* Log error: Subsystem not found */ }
-    }
 }

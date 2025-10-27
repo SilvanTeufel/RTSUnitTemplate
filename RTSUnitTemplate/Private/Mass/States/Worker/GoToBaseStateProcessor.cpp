@@ -14,6 +14,7 @@
 
 UGoToBaseStateProcessor::UGoToBaseStateProcessor(): EntityQuery()
 {
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -71,11 +72,9 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     }
 
     if (!SignalSubsystem) return;
-    // Use FMassSignalPayload
-    TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World](FMassExecutionContext& Context)
     {
         // --- Get Fragment Views ---
         
@@ -101,7 +100,10 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             if (!WorkerStats.BaseAvailable) // && AIState.StateTimer >= 5.f && !AIState.SwitchingState
             {
                  AIState.SwitchingState = true;
-                 PendingSignals.Emplace(Entity, UnitSignals::Idle);
+                 if (SignalSubsystem)
+                 {
+                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Idle, Entity);
+                 }
                  continue;
             }
 
@@ -116,10 +118,9 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntity(UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ReachedBase, Entity);
                 }
-                // Queue signal for reaching the base
-                PendingSignals.Emplace(Entity, UnitSignals::ReachedBase); // Use appropriate signal name
                 continue;
             }
           
@@ -130,28 +131,4 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             
     }); // End ForEachEntityChunk
 
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                         else { /* Log error */ }
-                    }
-                }
-                else { /* Log error: Subsystem invalid */ }
-            });
-        }
-        else { /* Log error: Subsystem not found */ }
-    }
 }

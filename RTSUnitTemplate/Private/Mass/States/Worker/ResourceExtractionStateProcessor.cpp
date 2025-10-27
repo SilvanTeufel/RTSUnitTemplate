@@ -18,6 +18,7 @@
 
 UResourceExtractionStateProcessor::UResourceExtractionStateProcessor(): EntityQuery()
 {
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -70,11 +71,8 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
     
     if (!SignalSubsystem) return;
     
-    TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(EntityQuery.GetNumMatchingEntities(EntityManager)); // Optional pre-allocation
-
     EntityQuery.ForEachEntityChunk(Context,
-        [this,  &PendingSignals](FMassExecutionContext& ChunkContext)
+        [this](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -93,46 +91,32 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             {
                 StateFrag.SwitchingState = true;
                 // Target is lost or invalid. Signal to go idle or find a new task.
-                PendingSignals.Emplace(Entity, UnitSignals::GoToBase); // Use appropriate signal
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                }
                 continue;
             }
             
             // --- 3. Increment Extraction Timer ---
             StateFrag.StateTimer += ExecutionInterval;
-            PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
+            if (SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncCastTime, Entity);
+            }
             // --- 4. Check if Extraction Time Elapsed ---
            
             if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
-                //StateFrag.StateTimer = 0.f;
-                PendingSignals.Emplace(Entity, UnitSignals::GetResource); // Use your actual signal name
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
+                }
                 continue; // Move to next entity
             }
         }
             
     }); // End ForEachEntityChunk
 
-
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        if (!Payload.SignalName.IsNone())
-                        {
-                            StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                    }
-                }
-            });
-        }
-    }
 }

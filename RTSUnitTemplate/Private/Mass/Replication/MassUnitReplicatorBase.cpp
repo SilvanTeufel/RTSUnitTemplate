@@ -24,6 +24,7 @@
 #include "MassRepresentationActorManagement.h"
 #include "HAL/IConsoleManager.h"
 #include "Mass/UnitMassTag.h"
+#include "Characters/Unit/UnitBase.h"
 
 // CVAR to control server-side MassUnitReplicatorBase logging
 static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
@@ -112,6 +113,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
 
     const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
     const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+    FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
     if (!NetIDFrag || !TransformFrag)
     {
         if (RepLogLevel() >= 1)
@@ -124,13 +126,14 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     const FMassNetworkID& NetID = NetIDFrag->NetID;
     const FTransform& Xf = TransformFrag->GetTransform();
 
+    // 1) Ensure presence/update in replicated bubble array for clients
     FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
     if (!Item)
     {
         FUnitReplicationItem NewItem;
         NewItem.NetID = NetID;
         // Fill stable owner key if available
-        if (FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
+        if (ActorFrag)
         {
             if (AActor* Ow = ActorFrag->GetMutable())
             {
@@ -153,7 +156,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
         BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
         BubbleInfo->Agents.MarkArrayDirty();
-      		BubbleInfo->ForceNetUpdate();
+        BubbleInfo->ForceNetUpdate();
     }
     else
     {
@@ -178,6 +181,52 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             BubbleInfo->Agents.MarkItemDirty(*Item);
             BubbleInfo->Agents.MarkArrayDirty();
             BubbleInfo->ForceNetUpdate();
+        }
+    }
+
+    // 2) Ensure presence/update in authoritative Unit Registry on the server
+    if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+    {
+        // Gather owner name and unit index if available
+        FName OwnerName = NAME_None;
+        int32 UnitIndex = INDEX_NONE;
+        if (ActorFrag)
+        {
+            if (AActor* Ow = ActorFrag->GetMutable())
+            {
+                OwnerName = Ow->GetFName();
+                if (const AUnitBase* UnitActor = Cast<AUnitBase>(Ow))
+                {
+                    UnitIndex = UnitActor->UnitIndex;
+                }
+            }
+        }
+
+        // Find by NetID; update if exists, otherwise add
+        bool bFound = false;
+        for (FUnitRegistryItem& It : Reg->Registry.Items)
+        {
+            if (It.NetID == NetID)
+            {
+                // Update fields if changed
+                bool bDirty = false;
+                if (OwnerName != NAME_None && It.OwnerName != OwnerName) { It.OwnerName = OwnerName; bDirty = true; }
+                if (UnitIndex != INDEX_NONE && It.UnitIndex != UnitIndex) { It.UnitIndex = UnitIndex; bDirty = true; }
+                if (bDirty) { Reg->Registry.MarkItemDirty(It); }
+                bFound = true;
+                break;
+            }
+        }
+        if (!bFound)
+        {
+            const int32 NewRegIdx = Reg->Registry.Items.AddDefaulted();
+            FUnitRegistryItem& NewRegItem = Reg->Registry.Items[NewRegIdx];
+            NewRegItem.NetID = NetID;
+            NewRegItem.OwnerName = OwnerName;
+            NewRegItem.UnitIndex = UnitIndex;
+            Reg->Registry.MarkItemDirty(NewRegItem);
+            Reg->Registry.MarkArrayDirty();
+            Reg->ForceNetUpdate();
         }
     }
 }
@@ -219,12 +268,30 @@ void UMassUnitReplicatorBase::RemoveEntity(FMassEntityHandle Entity, FMassReplic
     }
     const FMassNetworkID& NetID = NetIDFrag->NetID;
 
+    // Remove from bubble replication array
     if (BubbleInfo->Agents.RemoveItemByNetID(NetID))
     {
         BubbleInfo->Agents.MarkArrayDirty();
+        BubbleInfo->ForceNetUpdate();
     }
-    else
+
+    // Remove from authoritative Unit Registry as well
+    if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
     {
+        int32 Removed = 0;
+        for (int32 i = Reg->Registry.Items.Num() - 1; i >= 0; --i)
+        {
+            if (Reg->Registry.Items[i].NetID == NetID)
+            {
+                Reg->Registry.Items.RemoveAt(i);
+                ++Removed;
+            }
+        }
+        if (Removed > 0)
+        {
+            Reg->Registry.MarkArrayDirty();
+            Reg->ForceNetUpdate();
+        }
     }
 }
 

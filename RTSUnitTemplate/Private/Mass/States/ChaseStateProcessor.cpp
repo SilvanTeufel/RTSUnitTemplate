@@ -22,11 +22,11 @@
 
 UChaseStateProcessor::UChaseStateProcessor(): EntityQuery()
 {
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    // Ensure this processor executes on the Game Thread to avoid data races when signaling
-    bRequiresGameThreadExecution = true;
+    bRequiresGameThreadExecution = false;
 }
 
 void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -98,13 +98,12 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     if (!SignalSubsystem) return;
 
-    // --- List for Game Thread Signal Updates ---
-    TArray<FMassSignalPayload> PendingSignals;
+    // Using Mass deferred command buffer for thread-safe signaling; no manual PendingSignals array needed.
 
     EntityQuery.ForEachEntityChunk(Context,
-        // Capture PendingSignals by reference. Capture World for helper functions.
-        // Do NOT capture LocalSignalSubsystem directly here.
-        [this, &PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
+        // Use Mass deferred command buffer via ChunkContext.Defer() for thread-safe signaling.
+        // Do NOT access SignalSubsystem directly from worker threads.
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates
@@ -128,11 +127,19 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             StateFrag.StateTimer += ExecutionInterval;
 
             if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
-                PendingSignals.Emplace(Entity, UnitSignals::UseRangedAbilitys);
+            {
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UseRangedAbilitys, Entity);
+                }
+            }
 
             if (StateFrag.HoldPosition)
             {
-                PendingSignals.Emplace(Entity, UnitSignals::Idle);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
+                }
                 continue;
             }
             
@@ -144,10 +151,16 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
-                PendingSignals.Emplace(Entity, UnitSignals::MirrorMoveTarget);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
+                }
                 
                 StateFrag.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
+                }
                 continue;
             }
 
@@ -164,9 +177,12 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             {
                 // Queue signal instead of sending directly
                 StopMovement(MoveTarget, World);
-                PendingSignals.Emplace(Entity, UnitSignals::MirrorStopMovement);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
+                }
                 StateFrag.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::Pause);
                 continue;
             }
 
@@ -176,29 +192,12 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
            StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
            UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-           PendingSignals.Emplace(Entity, UnitSignals::MirrorMoveTarget);
+           if (SignalSubsystem)
+           {
+               SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
+           }
 
         }
     }); // End ForEachEntityChunk
 
-
-    // --- Defer queued signals to the next Game Thread tick to avoid re-entrancy in MassSignals ---
-    if (!PendingSignals.IsEmpty() && SignalSubsystem)
-    {
-        TWeakObjectPtr<UMassSignalSubsystem> WeakSignal = SignalSubsystem;
-        TArray<FMassSignalPayload> SignalsToSend = MoveTemp(PendingSignals);
-        AsyncTask(ENamedThreads::GameThread, [WeakSignal, SignalsToSend = MoveTemp(SignalsToSend)]() mutable
-        {
-            if (UMassSignalSubsystem* Strong = WeakSignal.Get())
-            {
-                for (const FMassSignalPayload& Payload : SignalsToSend)
-                {
-                    if (!Payload.SignalName.IsNone())
-                    {
-                        Strong->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                    }
-                }
-            }
-        });
-    }
 }

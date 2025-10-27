@@ -17,7 +17,10 @@
 UBuildStateProcessor::UBuildStateProcessor(): EntityQuery()
 {
     ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
-    // No specific execution order dependency for this state logic
+    ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
+    ProcessingPhase = EMassProcessingPhase::PostPhysics;
+    bAutoRegisterWithProcessingPhases = true;
+    bRequiresGameThreadExecution = false;
 }
 
 void UBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -63,11 +66,9 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
     if (!World) { return; } // Early exit if world is invalid
 
     if (!SignalSubsystem) return;
-    // Use FMassSignalPayload (defined by Mass framework)
-    TArray<FMassSignalPayload> PendingSignals;
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World, &PendingSignals](FMassExecutionContext& Context)
+        [this, World](FMassExecutionContext& Context)
     {
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
         const TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
@@ -85,48 +86,32 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable)
             {
                 AIState.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::SetUnitStatePlaceholder); 
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
+                }
                 continue; // Skip this entity
             }
 
             const float PreviousStateTimer = AIState.StateTimer;
             AIState.StateTimer += ExecutionInterval;
 
-
-            PendingSignals.Emplace(Entity, UnitSignals::SyncCastTime);
+            if (SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);
+            }
             // --- Completion Check ---
             if (AIState.StateTimer >= WorkerStats.BuildTime && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::SpawnBuildingRequest);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SpawnBuildingRequest, Entity);
+                }
                 continue; // Skip to next entity in chunk
             }
 
         } // End loop through entities
     }); // End ForEachEntityChunk
 
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                        else { UE_LOG(LogTemp, Error, TEXT("AsyncTask Signal Sender: Cannot send signal with NAME_None for Entity %d."), Payload.TargetEntity.Index); }
-                    }
-                }
-                else { UE_LOG(LogTemp, Warning, TEXT("AsyncTask Signal Sender: UMassSignalSubsystem became invalid.")); }
-            });
-        }
-        else { UE_LOG(LogTemp, Error, TEXT("UBuildStateProcessor: Cannot find UMassSignalSubsystem to send %d signals."), PendingSignals.Num()); }
-    }
 }

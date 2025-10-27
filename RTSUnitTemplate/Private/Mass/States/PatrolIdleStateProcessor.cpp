@@ -14,6 +14,7 @@
 
 UPatrolIdleStateProcessor::UPatrolIdleStateProcessor(): EntityQuery()
 {
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -63,10 +64,8 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     if (!SignalSubsystem) return;
 
 
-    TArray<FMassSignalPayload> PendingSignals;
-
     EntityQuery.ForEachEntityChunk(Context, 
-        [this, &PendingSignals](FMassExecutionContext& ChunkContext)
+        [this](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -96,7 +95,10 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
-                PendingSignals.Emplace(Entity, UnitSignals::Chase);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                }
                 continue; // Exit loop for this entity as we are switching to Chase
             }
             
@@ -108,7 +110,10 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             	
                 if (Roll > PatrolFrag.IdleChance)
                 {
-                    PendingSignals.Emplace(Entity, UnitSignals::PISwitcher);
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::PISwitcher, Entity);
+                    }
                    StateFrag.StateTimer = 0.f;
                 }
             }
@@ -116,29 +121,4 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     }); // End ForEachEntityChunk
 
 
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            // Capture the weak subsystem pointer and move the pending signals list
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                // Check if the subsystem is still valid on the Game Thread
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        // Check if the FName is valid before sending
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           // Send signal safely from the Game Thread using FName
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                    }
-                }
-            });
-        }
-    }
 }

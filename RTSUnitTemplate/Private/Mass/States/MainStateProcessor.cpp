@@ -10,9 +10,11 @@
 
 UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 {
-	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
-	ProcessingPhase = EMassProcessingPhase::PostPhysics;
-	bAutoRegisterWithProcessingPhases = true;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
+    ProcessingPhase = EMassProcessingPhase::PostPhysics;
+    bAutoRegisterWithProcessingPhases = true;
+    bRequiresGameThreadExecution = false;
 }
 
 void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -78,13 +80,9 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     if (!SignalSubsystem) return;
     // Make a weak pointer copy for safe capture in the async task
     
-    // --- List for Game Thread Signal Updates ---
-    TArray<FMassSignalPayload> PendingSignals;
-    // PendingSignals.Reserve(ExpectedSignalCount); // Optional
-
     
     EntityQuery.ForEachEntityChunk(Context,
-        [&PendingSignals, World, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
@@ -96,12 +94,17 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             
-            PendingSignals.Emplace(Entity, UnitSignals::SyncUnitBase);
-
+            if (SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncUnitBase, Entity);
+            }
 
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {
-                PendingSignals.Emplace(Entity, UnitSignals::UnitSpawned);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
+                }
             }
 
             
@@ -109,36 +112,13 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             // --- 1. Check CURRENT entity's health ---
             if (StatsFrag.Health <= 0.f)
             {
-                PendingSignals.Emplace(Entity, UnitSignals::Dead);
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Dead, Entity);
+                }
                 continue; // Skip further checks for this dead entity
             }
         } // End Entity Loop
     }); // End ForEachEntityChunk
 
-
-    // --- Schedule Game Thread Task to Send Queued Signals ---
-    if (!PendingSignals.IsEmpty())
-    {
-        if (SignalSubsystem)
-        {
-            TWeakObjectPtr<UMassSignalSubsystem> SignalSubsystemPtr = SignalSubsystem;
-            // Capture the weak subsystem pointer and move the pending signals list
-            AsyncTask(ENamedThreads::GameThread, [SignalSubsystemPtr, SignalsToSend = MoveTemp(PendingSignals)]()
-            {
-                // Check if the subsystem is still valid on the Game Thread
-                if (UMassSignalSubsystem* StrongSignalSubsystem = SignalSubsystemPtr.Get())
-                {
-                    for (const FMassSignalPayload& Payload : SignalsToSend)
-                    {
-                        // Check if the FName is valid before sending
-                        if (!Payload.SignalName.IsNone())
-                        {
-                           // Send signal safely from the Game Thread using FName
-                           StrongSignalSubsystem->SignalEntity(Payload.SignalName, Payload.TargetEntity);
-                        }
-                    }
-                }
-            });
-        }
-    }
 }

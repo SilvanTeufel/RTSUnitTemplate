@@ -439,22 +439,37 @@ void APerformanceUnit::SetClientVisibility(bool bVisible)
 
 void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
 {
+	// Do nothing for own team or if state already matches
 	if (IsMyTeam) return;
 	if (IsVisibleEnemy == bVisible) return;
+
+	// DetectingActor may be null/not replicated yet on some clients; guard before use
+	if (DetectingActor == nullptr || !DetectingActor->IsValidLowLevelFast())
+	{
+		return;
+	}
 	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
 
-	if (!OwningPlayerController)
+	// Ensure we have a controller reference and cast safely
+	ACustomControllerBase* MyController = nullptr;
+	if (OwningPlayerController)
 	{
-		APlayerController* PlayerController = World->GetFirstPlayerController();
-		if (PlayerController) OwningPlayerController = PlayerController;
+		MyController = Cast<ACustomControllerBase>(OwningPlayerController);
+	}
+	else
+	{
+		if (APlayerController* PlayerController = World->GetFirstPlayerController())
+		{
+			OwningPlayerController = PlayerController;
+			MyController = Cast<ACustomControllerBase>(OwningPlayerController);
+		}
 	}
 
-	if (OwningPlayerController)
-	if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(OwningPlayerController))
+	if (MyController && MyController->IsValidLowLevelFast())
 	{
-		if (MyController->IsValidLowLevel() && MyController->SelectableTeamId == DetectingActor->TeamId)
+		if (MyController->SelectableTeamId == DetectingActor->TeamId)
 		{
 			IsVisibleEnemy = bVisible;
 		}

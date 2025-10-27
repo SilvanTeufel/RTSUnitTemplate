@@ -118,6 +118,8 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 	UMassLODSubsystem* LODSub = World->GetSubsystem<UMassLODSubsystem>();
 	UMassReplicationSubsystem* RepSub = World->GetSubsystem<UMassReplicationSubsystem>();
+	// Safety: ensure bubble class is registered to avoid GetBubbleInfoClassHandle errors on both server and client worlds
+	RTSReplicationBootstrap::RegisterForWorld(*World);
 	if (!LODSub || !RepSub)
 	{
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)

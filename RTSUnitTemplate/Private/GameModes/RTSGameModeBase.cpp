@@ -589,15 +589,9 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 			// Assuming AUnitBase has a method to check if the unit is dead
 			if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead)
 			{
-				// Check if the index is not already in the array
-				if (!AvailableUnitIndexArray.Contains(UnitData.UnitBase->UnitIndex))
-				{
-					//UnitData.UnitBase->SaveLevelDataAndAttributes(FString::FromInt(UnitData.UnitBase->UnitIndex));
-					UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
-					AvailableUnitIndexArray.Add(UnitData.UnitBase->UnitIndex);
-					SpawnParameterIdArray.Add(SpawnParaId);
-					FoundDeadUnit = true;
-				}
+				// Save data for the dead unit (do not reuse index)
+				UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+				FoundDeadUnit = true;
 
 				AllUnits.Remove(UnitData.UnitBase);
 
@@ -729,11 +723,6 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
 
-	// Assuming UnitIndexArray is populated
-	for (int32 Index : AvailableUnitIndexArray)
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("Unit Index: %d"), Index);
-	}
 
 	FTimerHandleMapping TimerMap = GetTimerHandleMappingById(SpawnParameter.Id);
 	if(UnitCount < SpawnParameter.MaxUnitSpawnCount && TimerMap.SkipTimer && SpawnParameter.SkipTimerAfterDeath){
@@ -840,10 +829,8 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->InitializeAttributes();
 			
 				//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
-				int32 Index;
-				
-				Index = FindMatchingIndex(SpawnParameterIdArray, SpawnParameter.Id);
-				AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, Index, SpawnParameter);
+				// Assign a new unique UnitIndex without reusing old ones
+				AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, INDEX_NONE, SpawnParameter);
 
 				FUnitSpawnData UnitSpawnDataSet;
 				UnitSpawnDataSet.Id = SpawnParameter.Id;
@@ -874,32 +861,11 @@ int ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArray(AUnitBase* UnitBase)
 	return Index;
 }
 
-void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 Index, FUnitSpawnParameter SpawnParameter)
+void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* UnitBase, int32 /*Index*/, FUnitSpawnParameter /*SpawnParameter*/)
 {
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-
-	if(PlayerController)
-	{
-
-			if(Index == INDEX_NONE || !AvailableUnitIndexArray.Num() || !AvailableUnitIndexArray[Index])
-			{
-				AssignNewHighestIndex(UnitBase);
-				AllUnits.Add(UnitBase);
-		
-			}else
-			{
-				UnitBase->SetUnitIndex(AvailableUnitIndexArray[Index]);
-
-				if(SpawnParameter.LoadLevelAfterSpawn)
-				{
-					UnitBase->LoadAbilityAndLevelData(FString::FromInt(AvailableUnitIndexArray[Index]));
-				}
-				AvailableUnitIndexArray.RemoveAt(Index);
-				SpawnParameterIdArray.RemoveAt(Index);
-				AllUnits.Add(UnitBase);
-			
-		}
-	}
+	// Always assign a new unique UnitIndex and add to AllUnits. Do not reuse indices.
+	AssignNewHighestIndex(UnitBase);
+	AllUnits.Add(UnitBase);
 }
 
 
