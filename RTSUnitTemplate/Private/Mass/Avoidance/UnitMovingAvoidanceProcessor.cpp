@@ -273,7 +273,7 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	bAutoRegisterWithProcessingPhases = true;
 
 	// Runs on Server + Client + Standalone (same as default)
-	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server);
+	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
 
 	// Does not require Game Thread
 	bRequiresGameThreadExecution = true;

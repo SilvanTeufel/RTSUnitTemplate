@@ -1409,8 +1409,11 @@ void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* Worl
 			}
 		}
 		// Also mirror the high-level Unit state values for UI/logic expectations
-		LUnit->UnitState = static_cast<UnitData::EState>(UnitState);
-		LUnit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+		if (LUnit->IsWorker)
+		{
+			LUnit->UnitState = static_cast<UnitData::EState>(UnitState);
+			LUnit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+		}
 	};
 
 	// Kick off with retries
@@ -1447,6 +1450,9 @@ void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* Wo
 		}
 	}
 	// Mirror high-level unit states as well
-	Unit->UnitState = static_cast<UnitData::EState>(UnitState);
-	Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+	if (Unit->IsWorker)
+	{
+		Unit->UnitState = static_cast<UnitData::EState>(UnitState);
+		Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
+	}
 }
