@@ -152,6 +152,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
         NewItem.Scale = Xf.GetScale3D();
+        NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
 
         const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
         BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -407,6 +408,11 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
                     NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
                     NewItem.Scale = Sca;
+                    if (EM)
+                    {
+                        const FMassEntityHandle EH = Context.GetEntity(Idx);
+                        NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
+                    }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
                     bAnyDirty = true;
@@ -427,6 +433,13 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
                     if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
                     if (!Item->Scale.Equals(Sca, 0.01f)) { Item->Scale = Sca; bDirty = true; }
+                    // Update tag bits too if EntityManager is available
+                    if (EM)
+                    {
+                        const FMassEntityHandle EH = Context.GetEntity(Idx);
+                        const uint32 NewBits = BuildReplicatedTagBits(*EM, EH);
+                        if (Item->TagBits != NewBits) { Item->TagBits = NewBits; bDirty = true; }
+                    }
                     if (bDirty)
                     {
                         BubbleInfo->Agents.MarkItemDirty(*Item);

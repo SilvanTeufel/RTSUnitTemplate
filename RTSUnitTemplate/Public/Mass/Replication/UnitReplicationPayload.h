@@ -37,6 +37,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	FVector_NetQuantize10 Scale = FVector(1.0f, 1.0f, 1.0f);
 
+	// Bitfield of replicated Mass state tags (subset used for client-side state/UI)
+	UPROPERTY()
+	uint32 TagBits = 0u;
+
 	// Default Constructor
 	FUnitReplicationItem()
 		: NetID()

@@ -8,6 +8,7 @@
 #include "MassNavigationFragments.h"
 #include "MassNavigationTypes.h"
 #include "NavigationSystem.h" // Für GetRandomReachablePointInRadius
+#include "MassCommandBuffer.h"
 #include "Core/UnitData.h"
 #include "UnitMassTag.generated.h"
 
@@ -262,9 +263,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool IsInitialized = true;
-
-	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	bool CanAttack = true;
+	
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool CanAttack = true;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool HoldPosition = false;
@@ -668,4 +669,91 @@ inline bool IsFullyValidTarget(FMassEntityManager& EM, FMassEntityHandle H)
 		&& DoesEntityHaveFragment<FTransformFragment>(EM,H)
 		&& DoesEntityHaveFragment<FMassCombatStatsFragment>(EM,H)
 		&& DoesEntityHaveFragment<FMassAgentCharacteristicsFragment>(EM,H);
+}
+
+// ---- Replication of key state tags: bit mapping helpers ----
+namespace UnitTagBits
+{
+	// Core states (bit positions)
+	static constexpr uint32 Dead                = 1u << 0;
+	static constexpr uint32 Rooted              = 1u << 1;
+	static constexpr uint32 Casting             = 1u << 2;
+	static constexpr uint32 Charging            = 1u << 3;
+	static constexpr uint32 IsAttacked          = 1u << 4;
+	static constexpr uint32 Attack              = 1u << 5;
+	static constexpr uint32 Chase               = 1u << 6;
+	// Worker
+	static constexpr uint32 Build               = 1u << 7;
+	static constexpr uint32 ResourceExtraction  = 1u << 8;
+	static constexpr uint32 GoToResource        = 1u << 9;
+	static constexpr uint32 GoToBuild           = 1u << 10;
+	static constexpr uint32 GoToBase            = 1u << 11;
+	// Patrol / Run
+	static constexpr uint32 PatrolIdle          = 1u << 12;
+	static constexpr uint32 PatrolRandom        = 1u << 13;
+	static constexpr uint32 Patrol              = 1u << 14;
+	static constexpr uint32 Run                 = 1u << 15;
+	// Other
+	static constexpr uint32 Pause               = 1u << 16;
+	static constexpr uint32 Evasion             = 1u << 17;
+	static constexpr uint32 Idle                = 1u << 18;
+}
+
+
+inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FMassEntityHandle Entity)
+{
+	uint32 Bits = 0u;
+	auto H = [&EntityManager, &Entity](const UScriptStruct* S){ return DoesEntityHaveTag(EntityManager, Entity, S); };
+	if (H(FMassStateDeadTag::StaticStruct()))                 Bits |= UnitTagBits::Dead;
+	if (H(FMassStateRootedTag::StaticStruct()))               Bits |= UnitTagBits::Rooted;
+	if (H(FMassStateCastingTag::StaticStruct()))              Bits |= UnitTagBits::Casting;
+	if (H(FMassStateChargingTag::StaticStruct()))             Bits |= UnitTagBits::Charging;
+	if (H(FMassStateIsAttackedTag::StaticStruct()))           Bits |= UnitTagBits::IsAttacked;
+	if (H(FMassStateAttackTag::StaticStruct()))               Bits |= UnitTagBits::Attack;
+	if (H(FMassStateChaseTag::StaticStruct()))                Bits |= UnitTagBits::Chase;
+	if (H(FMassStateBuildTag::StaticStruct()))                Bits |= UnitTagBits::Build;
+	if (H(FMassStateResourceExtractionTag::StaticStruct()))   Bits |= UnitTagBits::ResourceExtraction;
+	if (H(FMassStateGoToResourceExtractionTag::StaticStruct())) Bits |= UnitTagBits::GoToResource;
+	if (H(FMassStateGoToBuildTag::StaticStruct()))            Bits |= UnitTagBits::GoToBuild;
+	if (H(FMassStateGoToBaseTag::StaticStruct()))             Bits |= UnitTagBits::GoToBase;
+	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
+	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
+	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
+	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
+	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
+	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
+	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
+	return Bits;
+}
+
+inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntityHandle Entity, uint32 Bits)
+{
+	// Defer commands to safely modify tags on the client
+	auto SetTag = [&EntityManager, &Entity, Bits](uint32 Mask, auto TagStructType)
+	{
+		using T = decltype(TagStructType);
+		const bool bShouldHave = (Bits & Mask) != 0;
+		const bool bHasNow = DoesEntityHaveTag(EntityManager, Entity, T::StaticStruct());
+		if (bShouldHave && !bHasNow) { EntityManager.Defer().AddTag<T>(Entity); }
+		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
+	};
+	SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
+	SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
+	SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
+	SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
+	SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
+	SetTag(UnitTagBits::Attack,              FMassStateAttackTag());
+	SetTag(UnitTagBits::Chase,               FMassStateChaseTag());
+	SetTag(UnitTagBits::Build,               FMassStateBuildTag());
+	SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
+	SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
+	SetTag(UnitTagBits::GoToBuild,           FMassStateGoToBuildTag());
+	SetTag(UnitTagBits::GoToBase,            FMassStateGoToBaseTag());
+	SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
+	SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
+	SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
+	SetTag(UnitTagBits::Run,                 FMassStateRunTag());
+	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
+	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
+	SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
 }

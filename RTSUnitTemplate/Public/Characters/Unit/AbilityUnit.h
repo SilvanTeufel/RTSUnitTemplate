@@ -82,7 +82,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category=Ability)
 	virtual void GetSelectedAbilitiesArray(TSubclassOf<UGameplayAbilityBase>& SAbility);
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> UnitState = UnitData::Idle;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

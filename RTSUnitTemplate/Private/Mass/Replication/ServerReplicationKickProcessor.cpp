@@ -19,6 +19,8 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Mass/Replication/ReplicationSettings.h"
+#include "Mass/UnitMassTag.h"
+#include "MassEntitySubsystem.h"
 
 // Configurable grace period CVAR: number of seconds after world start to bypass change-based skip
 static TAutoConsoleVariable<float> CVarRTSUnitStartupRepGraceSeconds(
@@ -49,34 +51,78 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
-// File-scope signature structure and storage so we can clear on world teardown
-namespace {
-	struct FSig
-	{
-		FVector Loc; uint16 P=0,Y=0,R=0; FVector Scale;
-		bool operator==(const FSig& O) const
-		{
-			return Loc.Equals(O.Loc, 0.1f) && P==O.P && Y==O.Y && R==O.R && Scale.Equals(O.Scale, 0.01f);
+// CVAR: when 1, do NOT skip clean chunks. This forces the replicator to run even when
+// transform and signature appear unchanged, allowing tag-only updates to propagate.
+static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
+	TEXT("net.RTS.ServerReplicationKick.ProcessCleanChunks"),
+	1,
+	TEXT("Process chunks even when signature unchanged (0=skip clean chunks, 1=process anyway). Default 1 to ensure tag-only changes replicate."),
+	ECVF_Default);
+
+	// File-scope signature structure and storage so we can clear on world teardown
+		namespace {
+			struct FSig
+			{
+				FVector Loc; uint16 P=0,Y=0,R=0; FVector Scale; uint32 TagBits = 0u;
+				bool operator==(const FSig& O) const
+				{
+					return Loc.Equals(O.Loc, 0.1f) && P==O.P && Y==O.Y && R==O.R && Scale.Equals(O.Scale, 0.01f) && TagBits == O.TagBits;
+				}
+			};
+			static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
+			static TMap<const UWorld*, int32> GProcessedCountByWorld;
+			static TMap<const UWorld*, double> GLastExecTimeByWorld;
+			static bool GCleanupRegistered = false;
+			static FDelegateHandle GCleanupHandle;
+			static void EnsureServerKickCleanupRegistered()
+			{
+				if (!GCleanupRegistered)
+				{
+					GCleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* InWorld, bool, bool){
+						GLastSigByID.Reset();
+						GProcessedCountByWorld.Remove(InWorld);
+						GLastExecTimeByWorld.Remove(InWorld);
+					});
+					GCleanupRegistered = true;
+				}
+			}
+
+			// Pretty-print UnitTagBits into a readable list for diagnostics
+			static FString StringifyUnitTagBits(uint32 Bits)
+			{
+				TArray<const TCHAR*> Names;
+				if (Bits & UnitTagBits::Dead)               Names.Add(TEXT("Dead"));
+				if (Bits & UnitTagBits::Rooted)             Names.Add(TEXT("Rooted"));
+				if (Bits & UnitTagBits::Casting)            Names.Add(TEXT("Casting"));
+				if (Bits & UnitTagBits::Charging)           Names.Add(TEXT("Charging"));
+				if (Bits & UnitTagBits::IsAttacked)         Names.Add(TEXT("IsAttacked"));
+				if (Bits & UnitTagBits::Attack)             Names.Add(TEXT("Attack"));
+				if (Bits & UnitTagBits::Chase)              Names.Add(TEXT("Chase"));
+				if (Bits & UnitTagBits::Build)              Names.Add(TEXT("Build"));
+				if (Bits & UnitTagBits::ResourceExtraction) Names.Add(TEXT("ResourceExtraction"));
+				if (Bits & UnitTagBits::GoToResource)       Names.Add(TEXT("GoToResource"));
+				if (Bits & UnitTagBits::GoToBuild)          Names.Add(TEXT("GoToBuild"));
+				if (Bits & UnitTagBits::GoToBase)           Names.Add(TEXT("GoToBase"));
+				if (Bits & UnitTagBits::PatrolIdle)         Names.Add(TEXT("PatrolIdle"));
+				if (Bits & UnitTagBits::PatrolRandom)       Names.Add(TEXT("PatrolRandom"));
+				if (Bits & UnitTagBits::Patrol)             Names.Add(TEXT("Patrol"));
+				if (Bits & UnitTagBits::Run)                Names.Add(TEXT("Run"));
+				if (Bits & UnitTagBits::Pause)              Names.Add(TEXT("Pause"));
+				if (Bits & UnitTagBits::Evasion)            Names.Add(TEXT("Evasion"));
+				if (Bits & UnitTagBits::Idle)               Names.Add(TEXT("Idle"));
+				if (Names.Num() == 0)
+				{
+					return TEXT("<none>");
+				}
+				FString Out;
+				for (int32 i=0;i<Names.Num();++i)
+				{
+					if (i>0) Out += TEXT(", ");
+					Out += Names[i];
+				}
+				return Out;
+			}
 		}
-	};
-	static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
-	static TMap<const UWorld*, int32> GProcessedCountByWorld;
-	static TMap<const UWorld*, double> GLastExecTimeByWorld;
-	static bool GCleanupRegistered = false;
-	static FDelegateHandle GCleanupHandle;
-	static void EnsureServerKickCleanupRegistered()
-	{
-		if (!GCleanupRegistered)
-		{
-			GCleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* InWorld, bool, bool){
-				GLastSigByID.Reset();
-				GProcessedCountByWorld.Remove(InWorld);
-				GLastExecTimeByWorld.Remove(InWorld);
-			});
-			GCleanupRegistered = true;
-		}
-	}
-}
 
 UServerReplicationKickProcessor::UServerReplicationKickProcessor()
 	: EntityQuery(*this)
@@ -178,7 +224,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	const int32 MaxPerChunk = CVarRTS_ServerKick_MaxPerChunk.GetValueOnGameThread();
 	const int32 MaxPerTick = CVarRTS_ServerKick_MaxPerTick.GetValueOnGameThread();
 
-	EntityQuery.ForEachEntityChunk(Context, [World, LODSub, RepSub, bInGrace, MaxPerChunk, MaxPerTick, &ProcessedThisTick](FMassExecutionContext& ChunkContext)
+	EntityQuery.ForEachEntityChunk(Context, [World, LODSub, RepSub, bInGrace, MaxPerChunk, MaxPerTick, &ProcessedThisTick, &EntityManager](FMassExecutionContext& ChunkContext)
 	{
 		const FMassReplicationSharedFragment& RepShared = ChunkContext.GetSharedFragment<FMassReplicationSharedFragment>();
 		UMassReplicatorBase* Replicator = RepShared.CachedReplicator;
@@ -224,6 +270,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				NewSig.Y = QuantizeAngle(Rot.Yaw);
 				NewSig.R = QuantizeAngle(Rot.Roll);
 				NewSig.Scale = Xf.GetScale3D();
+				// Include replicated state tag bits in the signature so tag changes trigger replication
+				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				NewSig.TagBits = BuildReplicatedTagBits(EntityManager, EH);
 				const FSig* Old = GLastSigByID.Find(ID);
 				if (!Old || !(*Old == NewSig))
 				{
@@ -233,10 +282,18 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			}
 		}
 
-		if (!bAnyChanged)
+		// Optionally skip clean chunks unless override CVAR is set
+		if (!bAnyChanged && CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() == 0)
 		{
 			// Skip invoking the (potentially heavy) replicator if nothing changed for this chunk
 			return;
+		}
+		if (!bAnyChanged && CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() != 0)
+		{
+			if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("ServerReplicationKick: Processing clean chunk due to CVAR override."));
+			}
 		}
 
 		// Optionally log a small sample (verbose only)
@@ -253,11 +310,28 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				Num, MaxLog, *IdList, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
 		}
 
+		// Detailed tag replication log per entity (verbose only)
+		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+		{
+			const int32 MaxLog = FMath::Min(20, Num);
+			for (int32 i = 0; i < MaxLog; ++i)
+			{
+				const uint32 ID = NetIDs[i].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				const uint32 NewBits = BuildReplicatedTagBits(EntityManager, EH);
+				const FSig* Prev = GLastSigByID.Find(ID);
+				const uint32 OldBits = Prev ? Prev->TagBits : 0u;
+				const bool bChangedBits = (NewBits != OldBits);
+				const FString Names = StringifyUnitTagBits(NewBits);
+				UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: NetID=%u TagBits=0x%08x %s Tags=[%s]"), ID, NewBits, bChangedBits ? TEXT("[CHANGED]") : TEXT(""), *Names);
+			}
+		}
+
 		// Invoke the same function the MassReplicationProcessor would call on the server.
 		Replicator->ProcessClientReplication(ChunkContext, RepCtx);
 		ProcessedThisTick += Num; // account budget usage
 
-		// Update stored signatures after replication to reflect the latest sent state
+		// Update stored signatures after replication to reflect the latest sent state, including tag bits
 		for (int32 i=0; i<Num; ++i)
 		{
 			const uint32 ID = NetIDs[i].NetID.GetValue();
@@ -269,6 +343,8 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			S.Y = QuantizeAngle(Rot.Yaw);
 			S.R = QuantizeAngle(Rot.Roll);
 			S.Scale = Xf.GetScale3D();
+			const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
 			GLastSigByID.FindOrAdd(ID) = S;
 		}
 	});

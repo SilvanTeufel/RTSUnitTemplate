@@ -54,6 +54,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_FullReplication(
 #include "MassReplicationFragments.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "Mass/UnitMassTag.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
@@ -551,6 +552,39 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				// Update the replicated fragment from cache if available
 				FTransform Cached;
 				uint32 WantedID_u32 = NetIDList[EntityIdx].NetID.GetValue();
+
+				// NEW: Always apply replicated TagBits from the bubble when available (independent of transform path)
+				{
+					UWorld* WorldForTags = nullptr;
+					if (AActor* OwnerA = ActorList[EntityIdx].GetMutable())
+					{
+						WorldForTags = OwnerA->GetWorld();
+					}
+					if (WorldForTags)
+					{
+						if (URTSWorldCacheSubsystem* CacheSub = WorldForTags->GetSubsystem<URTSWorldCacheSubsystem>())
+						{
+							if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+							{
+								const FUnitReplicationItem* TagItem = Bubble->Agents.FindItemByNetID(NetIDList[EntityIdx].NetID);
+								if (TagItem)
+								{
+									if (UMassEntitySubsystem* ES = WorldForTags->GetSubsystem<UMassEntitySubsystem>())
+									{
+										FMassEntityManager& EMgr = ES->GetMutableEntityManager();
+										const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+										ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
+										if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+										{
+											UE_LOG(LogTemp, Verbose, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
 				const bool bCacheHit = UnitReplicationCache::GetLatest(NetIDList[EntityIdx].NetID, Cached);
 				if (bCacheHit)
 				{
@@ -577,11 +611,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						if (Bubble)
 						{
 							const FMassNetworkID WantedID = NetIDList[EntityIdx].NetID;
-							// List some IDs for debugging
-							const int32 MaxList = FMath::Min(5, Bubble->Agents.Items.Num());
-								for (int32 Idx=0; Idx<MaxList; ++Idx)
-								{
-								}
 							// Try exact match first
 							const FUnitReplicationItem* UseItem = Bubble->Agents.FindItemByNetID(WantedID);
 							// If we still don't have a NetID (0), assign the nearest unclaimed bubble item
@@ -629,6 +658,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								const float Roll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
 								FinalXf = FTransform(FQuat(FRotator(Pitch, Yaw, Roll)), FVector(UseItem->Location), FVector(UseItem->Scale));
 								bFromBubble = true;
+								// Apply replicated tag bits to this entity on the client
+								if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
+								{
+									FMassEntityManager& EMgr = ES->GetMutableEntityManager();
+									const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+									ApplyReplicatedTagBits(EMgr, EH, UseItem->TagBits);
+								}
 							}
 						}
 					}
