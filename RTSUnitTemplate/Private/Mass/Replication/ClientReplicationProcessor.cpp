@@ -110,6 +110,8 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 
 void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	if (bSkipReplication) return;
+	
 	static int32 GExecCount = 0;
 	UWorld* World = GetWorld();
 	if (!World)

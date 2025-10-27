@@ -367,23 +367,57 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
         return;
     }
 
-    AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingUpdates)]()
+    const bool bLog = this->bShowLogs;
+    AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingUpdates), bLog]()
     {
+        // Periodic diagnostic: log batch size and a sample delta on clients
+        bool bLogged = false;
+        for (int32 idx = 0; idx < Updates.Num(); ++idx)
+        {
+            if (const AActor* SampleActor = Updates[idx].ActorPtr.Get())
+            {
+                if (UWorld* W = SampleActor->GetWorld())
+                {
+                    if (W->IsNetMode(NM_Client))
+                    {
+                        static int32 GActorSyncDispatchCounter = 0;
+                        if (((++GActorSyncDispatchCounter) % 60) == 0)
+                        {
+                            if (bLog)
+                            {
+                                const FVector CurLoc = SampleActor->GetActorLocation();
+                                const FVector NewLoc = Updates[idx].NewTransform.GetLocation();
+                                const FRotator CurRot = SampleActor->GetActorRotation();
+                                const FRotator NewRot = Updates[idx].NewTransform.Rotator();
+                                UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] Dispatching %d updates. Example %s: Loc %s -> %s | Yaw %.1f -> %.1f | Skeletal=%d"),
+                                    Updates.Num(), *SampleActor->GetName(), *CurLoc.ToString(), *NewLoc.ToString(), CurRot.Yaw, NewRot.Yaw, Updates[idx].bUseSkeletal ? 1 : 0);
+                            }
+                        }
+                        bLogged = true;
+                    }
+                }
+                break; // logged (or attempted), proceed to apply updates
+            }
+        }
+
         for (const FActorTransformUpdatePayload& Update : Updates)
         {
             if (AActor* Actor = Update.ActorPtr.Get())
             {
-
                 if (Update.bUseSkeletal)
                 {
-                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None); // ETeleportType::TeleportPhysics
+                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
                 }
                 else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                 {
                     if (Unit->bUseIsmWithActorMovement)
-                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None); // ETeleportType::TeleportPhysics
+                    {
+                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
+                    }
                     else
+                    {
                         Unit->Multicast_UpdateISMInstanceTransform(Update.InstanceIndex, Update.NewTransform);
+                    }
                 }
             }
         }
@@ -394,8 +428,16 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 {
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
-	    ExecuteRepClient(EntityManager, Context);
-		//ExecuteClient(EntityManager, Context);
+	    //ExecuteRepClient(EntityManager, Context);
+	    static int32 GActorSyncExecTickCounter = 0;
+     if ((++GActorSyncExecTickCounter % 60) == 0)
+     {
+         if (bShowLogs)
+         {
+             UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] Execute tick"));
+         }
+     }
+		ExecuteClient(EntityManager, Context);
 	}
 	else
 	{
@@ -411,6 +453,15 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     PendingActorUpdates.Reserve(ClientEntityQuery.GetNumMatchingEntities());
 
+    static int32 GActorSyncClientEnterCounter = 0;
+    if ((++GActorSyncClientEnterCounter % 60) == 0)
+    {
+        if (bShowLogs)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] ExecuteClient enter"));
+        }
+    }
+    
     ClientEntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {

@@ -16,6 +16,8 @@ class RTSUNITTEMPLATE_API UServerReplicationKickProcessor : public UMassProcesso
 public:
 	UServerReplicationKickProcessor();
 
+	bool bSkipReplication = true;
+	
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;

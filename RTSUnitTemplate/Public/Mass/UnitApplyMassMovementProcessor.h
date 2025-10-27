@@ -19,6 +19,9 @@ class RTSUNITTEMPLATE_API UUnitApplyMassMovementProcessor : public UMassProcesso
 public:
 	UUnitApplyMassMovementProcessor();
 
+	// Global logging toggle for this processor
+	bool bShowLogs = false;
+
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
@@ -27,7 +30,7 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	FMassEntityQuery ClientEntityQuery;
-
+	
 	// Separated execution paths
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);

@@ -98,6 +98,8 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 
 void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	if (bSkipReplication) return;
+	
 	UWorld* World = GetWorld();
 	if (!World || World->GetNetMode() == NM_Client)
 	{

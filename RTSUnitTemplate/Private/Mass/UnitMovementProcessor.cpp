@@ -95,14 +95,25 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
         if (!EntitySubsystem)
         {
-            UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor: EntitySubsystem not yet available; skipping this tick."));
+            if (bShowLogs)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor: EntitySubsystem not yet available; skipping this tick."));
+            }
             return;
         }
     }
 
     if (World->IsNetMode(NM_Client))
     {
-        //ExecuteClient(EntityManager, Context);
+        static int32 GUnitMoveExecTickCounter = 0;
+        if ((++GUnitMoveExecTickCounter % 60) == 0)
+        {
+            if (bShowLogs)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Execute tick"));
+            }
+        }
+        ExecuteClient(EntityManager, Context);
     }
     else
     {
@@ -130,7 +141,24 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
-            
+
+        int32 SkippedCannotMove = 0;
+        int32 SkippedNotInit = 0;
+        int32 Arrivals = 0;
+        int32 PathRequests = 0;
+        int32 FollowingPath = 0;
+        int32 DirectSteer = 0;
+        int32 WaypointAdvance = 0;
+        int32 PathfindingInProgressCount = 0;
+
+        static int32 GUnitMoveClientChunkCounter = 0;
+        if (((++GUnitMoveClientChunkCounter) % 60) == 0)
+        {
+            if (bShowLogs)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] ExecuteClient: Entities=%d, HasNav=%d"), NumEntities, bHasNavSystem ? 1 : 0);
+            }
+        }
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -140,8 +168,14 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             Steering.DesiredVelocity = FVector::ZeroVector;
 
             const FMassAIStateFragment& AIState = AIStateList[i];
-            if (!AIState.CanMove || !AIState.IsInitialized)
+            if (!AIState.IsInitialized)
             {
+                ++SkippedNotInit;
+                continue;
+            }
+            if (!AIState.CanMove)
+            {
+                ++SkippedCannotMove;
                 continue;
             }
             
@@ -175,6 +209,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
      
             if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
             {
+                ++Arrivals;
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
             }
@@ -183,6 +218,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // Begin a new path request if we have navigation; otherwise, steer directly.
                 if (bHasNavSystem)
                 {
+                    ++PathRequests;
                     PathFrag.bIsPathfindingInProgress = true;
                     PathFrag.PathTargetLocation = FinalDestination;
 
@@ -192,10 +228,18 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                         FNavLocation ProjectedStartLocation;
                         if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
                         {
+                            if (bShowLogs)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Start pathfinding: Start=%s Dest=%s"), *ProjectedStartLocation.Location.ToString(), *ProjectedDestinationLocation.Location.ToString());
+                            }
                             RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
                         }
                         else
                         {
+                            if (bShowLogs)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Project start failed for %s; steering directly"), *CurrentLocation.ToString());
+                            }
                             FVector MoveDir = (ProjectedDestinationLocation.Location - CurrentLocation).GetSafeNormal();
                             Steering.DesiredVelocity = MoveDir * DesiredSpeed;
                             PathFrag.bIsPathfindingInProgress = false;
@@ -203,6 +247,10 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     }
                     else
                     {
+                        if (bShowLogs)
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Project destination failed for %s; cancelling move"), *FinalDestination.ToString());
+                        }
                         MoveTarget.Center = CurrentLocation;
                         PathFrag.bIsPathfindingInProgress = false;
                         PathFrag.ResetPath();
@@ -211,6 +259,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 else
                 {
                     // No navmesh on client: steer straight to destination for prediction
+                    ++DirectSteer;
                     FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
                     if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
                     {
@@ -221,16 +270,19 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             }
             else if (PathFrag.bIsPathfindingInProgress)
             {
+                ++PathfindingInProgressCount;
             }
             else if (PathFrag.HasValidPath())
             {
+                ++FollowingPath;
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
                     if (FVector::DistSquared(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
                     {
-                        PathFrag.CurrentPathPointIndex++;
+                        ++WaypointAdvance;
+                        ++PathFrag.CurrentPathPointIndex;
                     }
                 }
 
@@ -246,11 +298,22 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             }
             else
             {
+                 ++DirectSteer;
                  FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
                  if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
                  {
                     Steering.DesiredVelocity = MoveDir * DesiredSpeed;
                  }
+            }
+        }
+
+        static int32 GUnitMoveClientSummaryCounter = 0;
+        if (((++GUnitMoveClientSummaryCounter) % 60) == 0)
+        {
+            if (bShowLogs)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Summary: Arrivals=%d, PathReq=%d, Following=%d, InProgress=%d, Direct=%d, WaypointAdvance=%d, SkippedInit=%d, SkippedCanMove=%d"),
+                    Arrivals, PathRequests, FollowingPath, PathfindingInProgressCount, DirectSteer, WaypointAdvance, SkippedNotInit, SkippedCannotMove);
             }
         }
     });
@@ -410,8 +473,10 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
     
     FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
 
+    const bool bClientWorld = World->IsNetMode(NM_Client);
+    const bool bLog = bShowLogs;
     AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-        [NavSystem, NavData, QueryFilter, Entity, StartLocation, EndLocation, World] () mutable
+        [NavSystem, NavData, QueryFilter, Entity, StartLocation, EndLocation, World, bClientWorld, bLog] () mutable
     {
         // --- Runs on a Background Thread ---
         FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, QueryFilter);
@@ -420,7 +485,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, World]() mutable // Note: EndLocation is no longer needed in this capture list
+            [Entity, PathResult, World, bClientWorld, bLog]() mutable // Note: EndLocation is no longer needed in this capture list
         {
             // --- Runs back on the Game Thread ---
             if (!World) return;
@@ -436,7 +501,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             }
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult](FMassEntityManager& System) // Note: EndLocation is no longer needed in this capture list
+                [Entity, PathResult, bClientWorld, bLog](FMassEntityManager& System) // Note: EndLocation is no longer needed in this capture list
                 {
                     // This lambda now runs at a safe time.
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
@@ -445,15 +510,23 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
 
                         if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
                         {
+                            const int32 NumPts = PathResult.Path->GetPathPoints().Num();
+                            if (bClientWorld && bLog)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Path result: SUCCESS points=%d"), NumPts);
+                            }
                             PathFrag->CurrentPath = PathResult.Path;
                             PathFrag->CurrentPathPointIndex = 1;
-
-                            // CRITICAL FIX: DO NOT UPDATE PathTargetLocation HERE.
-                            // Updating it to the projected location was causing an infinite loop
-                            // because it would no longer match the original target from the MoveTargetFragment.
                         }
                         else
                         {
+                            if (bClientWorld && bLog)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Path result: FAIL (IsSuccessful=%d, Valid=%d, Points=%d)"),
+                                    PathResult.IsSuccessful() ? 1 : 0,
+                                    PathResult.Path.IsValid() ? 1 : 0,
+                                    PathResult.Path.IsValid() ? PathResult.Path->GetPathPoints().Num() : 0);
+                            }
                             PathFrag->ResetPath();
                         }
                     }

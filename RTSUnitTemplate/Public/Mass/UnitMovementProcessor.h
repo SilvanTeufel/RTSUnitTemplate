@@ -24,6 +24,9 @@ class RTSUNITTEMPLATE_API UUnitMovementProcessor : public UMassProcessor
 public:
     UUnitMovementProcessor();
 
+    // Global logging toggle for this processor
+    bool bShowLogs = false;
+
 protected:
     // Configuration function called during initialization.
     virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
