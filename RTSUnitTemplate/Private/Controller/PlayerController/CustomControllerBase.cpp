@@ -392,7 +392,7 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementa
 	if (!World) return;
 	if (!World->IsNetMode(NM_Client)) return;
 
-	UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTargetForAbility for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
+	//UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTargetForAbility for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
 
 	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
@@ -401,7 +401,7 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementa
 		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
 		if (!bValidEntity)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client (Ability RPC): %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
+			//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client (Ability RPC): %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
 			Unit->Destroy();
 			return;
 		}
@@ -1408,12 +1408,6 @@ void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* Worl
 				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
 			}
 		}
-		// Also mirror the high-level Unit state values for UI/logic expectations
-		/*if (LUnit->IsWorker)
-		{
-			LUnit->UnitState = static_cast<UnitData::EState>(UnitState);
-			LUnit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
-		}*/
 	};
 
 	// Kick off with retries
@@ -1449,11 +1443,4 @@ void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* Wo
 			}
 		}
 	}
-	// Mirror high-level unit states as well
-	/*
-	if (Unit->IsWorker)
-	{
-		Unit->UnitState = static_cast<UnitData::EState>(UnitState);
-		Unit->UnitStatePlaceholder = static_cast<UnitData::EState>(UnitStatePlaceholder);
-	}*/
 }

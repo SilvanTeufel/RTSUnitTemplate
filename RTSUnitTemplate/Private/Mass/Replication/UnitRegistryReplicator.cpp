@@ -111,7 +111,7 @@ void AUnitRegistryReplicator::OnRep_Registry()
 			}
 			if (Cleaned > 0)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
+				//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
 			}
 
 			// Trim client-side transform cache entries whose NetIDs are no longer present in the registry
@@ -135,7 +135,7 @@ void AUnitRegistryReplicator::OnRep_Registry()
 				}
 				if (Trimmed > 0)
 				{
-					UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
+					//UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
 				}
 			}
 		}
@@ -230,30 +230,30 @@ static void RunDiagnosticsForWorld(UWorld& World, const FUnitRegistryArray& Regi
 		auto JoinInts = [](const TArray<int32>& Arr){ FString S; for (int32 i = 0; i < Arr.Num() && i < 20; ++i){ if (i>0) S += TEXT(", "); S += FString::FromInt(Arr[i]); } if (Arr.Num()>20) S += TEXT(", ..."); return S; };
 		auto JoinNames = [](const TArray<FName>& Arr){ FString S; for (int32 i = 0; i < Arr.Num() && i < 20; ++i){ if (i>0) S += TEXT(", "); S += Arr[i].ToString(); } if (Arr.Num()>20) S += TEXT(", ..."); return S; };
 
-		UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] DIAG[%s|%s]: LiveUnits=%d, Registry=%d, Missing(Index)=%d, Missing(Owner)=%d, Stale(Index)=%d, Stale(Owner)=%d"),
-			Context, ModeStr, LiveUnits, RegCount, MissingByIndex.Num(), MissingByOwner.Num(), StaleByIndex.Num(), StaleByOwner.Num());
+		//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] DIAG[%s|%s]: LiveUnits=%d, Registry=%d, Missing(Index)=%d, Missing(Owner)=%d, Stale(Index)=%d, Stale(Owner)=%d"),
+		//	Context, ModeStr, LiveUnits, RegCount, MissingByIndex.Num(), MissingByOwner.Num(), StaleByIndex.Num(), StaleByOwner.Num());
 
 		if (MissingByIndex.Num() > 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
+			//UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
 		}
 		if (MissingByOwner.Num() > 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
+			//UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
 		}
 		if (StaleByIndex.Num() > 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
+			//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
 		}
 		if (StaleByOwner.Num() > 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
+			//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
 		}
 	}
 	else
 	{
 		// Low verbosity success summary
-		UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
+		//UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
 	}
 }
 
@@ -364,11 +364,11 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 				Registry.MarkArrayDirty();
 				if (Removed > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server pruned %d stale entries from Unit Registry."), Removed);
+					//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server pruned %d stale entries from Unit Registry."), Removed);
 				}
 				if (Inserted > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server inserted %d missing live Units into Unit Registry."), Inserted);
+					//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Server inserted %d missing live Units into Unit Registry."), Inserted);
 				}
 			}
 		}

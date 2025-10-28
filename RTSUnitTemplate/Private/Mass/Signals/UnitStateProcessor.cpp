@@ -3042,7 +3042,7 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 	{
 		if (World && World->GetNetMode() == NM_Client && UnitBase)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] UpdateUnitMovement: Invalid Mass entity or UnitBase for %s on client. Destroying local actor to clean up zombie."), *UnitBase->GetName());
+			//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] UpdateUnitMovement: Invalid Mass entity or UnitBase for %s on client. Destroying local actor to clean up zombie."), *UnitBase->GetName());
 			TWeakObjectPtr<AUnitBase> WeakUnit(UnitBase);
 			AsyncTask(ENamedThreads::GameThread, [WeakUnit]()
 			{
