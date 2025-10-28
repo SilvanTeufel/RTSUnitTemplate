@@ -223,7 +223,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
- EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 
 	// Multicast to all connected clients for client-side navigation mirror
 	if (UWorld* PCWorld = World)

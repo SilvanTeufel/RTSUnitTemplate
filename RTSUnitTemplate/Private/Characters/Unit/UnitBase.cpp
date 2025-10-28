@@ -853,25 +853,10 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 		FTransform UnitTransform;
 	
 		UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
-
-		
 		
 		const auto UnitBase = Cast<AUnitBase>
 			(UGameplayStatics::BeginDeferredActorSpawnFromClass
 			(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
-
-		//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
-		/*
-		if(SpawnParameter.UnitControllerBaseClass)
-		{
-			AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-			if(!UnitController) return;
-			APawn* PawnBase = Cast<APawn>(UnitBase);
-			if(PawnBase)
-			{
-				UnitController->Possess(PawnBase);
-			}
-		}*/
 	
 		if (UnitBase != nullptr)
 		{
@@ -895,12 +880,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 			
 			UnitBase->OnRep_MeshAssetPath();
 			UnitBase->OnRep_MeshMaterialPath();
-
-			//UnitBase->SetReplicateMovement(true);
-			//UnitBase->SetReplicates(true);
-			//UnitBase->GetMesh()->SetIsReplicated(true);
-
-			// Does this have to be replicated?
+			
 			UnitBase->SetMeshRotationServer();
 		
 			UnitBase->UnitState = SpawnParameter.State;
@@ -916,8 +896,6 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 			 Cast<AActor>(UnitBase), 
 			 UnitTransform
 			);
-			
-			//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 
 			UnitBase->InitializeAttributes();
 			UnitBase->SquadId = (SpawnAsSquad ? SharedSquadId : 0);
@@ -943,13 +921,10 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 				UnitBase->UnitIndex = SummonedUnitIndexes[i];
 				SetUnitBase(SummonedUnitIndexes[i], UnitBase);
 			}
-
-			//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
-			//return UnitBase->UnitIndex;
+			
 		}
 	}
-
-	//return 0;
+	
 }
 
 bool AUnitBase::IsSpawnedUnitDead(int UIndex)
