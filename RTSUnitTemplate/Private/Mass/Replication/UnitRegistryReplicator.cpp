@@ -96,12 +96,7 @@ void AUnitRegistryReplicator::OnRep_Registry()
 			{
 				AUnitBase* Unit = *It;
 				if (!IsValid(Unit)) { continue; }
-				if (Unit->UnitState == UnitData::Dead)
-				{
-					Unit->Destroy();
-					++Cleaned;
-					continue;
-				}
+				// Do NOT destroy units simply because they are Dead; keep them until actor/entity despawns.
 				const bool bInReg = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex)) || RegOwners.Contains(Unit->GetFName());
 				bool bHasValidBinding = false;
 				if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
@@ -183,10 +178,6 @@ static void RunDiagnosticsForWorld(UWorld& World, const FUnitRegistryArray& Regi
 		AUnitBase* Unit = *It;
 		if (!IsValid(Unit)) continue;
 		// Ignore units that are dead; they should not be in the registry and shouldn't count as live
-		if (Unit->UnitState == UnitData::Dead)
-		{
-			continue;
-		}
 		LiveUnits++;
 		LiveOwners.Add(Unit->GetFName());
 		LiveIndices.Add(Unit->UnitIndex);
@@ -283,7 +274,7 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 			{
 				AUnitBase* Unit = *It;
 				if (!IsValid(Unit)) continue;
-				if (Unit->UnitState == UnitData::Dead) continue; // don't treat dead units as live
+				// Include dead units as live for replication/registry until they despawn
 				LiveOwners.Add(Unit->GetFName());
 				if (Unit->UnitIndex != INDEX_NONE)
 				{

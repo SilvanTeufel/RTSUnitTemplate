@@ -101,15 +101,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     // Read fragments directly from the entity (safely)
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-    // Do not replicate dead entities on the server
-    if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
-    {
-        if (RepLogLevel() >= 2)
-        {
-            UE_LOG(LogTemp, Log, TEXT("UMassUnitReplicatorBase::AddEntity - Skipping dead entity (FMassStateDeadTag present)."));
-        }
-        return;
-    }
+    // Note: We now replicate dead entities too. Do NOT early-return when FMassStateDeadTag is present.
 
     const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
     const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
@@ -350,27 +342,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
             {
                 const FMassNetworkID& NetID = NetIDList[Idx].NetID;
 
-                // Skip replication for dead entities (have FMassStateDeadTag). Also remove from bubble if present.
-                bool bIsDead = false;
-                if (EM)
-                {
-                    const FMassEntityHandle EntityHandle = Context.GetEntity(Idx);
-                    bIsDead = DoesEntityHaveTag(*EM, EntityHandle, FMassStateDeadTag::StaticStruct());
-                }
-                if (bIsDead)
-                {
-                    if (FUnitReplicationItem* Existing = BubbleInfo->Agents.FindItemByNetID(NetID))
-                    {
-                        // Remove dead unit's entry from replication array
-                        BubbleInfo->Agents.RemoveItemByNetID(NetID);
-                        bAnyDirty = true;
-                        if (RepLogLevel() >= 2)
-                        {
-                            UE_LOG(LogTemp, Log, TEXT("ServerReplicate: Removing dead NetID=%u from bubble"), NetID.GetValue());
-                        }
-                    }
-                    continue; // do not replicate dead entities
-                }
+                // We now replicate dead entities as well. Do not remove them from the bubble here.
+                // Dead state will be carried in TagBits and consumers can react accordingly.
 
                 const FTransform& Xf = TransformList[Idx].GetTransform();
                 const FVector Loc = Xf.GetLocation();
