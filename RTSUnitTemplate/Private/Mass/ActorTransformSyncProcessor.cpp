@@ -35,7 +35,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
         EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
         EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
-
+    
+        EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
         EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
@@ -65,6 +66,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 		ClientEntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
 		ClientEntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 
+        ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
         ClientEntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStatePatrolRandomTag>(EMassFragmentPresence::Any); 
