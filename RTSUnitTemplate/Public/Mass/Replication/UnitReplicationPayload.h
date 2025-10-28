@@ -2,6 +2,8 @@
 #include "CoreMinimal.h"
 #include "MassReplicationTypes.h"
 #include "Net/Serialization/FastArraySerializer.h"
+#include "Engine/NetSerialization.h"
+#include "Net/UnrealNetwork.h"
 #include "UnitReplicationPayload.generated.h"
 
 // Forward Declarations
@@ -23,7 +25,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// Position (komprimiert für Bandbreite)
 	UPROPERTY()
-	FVector_NetQuantize Location = FVector::ZeroVector;
+	FVector_NetQuantize Location;
 
 	// Rotation (quantisiert: 0-360° -> 0-65535)
 	UPROPERTY()
@@ -35,7 +37,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// Scale
 	UPROPERTY()
-	FVector_NetQuantize10 Scale = FVector(1.0f, 1.0f, 1.0f);
+	FVector_NetQuantize10 Scale;
 
 	// Bitfield of replicated Mass state tags (subset used for client-side state/UI)
 	UPROPERTY()
@@ -50,10 +52,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	uint8 AITargetFlags = 0u;
 	// Last known location of the target
 	UPROPERTY()
-	FVector_NetQuantize AITargetLastKnownLocation = FVector::ZeroVector;
+	FVector_NetQuantize AITargetLastKnownLocation;
 	// Ability target location (coarse precision is fine)
 	UPROPERTY()
-	FVector_NetQuantize10 AbilityTargetLocation = FVector::ZeroVector;
+	FVector_NetQuantize10 AbilityTargetLocation;
 
 	// Default Constructor
 	FUnitReplicationItem()
@@ -63,6 +65,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, YawQuantized(0)
 		, RollQuantized(0)
 		, Scale(FVector(1.0f, 1.0f, 1.0f))
+		, AITargetLastKnownLocation(FVector::ZeroVector)
+		, AbilityTargetLocation(FVector::ZeroVector)
 	{
 	}
 

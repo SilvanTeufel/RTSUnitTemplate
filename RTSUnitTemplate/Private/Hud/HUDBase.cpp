@@ -42,10 +42,10 @@ void AHUDBase::DrawHUD()
           // ... (The complex calculation for the scaled selection rectangle remains the same)
           const float LengthLineA = abs(InitialPoint.Y - CurrentPoint.Y);
           const float LengthLineB = abs(InitialPoint.X - CurrentPoint.X);
-          FVector2D LineCenterPointA;
-          FVector2D LineCenterPointB;
-          FVector2D InitialSelectionPoint;
-          FVector2D CurrentSelectionPoint;
+      		  FVector2D LineCenterPointA;
+      		  FVector2D LineCenterPointB;
+      		  FVector2D InitialSelectionPoint = FVector2D::ZeroVector;
+      		  FVector2D CurrentSelectionPoint = FVector2D::ZeroVector;
 
           if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
              LineCenterPointA.X = InitialPoint.X;

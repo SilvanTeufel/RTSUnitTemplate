@@ -408,7 +408,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 				}
 				if (!SharedReplicator)
 				{
-					SharedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+					SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
 					GReplicatorPerWorld.Add(W, SharedReplicator);
 				}
 			}
@@ -441,11 +441,11 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		SharedValues.Add(SharedRep);
 	}
 
-    SharedValues.Sort();
+	SharedValues.Sort();
 	
 	OutSharedValues = SharedValues;
 
-    return true;
+	return true;
 }
 
 
@@ -749,7 +749,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 				}
 				if (!SharedReplicator)
 				{
-					SharedReplicator = NewObject<UMassUnitReplicatorBase>(GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+					SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
 					GReplicatorPerWorld.Add(W, SharedReplicator);
 				}
 			}
