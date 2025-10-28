@@ -41,6 +41,20 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	uint32 TagBits = 0u;
 
+	// --- AI Target replication ---
+	// NetID of the current AI target entity (0 if none/invalid)
+	UPROPERTY()
+	uint32 AITargetNetID = 0u;
+	// Flags: bit0=HasValidTarget, bit1=IsFocusedOnTarget
+	UPROPERTY()
+	uint8 AITargetFlags = 0u;
+	// Last known location of the target
+	UPROPERTY()
+	FVector_NetQuantize AITargetLastKnownLocation = FVector::ZeroVector;
+	// Ability target location (coarse precision is fine)
+	UPROPERTY()
+	FVector_NetQuantize10 AbilityTargetLocation = FVector::ZeroVector;
+
 	// Default Constructor
 	FUnitReplicationItem()
 		: NetID()

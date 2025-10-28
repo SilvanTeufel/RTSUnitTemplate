@@ -648,7 +648,9 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassArchetypeHandle& OutArchetype,
                                                                FMassArchetypeSharedFragmentValues& OutSharedValues)
 {
+	return BuildArchetypeAndSharedValues(OutArchetype, OutSharedValues);
 
+	/*
     AActor* Owner = GetOwner();
     if (!Owner) return false;
 
@@ -782,6 +784,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
 	OutSharedValues = SharedValues;
 
     return true;
+	*/
 }
 
 void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager,

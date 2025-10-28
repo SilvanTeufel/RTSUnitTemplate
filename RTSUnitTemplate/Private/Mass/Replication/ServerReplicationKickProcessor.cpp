@@ -251,50 +251,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			return; // defer this chunk to a later tick
 		}
 
-		bool bAnyChanged = false;
-		// During startup grace period: do not skip replication based on signatures
-		if (bInGrace)
-		{
-			bAnyChanged = true;
-		}
-		else
-		{
-			for (int32 i=0; i<Num; ++i)
-			{
-				const uint32 ID = NetIDs[i].NetID.GetValue();
-				const FTransform& Xf = Transforms[i].GetTransform();
-				FSig NewSig;
-				NewSig.Loc = Xf.GetLocation();
-				const FRotator Rot = Xf.Rotator();
-				NewSig.P = QuantizeAngle(Rot.Pitch);
-				NewSig.Y = QuantizeAngle(Rot.Yaw);
-				NewSig.R = QuantizeAngle(Rot.Roll);
-				NewSig.Scale = Xf.GetScale3D();
-				// Include replicated state tag bits in the signature so tag changes trigger replication
-				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
-				NewSig.TagBits = BuildReplicatedTagBits(EntityManager, EH);
-				const FSig* Old = GLastSigByID.Find(ID);
-				if (!Old || !(*Old == NewSig))
-				{
-					bAnyChanged = true;
-					break; // one change is enough to require replication for this chunk
-				}
-			}
-		}
-
-		// Optionally skip clean chunks unless override CVAR is set
-		if (!bAnyChanged && CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() == 0)
-		{
-			// Skip invoking the (potentially heavy) replicator if nothing changed for this chunk
-			return;
-		}
-		if (!bAnyChanged && CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() != 0)
-		{
-			if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
-			{
-				UE_LOG(LogTemp, Verbose, TEXT("ServerReplicationKick: Processing clean chunk due to CVAR override."));
-			}
-		}
+		bool bAnyChanged = true;
 
 		// Optionally log a small sample (verbose only)
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
@@ -324,6 +281,27 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				const bool bChangedBits = (NewBits != OldBits);
 				const FString Names = StringifyUnitTagBits(NewBits);
 				UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: NetID=%u TagBits=0x%08x %s Tags=[%s]"), ID, NewBits, bChangedBits ? TEXT("[CHANGED]") : TEXT(""), *Names);
+			}
+			// Also log AI target fragment fields for visibility
+			for (int32 i = 0; i < MaxLog; ++i)
+			{
+				const uint32 ID = NetIDs[i].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH);
+				bool bHas = false; bool bFocused = false; FVector LKL = FVector::ZeroVector; FVector AbilityLoc = FVector::ZeroVector; bool bTargetSet = false; uint32 TargetNetID = 0u;
+				if (AIT)
+				{
+					bHas = AIT->bHasValidTarget; bFocused = AIT->IsFocusedOnTarget; LKL = AIT->LastKnownLocation; AbilityLoc = AIT->AbilityTargetLocation; bTargetSet = AIT->TargetEntity.IsSet();
+					if (bTargetSet && EntityManager.IsEntityValid(AIT->TargetEntity))
+					{
+						if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+						{
+							TargetNetID = TgtNet->NetID.GetValue();
+						}
+					}
+				}
+				UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: AITarget NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
+					ID, bHas?1:0, bFocused?1:0, *LKL.ToString(), *AbilityLoc.ToString(), bTargetSet?1:0, TargetNetID);
 			}
 		}
 

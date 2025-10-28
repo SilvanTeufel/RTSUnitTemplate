@@ -145,6 +145,26 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
+        // Fill AI target replication fields if available
+        if (const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
+        {
+            // Flags
+            NewItem.AITargetFlags = 0u;
+            if (AIT->bHasValidTarget) NewItem.AITargetFlags |= 1u;
+            if (AIT->IsFocusedOnTarget) NewItem.AITargetFlags |= 2u;
+            NewItem.AITargetLastKnownLocation = AIT->LastKnownLocation;
+            NewItem.AbilityTargetLocation = AIT->AbilityTargetLocation;
+            // Resolve target NetID if the target entity is valid
+            uint32 TargetNetIDVal = 0u;
+            if (AIT->TargetEntity.IsSet() && EntityManager.IsEntityValid(AIT->TargetEntity))
+            {
+                if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                {
+                    TargetNetIDVal = TgtNet->NetID.GetValue();
+                }
+            }
+            NewItem.AITargetNetID = TargetNetIDVal;
+        }
 
         const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
         BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -385,6 +405,24 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
+                        // Fill AI target fields if fragment exists
+                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
+                        {
+                            NewItem.AITargetFlags = 0u;
+                            if (AIT->bHasValidTarget) NewItem.AITargetFlags |= 1u;
+                            if (AIT->IsFocusedOnTarget) NewItem.AITargetFlags |= 2u;
+                            NewItem.AITargetLastKnownLocation = AIT->LastKnownLocation;
+                            NewItem.AbilityTargetLocation = AIT->AbilityTargetLocation;
+                            uint32 TargetNetIDVal = 0u;
+                            if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                {
+                                    TargetNetIDVal = TgtNet->NetID.GetValue();
+                                }
+                            }
+                            NewItem.AITargetNetID = TargetNetIDVal;
+                        }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -406,12 +444,30 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
                     if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
                     if (!Item->Scale.Equals(Sca, 0.01f)) { Item->Scale = Sca; bDirty = true; }
-                    // Update tag bits too if EntityManager is available
+                    // Update tag bits and AI target if EntityManager is available
                     if (EM)
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         const uint32 NewBits = BuildReplicatedTagBits(*EM, EH);
                         if (Item->TagBits != NewBits) { Item->TagBits = NewBits; bDirty = true; }
+                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
+                        {
+                            uint8 NewFlags = 0u;
+                            if (AIT->bHasValidTarget) NewFlags |= 1u;
+                            if (AIT->IsFocusedOnTarget) NewFlags |= 2u;
+                            uint32 NewTargetNetID = 0u;
+                            if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                {
+                                    NewTargetNetID = TgtNet->NetID.GetValue();
+                                }
+                            }
+                            if (Item->AITargetFlags != NewFlags) { Item->AITargetFlags = NewFlags; bDirty = true; }
+                            if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
+                            if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 0.1f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
+                            if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 0.1f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
+                        }
                     }
                     if (bDirty)
                     {

@@ -105,6 +105,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
  EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.RegisterWithProcessor(*this);
 	
 }
@@ -421,7 +422,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
- EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex](FMassExecutionContext& Context)
+ EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -432,6 +433,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassActorFragment> ActorList = Context.GetMutableFragmentView<FMassActorFragment>();
 			TArrayView<FMassNetworkIDFragment> NetIDList = Context.GetMutableFragmentView<FMassNetworkIDFragment>();
 			const TConstArrayView<FMassRepresentationLODFragment> LODList = Context.GetFragmentView<FMassRepresentationLODFragment>();
+			TArrayView<FMassAITargetFragment> AITargetList = Context.GetMutableFragmentView<FMassAITargetFragment>();
 
 			// Log registered NetIDs on client for this chunk (verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -452,6 +454,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				TSet<uint32> ClaimedIDs;
 				// Track seen NetIDs in this chunk to detect duplicates
 				TSet<uint32> SeenIDs;
+			// Build quick lookup for this chunk: NetID -> EntityHandle
+			TMap<uint32, FMassEntityHandle> NetToEntity;
+			NetToEntity.Reserve(NumEntities);
+			for (int32 PreIdx = 0; PreIdx < NumEntities; ++PreIdx)
+			{
+				const uint32 NID = NetIDList[PreIdx].NetID.GetValue();
+				if (NID != 0)
+				{
+					NetToEntity.Add(NID, Context.GetEntity(PreIdx));
+				}
+			}
 			for (int32 EntityIdx = 0; EntityIdx < NumEntities; ++EntityIdx)
 			{
 				// Duplicate NetID detection: ensure per-chunk uniqueness
@@ -553,7 +566,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				FTransform Cached;
 				uint32 WantedID_u32 = NetIDList[EntityIdx].NetID.GetValue();
 
-				// NEW: Always apply replicated TagBits from the bubble when available (independent of transform path)
+				// NEW: Always apply replicated TagBits and AI Target from the bubble when available (independent of transform path)
 				{
 					UWorld* WorldForTags = nullptr;
 					if (AActor* OwnerA = ActorList[EntityIdx].GetMutable())
@@ -574,9 +587,37 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 										FMassEntityManager& EMgr = ES->GetMutableEntityManager();
 										const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
 										ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
+										// Apply AI target replication to FMassAITargetFragment regardless of transform source
+										if (AITargetList.IsValidIndex(EntityIdx))
+										{
+											FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
+											AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
+											AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
+											AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
+											AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
+											const uint32 TgtID = TagItem->AITargetNetID;
+											if (TgtID != 0)
+											{
+												if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+												{
+													AITFrag.TargetEntity = *FoundHandle;
+												}
+											}
+											else
+											{
+												AITFrag.TargetEntity.Reset();
+											}
+										}
 										if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 										{
 											UE_LOG(LogTemp, Verbose, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
+											UE_LOG(LogTemp, Verbose, TEXT("ClientBubble AITarget: NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetNetID=%u"),
+												NetIDList[EntityIdx].NetID.GetValue(),
+												(TagItem->AITargetFlags & 1u)?1:0,
+												(TagItem->AITargetFlags & 2u)?1:0,
+												*FVector(TagItem->AITargetLastKnownLocation).ToString(),
+												*FVector(TagItem->AbilityTargetLocation).ToString(),
+												TagItem->AITargetNetID);
 										}
 									}
 								}
@@ -658,14 +699,36 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								const float Roll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
 								FinalXf = FTransform(FQuat(FRotator(Pitch, Yaw, Roll)), FVector(UseItem->Location), FVector(UseItem->Scale));
 								bFromBubble = true;
-								// Apply replicated tag bits to this entity on the client
-								if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
+   							// Apply replicated tag bits to this entity on the client
+							if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
+							{
+								FMassEntityManager& EMgr = ES->GetMutableEntityManager();
+								const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+								ApplyReplicatedTagBits(EMgr, EH, UseItem->TagBits);
+								// Apply AI target replication to FMassAITargetFragment
+								if (AITargetList.IsValidIndex(EntityIdx))
 								{
-									FMassEntityManager& EMgr = ES->GetMutableEntityManager();
-									const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
-									ApplyReplicatedTagBits(EMgr, EH, UseItem->TagBits);
+									FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
+									AITFrag.bHasValidTarget = (UseItem->AITargetFlags & 1u) != 0;
+									AITFrag.IsFocusedOnTarget = (UseItem->AITargetFlags & 2u) != 0;
+									AITFrag.LastKnownLocation = FVector(UseItem->AITargetLastKnownLocation);
+									AITFrag.AbilityTargetLocation = FVector(UseItem->AbilityTargetLocation);
+									// Resolve target entity handle on client if we know the NetID -> Entity mapping in this chunk
+									const uint32 TgtID = UseItem->AITargetNetID;
+									if (TgtID != 0)
+									{
+										if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+										{
+											AITFrag.TargetEntity = *FoundHandle;
+										}
+									}
+									else
+									{
+										AITFrag.TargetEntity.Reset();
+									}
 								}
 							}
+						}
 						}
 					}
 				
@@ -743,6 +806,28 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						FinalXf.GetLocation().X, FinalXf.GetLocation().Y, FinalXf.GetLocation().Z,
 						FinalXf.Rotator().Pitch, FinalXf.Rotator().Yaw, FinalXf.Rotator().Roll,
 						FinalXf.GetScale3D().X, FinalXf.GetScale3D().Y, FinalXf.GetScale3D().Z);
+				}
+				// Additional verbose diagnostics: log AI target fragment values for this entity on the client
+				if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && AITargetList.IsValidIndex(EntityIdx))
+				{
+					const FMassAITargetFragment& AIT = AITargetList[EntityIdx];
+					uint32 TargetNetIDDiag = 0u;
+					if (AIT.TargetEntity.IsSet() && EntityManager.IsEntityValid(AIT.TargetEntity))
+					{
+						if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT.TargetEntity))
+						{
+							TargetNetIDDiag = TgtNet->NetID.GetValue();
+						}
+					}
+					UE_LOG(LogTemp, Log, TEXT("ClientAITarget: Actor=%s NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
+						ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"),
+						NetIDList[EntityIdx].NetID.GetValue(),
+						AIT.bHasValidTarget?1:0,
+						AIT.IsFocusedOnTarget?1:0,
+						*AIT.LastKnownLocation.ToString(),
+						*AIT.AbilityTargetLocation.ToString(),
+						AIT.TargetEntity.IsSet()?1:0,
+						TargetNetIDDiag);
 				}
 
     // Self-heal if NetID repeatedly missing on client

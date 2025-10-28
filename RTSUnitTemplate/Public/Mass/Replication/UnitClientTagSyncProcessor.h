@@ -16,7 +16,7 @@ public:
 	UUnitClientTagSyncProcessor();
 
 	// Toggle debug logging for this processor at runtime
-	bool bShowLogs = true;
+	bool bShowLogs = false;
 
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;

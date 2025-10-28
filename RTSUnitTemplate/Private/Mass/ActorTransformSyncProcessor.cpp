@@ -317,7 +317,9 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
 
 void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
-    if (!TargetFrag.TargetEntity.IsSet() || !Char.RotatesToEnemy)
+    // Proceed if we have either a resolved target entity OR a valid target flag with a non-zero last known location, and rotation to enemy is enabled
+    const bool bHasUsableTarget = TargetFrag.TargetEntity.IsSet() || (TargetFrag.bHasValidTarget && !TargetFrag.LastKnownLocation.IsNearlyZero());
+    if (!bHasUsableTarget || !Char.RotatesToEnemy)
     {
         return;
     }
@@ -331,7 +333,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
             TargetLocation = TargetXform->GetTransform().GetLocation();
         }
     }
-
+   
     FVector Dir = TargetLocation - CurrentActorLocation;
     Dir.Z = 0.f;
     if (!Dir.Normalize())
