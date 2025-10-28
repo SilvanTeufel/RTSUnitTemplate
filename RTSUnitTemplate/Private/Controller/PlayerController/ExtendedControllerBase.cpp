@@ -14,6 +14,9 @@
 #include "GameModes/ResourceGameMode.h"
 #include "Mass/Signals/MySignals.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "Hud/HUDBase.h"
+#include "GameModes/RTSGameModeBase.h"
+#include "Characters/Unit/UnitBase.h"
 
 
 void AExtendedControllerBase::BeginPlay()
@@ -2046,4 +2049,67 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 		{
 			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
 		}
+}
+
+// --- Squad selection: forward to server in PC and apply on client ---
+void AExtendedControllerBase::Server_SelectUnitsFromSameSquad_Implementation(AUnitBase* SelectedUnit)
+{
+	UE_LOG(LogTemp, Log, TEXT("[PC][Server_SelectUnitsFromSameSquad] Called. Controller=%s HasAuthority=%d Selected=%s"),
+		*GetName(), HasAuthority(), SelectedUnit ? *SelectedUnit->GetName() : TEXT("NULL"));
+
+	if (!SelectedUnit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PC][Server_SelectUnitsFromSameSquad] SelectedUnit is NULL"));
+		return;
+	}
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
+	if (!GameMode)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[PC][Server_SelectUnitsFromSameSquad] GameMode is NULL"));
+		return;
+	}
+
+	const int32 SquadId = SelectedUnit->SquadId;
+	TArray<AUnitBase*> UnitsToSelect;
+
+	if (SquadId == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PC][Server_SelectUnitsFromSameSquad] SelectedUnit has no SquadId (0)"));
+	}
+	else
+	{
+		for (int32 i = 0; i < GameMode->AllUnits.Num(); ++i)
+		{
+			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
+			if (Unit && Unit->SquadId == SquadId)
+			{
+				// Optional team gate: only same team as this controller, unless controller TeamId == 0 (spectator/admin)
+				if (Unit->TeamId == SelectableTeamId || SelectableTeamId == 0)
+				{
+					UnitsToSelect.Emplace(Unit);
+				}
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[PC][Server_SelectUnitsFromSameSquad] SquadId=%d UnitsFound=%d ControllerTeam=%d"), SquadId, UnitsToSelect.Num(), SelectableTeamId);
+	Client_SelectUnitsFromSameSquad(UnitsToSelect);
+}
+
+void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(const TArray<AUnitBase*>& Units)
+{
+	AHUDBase* HUD = Cast<AHUDBase>(GetHUD());
+	UE_LOG(LogTemp, Log, TEXT("[PC][Client_SelectUnitsFromSameSquad] Applying selection on client. HUD=%s Units=%d"), HUD ? *HUD->GetName() : TEXT("NULL"), Units.Num());
+	if (!HUD)
+	{
+		return;
+	}
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit) continue;
+		Unit->SetSelected();
+		HUD->SelectedUnits.AddUnique(Unit);
+		UE_LOG(LogTemp, Verbose, TEXT("[PC][Client_SelectUnitsFromSameSquad] Selected %s (Team=%d Squad=%d)"), *Unit->GetName(), Unit->TeamId, Unit->SquadId);
+	}
 }

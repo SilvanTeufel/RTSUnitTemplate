@@ -231,19 +231,21 @@ void AHUDBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 
 void AHUDBase::SelectUnitsFromSameSquad(AUnitBase* SelectedUnit)
 {
-	if(!bSelectFullSquad) return;
-
-	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-
-	if(GameMode)
-	for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
+	if(!bSelectFullSquad || !SelectedUnit)
 	{
-		AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
-		if(Unit && Unit->SquadId == SelectedUnit->SquadId && Unit->SquadId != 0)
-		{
-			Unit->SetSelected();
-			SelectedUnits.Emplace(Unit);
-		}
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] SelectUnitsFromSameSquad aborted. bSelectFullSquad=%d SelectedUnit=%s"), bSelectFullSquad ? 1 : 0, SelectedUnit ? *SelectedUnit->GetName() : TEXT("NULL"));
+		return;
+	}
+
+	APlayerController* PC = GetOwningPlayerController();
+	UE_LOG(LogTemp, Log, TEXT("[HUD] Forwarding SelectUnitsFromSameSquad for %s to PC server RPC. PC=%s HasAuthority=%d"), *SelectedUnit->GetName(), PC ? *PC->GetName() : TEXT("NULL"), HasAuthority());
+	if(ACameraControllerBase* CamPC = Cast<ACameraControllerBase>(PC))
+	{
+		CamPC->Server_SelectUnitsFromSameSquad(SelectedUnit);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] CameraControllerBase not found on owning PC. Cannot request same-squad selection."));
 	}
 }
 

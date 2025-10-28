@@ -291,5 +291,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastEndsEvent(AUnitBase* UnitBase);
 	
+	// Squad selection RPCs for selecting full squad on client
+	UFUNCTION(Server, Reliable)
+	void Server_SelectUnitsFromSameSquad(AUnitBase* SelectedUnit);
+	
+	UFUNCTION(Client, Reliable)
+	void Client_SelectUnitsFromSameSquad(const TArray<AUnitBase*>& Units);
 	
 };

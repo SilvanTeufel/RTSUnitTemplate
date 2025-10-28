@@ -9,7 +9,9 @@
 // Forward declarations
 class UTextBlock;
 class UVerticalBox;
+class UPanelWidget;
 class UResourceEntryWidget;
+class UTexture2D;
 
 UCLASS()
 class RTSUNITTEMPLATE_API UResourceWidget : public UUserWidget
@@ -52,4 +54,17 @@ private:
 	FTimerHandle UpdateTimerHandle;
 	
 	const float UpdateInterval = 1.0f;
+
+public:
+	// Optional per-resource icon overrides editable in the ResourceWidget
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Appearance")
+	TMap<EResourceType, UTexture2D*> ResourceIcons;
+
+	// Optional per-resource display name overrides
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Appearance")
+	TMap<EResourceType, FText> ResourceDisplayNames;
+
+	// If > 0, limit how many resource entries are populated
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Behavior")
+	int32 MaxResourcesToDisplay = -1;
 };
