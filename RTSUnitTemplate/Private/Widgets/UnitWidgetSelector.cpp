@@ -508,74 +508,77 @@ void UUnitWidgetSelector::SetVisibleButtonCount(int32 /*Count*/)
 void UUnitWidgetSelector::SetButtonLabelCount(int32 Count)
 {
 	// Überprüfe, ob die Anzahl der Labels mit der Anzahl der Buttons übereinstimmt
-
-	
 	if (ButtonLabels.Num() != SelectButtons.Num())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Die Anzahl der Labels stimmt nicht mit der Anzahl der Buttons überein!"));
 		return;
 	}
 
-	// Build labels that reflect deduplicated squads. For the first member of a squad, join all member Ids with '/'.
+	// Build labels using compact, sequential indices across visible groups
 	const int32 SelCount = (ControllerBase) ? ControllerBase->SelectedUnits.Num() : 0;
-
-	for (int32 i = 0; i < ButtonLabels.Num(); i++)
+	// Clear all labels first
+	for (int32 i = 0; i < ButtonLabels.Num(); ++i)
 	{
-		FText OutText = FText::GetEmpty();
+		if (ButtonLabels[i]) ButtonLabels[i]->SetText(FText::GetEmpty());
+	}
+	if (!ControllerBase || SelCount <= 0)
+	{
+		return;
+	}
 
-		// Limit to existing selected units and valid button entries
-		const bool bIndexValid = (i >= 0 && i < SelCount) && SelectButtons.IsValidIndex(i) && ButtonLabels.IsValidIndex(i) && SelectButtons[i] && ButtonLabels[i];
-		if (bIndexValid && ControllerBase)
+	TSet<int32> VisitedSelectionIndices; // SelectedUnits indices already grouped
+	int32 NextCompactIndex = 0; // Sequential numbering across visible buttons
+
+	for (int32 i = 0; i < SelCount; ++i)
+	{
+		if (VisitedSelectionIndices.Contains(i)) continue;
+		AUnitBase* Unit = ControllerBase->SelectedUnits[i];
+		if (!Unit) { VisitedSelectionIndices.Add(i); continue; }
+
+		const int32 SquadId = Unit->SquadId;
+		TArray<int32> MemberCompactIndices; // what to print on the label
+		TSet<AUnitBase*> GroupUnitsSeen;     // deduplicate same unit within the squad group
+		
+		if (SquadId > 0)
 		{
-			AUnitBase* Unit = ControllerBase->SelectedUnits[i];
-			if (Unit)
+			// Collect all squad members from first occurrence onwards, but avoid counting duplicates
+			for (int32 j = i; j < SelCount; ++j)
 			{
-				const int32 SquadId = Unit->SquadId;
-				// Determine if this is the first occurrence of this squad (or solo unit)
-				bool bIsFirstOfGroup = true;
-				if (SquadId > 0)
+				AUnitBase* U = ControllerBase->SelectedUnits[j];
+				if (U && U->SquadId == SquadId)
 				{
-					for (int32 k = 0; k < i && k < SelCount; ++k)
+					// Mark this selection index as visited so we don't start a new group for it later
+					VisitedSelectionIndices.Add(j);
+					// Only increment compact indices once per unique unit pointer
+					if (!GroupUnitsSeen.Contains(U))
 					{
-						AUnitBase* Prev = ControllerBase->SelectedUnits[k];
-						if (Prev && Prev->SquadId == SquadId)
-						{
-							bIsFirstOfGroup = false;
-							break;
-						}
+						GroupUnitsSeen.Add(U);
+						MemberCompactIndices.Add(NextCompactIndex++);
 					}
-				}
-				if (bIsFirstOfGroup)
-				{
-					// Build joined ids for this group
-					FString LabelText;
-					if (SquadId > 0)
-					{
-						bool bFirst = true;
-						for (int32 j = 0; j < SelCount; ++j)
-						{
-							AUnitBase* U = ControllerBase->SelectedUnits[j];
-							if (U && U->SquadId == SquadId && SelectButtons.IsValidIndex(j) && SelectButtons[j])
-							{
-								if (!bFirst) { LabelText += TEXT(" / "); }
-								bFirst = false;
-								LabelText += FString::FromInt(SelectButtons[j]->Id);
-							}
-						}
-					}
-					else
-					{
-						LabelText = FString::FromInt(SelectButtons[i]->Id);
-					}
-					OutText = FText::FromString(LabelText);
 				}
 			}
 		}
+		else
+		{
+			VisitedSelectionIndices.Add(i);
+			// Solo unit: still guard against accidental duplicates of the same pointer
+			if (!GroupUnitsSeen.Contains(Unit))
+			{
+				GroupUnitsSeen.Add(Unit);
+				MemberCompactIndices.Add(NextCompactIndex++);
+			}
+		}
 
-		// Apply text (or clear if not first of group / invalid)
+		// Set label only on the first (visible) entry of this group
 		if (ButtonLabels.IsValidIndex(i) && ButtonLabels[i])
 		{
-			ButtonLabels[i]->SetText(OutText);
+			FString LabelText;
+			for (int32 k = 0; k < MemberCompactIndices.Num(); ++k)
+			{
+				if (k > 0) { LabelText += TEXT(" / "); }
+				LabelText += FString::FromInt(MemberCompactIndices[k]);
+			}
+			ButtonLabels[i]->SetText(FText::FromString(LabelText));
 		}
 	}
 }
