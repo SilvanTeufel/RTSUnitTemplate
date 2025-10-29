@@ -21,6 +21,9 @@
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
+#include "Widgets/SquadHealthBar.h"
+#include "EngineUtils.h"
+#include <climits>
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -141,6 +144,117 @@ void AUnitBase::InitHealthbarOwner()
 		HealthBarWidget->SetOwnerActor(this);
 		HealthWidgetRelativeOffset = HealthWidgetComp->GetRelativeLocation();
 	}
+	// Ensure proper widget for squads
+	EnsureSquadHealthbarState();
+}
+
+void AUnitBase::EnsureSquadHealthbarState()
+{
+	if (!HealthWidgetComp) return;
+	if (SquadId <= 0) return; // Regular units keep their own healthbar
+
+	// Select designated owner: alive squadmate with smallest UnitIndex; fallback to first found
+	AUnitBase* Best = nullptr;
+	int32 BestIndex = TNumericLimits<int32>::Max();
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* U = *It;
+		if (!U || U->TeamId != TeamId || U->SquadId != SquadId) continue;
+		if (U->GetUnitState() == UnitData::Dead) continue;
+		int32 Index = U->UnitIndex;
+		if (Index < 0) Index = INT_MAX - 1; // push invalids back
+		if (!Best || Index < BestIndex)
+		{
+			Best = U;
+			BestIndex = Index;
+		}
+	}
+
+	if (!Best)
+	{
+		// No alive squadmates: hide this component just in case
+		OpenHealthWidget = false;
+		HealthBarUpdateTriggered = false;
+		if (UUserWidget* UW = HealthWidgetComp->GetUserWidgetObject())
+		{
+			UW->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		HealthWidgetComp->SetVisibility(false);
+		return;
+	}
+
+	if (Best == this)
+	{
+		// This unit is the designated owner: ensure Squad widget is used
+		if (!HealthWidgetComp->GetUserWidgetObject() || !HealthWidgetComp->GetUserWidgetObject()->IsA(USquadHealthBar::StaticClass()))
+		{
+			HealthWidgetComp->SetWidgetClass(USquadHealthBar::StaticClass());
+			// Force-create the widget instance so we can set it up immediately
+			HealthWidgetComp->InitWidget();
+		}
+		else if (!HealthWidgetComp->GetUserWidgetObject())
+		{
+			HealthWidgetComp->InitWidget();
+		}
+
+		if (UUnitBaseHealthBar* HB = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+		{
+			HB->SetOwnerActor(this);
+			// If it is a SquadHealthBar and the designer wants it always visible, show it now
+			if (USquadHealthBar* SquadHB = Cast<USquadHealthBar>(HB))
+			{
+				if (SquadHB->bAlwaysShowSquadHealthbar)
+				{
+					HB->SetVisibility(ESlateVisibility::Visible);
+					HB->UpdateWidget();
+					HealthBarUpdateTriggered = true;
+				}
+			}
+		}
+		// Ensure the component itself is visible so the widget can render
+		HealthWidgetComp->SetVisibility(true);
+	}
+	else
+	{
+		// Not owner: collapse and prevent updates
+		OpenHealthWidget = false;
+		HealthBarUpdateTriggered = false;
+		if (UUserWidget* UW = HealthWidgetComp->GetUserWidgetObject())
+		{
+			UW->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		HealthWidgetComp->SetVisibility(false);
+	}
+}
+
+bool AUnitBase::IsSquadHealthbarOwner() const
+{
+	if (SquadId <= 0) return false;
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	const int32 MyTeam = TeamId;
+	const int32 MySquad = SquadId;
+
+	AUnitBase* Best = nullptr;
+	int32 BestIndex = TNumericLimits<int32>::Max();
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* U = *It;
+		if (!U || U->TeamId != MyTeam || U->SquadId != MySquad) continue;
+		if (U->GetUnitState() == UnitData::Dead) continue;
+		int32 Index = U->UnitIndex;
+		if (Index < 0) Index = INT_MAX - 1; // push invalids back
+		if (!Best || Index < BestIndex)
+		{
+			Best = U;
+			BestIndex = Index;
+		}
+	}
+	return Best == this;
 }
 
 
@@ -323,8 +437,6 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		{
 			if (UWorld* W = GetWorld())
 			{
-				// Late-include to avoid heavy deps in header
-				#include "Mass/Replication/UnitRegistryReplicator.h"
 				if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*W))
 				{
 					bool bRemoved = false;
@@ -357,6 +469,23 @@ void AUnitBase::DeadEffectsAndEvents()
 		StoppedMoving();
 		IsDead();
 		DeadEffectsExecuted = true;
+	}
+	// If we are part of a squad, ensure the healthbar ownership migrates to another alive member
+	if (SquadId > 0)
+	{
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			for (TActorIterator<AUnitBase> It(World); It; ++It)
+			{
+				AUnitBase* U = *It;
+				if (!U || U == this) continue;
+				if (U->TeamId == TeamId && U->SquadId == SquadId)
+				{
+					U->EnsureSquadHealthbarState();
+				}
+			}
+		}
 	}
 }
 
@@ -899,6 +1028,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 
 			UnitBase->InitializeAttributes();
 			UnitBase->SquadId = (SpawnAsSquad ? SharedSquadId : 0);
+			// Ensure squad healthbar setup on server right after SquadId assignment
+			UnitBase->EnsureSquadHealthbarState();
 			
 			if(Waypoint)
 				UnitBase->NextWaypoint = Waypoint;

@@ -6,6 +6,7 @@
 #include "MassEntitySubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
+#include "Widgets/SquadHealthBar.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -16,9 +17,15 @@
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
+#include "EngineUtils.h"
+#include <limits>
 
 #include "Engine/World.h"              // For UWorld, GetWorld()
 #include "GameFramework/Actor.h"         // For FActorSpawnParameters, SpawnActo
+#include "Logging/LogMacros.h"
+
+// Debug category for squad healthbar visibility
+DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
 
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
@@ -172,32 +179,157 @@ bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
 	return false;
 }
 
-void APerformanceUnit::CheckHealthBarVisibility()
+void APerformanceUnit::HandleSquadHealthBarVisibility()
 {
-	if(HealthWidgetComp)
-	if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject()))
+	if (!HealthWidgetComp) return;
+
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	if (!HealthBarWidget)
 	{
-		if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && (!EnableFog || IsVisibleEnemy || IsMyTeam))
-		{
-			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
-			HealthBarUpdateTriggered = true;
-		}
-		else if(HealthBarUpdateTriggered && !OpenHealthWidget)
-		{
-			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-			HealthBarUpdateTriggered = false;
-		}
-		
-		if(HealthBarUpdateTriggered)	
-			HealthBarWidget->UpdateWidget();
+		HealthWidgetComp->InitWidget();
+		HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	}
 
+	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
 
-		if(!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)
+	if (SquadId <= 0) return;
+
+	// Determine owner among alive squadmates with same team
+	AUnitBase* ThisAsUnit = Cast<AUnitBase>(this);
+	AUnitBase* Best = nullptr;
+	int32 BestIndex = TNumericLimits<int32>::Max();
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AUnitBase> It(World); It; ++It)
 		{
-			FVector ALocation = GetMassActorLocation()+HealthWidgetRelativeOffset;
-			HealthWidgetComp->SetWorldLocation(ALocation);
+			AUnitBase* U = *It;
+			if (!U || U->TeamId != TeamId || U->SquadId != SquadId) continue;
+			if (U->GetUnitState() == UnitData::Dead) continue;
+			int32 Index = U->UnitIndex;
+			if (Index < 0) Index = INT_MAX - 1;
+			if (!Best || Index < BestIndex)
+			{
+				Best = U;
+				BestIndex = Index;
+			}
 		}
 	}
+	
+	const bool bIsOwner = (ThisAsUnit && Best == ThisAsUnit);
+	if (!bIsOwner)
+	{
+		if (UUserWidget* UW = HealthWidgetComp->GetUserWidgetObject())
+		{
+			UW->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		HealthWidgetComp->SetVisibility(false);
+		HealthBarUpdateTriggered = false;
+		OpenHealthWidget = false;
+		return;
+	}
+
+	{
+		UUserWidget* ExistingUW = HealthWidgetComp->GetUserWidgetObject();
+		const bool bNeedsSwitch = (!ExistingUW || !ExistingUW->IsA(USquadHealthBar::StaticClass()));
+		if (bNeedsSwitch)
+		{
+			HealthWidgetComp->SetWidgetClass(USquadHealthBar::StaticClass());
+			HealthWidgetComp->InitWidget();
+			HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		}
+	}
+	if (HealthBarWidget)
+	{
+		if (HealthBarWidget->GetOwnerActor() != ThisAsUnit)
+		{
+			HealthBarWidget->SetOwnerActor(ThisAsUnit);
+		}
+	}
+
+	HealthWidgetComp->SetVisibility(true);
+
+	USquadHealthBar* SquadHB = Cast<USquadHealthBar>(HealthBarWidget);
+	if (SquadHB)
+	{
+		const bool bShouldShowSquad = IsOnViewport && bFogAllows && SquadHB->bAlwaysShowSquadHealthbar;
+
+		if (bShouldShowSquad)
+		{
+			if (!HealthBarUpdateTriggered)
+			{
+				HealthBarUpdateTriggered = true;
+			}
+			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			HealthBarWidget->UpdateWidget();
+			if (!bUseSkeletalMovement)
+			{
+				FVector ALocation = GetMassActorLocation() + HealthWidgetRelativeOffset;
+				HealthWidgetComp->SetWorldLocation(ALocation);
+			}
+		}
+		else
+		{
+			if (HealthBarUpdateTriggered)
+			{
+				HealthBarUpdateTriggered = false;
+			}
+			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void APerformanceUnit::HandleStandardHealthBarVisibility()
+{
+	if (!HealthWidgetComp) return;
+
+	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	if (!HealthBarWidget)
+	{
+		HealthWidgetComp->InitWidget();
+		HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+	}
+	if (!HealthBarWidget)
+	{
+		return;
+	}
+
+	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
+
+	if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && bFogAllows)
+	{
+		HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+		HealthBarUpdateTriggered = true;
+	}
+	else if (HealthBarUpdateTriggered && !OpenHealthWidget)
+	{
+		HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+		HealthBarUpdateTriggered = false;
+	}
+
+	if (HealthBarUpdateTriggered)
+	{
+		HealthBarWidget->UpdateWidget();
+	}
+
+	if (!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)
+	{
+		FVector ALocation = GetMassActorLocation() + HealthWidgetRelativeOffset;
+		HealthWidgetComp->SetWorldLocation(ALocation);
+	}
+}
+
+void APerformanceUnit::CheckHealthBarVisibility()
+{
+	if (!HealthWidgetComp)
+		return;
+
+	if (SquadId > 0)
+	{
+		HandleSquadHealthBarVisibility();
+		return;
+	}
+
+	HandleStandardHealthBarVisibility();
 }
 
 

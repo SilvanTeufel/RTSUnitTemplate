@@ -216,6 +216,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitHealthbarOwner();
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EnsureSquadHealthbarState();
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	bool IsSquadHealthbarOwner() const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HealthbarCollapseCheck(float NewHealth, float OldHealth);

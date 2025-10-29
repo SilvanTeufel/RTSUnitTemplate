@@ -2,6 +2,8 @@
 
 
 #include "Widgets/UnitWidgetSelector.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Containers/Set.h"
 
 
 
@@ -54,20 +56,30 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		if (!ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]) return;
 		if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
 		
-		if(ControllerBase && ControllerBase->SelectedUnits.Num() && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex])
+		bool bHasSelected = false;
+		if (ControllerBase)
 		{
-			if (ControllerBase->AbilityArrayIndex == 0 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->DefaultAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 1 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->SecondAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 2 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->ThirdAbilities.Num());
-			else if (ControllerBase->AbilityArrayIndex == 3 && ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities.Num())
-				ChangeAbilityButtonCount(ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]->FourthAbilities.Num());
+			if (ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex))
+			{
+				if (ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex])
+				{
+					bHasSelected = true;
+				}
+			}
+		}
+		if (bHasSelected)
+		{
+			AUnitBase* CurrentUnit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
+			if (ControllerBase->AbilityArrayIndex == 0 && CurrentUnit->DefaultAbilities.Num())
+				ChangeAbilityButtonCount(CurrentUnit->DefaultAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 1 && CurrentUnit->SecondAbilities.Num())
+				ChangeAbilityButtonCount(CurrentUnit->SecondAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 2 && CurrentUnit->ThirdAbilities.Num())
+				ChangeAbilityButtonCount(CurrentUnit->ThirdAbilities.Num());
+			else if (ControllerBase->AbilityArrayIndex == 3 && CurrentUnit->FourthAbilities.Num())
+				ChangeAbilityButtonCount(CurrentUnit->FourthAbilities.Num());
 			else
-			    ChangeAbilityButtonCount(0);
-			
-			//Update(ControllerBase->AbilityArrayIndex);
+				ChangeAbilityButtonCount(0);
 		}
 
 		UpdateAbilityCooldowns();
@@ -437,33 +449,60 @@ void UUnitWidgetSelector::SetButtonIds()
 	}
 }
 
-void UUnitWidgetSelector::SetVisibleButtonCount(int32 Count)
+void UUnitWidgetSelector::SetVisibleButtonCount(int32 /*Count*/)
 {
+	// Show only one SelectButtonWidget per squad (SquadId > 0). Solo units (SquadId <= 0) always show.
+	// We keep button Ids aligned with SelectedUnits indices so clicks still target the correct unit.
+	TSet<int32> SeenSquads;
+	int32 VisibleCount = 0;
+
 	for (int32 i = 0; i < SelectButtonWidgets.Num(); i++)
 	{
-		if (SelectButtonWidgets[i])
+		bool bShow = false;
+		bool bIndexValid = false;
+		if (ControllerBase)
 		{
-			if (i >= Count)
+			const int32 SelCount = ControllerBase->SelectedUnits.Num();
+			if (i >= 0 && i < SelCount)
 			{
-				SelectButtonWidgets[i]->SetVisibility(ESlateVisibility::Hidden);
-			}
-			else
-			{
-				SelectButtonWidgets[i]->SetVisibility(ESlateVisibility::Visible);
+				bIndexValid = true;
 			}
 		}
+		if (bIndexValid)
+		{
+			AUnitBase* Unit = ControllerBase->SelectedUnits[i];
+			if (Unit)
+			{
+				const int32 SquadId = Unit->SquadId;
+				if (SquadId > 0)
+				{
+					if (!SeenSquads.Contains(SquadId))
+					{
+						SeenSquads.Add(SquadId);
+						bShow = true; // first appearance of this squad
+					}
+				}
+				else
+				{
+					bShow = true; // solo unit
+				}
+			}
+		}
+
+		if (SelectButtonWidgets[i])
+		{
+			SelectButtonWidgets[i]->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+			if (bShow) { ++VisibleCount; }
+		}
 	}
-	
-	if(!Count)
+
+	// Toggle overall widget/name visibility based on whether anything is shown
+	const bool bAnyVisible = VisibleCount > 0;
+	if (Name)
 	{
-		Name->SetVisibility(ESlateVisibility::Hidden);
-		SetVisibility(ESlateVisibility::Hidden);
+		Name->SetVisibility(bAnyVisible ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 	}
-	else
-	{
-		Name->SetVisibility(ESlateVisibility::Visible);
-		SetVisibility(ESlateVisibility::Visible);
-	}
+	SetVisibility(bAnyVisible ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 }
 
 void UUnitWidgetSelector::SetButtonLabelCount(int32 Count)
@@ -477,20 +516,66 @@ void UUnitWidgetSelector::SetButtonLabelCount(int32 Count)
 		return;
 	}
 
-	// Iteriere über die Button-Labels und beschrifte sie von 1 bis Count
+	// Build labels that reflect deduplicated squads. For the first member of a squad, join all member Ids with '/'.
+	const int32 SelCount = (ControllerBase) ? ControllerBase->SelectedUnits.Num() : 0;
+
 	for (int32 i = 0; i < ButtonLabels.Num(); i++)
 	{
-		if (SelectButtons[i])
+		FText OutText = FText::GetEmpty();
+
+		// Limit to existing selected units and valid button entries
+		const bool bIndexValid = (i >= 0 && i < SelCount) && SelectButtons.IsValidIndex(i) && ButtonLabels.IsValidIndex(i) && SelectButtons[i] && ButtonLabels[i];
+		if (bIndexValid && ControllerBase)
 		{
-			if (i < Count)
+			AUnitBase* Unit = ControllerBase->SelectedUnits[i];
+			if (Unit)
 			{
-				FString LabelText = FString::Printf(TEXT("%d"), SelectButtons[i]->Id);
-				ButtonLabels[i]->SetText(FText::FromString(LabelText));
+				const int32 SquadId = Unit->SquadId;
+				// Determine if this is the first occurrence of this squad (or solo unit)
+				bool bIsFirstOfGroup = true;
+				if (SquadId > 0)
+				{
+					for (int32 k = 0; k < i && k < SelCount; ++k)
+					{
+						AUnitBase* Prev = ControllerBase->SelectedUnits[k];
+						if (Prev && Prev->SquadId == SquadId)
+						{
+							bIsFirstOfGroup = false;
+							break;
+						}
+					}
+				}
+				if (bIsFirstOfGroup)
+				{
+					// Build joined ids for this group
+					FString LabelText;
+					if (SquadId > 0)
+					{
+						bool bFirst = true;
+						for (int32 j = 0; j < SelCount; ++j)
+						{
+							AUnitBase* U = ControllerBase->SelectedUnits[j];
+							if (U && U->SquadId == SquadId && SelectButtons.IsValidIndex(j) && SelectButtons[j])
+							{
+								if (!bFirst) { LabelText += TEXT(" / "); }
+								bFirst = false;
+								LabelText += FString::FromInt(SelectButtons[j]->Id);
+							}
+						}
+					}
+					else
+					{
+						LabelText = FString::FromInt(SelectButtons[i]->Id);
+					}
+					OutText = FText::FromString(LabelText);
+				}
 			}
-			else
-			{
-				ButtonLabels[i]->SetText(FText::GetEmpty());
-			}
+		}
+
+		// Apply text (or clear if not first of group / invalid)
+		if (ButtonLabels.IsValidIndex(i) && ButtonLabels[i])
+		{
+			ButtonLabels[i]->SetText(OutText);
 		}
 	}
 }

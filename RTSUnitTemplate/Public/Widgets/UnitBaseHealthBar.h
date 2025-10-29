@@ -76,7 +76,7 @@ public:
 	void CollapseWidget();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void UpdateWidget();
+	virtual void UpdateWidget();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxUnitCount = 200;

@@ -173,6 +173,10 @@ private:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckHealthBarVisibility();
 
+	// Helpers to handle specific healthbar modes (no Blueprint exposure)
+	void HandleStandardHealthBarVisibility();
+	void HandleSquadHealthBarVisibility();
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckTimerVisibility();
 	
