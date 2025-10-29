@@ -3,6 +3,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Internationalization/Text.h"
 
 void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 {
@@ -35,7 +36,11 @@ void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const F
 	}
 	if (ResourceAmountText)
 	{
-		ResourceAmountText->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), InResourceAmount)));
+		FNumberFormattingOptions FormatOptions;
+		const int32 Decimals = FMath::Clamp(ResourceAmountDecimalPlaces, 0, 6);
+		FormatOptions.MinimumFractionalDigits = Decimals;
+		FormatOptions.MaximumFractionalDigits = Decimals;
+		ResourceAmountText->SetText(FText::AsNumber(InResourceAmount, &FormatOptions));
 	}
 	if (WorkerCountText)
 	{

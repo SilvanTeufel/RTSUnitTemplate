@@ -32,6 +32,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 TeamId = 0;
 
+	/** Number of decimal places to display for the resource amount. Default is 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 ResourceAmountDecimalPlaces = 0;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateWorkerCount(int32 AmountToAdd);
 	
