@@ -240,18 +240,13 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
-	static int32 GClientSetMoveCounter = 0;
-	UE_LOG(LogTemp, Warning, TEXT("[Client][PC] Client_CorrectSetUnitMoveTarget enter (%d)"), ++GClientSetMoveCounter);
-	if (!IsLocalController()) { UE_LOG(LogTemp, Warning, TEXT("[Client][PC] Ignored: not local controller")); return; }
-	if (!Unit) { UE_LOG(LogTemp, Error, TEXT("[Client][PC] Unit is null")); return; }
-	if (!Unit->IsInitialized || !Unit->CanMove) { UE_LOG(LogTemp, Warning, TEXT("[Client][PC] Unit %s cannot move or not initialized (CanMove=%d, Init=%d)"), *Unit->GetName(), Unit->CanMove?1:0, Unit->IsInitialized?1:0); return; }
-
-	// Client-side prediction: update local Mass fragments minimally
+	if (!IsLocalController()) { return; }
+	if (!Unit) { return; }
+	if (!Unit->IsInitialized || !Unit->CanMove) { return; }
+	
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) { UE_LOG(LogTemp, Error, TEXT("[Client][PC] World is null from context")); return; }
-	if (!World->IsNetMode(NM_Client)) { UE_LOG(LogTemp, Warning, TEXT("[Client][PC] Not a client world, skipping")); return; }
-
-	UE_LOG(LogTemp, Warning, TEXT("[Client][PC] MoveTarget request for %s -> %s (DesiredSpeed=%.1f, Slack=%.1f)"), *Unit->GetName(), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius);
+	if (!World) { return; }
+	if (!World->IsNetMode(NM_Client)) { return; }
 
 	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 	{
@@ -260,20 +255,12 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObje
 		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
 		if (!bValidEntity)
 		{
-			UE_LOG(LogTemp, Error, TEXT("[Client][PC] Unit %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
 			Unit->Destroy();
 			return;
 		}
 
-		FVector PrevCenter(ForceInitToZero);
-		float PrevSlack = 0.f;
-		float PrevSpeed = 0.f;
 		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
 		{
-			PrevCenter = MoveTargetFragmentPtr->Center;
-			PrevSlack = MoveTargetFragmentPtr->SlackRadius;
-			PrevSpeed = MoveTargetFragmentPtr->DesiredSpeed.Get();
-
 			MoveTargetFragmentPtr->Center = NewTargetLocation;
 			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 			MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
@@ -283,13 +270,6 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObje
 			AiStatePtr->StoredLocation = NewTargetLocation;
 			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[Client][PC] Mass MoveTarget updated for %s: PrevCenter=%s -> NewCenter=%s | PrevSpeed=%.1f -> NewSpeed=%.1f | PrevSlack=%.1f -> NewSlack=%.1f"),
-			*Unit->GetName(), *PrevCenter.ToString(), *NewTargetLocation.ToString(), PrevSpeed, DesiredSpeed, PrevSlack, AcceptanceRadius);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[Client][PC] MassEntitySubsystem missing on client world"));
 	}
 }
 

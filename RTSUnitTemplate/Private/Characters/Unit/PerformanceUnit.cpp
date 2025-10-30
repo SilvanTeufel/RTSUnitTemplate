@@ -571,16 +571,6 @@ void APerformanceUnit::SetClientVisibility(bool bVisible)
 
 void APerformanceUnit::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible)
 {
-	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[SetEnemyVisibility] %s (NetMode=%d) DetectingTeam=%d TargetTeam=%d Visible=%d"),
-			HasAuthority() ? TEXT("Server") : TEXT("Client"),
-			GetNetMode(),
-			DetectingActor ? DetectingActor->TeamId : -1,
-			TeamId,
-			bVisible ? 1 : 0);
-	}
-
 	// Do nothing for own team or if state already matches
 	if (IsMyTeam) return;
 	if (IsVisibleEnemy == bVisible) return;
