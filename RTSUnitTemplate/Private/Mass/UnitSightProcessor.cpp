@@ -10,6 +10,7 @@
 #include "MassActorSubsystem.h" // FMassActorFragment
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 UUnitSightProcessor::UUnitSightProcessor(): EntityQuery()
 {
@@ -47,6 +48,35 @@ void UUnitSightProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
             .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitSightProcessor, HandleSightSignals));
         SightSignalDelegateHandles.Add(H2);
     }
+
+    // Bind fog update so clients can update Fog + Minimap locally
+    FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
+        .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitSightProcessor, HandleUpdateFogMask));
+}
+
+void UUnitSightProcessor::HandleUpdateFogMask(FName /*SignalName*/, TArray<FMassEntityHandle>& Entities)
+{
+    if (!World)
+    {
+        return;
+    }
+    APlayerController* PC = World->GetFirstPlayerController();
+    if (!PC)
+    {
+        return;
+    }
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+    if (!CustomPC)
+    {
+        return;
+    }
+    // Copy entity array for async safety
+    TArray<FMassEntityHandle> Copied = Entities;
+    AsyncTask(ENamedThreads::GameThread, [CustomPC, Copied = MoveTemp(Copied)]()
+    {
+        CustomPC->UpdateFogMaskWithCircles(Copied);
+        CustomPC->UpdateMinimap(Copied);
+    });
 }
 
 void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

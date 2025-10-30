@@ -1079,7 +1079,7 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
 	
     for (TActorIterator<AFogActor> It(World); It; ++It)
     {
-        It->Multicast_UpdateFogMaskWithCircles(Positions, WorldRadii, UnitTeamIds);
+        It->UpdateFogMaskWithCircles_Local(Positions, WorldRadii, UnitTeamIds);
     }
 }
 
@@ -1144,7 +1144,7 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
     // Rufe den Multicast auf allen MinimapActors auf und sende ALLE Arrays.
     for (TActorIterator<AMinimapActor> It(World); It; ++It)
     {
-       It->Multicast_UpdateMinimap(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
+       It->UpdateMinimap_Local(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
     }
 }
 

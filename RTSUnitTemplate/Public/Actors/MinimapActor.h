@@ -88,6 +88,15 @@ public:
         const TArray<float>& FogRadii,
         const TArray<uint8>& UnitTeamIds);
 
+    // Local, non-replicated update for client-side rendering
+    UFUNCTION(BlueprintCallable, Category = "Minimap")
+    void UpdateMinimap_Local(
+        const TArray<AUnitBase*>& UnitRefs,
+        const TArray<FVector_NetQuantize>& Positions,
+        const TArray<float>& UnitRadii,
+        const TArray<float>& FogRadii,
+        const TArray<uint8>& UnitTeamIds);
+
 private:
     /** Initializes the transient texture and pixel buffer. */
     void InitMinimapTexture();

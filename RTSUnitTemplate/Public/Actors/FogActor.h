@@ -52,6 +52,13 @@ public:
 		const TArray<FVector_NetQuantize>& Positions,
 		const TArray<float>&              WorldRadii,
 		const TArray<uint8>&              UnitTeamIds);
+
+	// Local (non-replicated) fog update for client-side execution
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateFogMaskWithCircles_Local(
+		const TArray<FVector_NetQuantize>& Positions,
+		const TArray<float>&              WorldRadii,
+		const TArray<uint8>&              UnitTeamIds);
 	//void Multicast_UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

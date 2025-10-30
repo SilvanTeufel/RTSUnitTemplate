@@ -50,4 +50,11 @@ private:
 	
 	// store both enter/exit sight delegate handles
 	TArray<FDelegateHandle> SightSignalDelegateHandles;
+
+	// fog update signal delegate handle
+	FDelegateHandle FogParametersDelegateHandle;
+
+	// Handle fog mask updates on client (and server if needed)
+	UFUNCTION()
+	void HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities);
 };

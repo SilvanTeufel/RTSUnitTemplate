@@ -132,14 +132,12 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     if (!MinimapTexture || MinimapPixels.Num() == 0) return;
 
     // --- Pass 1: Clear the entire map with the Fog Color ---
-    // (Dieser Teil bleibt unverändert)
     for (FColor& Pixel : MinimapPixels)
     {
         Pixel = FogColor;
     }
 
     // --- Pass 2: Reveal the fog for friendly units ---
-    // (Dieser Teil bleibt ebenfalls unverändert)
     const float WorldExtentX = MinimapMaxBounds.X - MinimapMinBounds.X;
     const float WorldExtentY = MinimapMaxBounds.Y - MinimapMinBounds.Y;
     if (WorldExtentX <= 0 || WorldExtentY <= 0) return;
@@ -165,15 +163,12 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
         
         if (UnitTeamIds[i] == TeamId)
         {
-            // Eigene Einheiten immer zeichnen
             bShouldDrawUnit = true;
         }
-        else // Feindliche Einheiten
+        else
         {
-            // Hole den Aktor aus der übergebenen Liste
             if (UnitRefs[i] && UnitRefs[i]->IsVisibleEnemy)
             {
-                // Zeichne den Feind nur, wenn er sichtbar ist
                 bShouldDrawUnit = true;
             }
         }
@@ -194,10 +189,20 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     }
 
     // --- Upload updated pixels to the GPU texture ---
-    // (Dieser Teil bleibt unverändert)
     FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, MinimapTexSize, MinimapTexSize);
     MinimapTexture->UpdateTextureRegions(0, 1, Region, MinimapTexSize * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(MinimapPixels.GetData()));
 }
+
+void AMinimapActor::UpdateMinimap_Local(
+    const TArray<AUnitBase*>& UnitRefs,
+    const TArray<FVector_NetQuantize>& Positions,
+    const TArray<float>& UnitRadii,
+    const TArray<float>& FogRadii,
+    const TArray<uint8>& UnitTeamIds)
+{
+    // Simply reuse the same logic as the multicast implementation
+    Multicast_UpdateMinimap_Implementation(UnitRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
+    }
 
 void AMinimapActor::DrawFilledCircle(TArray<FColor>& Pixels, int32 TexSize, int32 CenterX, int32 CenterY, int32 Radius, const FColor& Color)
 {

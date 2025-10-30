@@ -81,10 +81,7 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
      {
          UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Sight signals are handled by UnitSightProcessor now (NetMode=%d)."), World ? (int32)World->GetNetMode() : -1);
      }
-    	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFogMask));
-
-    	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
+    	SelectionCircleDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
 			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateSelectionCircle));
     	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
