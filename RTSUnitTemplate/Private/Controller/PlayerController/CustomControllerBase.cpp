@@ -1001,14 +1001,12 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, 
 		{
 			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
-				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
 			}
 			Unit->RemoveFocusEntityTarget();
 		}
 		else
 		{
-			DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 			LeftClickAMove(Unit, Location);
 			Unit->RemoveFocusEntityTarget();
 		}
