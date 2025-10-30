@@ -7,6 +7,8 @@
 #include "MassCommonFragments.h"
 #include "MassEntitySubsystem.h"
 #include "MassSignalSubsystem.h"
+#include "MassEntityTypes.h" // for FMassEntityHandle
+#include "Delegates/Delegate.h" // for FDelegateHandle
 #include "UnitSightProcessor.generated.h"
 
 UCLASS()
@@ -22,11 +24,19 @@ protected:
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
+	// Handle sight-related signals directly in the SightProcessor so it can run on client and server
+	UFUNCTION()
+	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
 private:
+	// Split execute paths for server and client
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	
 	UPROPERTY(Transient)
 	UWorld* World;
 	
+	// Main (server) query
 	FMassEntityQuery EntityQuery;
 	
 	float TimeSinceLastRun = 0.0f;
@@ -38,5 +48,6 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 	
-	FDelegateHandle SignalDelegateHandle;
+	// store both enter/exit sight delegate handles
+	TArray<FDelegateHandle> SightSignalDelegateHandles;
 };

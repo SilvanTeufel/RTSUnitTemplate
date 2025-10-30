@@ -75,16 +75,12 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
             // if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
         }
 
-    	for (const FName& SignalName : SightChangeSignals)
-    	{
-    		// Use AddUFunction since ChangeUnitState is a UFUNCTION
-    		FDelegateHandle NewHandle = SignalSubsystem->GetSignalDelegateByName(SignalName)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleSightSignals));
-
-    		SightChangeRequestDelegateHandle.Add(NewHandle);
-    		// Optional: Store handles if you need precise unregistration later
-    		// if (NewHandle.IsValid()) { StateSignalDelegateHandles.Add(NewHandle); }
-    	}
+   		// Sight change signals are now handled by UnitSightProcessor on both client and server.
+   		// Intentionally not binding here to avoid server-only handling.
+     if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+     {
+         UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Sight signals are handled by UnitSightProcessor now (NetMode=%d)."), World ? (int32)World->GetNetMode() : -1);
+     }
     	FogParametersDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFogMask));
 
@@ -2651,51 +2647,17 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 	});
 }
 
-void UUnitStateProcessor::HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities)
+void UUnitStateProcessor::HandleSightSignals(FName /*SignalName*/, TArray<FMassEntityHandle>& /*Entities*/)
 {
-	if (!EntitySubsystem) 
+	// Sight handling moved to UnitSightProcessor to run on both client and server.
+	if (World)
 	{
-		return;
+ 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+ 	{
+ 		UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor::HandleSightSignals] Deprecated. Sight signals are now handled by UnitSightProcessor. NetMode=%d"), (int32)World->GetNetMode());
+ 	}
 	}
-    
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-    
-	if (EntityManager.IsEntityValid(Entities[0]) && EntityManager.IsEntityValid(Entities[1]) ) // Iterate the captured copy
-	{
-		// Check entity validity *on the game thread*
-
-		FMassActorFragment* TargetActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[0]);
-		FMassActorFragment* DetectorActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entities[1]);
-		if (TargetActorFragPtr)
-		{
-			AActor* TargetActor = TargetActorFragPtr->GetMutable();
-			AActor* DetectorActor = DetectorActorFragPtr->GetMutable(); 
-			if (IsValid(TargetActor))
-			{
-				AUnitBase* TargetUnitBase = Cast<AUnitBase>(TargetActor);
-				AUnitBase* DetectorUnitBase = Cast<AUnitBase>(DetectorActor);
-				if (TargetUnitBase )
-				{
-					// Check Signal Name
-					if (SignalName == UnitSignals::UnitEnterSight)
-					{
-						//UE_LOG(LogTemp, Log, TEXT("/// -> DetectorUnitBase>TeamId: %d"), DetectorUnitBase->TeamId)
-						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase, true);
-					}
-					// Check Signal Name
-						
-					if (SignalName == UnitSignals::UnitExitSight)
-					{
-						//if (DetectorUnitBase->TeamId == 1)
-						//UE_LOG(LogTemp, Log, TEXT("/// -> DetectorUnitBase>TeamId: %d"), DetectorUnitBase->TeamId)
-						
-						TargetUnitBase->MulticastSetEnemyVisibility(DetectorUnitBase,false);
-					}
-				}
-			}
-		}
-	}
-	
+	return;
 }
 
 

@@ -168,6 +168,33 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 }
             }
             NewItem.AITargetNetID = TargetNetIDVal;
+            // Build seen arrays (cap to 64 entries each to limit bandwidth)
+            NewItem.AITargetPrevSeenIDs.Reset();
+            NewItem.AITargetCurrSeenIDs.Reset();
+            int32 CountPrev = 0;
+            for (const FMassEntityHandle& H : AIT->PreviouslySeen)
+            {
+                if (EntityManager.IsEntityValid(H))
+                {
+                    if (const FMassNetworkIDFragment* SNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(H))
+                    {
+                        NewItem.AITargetPrevSeenIDs.Add(SNet->NetID.GetValue());
+                        if (++CountPrev >= 64) break;
+                    }
+                }
+            }
+            int32 CountCurr = 0;
+            for (const FMassEntityHandle& H : AIT->CurrentlySeen)
+            {
+                if (EntityManager.IsEntityValid(H))
+                {
+                    if (const FMassNetworkIDFragment* SNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(H))
+                    {
+                        NewItem.AITargetCurrSeenIDs.Add(SNet->NetID.GetValue());
+                        if (++CountCurr >= 64) break;
+                    }
+                }
+            }
         }
         // Fill additional fragments: CombatStats, AgentCharacteristics, AIState
         if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
@@ -176,12 +203,46 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.CS_MaxHealth = CS->MaxHealth;
             NewItem.CS_RunSpeed = CS->RunSpeed;
             NewItem.CS_TeamId = CS->TeamId;
+            NewItem.CS_AttackRange = CS->AttackRange;
+            NewItem.CS_AttackDamage = CS->AttackDamage;
+            NewItem.CS_AttackDuration = CS->AttackDuration;
+            NewItem.CS_IsAttackedDuration = CS->IsAttackedDuration;
+            NewItem.CS_CastTime = CS->CastTime;
+            NewItem.CS_IsInitialized = CS->IsInitialized;
+            NewItem.CS_RotationSpeed = CS->RotationSpeed;
+            NewItem.CS_Armor = CS->Armor;
+            NewItem.CS_MagicResistance = CS->MagicResistance;
+            NewItem.CS_Shield = CS->Shield;
+            NewItem.CS_MaxShield = CS->MaxShield;
+            NewItem.CS_SightRadius = CS->SightRadius;
+            NewItem.CS_LoseSightRadius = CS->LoseSightRadius;
+            NewItem.CS_PauseDuration = CS->PauseDuration;
+            NewItem.CS_bUseProjectile = CS->bUseProjectile;
         }
         if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
         {
             NewItem.AC_bIsFlying = AC->bIsFlying;
             NewItem.AC_bIsInvisible = AC->bIsInvisible;
             NewItem.AC_FlyHeight = AC->FlyHeight;
+            NewItem.AC_bCanOnlyAttackFlying = AC->bCanOnlyAttackFlying;
+            NewItem.AC_bCanOnlyAttackGround = AC->bCanOnlyAttackGround;
+            NewItem.AC_bCanBeInvisible = AC->bCanBeInvisible;
+            NewItem.AC_bCanDetectInvisible = AC->bCanDetectInvisible;
+            NewItem.AC_LastGroundLocation = AC->LastGroundLocation;
+            NewItem.AC_DespawnTime = AC->DespawnTime;
+            NewItem.AC_RotatesToMovement = AC->RotatesToMovement;
+            NewItem.AC_RotatesToEnemy = AC->RotatesToEnemy;
+            NewItem.AC_RotationSpeed = AC->RotationSpeed;
+            // Quantize positioned transform
+            const FTransform& PT = AC->PositionedTransform;
+            NewItem.AC_PosPosition = PT.GetLocation();
+            NewItem.AC_PosScale = PT.GetScale3D();
+            const FRotator PTRot = PT.Rotator();
+            NewItem.AC_PosPitch = QuantizeAngle(PTRot.Pitch);
+            NewItem.AC_PosYaw = QuantizeAngle(PTRot.Yaw);
+            NewItem.AC_PosRoll = QuantizeAngle(PTRot.Roll);
+            NewItem.AC_CapsuleHeight = AC->CapsuleHeight;
+            NewItem.AC_CapsuleRadius = AC->CapsuleRadius;
         }
         if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
         {
@@ -189,6 +250,13 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_CanAttack = AIS->CanAttack;
             NewItem.AIS_CanMove = AIS->CanMove;
             NewItem.AIS_HoldPosition = AIS->HoldPosition;
+            NewItem.AIS_HasAttacked = AIS->HasAttacked;
+            NewItem.AIS_PlaceholderSignal = AIS->PlaceholderSignal;
+            NewItem.AIS_StoredLocation = AIS->StoredLocation;
+            NewItem.AIS_SwitchingState = AIS->SwitchingState;
+            NewItem.AIS_BirthTime = AIS->BirthTime;
+            NewItem.AIS_DeathTime = AIS->DeathTime;
+            NewItem.AIS_IsInitialized = AIS->IsInitialized;
         }
         if (RepLogLevel() >= 2)
         {
@@ -455,6 +523,68 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             }
                             NewItem.AITargetNetID = TargetNetIDVal;
                         }
+                        // Fill additional replicated fragments at creation time (full data)
+                        if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+                        {
+                            NewItem.CS_Health = CS->Health;
+                            NewItem.CS_MaxHealth = CS->MaxHealth;
+                            NewItem.CS_RunSpeed = CS->RunSpeed;
+                            NewItem.CS_TeamId = CS->TeamId;
+                            NewItem.CS_AttackRange = CS->AttackRange;
+                            NewItem.CS_AttackDamage = CS->AttackDamage;
+                            NewItem.CS_AttackDuration = CS->AttackDuration;
+                            NewItem.CS_IsAttackedDuration = CS->IsAttackedDuration;
+                            NewItem.CS_CastTime = CS->CastTime;
+                            NewItem.CS_IsInitialized = CS->IsInitialized;
+                            NewItem.CS_RotationSpeed = CS->RotationSpeed;
+                            NewItem.CS_Armor = CS->Armor;
+                            NewItem.CS_MagicResistance = CS->MagicResistance;
+                            NewItem.CS_Shield = CS->Shield;
+                            NewItem.CS_MaxShield = CS->MaxShield;
+                            NewItem.CS_SightRadius = CS->SightRadius;
+                            NewItem.CS_LoseSightRadius = CS->LoseSightRadius;
+                            NewItem.CS_PauseDuration = CS->PauseDuration;
+                            NewItem.CS_bUseProjectile = CS->bUseProjectile;
+                        }
+                        if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
+                        {
+                            NewItem.AC_bIsFlying = AC->bIsFlying;
+                            NewItem.AC_bIsInvisible = AC->bIsInvisible;
+                            NewItem.AC_FlyHeight = AC->FlyHeight;
+                            NewItem.AC_bCanOnlyAttackFlying = AC->bCanOnlyAttackFlying;
+                            NewItem.AC_bCanOnlyAttackGround = AC->bCanOnlyAttackGround;
+                            NewItem.AC_bCanBeInvisible = AC->bCanBeInvisible;
+                            NewItem.AC_bCanDetectInvisible = AC->bCanDetectInvisible;
+                            NewItem.AC_LastGroundLocation = AC->LastGroundLocation;
+                            NewItem.AC_DespawnTime = AC->DespawnTime;
+                            NewItem.AC_RotatesToMovement = AC->RotatesToMovement;
+                            NewItem.AC_RotatesToEnemy = AC->RotatesToEnemy;
+                            NewItem.AC_RotationSpeed = AC->RotationSpeed;
+                            // Quantize positioned transform
+                            const FTransform& PT = AC->PositionedTransform;
+                            const FRotator PTRot = PT.Rotator();
+                            NewItem.AC_PosPitch = QuantizeAngle(PTRot.Pitch);
+                            NewItem.AC_PosYaw = QuantizeAngle(PTRot.Yaw);
+                            NewItem.AC_PosRoll = QuantizeAngle(PTRot.Roll);
+                            NewItem.AC_PosPosition = PT.GetLocation();
+                            NewItem.AC_PosScale = PT.GetScale3D();
+                            NewItem.AC_CapsuleHeight = AC->CapsuleHeight;
+                            NewItem.AC_CapsuleRadius = AC->CapsuleRadius;
+                        }
+                        if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
+                        {
+                            NewItem.AIS_StateTimer = AIS->StateTimer;
+                            NewItem.AIS_CanAttack = AIS->CanAttack;
+                            NewItem.AIS_CanMove = AIS->CanMove;
+                            NewItem.AIS_HoldPosition = AIS->HoldPosition;
+                            NewItem.AIS_HasAttacked = AIS->HasAttacked;
+                            NewItem.AIS_PlaceholderSignal = AIS->PlaceholderSignal;
+                            NewItem.AIS_StoredLocation = AIS->StoredLocation;
+                            NewItem.AIS_SwitchingState = AIS->SwitchingState;
+                            NewItem.AIS_BirthTime = AIS->BirthTime;
+                            NewItem.AIS_DeathTime = AIS->DeathTime;
+                            NewItem.AIS_IsInitialized = AIS->IsInitialized;
+                        }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -499,6 +629,31 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
                             if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 0.1f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
                             if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 0.1f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
+                            // Seen arrays
+                            TArray<uint32> NewPrevIDs; NewPrevIDs.Reserve(64);
+                            for (const FMassEntityHandle& H : AIT->PreviouslySeen)
+                            {
+                                if (EM->IsEntityValid(H))
+                                {
+                                    if (const FMassNetworkIDFragment* SNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(H))
+                                    {
+                                        NewPrevIDs.Add(SNet->NetID.GetValue()); if (NewPrevIDs.Num()>=64) break;
+                                    }
+                                }
+                            }
+                            TArray<uint32> NewCurrIDs; NewCurrIDs.Reserve(64);
+                            for (const FMassEntityHandle& H : AIT->CurrentlySeen)
+                            {
+                                if (EM->IsEntityValid(H))
+                                {
+                                    if (const FMassNetworkIDFragment* SNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(H))
+                                    {
+                                        NewCurrIDs.Add(SNet->NetID.GetValue()); if (NewCurrIDs.Num()>=64) break;
+                                    }
+                                }
+                            }
+                            if (Item->AITargetPrevSeenIDs != NewPrevIDs) { Item->AITargetPrevSeenIDs = MoveTemp(NewPrevIDs); bDirty = true; }
+                            if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
                         // Keep additional replicated fragments in sync
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
@@ -507,6 +662,22 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!FMath::IsNearlyEqual(Item->CS_MaxHealth, CS->MaxHealth, 0.01f)) { Item->CS_MaxHealth = CS->MaxHealth; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->CS_RunSpeed, CS->RunSpeed, 0.01f)) { Item->CS_RunSpeed = CS->RunSpeed; bDirty = true; }
                             if (Item->CS_TeamId != CS->TeamId) { Item->CS_TeamId = CS->TeamId; bDirty = true; }
+                            // Extended combat stats (ensure full replication including SightRadius)
+                            if (!FMath::IsNearlyEqual(Item->CS_AttackRange, CS->AttackRange, 0.01f)) { Item->CS_AttackRange = CS->AttackRange; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_AttackDamage, CS->AttackDamage, 0.01f)) { Item->CS_AttackDamage = CS->AttackDamage; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_AttackDuration, CS->AttackDuration, 0.001f)) { Item->CS_AttackDuration = CS->AttackDuration; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_IsAttackedDuration, CS->IsAttackedDuration, 0.001f)) { Item->CS_IsAttackedDuration = CS->IsAttackedDuration; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_CastTime, CS->CastTime, 0.001f)) { Item->CS_CastTime = CS->CastTime; bDirty = true; }
+                            if (Item->CS_IsInitialized != CS->IsInitialized) { Item->CS_IsInitialized = CS->IsInitialized; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_RotationSpeed, CS->RotationSpeed, 0.01f)) { Item->CS_RotationSpeed = CS->RotationSpeed; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_Armor, CS->Armor, 0.01f)) { Item->CS_Armor = CS->Armor; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_MagicResistance, CS->MagicResistance, 0.01f)) { Item->CS_MagicResistance = CS->MagicResistance; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_Shield, CS->Shield, 0.01f)) { Item->CS_Shield = CS->Shield; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_MaxShield, CS->MaxShield, 0.01f)) { Item->CS_MaxShield = CS->MaxShield; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_SightRadius, CS->SightRadius, 0.01f)) { Item->CS_SightRadius = CS->SightRadius; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_LoseSightRadius, CS->LoseSightRadius, 0.01f)) { Item->CS_LoseSightRadius = CS->LoseSightRadius; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_PauseDuration, CS->PauseDuration, 0.001f)) { Item->CS_PauseDuration = CS->PauseDuration; bDirty = true; }
+                            if (Item->CS_bUseProjectile != CS->bUseProjectile) { Item->CS_bUseProjectile = CS->bUseProjectile; bDirty = true; }
                         }
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
@@ -516,6 +687,33 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AC_bIsFlying != NewFlying) { Item->AC_bIsFlying = NewFlying; bDirty = true; }
                             if (Item->AC_bIsInvisible != NewInvis) { Item->AC_bIsInvisible = NewInvis; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->AC_FlyHeight, NewFlyH, 0.01f)) { Item->AC_FlyHeight = NewFlyH; bDirty = true; }
+                            // Extended fields
+                            if (Item->AC_bCanOnlyAttackFlying != AC->bCanOnlyAttackFlying) { Item->AC_bCanOnlyAttackFlying = AC->bCanOnlyAttackFlying; bDirty = true; }
+                            if (Item->AC_bCanOnlyAttackGround != AC->bCanOnlyAttackGround) { Item->AC_bCanOnlyAttackGround = AC->bCanOnlyAttackGround; bDirty = true; }
+                            if (Item->AC_bCanBeInvisible != AC->bCanBeInvisible) { Item->AC_bCanBeInvisible = AC->bCanBeInvisible; bDirty = true; }
+                            if (Item->AC_bCanDetectInvisible != AC->bCanDetectInvisible) { Item->AC_bCanDetectInvisible = AC->bCanDetectInvisible; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_LastGroundLocation, AC->LastGroundLocation, 0.01f)) { Item->AC_LastGroundLocation = AC->LastGroundLocation; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_DespawnTime, AC->DespawnTime, 0.001f)) { Item->AC_DespawnTime = AC->DespawnTime; bDirty = true; }
+                            if (Item->AC_RotatesToMovement != AC->RotatesToMovement) { Item->AC_RotatesToMovement = AC->RotatesToMovement; bDirty = true; }
+                            if (Item->AC_RotatesToEnemy != AC->RotatesToEnemy) { Item->AC_RotatesToEnemy = AC->RotatesToEnemy; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_RotationSpeed, AC->RotationSpeed, 0.01f)) { Item->AC_RotationSpeed = AC->RotationSpeed; bDirty = true; }
+                            const FTransform& PT = AC->PositionedTransform;
+                            const FVector PPos = PT.GetLocation();
+                            const FVector PSca = PT.GetScale3D();
+                            const FRotator PRot = PT.Rotator();
+                            const float NormPitch = FMath::Fmod(PRot.Pitch + 360.0f, 360.0f);
+                            const float NormYaw   = FMath::Fmod(PRot.Yaw   + 360.0f, 360.0f);
+                            const float NormRoll  = FMath::Fmod(PRot.Roll  + 360.0f, 360.0f);
+                            const uint16 NP = static_cast<uint16>(FMath::RoundToInt((NormPitch / 360.0f) * 65535.0f));
+                            const uint16 NY = static_cast<uint16>(FMath::RoundToInt((NormYaw   / 360.0f) * 65535.0f));
+                            const uint16 NR = static_cast<uint16>(FMath::RoundToInt((NormRoll  / 360.0f) * 65535.0f));
+                            if (!Item->AC_PosPosition.Equals(PPos, 0.01f)) { Item->AC_PosPosition = PPos; bDirty = true; }
+                            if (!Item->AC_PosScale.Equals(PSca, 0.01f)) { Item->AC_PosScale = PSca; bDirty = true; }
+                            if (Item->AC_PosPitch != NP) { Item->AC_PosPitch = NP; bDirty = true; }
+                            if (Item->AC_PosYaw != NY) { Item->AC_PosYaw = NY; bDirty = true; }
+                            if (Item->AC_PosRoll != NR) { Item->AC_PosRoll = NR; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_CapsuleHeight, AC->CapsuleHeight, 0.01f)) { Item->AC_CapsuleHeight = AC->CapsuleHeight; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_CapsuleRadius, AC->CapsuleRadius, 0.01f)) { Item->AC_CapsuleRadius = AC->CapsuleRadius; bDirty = true; }
                         }
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
@@ -523,6 +721,13 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AIS_CanAttack != AIS->CanAttack) { Item->AIS_CanAttack = AIS->CanAttack; bDirty = true; }
                             if (Item->AIS_CanMove != AIS->CanMove) { Item->AIS_CanMove = AIS->CanMove; bDirty = true; }
                             if (Item->AIS_HoldPosition != AIS->HoldPosition) { Item->AIS_HoldPosition = AIS->HoldPosition; bDirty = true; }
+                            if (Item->AIS_HasAttacked != AIS->HasAttacked) { Item->AIS_HasAttacked = AIS->HasAttacked; bDirty = true; }
+                            if (Item->AIS_PlaceholderSignal != AIS->PlaceholderSignal) { Item->AIS_PlaceholderSignal = AIS->PlaceholderSignal; bDirty = true; }
+                            if (!Item->AIS_StoredLocation.Equals(AIS->StoredLocation, 0.1f)) { Item->AIS_StoredLocation = AIS->StoredLocation; bDirty = true; }
+                            if (Item->AIS_SwitchingState != AIS->SwitchingState) { Item->AIS_SwitchingState = AIS->SwitchingState; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AIS_BirthTime, AIS->BirthTime, 0.001f)) { Item->AIS_BirthTime = AIS->BirthTime; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AIS_DeathTime, AIS->DeathTime, 0.001f)) { Item->AIS_DeathTime = AIS->DeathTime; bDirty = true; }
+                            if (Item->AIS_IsInitialized != AIS->IsInitialized) { Item->AIS_IsInitialized = AIS->IsInitialized; bDirty = true; }
                         }
                         if (RepLogLevel() >= 2)
                         {

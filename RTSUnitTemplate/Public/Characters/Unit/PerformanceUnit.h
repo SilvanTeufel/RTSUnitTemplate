@@ -197,9 +197,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetClientVisibility(bool bVisible);
 	
+	// Local (non-RPC) visibility setter used by SightProcessor on both client and server
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
-
+	
 	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible);
 	// Pure compute helper if you ever need the raw bool:
 	bool ComputeLocalVisibility() const;
@@ -207,7 +211,7 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, Replicated, Category = RTSUnitTemplate)
 	bool bClientIsVisible = false;
-
+	
 	// Renamed to reflect that it *updates* (and/or computes) the client‐side flag:
 	void UpdateClientVisibility();
 };

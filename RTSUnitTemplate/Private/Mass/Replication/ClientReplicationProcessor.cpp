@@ -595,50 +595,107 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 											const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
 											ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
 											// Apply AI target replication to FMassAITargetFragment regardless of transform source
-											if (AITargetList.IsValidIndex(EntityIdx))
-											{
-												FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
-												AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
-												AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
-												AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
-												AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
-												const uint32 TgtID = TagItem->AITargetNetID;
-												if (TgtID != 0)
-												{
-													if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
-													{
-														AITFrag.TargetEntity = *FoundHandle;
-													}
-												}
-												else
-												{
-													AITFrag.TargetEntity.Reset();
-												}
-											}
-											// Apply replicated Combat/Characteristics/AIState subsets
+    							if (AITargetList.IsValidIndex(EntityIdx))
+    							{
+    								FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
+    								AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
+    								AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
+    								AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
+    								AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
+    								const uint32 TgtID = TagItem->AITargetNetID;
+    								if (TgtID != 0)
+    								{
+    									if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+    									{
+    										AITFrag.TargetEntity = *FoundHandle;
+    									}
+    								}
+    								else
+    								{
+    									AITFrag.TargetEntity.Reset();
+    								}
+    								// Rebuild seen sets from replicated NetID arrays
+    								AITFrag.PreviouslySeen.Reset();
+    								for (const uint32 SeenID : TagItem->AITargetPrevSeenIDs)
+    								{
+    									if (const FMassEntityHandle* Found = NetToEntity.Find(SeenID))
+    									{
+    										AITFrag.PreviouslySeen.Add(*Found);
+    									}
+    								}
+    								AITFrag.CurrentlySeen.Reset();
+    								for (const uint32 SeenID : TagItem->AITargetCurrSeenIDs)
+    								{
+    									if (const FMassEntityHandle* Found = NetToEntity.Find(SeenID))
+    									{
+    										AITFrag.CurrentlySeen.Add(*Found);
+    									}
+    								}
+    							}
+    							// Apply replicated Combat/Characteristics/AIState subsets
 											if (CombatList.IsValidIndex(EntityIdx))
 											{
-												FMassCombatStatsFragment& CS = CombatList[EntityIdx];
-												CS.Health = TagItem->CS_Health;
-												CS.MaxHealth = TagItem->CS_MaxHealth;
-												CS.RunSpeed = TagItem->CS_RunSpeed;
-												CS.TeamId = TagItem->CS_TeamId;
-											}
-											if (CharList.IsValidIndex(EntityIdx))
-											{
-												FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-												AC.bIsFlying = TagItem->AC_bIsFlying;
-												AC.bIsInvisible = TagItem->AC_bIsInvisible;
-												AC.FlyHeight = TagItem->AC_FlyHeight;
-											}
-											if (AIStateList.IsValidIndex(EntityIdx))
-											{
-												FMassAIStateFragment& AIS = AIStateList[EntityIdx];
-												AIS.StateTimer = TagItem->AIS_StateTimer;
-												AIS.CanAttack = TagItem->AIS_CanAttack;
-												AIS.CanMove = TagItem->AIS_CanMove;
-												AIS.HoldPosition = TagItem->AIS_HoldPosition;
-											}
+    								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
+    								CS.Health = TagItem->CS_Health;
+    								CS.MaxHealth = TagItem->CS_MaxHealth;
+    								CS.RunSpeed = TagItem->CS_RunSpeed;
+    								CS.TeamId = TagItem->CS_TeamId;
+    								// Extended combat stats
+    								CS.AttackRange = TagItem->CS_AttackRange;
+    								CS.AttackDamage = TagItem->CS_AttackDamage;
+    								CS.AttackDuration = TagItem->CS_AttackDuration;
+    								CS.IsAttackedDuration = TagItem->CS_IsAttackedDuration;
+    								CS.CastTime = TagItem->CS_CastTime;
+    								CS.IsInitialized = TagItem->CS_IsInitialized;
+    								CS.RotationSpeed = TagItem->CS_RotationSpeed;
+    								CS.Armor = TagItem->CS_Armor;
+    								CS.MagicResistance = TagItem->CS_MagicResistance;
+    								CS.Shield = TagItem->CS_Shield;
+    								CS.MaxShield = TagItem->CS_MaxShield;
+    								CS.SightRadius = TagItem->CS_SightRadius;
+    								CS.LoseSightRadius = TagItem->CS_LoseSightRadius;
+    								CS.PauseDuration = TagItem->CS_PauseDuration;
+    								CS.bUseProjectile = TagItem->CS_bUseProjectile;
+    							}
+    							if (CharList.IsValidIndex(EntityIdx))
+    							{
+    								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+    								AC.bIsFlying = TagItem->AC_bIsFlying;
+    								AC.bIsInvisible = TagItem->AC_bIsInvisible;
+    								AC.FlyHeight = TagItem->AC_FlyHeight;
+    								AC.bCanOnlyAttackFlying = TagItem->AC_bCanOnlyAttackFlying;
+    								AC.bCanOnlyAttackGround = TagItem->AC_bCanOnlyAttackGround;
+    								AC.bCanBeInvisible = TagItem->AC_bCanBeInvisible;
+    								AC.bCanDetectInvisible = TagItem->AC_bCanDetectInvisible;
+    								AC.LastGroundLocation = TagItem->AC_LastGroundLocation;
+    								AC.DespawnTime = TagItem->AC_DespawnTime;
+    								AC.RotatesToMovement = TagItem->AC_RotatesToMovement;
+    								AC.RotatesToEnemy = TagItem->AC_RotatesToEnemy;
+    								AC.RotationSpeed = TagItem->AC_RotationSpeed;
+    								// Rebuild PositionedTransform from quantized pieces
+    								const float PPitch = (static_cast<float>(TagItem->AC_PosPitch) / 65535.0f) * 360.0f;
+    								const float PYaw   = (static_cast<float>(TagItem->AC_PosYaw)   / 65535.0f) * 360.0f;
+    								const float PRoll  = (static_cast<float>(TagItem->AC_PosRoll)  / 65535.0f) * 360.0f;
+    								const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
+    								AC.PositionedTransform = FTransform(PRot, FVector(TagItem->AC_PosPosition), FVector(TagItem->AC_PosScale));
+    								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
+    								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
+    							}
+    	    					if (AIStateList.IsValidIndex(EntityIdx))
+    							{
+    								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+    								AIS.StateTimer = TagItem->AIS_StateTimer;
+    								AIS.CanAttack = TagItem->AIS_CanAttack;
+    								AIS.CanMove = TagItem->AIS_CanMove;
+    								AIS.HoldPosition = TagItem->AIS_HoldPosition;
+    								AIS.HasAttacked = TagItem->AIS_HasAttacked;
+    								AIS.PlaceholderSignal = TagItem->AIS_PlaceholderSignal;
+    								AIS.StoredLocation = FVector(TagItem->AIS_StoredLocation);
+    								AIS.SwitchingState = TagItem->AIS_SwitchingState;
+    								AIS.BirthTime = TagItem->AIS_BirthTime;
+    								AIS.DeathTime = TagItem->AIS_DeathTime;
+    								AIS.IsInitialized = TagItem->AIS_IsInitialized;
+    							}
 											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 											{
  											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
@@ -761,6 +818,69 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									{
 										AITFrag.TargetEntity.Reset();
 									}
+								}
+								// Also apply replicated CombatStats/Characteristics/AIState from bubble item to ensure full data on client
+								if (CombatList.IsValidIndex(EntityIdx))
+								{
+									FMassCombatStatsFragment& CS = CombatList[EntityIdx];
+									CS.Health = UseItem->CS_Health;
+									CS.MaxHealth = UseItem->CS_MaxHealth;
+									CS.RunSpeed = UseItem->CS_RunSpeed;
+									CS.TeamId = UseItem->CS_TeamId;
+									CS.AttackRange = UseItem->CS_AttackRange;
+									CS.AttackDamage = UseItem->CS_AttackDamage;
+									CS.AttackDuration = UseItem->CS_AttackDuration;
+									CS.IsAttackedDuration = UseItem->CS_IsAttackedDuration;
+									CS.CastTime = UseItem->CS_CastTime;
+									CS.IsInitialized = UseItem->CS_IsInitialized;
+									CS.RotationSpeed = UseItem->CS_RotationSpeed;
+									CS.Armor = UseItem->CS_Armor;
+									CS.MagicResistance = UseItem->CS_MagicResistance;
+									CS.Shield = UseItem->CS_Shield;
+									CS.MaxShield = UseItem->CS_MaxShield;
+									CS.SightRadius = UseItem->CS_SightRadius;
+									CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
+									CS.PauseDuration = UseItem->CS_PauseDuration;
+									CS.bUseProjectile = UseItem->CS_bUseProjectile;
+								}
+								if (CharList.IsValidIndex(EntityIdx))
+								{
+									FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+									AC.bIsFlying = UseItem->AC_bIsFlying;
+									AC.bIsInvisible = UseItem->AC_bIsInvisible;
+									AC.FlyHeight = UseItem->AC_FlyHeight;
+									AC.bCanOnlyAttackFlying = UseItem->AC_bCanOnlyAttackFlying;
+									AC.bCanOnlyAttackGround = UseItem->AC_bCanOnlyAttackGround;
+									AC.bCanBeInvisible = UseItem->AC_bCanBeInvisible;
+									AC.bCanDetectInvisible = UseItem->AC_bCanDetectInvisible;
+									AC.LastGroundLocation = UseItem->AC_LastGroundLocation;
+									AC.DespawnTime = UseItem->AC_DespawnTime;
+									AC.RotatesToMovement = UseItem->AC_RotatesToMovement;
+									AC.RotatesToEnemy = UseItem->AC_RotatesToEnemy;
+									AC.RotationSpeed = UseItem->AC_RotationSpeed;
+									// Rebuild PositionedTransform from quantized pieces
+									const float PPitch = (static_cast<float>(UseItem->AC_PosPitch) / 65535.0f) * 360.0f;
+									const float PYaw   = (static_cast<float>(UseItem->AC_PosYaw)   / 65535.0f) * 360.0f;
+									const float PRoll  = (static_cast<float>(UseItem->AC_PosRoll)  / 65535.0f) * 360.0f;
+									const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
+									AC.PositionedTransform = FTransform(PRot, FVector(UseItem->AC_PosPosition), FVector(UseItem->AC_PosScale));
+									AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
+									AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
+								}
+								if (AIStateList.IsValidIndex(EntityIdx))
+								{
+									FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+									AIS.StateTimer = UseItem->AIS_StateTimer;
+									AIS.CanAttack = UseItem->AIS_CanAttack;
+									AIS.CanMove = UseItem->AIS_CanMove;
+									AIS.HoldPosition = UseItem->AIS_HoldPosition;
+									AIS.HasAttacked = UseItem->AIS_HasAttacked;
+									AIS.PlaceholderSignal = UseItem->AIS_PlaceholderSignal;
+									AIS.StoredLocation = FVector(UseItem->AIS_StoredLocation);
+									AIS.SwitchingState = UseItem->AIS_SwitchingState;
+									AIS.BirthTime = UseItem->AIS_BirthTime;
+									AIS.DeathTime = UseItem->AIS_DeathTime;
+									AIS.IsInitialized = UseItem->AIS_IsInitialized;
 								}
 							}
 						}

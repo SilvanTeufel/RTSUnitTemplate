@@ -66,26 +66,71 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Last known location of the target
 	UPROPERTY()
 	FVector_NetQuantize AITargetLastKnownLocation;
-	// Ability target location (coarse precision is fine)
-	UPROPERTY()
-	FVector_NetQuantize10 AbilityTargetLocation;
+ // Ability target location (coarse precision is fine)
+ UPROPERTY()
+ FVector_NetQuantize10 AbilityTargetLocation;
+ // Replicate seen sets as NetID arrays (bounded on server)
+ UPROPERTY()
+ TArray<uint32> AITargetPrevSeenIDs;
+ UPROPERTY()
+ TArray<uint32> AITargetCurrSeenIDs;
 
-	// --- FMassCombatStatsFragment (subset) ---
+ // --- FMassCombatStatsFragment (full) ---
 	UPROPERTY() float CS_Health = 0.f;
 	UPROPERTY() float CS_MaxHealth = 0.f;
 	UPROPERTY() float CS_RunSpeed = 0.f;
 	UPROPERTY() int32 CS_TeamId = 0;
+	UPROPERTY() float CS_AttackRange = 0.f;
+	UPROPERTY() float CS_AttackDamage = 0.f;
+	UPROPERTY() float CS_AttackDuration = 0.f;
+	UPROPERTY() float CS_IsAttackedDuration = 0.f;
+	UPROPERTY() float CS_CastTime = 0.f;
+	UPROPERTY() bool CS_IsInitialized = true;
+	UPROPERTY() float CS_RotationSpeed = 0.f;
+	UPROPERTY() float CS_Armor = 0.f;
+	UPROPERTY() float CS_MagicResistance = 0.f;
+	UPROPERTY() float CS_Shield = 0.f;
+	UPROPERTY() float CS_MaxShield = 0.f;
+	UPROPERTY() float CS_SightRadius = 0.f;
+	UPROPERTY() float CS_LoseSightRadius = 0.f;
+	UPROPERTY() float CS_PauseDuration = 0.f;
+	UPROPERTY() bool CS_bUseProjectile = false;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
 	UPROPERTY() bool AC_bIsFlying = false;
 	UPROPERTY() bool AC_bIsInvisible = false;
 	UPROPERTY() float AC_FlyHeight = 0.f;
+	// Extended AgentCharacteristics (full)
+	UPROPERTY() bool AC_bCanOnlyAttackFlying = true;
+	UPROPERTY() bool AC_bCanOnlyAttackGround = true;
+	UPROPERTY() bool AC_bCanBeInvisible = false;
+	UPROPERTY() bool AC_bCanDetectInvisible = false;
+	UPROPERTY() float AC_LastGroundLocation = 0.f;
+	UPROPERTY() float AC_DespawnTime = 0.f;
+	UPROPERTY() bool AC_RotatesToMovement = true;
+	UPROPERTY() bool AC_RotatesToEnemy = true;
+	UPROPERTY() float AC_RotationSpeed = 0.f;
+	// Quantized positioned transform from AgentCharacteristics
+	UPROPERTY() FVector_NetQuantize10 AC_PosPosition = FVector::ZeroVector;
+	UPROPERTY() FVector_NetQuantize10 AC_PosScale = FVector(1.f,1.f,1.f);
+	UPROPERTY() uint16 AC_PosPitch = 0;
+	UPROPERTY() uint16 AC_PosYaw = 0;
+	UPROPERTY() uint16 AC_PosRoll = 0;
+	UPROPERTY() float AC_CapsuleHeight = 0.f;
+	UPROPERTY() float AC_CapsuleRadius = 0.f;
 
-	// --- FMassAIStateFragment (subset) ---
+	// --- FMassAIStateFragment (full) ---
 	UPROPERTY() float AIS_StateTimer = 0.f;
 	UPROPERTY() bool AIS_CanAttack = true;
 	UPROPERTY() bool AIS_CanMove = true;
 	UPROPERTY() bool AIS_HoldPosition = false;
+	UPROPERTY() bool AIS_HasAttacked = false;
+	UPROPERTY() FName AIS_PlaceholderSignal = NAME_None;
+	UPROPERTY() FVector_NetQuantize10 AIS_StoredLocation = FVector::ZeroVector;
+	UPROPERTY() bool AIS_SwitchingState = false;
+	UPROPERTY() float AIS_BirthTime = 0.f;
+	UPROPERTY() float AIS_DeathTime = 0.f;
+	UPROPERTY() bool AIS_IsInitialized = true;
 
 	// Default Constructor
 	FUnitReplicationItem()
