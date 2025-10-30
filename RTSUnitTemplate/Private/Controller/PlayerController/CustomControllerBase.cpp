@@ -1076,8 +1076,7 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
                 UnitTeamIds.Add(StateFrag->TeamId);
         }
     }
-
-    // **One** multicast to all FogActors
+	
     for (TActorIterator<AFogActor> It(World); It; ++It)
     {
         It->Multicast_UpdateFogMaskWithCircles(Positions, WorldRadii, UnitTeamIds);
