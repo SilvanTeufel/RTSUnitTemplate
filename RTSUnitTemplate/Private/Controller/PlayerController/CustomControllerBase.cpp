@@ -844,9 +844,12 @@ void ACustomControllerBase::LeftClickPressedMass()
     }
     else if (AttackToggled)
     {
-        // 1) get world hit under cursor
+        // 1) get world hit under cursor for ground and pawn
         FHitResult Hit;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+        FHitResult HitPawn;
+        GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+        AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
 
         int32 NumUnits = SelectedUnits.Num();
         if (NumUnits == 0) return;
@@ -879,7 +882,8 @@ void ACustomControllerBase::LeftClickPressedMass()
             {
                 if (U->bIsMassUnit)
                 {
-                    LeftClickAttackMass(U, RunLocation, AttackToggled);
+                    LeftClickAttackMass(U, RunLocation, AttackToggled, CursorHitActor);
+                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                 }
                 else
                 {
@@ -979,50 +983,35 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor)
 {
-	if (Unit && Unit->UnitState != UnitData::Dead) {
-	
-		FHitResult Hit_Pawn;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
+	if (Unit && Unit->UnitState != UnitData::Dead)
+	{
+		AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
 
-		if (Hit_Pawn.bBlockingHit)
+		if (TargetUnitBase)
 		{
-			AUnitBase* TargetUnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-			
-			if(TargetUnitBase)
-			{
-				/// Focus Enemy Units ///
-				Unit->UnitToChase = TargetUnitBase;
-				Unit->FocusEntityTarget(TargetUnitBase);
-				SetUnitState_Replication(Unit, 3);
-				Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
-			}else if(UseUnrealEnginePathFinding)
-			{
-				if (Unit && Unit->UnitState != UnitData::Dead)
-				{
-					DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
-					LeftClickAMoveUEPFMass(Unit, Location, AttackT);
-				}
-				Unit->RemoveFocusEntityTarget();
-			}else
-			{
-				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
-				LeftClickAMove(Unit, Location);
-				Unit->RemoveFocusEntityTarget();
-			}
-		}else if(UseUnrealEnginePathFinding)
+			/// Focus Enemy Units ///
+			Unit->UnitToChase = TargetUnitBase;
+			Unit->FocusEntityTarget(TargetUnitBase);
+			SetUnitState_Replication(Unit, 3);
+			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
+		}
+		else if (UseUnrealEnginePathFinding)
 		{
 			if (Unit && Unit->UnitState != UnitData::Dead)
 			{
-				/// A-Move Units ///
 				DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
 				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
-				Unit->RemoveFocusEntityTarget();
 			}
-					
+			Unit->RemoveFocusEntityTarget();
 		}
-			
+		else
+		{
+			DrawDebugCircleAtLocation(GetWorld(), Location, FColor::Red);
+			LeftClickAMove(Unit, Location);
+			Unit->RemoveFocusEntityTarget();
+		}
 	}
 }
 

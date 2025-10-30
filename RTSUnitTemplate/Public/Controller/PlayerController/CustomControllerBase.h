@@ -139,7 +139,7 @@ public:
 	void LeftClickPressedMass();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAttackMass(AUnitBase* Unit, FVector Location, bool AttackT);
+	void LeftClickAttackMass(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor = nullptr);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location, bool AttackT);
