@@ -106,6 +106,9 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.RegisterWithProcessor(*this);
 	
 }
@@ -434,6 +437,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassNetworkIDFragment> NetIDList = Context.GetMutableFragmentView<FMassNetworkIDFragment>();
 			const TConstArrayView<FMassRepresentationLODFragment> LODList = Context.GetFragmentView<FMassRepresentationLODFragment>();
 			TArrayView<FMassAITargetFragment> AITargetList = Context.GetMutableFragmentView<FMassAITargetFragment>();
+			// New replicated fragments to apply on client
+			TArrayView<FMassCombatStatsFragment> CombatList = Context.GetMutableFragmentView<FMassCombatStatsFragment>();
+			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
+			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 
 			// Log registered NetIDs on client for this chunk (verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -584,41 +591,69 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								{
 									if (UMassEntitySubsystem* ES = WorldForTags->GetSubsystem<UMassEntitySubsystem>())
 									{
-										FMassEntityManager& EMgr = ES->GetMutableEntityManager();
-										const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
-										ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
-										// Apply AI target replication to FMassAITargetFragment regardless of transform source
-										if (AITargetList.IsValidIndex(EntityIdx))
-										{
-											FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
-											AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
-											AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
-											AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
-											AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
-											const uint32 TgtID = TagItem->AITargetNetID;
-											if (TgtID != 0)
+											FMassEntityManager& EMgr = ES->GetMutableEntityManager();
+											const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+											ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
+											// Apply AI target replication to FMassAITargetFragment regardless of transform source
+											if (AITargetList.IsValidIndex(EntityIdx))
 											{
-												if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+												FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
+												AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
+												AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
+												AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
+												AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
+												const uint32 TgtID = TagItem->AITargetNetID;
+												if (TgtID != 0)
 												{
-													AITFrag.TargetEntity = *FoundHandle;
+													if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+													{
+														AITFrag.TargetEntity = *FoundHandle;
+													}
+												}
+												else
+												{
+													AITFrag.TargetEntity.Reset();
 												}
 											}
-											else
+											// Apply replicated Combat/Characteristics/AIState subsets
+											if (CombatList.IsValidIndex(EntityIdx))
 											{
-												AITFrag.TargetEntity.Reset();
+												FMassCombatStatsFragment& CS = CombatList[EntityIdx];
+												CS.Health = TagItem->CS_Health;
+												CS.MaxHealth = TagItem->CS_MaxHealth;
+												CS.RunSpeed = TagItem->CS_RunSpeed;
+												CS.TeamId = TagItem->CS_TeamId;
 											}
-										}
-										if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-										{
-											UE_LOG(LogTemp, Verbose, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
-											UE_LOG(LogTemp, Verbose, TEXT("ClientBubble AITarget: NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetNetID=%u"),
-												NetIDList[EntityIdx].NetID.GetValue(),
-												(TagItem->AITargetFlags & 1u)?1:0,
-												(TagItem->AITargetFlags & 2u)?1:0,
-												*FVector(TagItem->AITargetLastKnownLocation).ToString(),
-												*FVector(TagItem->AbilityTargetLocation).ToString(),
-												TagItem->AITargetNetID);
-										}
+											if (CharList.IsValidIndex(EntityIdx))
+											{
+												FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+												AC.bIsFlying = TagItem->AC_bIsFlying;
+												AC.bIsInvisible = TagItem->AC_bIsInvisible;
+												AC.FlyHeight = TagItem->AC_FlyHeight;
+											}
+											if (AIStateList.IsValidIndex(EntityIdx))
+											{
+												FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+												AIS.StateTimer = TagItem->AIS_StateTimer;
+												AIS.CanAttack = TagItem->AIS_CanAttack;
+												AIS.CanMove = TagItem->AIS_CanMove;
+												AIS.HoldPosition = TagItem->AIS_HoldPosition;
+											}
+											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+											{
+ 											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
+ 											UE_LOG(LogTemp, Log, TEXT("ClientBubble AITarget: NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetNetID=%u"),
+ 												NetIDList[EntityIdx].NetID.GetValue(),
+ 												(TagItem->AITargetFlags & 1u)?1:0,
+ 												(TagItem->AITargetFlags & 2u)?1:0,
+ 												*FVector(TagItem->AITargetLastKnownLocation).ToString(),
+ 												*FVector(TagItem->AbilityTargetLocation).ToString(),
+ 												TagItem->AITargetNetID);
+ 											UE_LOG(LogTemp, Log, TEXT("ClientRep Frags: Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+ 												TagItem->CS_Health, TagItem->CS_MaxHealth, TagItem->CS_RunSpeed, TagItem->CS_TeamId,
+ 												TagItem->AC_bIsFlying?1:0, TagItem->AC_bIsInvisible?1:0, TagItem->AC_FlyHeight,
+ 												TagItem->AIS_StateTimer, TagItem->AIS_CanAttack?1:0, TagItem->AIS_CanMove?1:0, TagItem->AIS_HoldPosition?1:0);
+											}
 									}
 								}
 							}

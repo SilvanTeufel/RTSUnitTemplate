@@ -6,6 +6,19 @@
 #include "Net/UnrealNetwork.h"
 #include "UnitReplicationPayload.generated.h"
 
+// NOTE: Replicated fragments/tags summary and where to find them:
+// - Replicated fragments (payload fields below):
+//   - FTransformFragment (Location/Rotation/Scale)
+//   - FMassActorFragment (OwnerName as stable owner key)
+//   - FMassCombatStatsFragment (subset: Health, MaxHealth, RunSpeed, TeamId)
+//   - FMassAgentCharacteristicsFragment (subset: bIsFlying, bIsInvisible, FlyHeight)
+//   - FMassAIStateFragment (subset: StateTimer, CanAttack, CanMove, HoldPosition)
+//   - FMassAITargetFragment (Target flags/NetID/locations)
+// - Replicated tags: packed into TagBits (see ApplyReplicatedTagBits in UnitMassTag.h)
+// Writers: Mass/Replication/MassUnitReplicatorBase.cpp (server side)
+// Readers: Mass/Replication/ClientReplicationProcessor.cpp (client side)
+// Transport: Mass/Replication/UnitClientBubbleInfo.* (FastArray Agents)
+
 // Forward Declarations
 struct FUnitReplicationArray;
 
@@ -56,6 +69,23 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Ability target location (coarse precision is fine)
 	UPROPERTY()
 	FVector_NetQuantize10 AbilityTargetLocation;
+
+	// --- FMassCombatStatsFragment (subset) ---
+	UPROPERTY() float CS_Health = 0.f;
+	UPROPERTY() float CS_MaxHealth = 0.f;
+	UPROPERTY() float CS_RunSpeed = 0.f;
+	UPROPERTY() int32 CS_TeamId = 0;
+
+	// --- FMassAgentCharacteristicsFragment (subset) ---
+	UPROPERTY() bool AC_bIsFlying = false;
+	UPROPERTY() bool AC_bIsInvisible = false;
+	UPROPERTY() float AC_FlyHeight = 0.f;
+
+	// --- FMassAIStateFragment (subset) ---
+	UPROPERTY() float AIS_StateTimer = 0.f;
+	UPROPERTY() bool AIS_CanAttack = true;
+	UPROPERTY() bool AIS_CanMove = true;
+	UPROPERTY() bool AIS_HoldPosition = false;
 
 	// Default Constructor
 	FUnitReplicationItem()

@@ -303,6 +303,27 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: AITarget NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
 					ID, bHas?1:0, bFocused?1:0, *LKL.ToString(), *AbilityLoc.ToString(), bTargetSet?1:0, TargetNetID);
 			}
+			// Also log values of replicated fragments (CombatStats, AgentCharacteristics, AIState)
+			for (int32 i = 0; i < MaxLog; ++i)
+			{
+				const uint32 ID = NetIDs[i].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				float H = 0.f, MH = 0.f, Run = 0.f, FlyH = 0.f, StateT = 0.f; int32 Team = 0; bool Fly = false, Invis = false, CanAtk = true, CanMove = true, Hold = false;
+				if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+				{
+					H = CS->Health; MH = CS->MaxHealth; Run = CS->RunSpeed; Team = CS->TeamId;
+				}
+				if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
+				{
+					Fly = AC->bIsFlying; Invis = AC->bIsInvisible; FlyH = AC->FlyHeight;
+				}
+				if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
+				{
+					StateT = AIS->StateTimer; CanAtk = AIS->CanAttack; CanMove = AIS->CanMove; Hold = AIS->HoldPosition;
+				}
+				UE_LOG(LogTemp, Log, TEXT("ServerRep Frags: Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+					H, MH, Run, Team, Fly?1:0, Invis?1:0, FlyH, StateT, CanAtk?1:0, CanMove?1:0, Hold?1:0);
+			}
 		}
 
 		// Invoke the same function the MassReplicationProcessor would call on the server.

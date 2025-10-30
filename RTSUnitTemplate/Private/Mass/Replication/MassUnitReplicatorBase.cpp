@@ -66,6 +66,10 @@ void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
     // Adding it again causes a duplicate-requirement assertion in UE 5.6.
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
     // Do NOT add FMassNetworkIDFragment here to avoid duplicates.
 }
 
@@ -164,6 +168,34 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 }
             }
             NewItem.AITargetNetID = TargetNetIDVal;
+        }
+        // Fill additional fragments: CombatStats, AgentCharacteristics, AIState
+        if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+        {
+            NewItem.CS_Health = CS->Health;
+            NewItem.CS_MaxHealth = CS->MaxHealth;
+            NewItem.CS_RunSpeed = CS->RunSpeed;
+            NewItem.CS_TeamId = CS->TeamId;
+        }
+        if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
+        {
+            NewItem.AC_bIsFlying = AC->bIsFlying;
+            NewItem.AC_bIsInvisible = AC->bIsInvisible;
+            NewItem.AC_FlyHeight = AC->FlyHeight;
+        }
+        if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+        {
+            NewItem.AIS_StateTimer = AIS->StateTimer;
+            NewItem.AIS_CanAttack = AIS->CanAttack;
+            NewItem.AIS_CanMove = AIS->CanMove;
+            NewItem.AIS_HoldPosition = AIS->HoldPosition;
+        }
+        if (RepLogLevel() >= 2)
+        {
+            UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Add): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+                NetID.GetValue(), NewItem.CS_Health, NewItem.CS_MaxHealth, NewItem.CS_RunSpeed, NewItem.CS_TeamId,
+                NewItem.AC_bIsFlying?1:0, NewItem.AC_bIsInvisible?1:0, NewItem.AC_FlyHeight,
+                NewItem.AIS_StateTimer, NewItem.AIS_CanAttack?1:0, NewItem.AIS_CanMove?1:0, NewItem.AIS_HoldPosition?1:0);
         }
 
         const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
@@ -390,7 +422,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 {
                     FUnitReplicationItem NewItem;
                     NewItem.NetID = NetID;
-                    // OwnerName left unset here; can be filled elsewhere if needed.
+                    NewItem.OwnerName = OwnerName;
                     NewItem.Location = Loc;
                     auto QuantizeAngle = [](float AngleDeg)->uint16
                     {
@@ -467,6 +499,37 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
                             if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 0.1f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
                             if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 0.1f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
+                        }
+                        // Keep additional replicated fragments in sync
+                        if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+                        {
+                            if (!FMath::IsNearlyEqual(Item->CS_Health, CS->Health, 0.01f)) { Item->CS_Health = CS->Health; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_MaxHealth, CS->MaxHealth, 0.01f)) { Item->CS_MaxHealth = CS->MaxHealth; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->CS_RunSpeed, CS->RunSpeed, 0.01f)) { Item->CS_RunSpeed = CS->RunSpeed; bDirty = true; }
+                            if (Item->CS_TeamId != CS->TeamId) { Item->CS_TeamId = CS->TeamId; bDirty = true; }
+                        }
+                        if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
+                        {
+                            const bool NewFlying = AC->bIsFlying;
+                            const bool NewInvis = AC->bIsInvisible;
+                            const float NewFlyH = AC->FlyHeight;
+                            if (Item->AC_bIsFlying != NewFlying) { Item->AC_bIsFlying = NewFlying; bDirty = true; }
+                            if (Item->AC_bIsInvisible != NewInvis) { Item->AC_bIsInvisible = NewInvis; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->AC_FlyHeight, NewFlyH, 0.01f)) { Item->AC_FlyHeight = NewFlyH; bDirty = true; }
+                        }
+                        if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
+                        {
+                            if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) { Item->AIS_StateTimer = AIS->StateTimer; bDirty = true; }
+                            if (Item->AIS_CanAttack != AIS->CanAttack) { Item->AIS_CanAttack = AIS->CanAttack; bDirty = true; }
+                            if (Item->AIS_CanMove != AIS->CanMove) { Item->AIS_CanMove = AIS->CanMove; bDirty = true; }
+                            if (Item->AIS_HoldPosition != AIS->HoldPosition) { Item->AIS_HoldPosition = AIS->HoldPosition; bDirty = true; }
+                        }
+                        if (RepLogLevel() >= 2)
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Upd): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+                                NetID.GetValue(), Item->CS_Health, Item->CS_MaxHealth, Item->CS_RunSpeed, Item->CS_TeamId,
+                                Item->AC_bIsFlying?1:0, Item->AC_bIsInvisible?1:0, Item->AC_FlyHeight,
+                                Item->AIS_StateTimer, Item->AIS_CanAttack?1:0, Item->AIS_CanMove?1:0, Item->AIS_HoldPosition?1:0);
                         }
                     }
                     if (bDirty)
