@@ -203,6 +203,10 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ApplyWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
 
+	// Update WorkArea location on client, used for clients with same TeamId on drop
+	UFUNCTION(Client, Reliable)
+	void Client_UpdateWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+
 	// Helper to compute a grounded location so the mesh bottom rests on the ground
 	FVector ComputeGroundedLocation(AWorkArea* DraggedArea, const FVector& DesiredLocation) const;
 

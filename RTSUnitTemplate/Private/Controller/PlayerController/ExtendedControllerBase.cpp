@@ -532,10 +532,36 @@ void AExtendedControllerBase::Server_FinalizeWorkAreaPosition_Implementation(AWo
 	const FVector Grounded = ComputeGroundedLocation(DraggedArea, NewActorPosition);
 	DraggedArea->SetActorLocation(Grounded);
 	DraggedArea->ForceNetUpdate();
+
+	// Inform all clients (legacy behavior)
 	Multicast_ApplyWorkAreaPosition(DraggedArea, Grounded);
+
+	// Additionally, explicitly update clients that share the same TeamId as the WorkArea
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			APlayerController* PC = It->Get();
+			AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(PC);
+			if (!ExtPC) continue;
+
+			// Compare the controller's selectable team against the WorkArea's team
+			if (ExtPC->SelectableTeamId == DraggedArea->TeamId)
+			{
+				ExtPC->Client_UpdateWorkAreaPosition(DraggedArea, Grounded);
+			}
+		}
+	}
 }
 
 void AExtendedControllerBase::Multicast_ApplyWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
+{
+	if (!DraggedArea) return;
+	DraggedArea->SetActorLocation(NewActorPosition);
+}
+
+void AExtendedControllerBase::Client_UpdateWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
 {
 	if (!DraggedArea) return;
 	DraggedArea->SetActorLocation(NewActorPosition);
