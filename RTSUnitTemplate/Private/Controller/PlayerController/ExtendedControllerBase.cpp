@@ -40,7 +40,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	MoveDraggedUnit_Implementation(DeltaSeconds);
-	MoveWorkArea_Implementation(DeltaSeconds);
+	MoveWorkArea_Local(DeltaSeconds);
 	MoveAbilityIndicator_Implementation(DeltaSeconds);
 }
 
@@ -525,6 +525,59 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
 	DraggedArea->ForceNetUpdate();
 }
 
+void AExtendedControllerBase::Server_FinalizeWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
+{
+	if (!DraggedArea) return;
+	// Compute grounded position on the server to ensure mesh bottom sits on ground
+	const FVector Grounded = ComputeGroundedLocation(DraggedArea, NewActorPosition);
+	DraggedArea->SetActorLocation(Grounded);
+	DraggedArea->ForceNetUpdate();
+	Multicast_ApplyWorkAreaPosition(DraggedArea, Grounded);
+}
+
+void AExtendedControllerBase::Multicast_ApplyWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FVector NewActorPosition)
+{
+	if (!DraggedArea) return;
+	DraggedArea->SetActorLocation(NewActorPosition);
+}
+
+FVector AExtendedControllerBase::ComputeGroundedLocation(AWorkArea* DraggedArea, const FVector& DesiredLocation) const
+{
+	if (!DraggedArea) return DesiredLocation;
+
+	UStaticMeshComponent* MeshComponent = DraggedArea->FindComponentByClass<UStaticMeshComponent>();
+	if (!MeshComponent)
+	{
+		return DesiredLocation; // No mesh, use desired location as-is
+	}
+
+	// Use current bounds to understand bottom offset from actor location
+	const FBoxSphereBounds MeshBounds = MeshComponent->CalcBounds(MeshComponent->GetComponentTransform());
+	const float HalfHeight = MeshBounds.BoxExtent.Z;
+	const float CurrentBottomZ = MeshBounds.Origin.Z - HalfHeight;
+	const float OffsetActorToBottom = CurrentBottomZ - DraggedArea->GetActorLocation().Z; // how far below actor loc the mesh bottom currently is
+
+	// Trace straight down from above the desired XY to find ground
+	const FVector TraceStart = FVector(DesiredLocation.X, DesiredLocation.Y, DesiredLocation.Z + 2000.f);
+	const FVector TraceEnd   = FVector(DesiredLocation.X, DesiredLocation.Y, DesiredLocation.Z - 10000.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(FName(TEXT("WorkArea_GroundTrace")), true, DraggedArea);
+	// Ignore all WorkAreas so we hit world
+	for (TActorIterator<AWorkArea> It(DraggedArea->GetWorld()); It; ++It)
+	{
+		Params.AddIgnoredActor(*It);
+	}
+
+	FVector Result = DesiredLocation;
+	if (DraggedArea->GetWorld() && DraggedArea->GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
+	{
+		// Place so that mesh bottom rests exactly on the hit surface
+		Result.Z = Hit.ImpactPoint.Z - OffsetActorToBottom;
+	}
+	return Result;
+}
+
 
 AActor* AExtendedControllerBase::CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation)
 {
@@ -640,7 +693,9 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     //    Otherwise, we keep the dragged actor’s original Z.
 
     // 9) Finally, move the dragged actor
-	SetWorkAreaPosition(DraggedActor, SnappedPos);
+	// Client-only preview move; do not RPC during drag
+	const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedPos);
+	DraggedActor->SetActorLocation(GroundedSnap);
 
 	//
 	// ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
@@ -703,7 +758,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
 }
 
 
-void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
+void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 {
     // Sanity check that we have at least one "SelectedUnit"
     if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
@@ -877,17 +932,19 @@ void AExtendedControllerBase::MoveWorkArea_Implementation(float DeltaSeconds)
     //---------------------------------
     // If no snap, move the WorkArea
     //---------------------------------
-    if (bHit && HitResult.GetActor() != nullptr) // && !bAnyOverlap
-    {
-        CurrentDraggedGround = HitResult.GetActor();
+        if (bHit && HitResult.GetActor() != nullptr) // && !bAnyOverlap
+        {
+            CurrentDraggedGround = HitResult.GetActor();
 
-        FVector NewActorPosition = HitResult.Location;
-        // Adjust Z if needed
-        NewActorPosition.Z += DraggedAreaZOffset; 
-        SetWorkAreaPosition(DraggedWorkArea, NewActorPosition);
+            FVector NewActorPosition = HitResult.Location;
+            // Adjust Z if needed
+            NewActorPosition.Z += DraggedAreaZOffset; 
+            // Client-only preview move during drag with grounded Z
+            const FVector GroundedPos = ComputeGroundedLocation(DraggedWorkArea, NewActorPosition);
+            DraggedWorkArea->SetActorLocation(GroundedPos);
 
-        WorkAreaIsSnapped = false;
-    }
+            WorkAreaIsSnapped = false;
+        }
 }
 
 
@@ -1062,7 +1119,9 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
         FVector NewActorPosition = HitResult.Location;
         // Adjust Z if needed
         NewActorPosition.Z += DraggedAreaZOffset; 
-        SetWorkAreaPosition(DraggedWorkArea, NewActorPosition);
+        // Client-only preview move during drag with grounded Z
+        const FVector GroundedPos2 = ComputeGroundedLocation(DraggedWorkArea, NewActorPosition);
+        DraggedWorkArea->SetActorLocation(GroundedPos2);
 
         WorkAreaIsSnapped = false;
     }
@@ -1307,6 +1366,12 @@ bool AExtendedControllerBase::DropWorkArea()
 				UGameplayStatics::PlaySound2D(this, DropWorkAreaSound);
 			}
 	
+				// Finalize placement on the server now that the player dropped the area
+				if (SelectedUnits[0]->CurrentDraggedWorkArea)
+				{
+					Server_FinalizeWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea,
+						SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation());
+				}
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
 		}

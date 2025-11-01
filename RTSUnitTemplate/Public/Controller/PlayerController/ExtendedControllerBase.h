@@ -2,7 +2,13 @@
 
 #pragma once
 
+class AWorkArea;
+class AActor;
+class UStaticMeshComponent;
+class USoundBase;
+
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Controller/PlayerController/WidgetController.h"
 #include "ExtendedControllerBase.generated.h"
 
@@ -181,8 +187,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
 
+	// Accumulator to throttle streaming SetWorkAreaPosition updates
+	UPROPERTY(Transient)
+	float WorkAreaStreamAccumulator = 0.f;
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveWorkArea_Local(float DeltaSeconds);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_FinalizeWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ApplyWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+
+	// Helper to compute a grounded location so the mesh bottom rests on the ground
+	FVector ComputeGroundedLocation(AWorkArea* DraggedArea, const FVector& DesiredLocation) const;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AActor* CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation);
@@ -190,8 +212,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor, UStaticMeshComponent* OtherMesh);
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void MoveWorkArea(float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWorkArea(FVector AreaLocation);

@@ -68,7 +68,7 @@ void AWorkArea::BeginPlay()
 {
 	Super::BeginPlay();
 	MaxAvailableResourceAmount = AvailableResourceAmount;
-	SetReplicateMovement(true);
+	SetReplicateMovement(false);
 }
 
 
