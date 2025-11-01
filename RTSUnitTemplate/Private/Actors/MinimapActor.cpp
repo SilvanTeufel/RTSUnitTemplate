@@ -202,7 +202,7 @@ void AMinimapActor::UpdateMinimap_Local(
 {
     // Simply reuse the same logic as the multicast implementation
     Multicast_UpdateMinimap_Implementation(UnitRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
-    }
+}
 
 void AMinimapActor::DrawFilledCircle(TArray<FColor>& Pixels, int32 TexSize, int32 CenterX, int32 CenterY, int32 Radius, const FColor& Color)
 {
