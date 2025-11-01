@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
+#include "BehaviorTree/BehaviorTree.h"
 #include "InferenceComponent.generated.h"
 
 USTRUCT(BlueprintType)
@@ -99,6 +100,18 @@ struct FGameStateData
 	float LegendaryResource = 0.0f;
 };
 
+UENUM(BlueprintType)
+enum class EBrainMode : uint8
+{
+	RL_Model        UMETA(DisplayName = "RL Model (ONNX)"),
+	Behavior_Tree   UMETA(DisplayName = "Behavior Tree")
+};
+
+class AController;
+class UBehaviorTree;
+class UBlackboardComponent;
+class UBehaviorTreeComponent;
+
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RTSUNITTEMPLATE_API UInferenceComponent : public UActorComponent
 {
@@ -112,10 +125,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	int32 ChooseAction(const TArray<float>& GameState);
 
+	// Router that chooses between RL and BT
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString ChooseJsonAction(const FGameStateData& GameState);
+
+	// Expose for BT task to fetch JSON for an index
+	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
+	FString GetActionAsJSON(int32 ActionIndex);
+
+	// Call this from ARLAgent after the controller is set
+	void InitializeBehaviorTree(class AController* OwnerController);
+
 protected:
 	virtual void BeginPlay() override;
+
+	// Update Blackboard values from game state
+	void UpdateBlackboard(const FGameStateData& GameState);
+
+protected:
+	// Brain routing and BT assets
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI")
+	EBrainMode BrainMode = EBrainMode::RL_Model;
+
+	// Assign the BT asset to run when BrainMode is Behavior_Tree
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (EditCondition = "BrainMode == EBrainMode::Behavior_Tree"))
+	UBehaviorTree* StrategyBehaviorTree = nullptr;
+
+	// Runtime instances of the BT components
+	UPROPERTY(Transient)
+	UBlackboardComponent* BlackboardComp = nullptr;
+
+	UPROPERTY(Transient)
+	UBehaviorTreeComponent* BehaviorTreeComp = nullptr;
 
 private:
 	// Assign your ONNX asset in the editor
@@ -128,9 +169,11 @@ private:
 
 	TArray<float> ConvertStateToArray(const FGameStateData& GameStateData) const;
 	
-	FString GetActionAsJSON(int32 ActionIndex);
 	// Helper function to set up the action space
 	void InitializeActionSpace();
 
 	TArray<FRLAction> ActionSpace;
+
+	// Old behavior (RL) - renamed from ChooseJsonAction
+	FString GetActionFromRLModel(const FGameStateData& GameState);
 };

@@ -42,6 +42,12 @@ void ARLAgent::AgentInitialization()
             // Convert FString to TCHAR* for FSharedMemoryManager
             SharedMemoryManager = new FSharedMemoryManager(*MemoryName, sizeof(SharedData));
         }
+
+        // --- Initialize Behavior Tree brain components if enabled ---
+        if (InferenceComponent)
+        {
+            InferenceComponent->InitializeBehaviorTree(ExtendedController);
+        }
     }
     
     SIZE_T MemorySizeNeeded = sizeof(SharedData);

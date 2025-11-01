@@ -7,6 +7,9 @@
 #include "NNETypes.h"
 #include "NNERuntimeRunSync.h"     // <-- ADD THIS for FTensorBinding
 #include "NNEClasses.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "AIController.h"
 
 // Bring the NNE namespace into scope to simplify type names
 using namespace UE::NNE;
@@ -250,7 +253,7 @@ int32 UInferenceComponent::ChooseAction(const TArray<float>& GameState)
     return BestActionIndex;
 }
 
-FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
+FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameState)
 {
     // Convert the input struct to the flat TArray<float> the model needs
     const TArray<float> GameStateArray = ConvertStateToArray(GameState);
@@ -308,4 +311,86 @@ FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
     
     // --- Return the chosen action as a JSON string ---
     return GetActionAsJSON(BestActionIndex);
+}
+
+FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
+{
+    if (BrainMode == EBrainMode::RL_Model)
+    {
+        // --- 1. Use the RL Brain ---
+        return GetActionFromRLModel(GameState);
+    }
+    
+    if (BrainMode == EBrainMode::Behavior_Tree && BlackboardComp && BehaviorTreeComp)
+    {
+        // --- 2. Use the BT Brain ---
+        
+        // A. Update the Blackboard with the latest game state
+        UpdateBlackboard(GameState);
+
+        // B. Clear the old action from the Blackboard
+        BlackboardComp->SetValueAsString(TEXT("SelectedActionJSON"), TEXT(""));
+
+        // C. Tick the Behavior Tree (using 0.1f from ARLAgent's timer)
+        BehaviorTreeComp->TickComponent(0.1f, ELevelTick::LEVELTICK_All, nullptr);
+
+        // D. Get the action chosen by the BT task
+        FString ChosenAction = BlackboardComp->GetValueAsString(TEXT("SelectedActionJSON"));
+
+        if (!ChosenAction.IsEmpty())
+        {
+            return ChosenAction;
+        }
+
+        // Failsafe: if BT doesn't pick an action, do nothing
+        return TEXT("{}"); 
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("ChooseJsonAction: No valid brain mode selected or BT not initialized."));
+    return TEXT("{}");
+}
+
+void UInferenceComponent::InitializeBehaviorTree(AController* OwnerController)
+{
+    if (BrainMode != EBrainMode::Behavior_Tree || !StrategyBehaviorTree || !OwnerController)
+    {
+        // Only init if in BT mode and all assets are correctly set
+        return; 
+    }
+
+    // BT components are owned by the Controller
+    BlackboardComp = NewObject<UBlackboardComponent>(OwnerController, TEXT("BlackboardComp"));
+    if (BlackboardComp)
+    {
+        BlackboardComp->InitializeBlackboard(*StrategyBehaviorTree->BlackboardAsset);
+    }
+
+    BehaviorTreeComp = NewObject<UBehaviorTreeComponent>(OwnerController, TEXT("BehaviorTreeComp"));
+    if (BehaviorTreeComp && BlackboardComp)
+    {
+        BehaviorTreeComp->StartTree(*StrategyBehaviorTree);
+        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Behavior Tree initialized and started."));
+    }
+}
+
+void UInferenceComponent::UpdateBlackboard(const FGameStateData& GameState)
+{
+    if (!BlackboardComp) return;
+
+    // Map all your GameState data to Blackboard keys.
+    // The BT will use these keys to make decisions.
+    BlackboardComp->SetValueAsInt(TEXT("MyUnitCount"), GameState.MyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("EnemyUnitCount"), GameState.EnemyUnitCount);
+    BlackboardComp->SetValueAsFloat(TEXT("MyTotalHealth"), GameState.MyTotalHealth);
+    BlackboardComp->SetValueAsFloat(TEXT("EnemyTotalHealth"), GameState.EnemyTotalHealth);
+    
+    BlackboardComp->SetValueAsFloat(TEXT("PrimaryResource"), GameState.PrimaryResource);
+    BlackboardComp->SetValueAsFloat(TEXT("SecondaryResource"), GameState.SecondaryResource);
+
+    BlackboardComp->SetValueAsVector(TEXT("AgentPosition"), GameState.AgentPosition);
+    BlackboardComp->SetValueAsVector(TEXT("AverageFriendlyPosition"), GameState.AverageFriendlyPosition);
+    BlackboardComp->SetValueAsVector(TEXT("AverageEnemyPosition"), GameState.AverageEnemyPosition);
+
+    // NOTE: You should add GameTime to your FGameStateData struct and update it here
+    // BlackboardComp->SetValueAsFloat(TEXT("GameTime"), GameState.GameTime);
 }
