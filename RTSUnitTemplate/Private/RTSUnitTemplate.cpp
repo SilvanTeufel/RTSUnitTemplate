@@ -25,6 +25,15 @@ void FRTSUnitTemplateModule::StartupModule()
 			RTSReplicationBootstrap::RegisterForWorld(*World);
 		}
 	});
+
+	// Register on map load as well to ensure worlds created via seamless travel or browsing get early registration
+	PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddLambda([](UWorld* World)
+	{
+		if (World)
+		{
+			RTSReplicationBootstrap::RegisterForWorld(*World);
+		}
+	});
 }
 
 void FRTSUnitTemplateModule::ShutdownModule()
@@ -37,8 +46,13 @@ void FRTSUnitTemplateModule::ShutdownModule()
 	{
 		FWorldDelegates::OnPreWorldInitialization.Remove(PreWorldInitHandle);
 	}
+	if (PostLoadMapHandle.IsValid())
+	{
+		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
+	}
 	WorldInitHandle = FDelegateHandle();
 	PreWorldInitHandle = FDelegateHandle();
+	PostLoadMapHandle = FDelegateHandle();
 }
 
 #undef LOCTEXT_NAMESPACE

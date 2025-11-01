@@ -118,7 +118,6 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MirrorStopMovement, Entity);
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ReachedBase, Entity);
                 }
                 continue;

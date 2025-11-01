@@ -226,6 +226,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 
 	// Multicast to all connected clients for client-side navigation mirror
+	/*
 	if (UWorld* PCWorld = World)
 	{
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
@@ -235,9 +236,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 				PC->Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
 			}
 		}
-	}
+	}*/
 }
-
+/*
 void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
 	if (!IsLocalController()) { return; }
@@ -272,7 +273,7 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObje
 		}
 	}
 }
-
+*/
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
 	if (!Unit) return;
@@ -348,7 +349,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-	
+
+	/*
    	// Multicast to all connected clients for client-side navigation mirror (ability)
    	if (UWorld* PCWorld = World)
    	{
@@ -360,8 +362,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    			}
    		}
    	}
+	*/
 }
-
+/*
 void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
 	if (!IsLocalController()) return;
@@ -400,7 +403,7 @@ void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementa
 		}
 	}
 }
-
+*/
 void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
 {
 		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
@@ -1308,105 +1311,4 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 }
 
 // === Client mirror helpers ===
-void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
 
-	// Retry-safe application: client may receive mirror before Mass entity is ready.
-	TWeakObjectPtr<UWorld> WorldPtr = World;
-	TWeakObjectPtr<AUnitBase> UnitPtr = Unit;
-	// Limit retries to avoid infinite loops (e.g., ~1s total)
-	constexpr int32 MaxAttempts = 20; // 20 x 0.05s = 1s
-	constexpr float RetryDelaySec = 0.05f;
-
-	// Define a recursive lambda using TSharedRef to allow rebinding in timer
-	TSharedRef<TFunction<void(int32)>> TryApplyRef = MakeShared<TFunction<void(int32)>>();
-	*TryApplyRef = [this, WorldPtr, UnitPtr, NewTargetLocation, DesiredSpeed, AcceptanceRadius, UnitState, UnitStatePlaceholder, PlaceholderSignal, TryApplyRef](int32 AttemptsLeft)
-	{
-		if (!WorldPtr.IsValid() || !UnitPtr.IsValid()) return;
-		UWorld* LWorld = WorldPtr.Get();
-		AUnitBase* LUnit = UnitPtr.Get();
-		if (!LWorld || !LUnit)
-		{
-			return;
-		}
-
-		// If the Unit isn't initialized or movable yet, retry later
-		if (!LUnit->IsInitialized || !LUnit->CanMove)
-		{
-			if (AttemptsLeft <= 0) return;
-			FTimerDelegate Del;
-			Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
-			FTimerHandle Th;
-			LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
-			return;
-		}
-
-		if (UMassEntitySubsystem* MassSubsystem = LWorld->GetSubsystem<UMassEntitySubsystem>())
-		{
-			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-			const FMassEntityHandle MassEntityHandle = LUnit->MassActorBindingComponent->GetMassEntityHandle();
-			if (!EntityManager.IsEntityValid(MassEntityHandle))
-			{
-				if (AttemptsLeft <= 0) return;
-				FTimerDelegate Del;
-				Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
-				FTimerHandle Th;
-				LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
-				return;
-			}
-
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Mirror movement target on client
-				MoveTargetFragmentPtr->Center = NewTargetLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
-				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = NewTargetLocation;
-				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
-			}
-		}
-	};
-
-	// Kick off with retries
-	(*TryApplyRef)(MaxAttempts);
-}
-
-void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& StopLocation, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
-
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-	{
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager.IsEntityValid(MassEntityHandle))
-		{
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Client mirror only: avoid authority-only CreateNewAction/SetDesiredAction on clients
-				MoveTargetFragmentPtr->Center = StopLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				MoveTargetFragmentPtr->DesiredSpeed.Set(0.f);
-				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = StopLocation;
-				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
-			}
-		}
-	}
-}

@@ -118,10 +118,6 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                     }
                     StateFrag.StateTimer = 0.f;
                     StopMovement(MoveTarget, World);
-                    if (SignalSubsystem)
-                    {
-                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
-                    }
 
                     continue;
                 }

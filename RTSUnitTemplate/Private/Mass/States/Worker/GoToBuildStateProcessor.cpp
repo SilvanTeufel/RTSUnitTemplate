@@ -120,7 +120,6 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MirrorStopMovement, Entity);
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Build, Entity);
                 }
                 continue;

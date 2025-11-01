@@ -16,4 +16,5 @@ public:
 private:
 	FDelegateHandle WorldInitHandle; // handle to unregister delegate on shutdown
 	FDelegateHandle PreWorldInitHandle;
+	FDelegateHandle PostLoadMapHandle; // register bubble on PostLoadMapWithWorld
 };

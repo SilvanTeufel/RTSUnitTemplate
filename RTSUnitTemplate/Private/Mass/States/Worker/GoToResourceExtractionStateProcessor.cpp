@@ -129,7 +129,6 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 // Queue signals thread-safely using the deferred command buffer
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ResourceExtraction, Entity);
                 }
             }

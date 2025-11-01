@@ -14,9 +14,10 @@
 //   - FMassAgentCharacteristicsFragment (subset: bIsFlying, bIsInvisible, FlyHeight)
 //   - FMassAIStateFragment (subset: StateTimer, CanAttack, CanMove, HoldPosition)
 //   - FMassAITargetFragment (Target flags/NetID/locations)
+//   - FMassMoveTargetFragment (subset: bHasTarget, Center, SlackRadius, DesiredSpeed, IntentAtGoal, DistanceToGoal)
 // - Replicated tags: packed into TagBits (see ApplyReplicatedTagBits in UnitMassTag.h)
-// Writers: Mass/Replication/MassUnitReplicatorBase.cpp (server side)
-// Readers: Mass/Replication/ClientReplicationProcessor.cpp (client side)
+// Writers: Mass/Replication/MassUnitReplicatorBase.cpp (server side; populates Move_* from FMassMoveTargetFragment)
+// Readers: Mass/Replication/ClientReplicationProcessor.cpp (client side; applies Move_* back to FMassMoveTargetFragment)
 // Transport: Mass/Replication/UnitClientBubbleInfo.* (FastArray Agents)
 
 // Forward Declarations
@@ -131,6 +132,14 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float AIS_BirthTime = 0.f;
 	UPROPERTY() float AIS_DeathTime = 0.f;
 	UPROPERTY() bool AIS_IsInitialized = true;
+
+	// --- FMassMoveTargetFragment (subset) ---
+	UPROPERTY() bool Move_bHasTarget = false;
+	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
+	UPROPERTY() float Move_SlackRadius = 0.f;
+	UPROPERTY() float Move_DesiredSpeed = 0.f;
+	UPROPERTY() uint8 Move_IntentAtGoal = 0; // EMassMovementAction
+	UPROPERTY() float Move_DistanceToGoal = 0.f;
 
 	// Default Constructor
 	FUnitReplicationItem()
