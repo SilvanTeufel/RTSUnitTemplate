@@ -17,6 +17,9 @@
 #include "Mass/Replication/ReplicationSettings.h"
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
+#include "EngineUtils.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Mass/MassActorBindingComponent.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
@@ -75,7 +78,8 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 			static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
 			static TMap<const UWorld*, int32> GProcessedCountByWorld;
 			static TMap<const UWorld*, double> GLastExecTimeByWorld;
-			static TMap<const UWorld*, int32> GNextStartOffsetByWorld; // rotate slice start within chunk across ticks
+			// Per-chunk slice start offset: key built from replicator and chunk identity
+			static TMap<uint64, int32> GStartOffsetByChunk;
 			static bool GCleanupRegistered = false;
 			static FDelegateHandle GCleanupHandle;
 			static void EnsureServerKickCleanupRegistered()
@@ -83,10 +87,11 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 				if (!GCleanupRegistered)
 				{
 					GCleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* InWorld, bool, bool){
-   			GLastSigByID.Reset();
+ 					GLastSigByID.Reset();
 						GProcessedCountByWorld.Remove(InWorld);
 						GLastExecTimeByWorld.Remove(InWorld);
-						GNextStartOffsetByWorld.Remove(InWorld);
+						// Reset all per-chunk cursors on world cleanup (safe since chunks are world-bound)
+						GStartOffsetByChunk.Reset();
 					});
 					GCleanupRegistered = true;
 				}
@@ -151,14 +156,14 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 {
 	if (bSkipReplication) return;
 
-	/*		
+		
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{
 		return;
 	}
 	TimeSinceLastRun = 0.f;
-	*/
+
 			
 	UWorld* World = GetWorld();
 	if (!World || World->GetNetMode() == NM_Client)
@@ -227,6 +232,118 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		GLoggedGraceEnd.Add(World);
 	}
 
+	// Detect missing units vs replication query and try to reregister on server
+	{
+		int32 QueryCount = 0;
+		EntityQuery.ForEachEntityChunk(Context, [&QueryCount](FMassExecutionContext& ChunkContext)
+		{
+			QueryCount += ChunkContext.GetNumEntities();
+		});
+
+		int32 LiveCount = 0;
+		TSet<int32> LiveIndices;
+		TSet<FName> LiveOwners;
+		for (TActorIterator<AUnitBase> It(World); It; ++It)
+		{
+			AUnitBase* Unit = *It;
+			if (!IsValid(Unit)) { continue; }
+			++LiveCount;
+			LiveOwners.Add(Unit->GetFName());
+			if (Unit->UnitIndex != INDEX_NONE)
+			{
+				LiveIndices.Add(Unit->UnitIndex);
+			}
+		}
+
+		AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World);
+		if (Reg)
+		{
+			TSet<int32> RegIndices;
+			TSet<FName> RegOwners;
+			RegIndices.Reserve(Reg->Registry.Items.Num());
+			RegOwners.Reserve(Reg->Registry.Items.Num());
+			for (const FUnitRegistryItem& Itm : Reg->Registry.Items)
+			{
+				if (Itm.UnitIndex != INDEX_NONE) { RegIndices.Add(Itm.UnitIndex); }
+				if (Itm.OwnerName != NAME_None) { RegOwners.Add(Itm.OwnerName); }
+			}
+
+			if (LiveCount > QueryCount)
+			{
+				if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("ServerKick: Live Units (%d) exceed ReplicationQuery count (%d). Attempting re-register of missing units."), LiveCount, QueryCount);
+				}
+				UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+				FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
+				int32 Inserted = 0;
+				for (TActorIterator<AUnitBase> It2(World); It2; ++It2)
+				{
+					AUnitBase* Unit = *It2;
+					if (!IsValid(Unit)) { continue; }
+					const bool bMissing = (Unit->UnitIndex == INDEX_NONE || !RegIndices.Contains(Unit->UnitIndex)) && !RegOwners.Contains(Unit->GetFName());
+					if (!bMissing)
+					{
+						continue;
+					}
+
+					FMassNetworkID NetIDValue;
+					bool bHaveNetID = false;
+					if (EM)
+					{
+						if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
+						{
+							const FMassEntityHandle EHandle = Bind->GetMassEntityHandle();
+							if (EHandle.IsSet() && EM->IsEntityValid(EHandle))
+							{
+								if (FMassNetworkIDFragment* NetFrag = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+								{
+									if (NetFrag->NetID.GetValue() != 0)
+									{
+										NetIDValue = NetFrag->NetID;
+										bHaveNetID = true;
+									}
+									else
+									{
+										NetIDValue = FMassNetworkID(Reg->GetNextNetID());
+										NetFrag->NetID = NetIDValue;
+										bHaveNetID = true;
+									}
+								}
+								else
+								{
+									if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+									{
+										UE_LOG(LogTemp, Warning, TEXT("ServerKick: Entity for %s missing FMassNetworkIDFragment; cannot assign NetID."), *Unit->GetName());
+									}
+								}
+ 						}
+ 					}
+ 					}
+ 					if (!bHaveNetID)
+					{
+						NetIDValue = FMassNetworkID(Reg->GetNextNetID());
+					}
+					const int32 NewIdx = Reg->Registry.Items.AddDefaulted();
+					Reg->Registry.Items[NewIdx].OwnerName = Unit->GetFName();
+					Reg->Registry.Items[NewIdx].UnitIndex = Unit->UnitIndex;
+					Reg->Registry.Items[NewIdx].NetID = NetIDValue;
+					Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx]);
+					Inserted++;
+				}
+				if (Inserted > 0)
+				{
+					Reg->Registry.MarkArrayDirty();
+					Reg->ForceNetUpdate();
+					if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("ServerKick: Inserted %d missing units into UnitRegistry (world=%s)"), Inserted, *World->GetName());
+					}
+				}
+			}
+		}
+	}
+
 	// Per-tick budgeting across chunks
 	int32& ProcessedThisTick = GProcessedCountByWorld.FindOrAdd(World);
 	double& LastExecTime = GLastExecTimeByWorld.FindOrAdd(World);
@@ -266,7 +383,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		}
 		const int32 RemainingBudget = MaxPerTick - ProcessedThisTick;
 		const int32 SliceSize = FMath::Clamp(FMath::Min3(RemainingBudget, MaxPerChunk, Num), 0, Num);
-		int32& StartOffset = GNextStartOffsetByWorld.FindOrAdd(World);
+		// Build a per-chunk key using replicator and shared fragment address (stable within world lifetime)
+		const uint64 ChunkKey = (static_cast<uint64>(reinterpret_cast<uintptr_t>(Replicator)) ^ static_cast<uint64>(reinterpret_cast<uintptr_t>(&RepShared)));
+		int32& StartOffset = GStartOffsetByChunk.FindOrAdd(ChunkKey);
 		if (StartOffset >= Num)
 		{
 			StartOffset = 0;
@@ -294,25 +413,27 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		// Optionally log a small sample (verbose only)
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
 		{
-			const int32 MaxLog = FMath::Min(20, Num);
+			const int32 MaxLog = FMath::Min(20, SliceSize);
 			FString IdList;
 			for (int32 i = 0; i < MaxLog; ++i)
 			{
+				const int32 Idx = (SliceStart + i) % Num;
 				if (i > 0) { IdList += TEXT(", "); }
-				IdList += FString::Printf(TEXT("%u"), NetIDs[i].NetID.GetValue());
+				IdList += FString::Printf(TEXT("%u"), NetIDs[Idx].NetID.GetValue());
 			}
-			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: %d entities. NetIDs[%d]: %s%s"),
-				Num, MaxLog, *IdList, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
+			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: %d entities. Slice NetIDs[%d] from %d: %s%s"),
+				Num, MaxLog, SliceStart, *IdList, (SliceSize > MaxLog ? TEXT(" ...") : TEXT("")));
 		}
 
 		// Detailed tag replication log per entity (verbose only)
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
 		{
-			const int32 MaxLog = FMath::Min(20, Num);
+			const int32 MaxLog = FMath::Min(20, SliceSize);
 			for (int32 i = 0; i < MaxLog; ++i)
 			{
-				const uint32 ID = NetIDs[i].NetID.GetValue();
-				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				const int32 Idx = (SliceStart + i) % Num;
+				const uint32 ID = NetIDs[Idx].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
 				const uint32 NewBits = BuildReplicatedTagBits(EntityManager, EH);
 				const FSig* Prev = GLastSigByID.Find(ID);
 				const uint32 OldBits = Prev ? Prev->TagBits : 0u;
@@ -323,8 +444,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			// Also log AI target fragment fields for visibility
 			for (int32 i = 0; i < MaxLog; ++i)
 			{
-				const uint32 ID = NetIDs[i].NetID.GetValue();
-				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				const int32 Idx = (SliceStart + i) % Num;
+				const uint32 ID = NetIDs[Idx].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
 				const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH);
 				bool bHas = false; bool bFocused = false; FVector LKL = FVector::ZeroVector; FVector AbilityLoc = FVector::ZeroVector; bool bTargetSet = false; uint32 TargetNetID = 0u;
 				if (AIT)
@@ -344,8 +466,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			// Also log values of replicated fragments (CombatStats, AgentCharacteristics, AIState)
 			for (int32 i = 0; i < MaxLog; ++i)
 			{
-				const uint32 ID = NetIDs[i].NetID.GetValue();
-				const FMassEntityHandle EH = ChunkContext.GetEntity(i);
+				const int32 Idx = (SliceStart + i) % Num;
+				const uint32 ID = NetIDs[Idx].NetID.GetValue();
+				const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
 				float H = 0.f, MH = 0.f, Run = 0.f, FlyH = 0.f, StateT = 0.f; int32 Team = 0; bool Fly = false, Invis = false, CanAtk = true, CanMove = true, Hold = false;
 				if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
 				{
