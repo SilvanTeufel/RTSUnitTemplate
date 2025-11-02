@@ -51,7 +51,7 @@ namespace ReplicationSliceControl
 // CVAR to control server-side MassUnitReplicatorBase logging
 static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
 	TEXT("net.RTS.ServerReplicator.LogLevel"),
-	2,
+	0,
 	TEXT("Logging level for MassUnitReplicatorBase: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 

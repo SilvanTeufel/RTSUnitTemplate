@@ -125,9 +125,9 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     const bool bIsClient = World->GetNetMode() == NM_Client;
 
     // Optional diagnostic: log counts to help find missing registrations
-    static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_LogCounts(
+   	static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_LogCounts(
         TEXT("net.RTS.UnitSignaling.LogCounts"),
-        1,
+        0,
         TEXT("Log diagnostic counts in UnitSignalingProcessor Execute (0=off,1=on)."),
         ECVF_Default);
 

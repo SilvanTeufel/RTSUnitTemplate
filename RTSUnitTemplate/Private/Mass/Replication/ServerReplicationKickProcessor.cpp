@@ -53,7 +53,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("net.RTS.ServerReplicationKick.LogLevel"),
-	2,
+	0,
 	TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
@@ -63,6 +63,22 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 	TEXT("net.RTS.ServerReplicationKick.ProcessCleanChunks"),
 	1,
 	TEXT("Process chunks even when signature unchanged (0=skip clean chunks, 1=process anyway). Default 1 to ensure tag-only changes replicate."),
+	ECVF_Default);
+
+// CVAR: Enforce full slices (Count == MaxPerChunk) when possible. If remaining budget is smaller,
+// defer the chunk to the next tick to avoid short, jittery updates between ticks. Chunks with fewer
+// than MaxPerChunk entities are processed with their actual size.
+static TAutoConsoleVariable<int32> CVarRTS_ServerKick_EnforceFullSlices(
+	TEXT("net.RTS.ServerReplicationKick.EnforceFullSlices"),
+	1,
+	TEXT("When 1, only process a chunk if at least MaxPerChunk budget remains (unless the chunk has < MaxPerChunk entities). This keeps slices consistently filled and avoids partial slices."),
+	ECVF_Default);
+
+// CVAR: Control the legacy server-side re-registration fallback. Default OFF now that UnitSignalingProcessor assists.
+static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
+	TEXT("net.RTS.ServerReplicationKick.ReRegisterMissing"),
+	0,
+	TEXT("When 1, perform server-side recovery to re-register Units missing in the replication query by adding NetID and registry entries. Default 0 (disabled) because UnitSignalingProcessor assists."),
 	ECVF_Default);
 
 	// File-scope signature structure and storage so we can clear on world teardown
@@ -233,7 +249,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		GLoggedGraceEnd.Add(World);
 	}
 
-	// Detect missing units vs replication query and try to reregister on server
+	// Detect missing units vs replication query; optionally re-register on server (guarded by CVAR)
 	{
 		int32 QueryCount = 0;
 		int32 ChunkCount = 0;
@@ -248,94 +264,96 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			UE_LOG(LogTemp, Log, TEXT("ServerKick: Query eligible entities this tick: Total=%d across %d chunks"), QueryCount, ChunkCount);
 		}
 
-		int32 LiveCount = 0;
-		TSet<int32> LiveIndices;
-		TSet<FName> LiveOwners;
-		for (TActorIterator<AUnitBase> It(World); It; ++It)
+		// Only attempt legacy re-registration when explicitly enabled
+		if (CVarRTS_ServerKick_ReRegisterMissing.GetValueOnGameThread() != 0)
 		{
-			AUnitBase* Unit = *It;
-			if (!IsValid(Unit)) { continue; }
-			++LiveCount;
-			LiveOwners.Add(Unit->GetFName());
-			if (Unit->UnitIndex != INDEX_NONE)
+			int32 LiveCount = 0;
+			TSet<int32> LiveIndices;
+			TSet<FName> LiveOwners;
+			for (TActorIterator<AUnitBase> It(World); It; ++It)
 			{
-				LiveIndices.Add(Unit->UnitIndex);
-			}
-		}
-
-		AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World);
-		if (Reg)
-		{
-			TSet<int32> RegIndices;
-			TSet<FName> RegOwners;
-			RegIndices.Reserve(Reg->Registry.Items.Num());
-			RegOwners.Reserve(Reg->Registry.Items.Num());
-			for (const FUnitRegistryItem& Itm : Reg->Registry.Items)
-			{
-				if (Itm.UnitIndex != INDEX_NONE) { RegIndices.Add(Itm.UnitIndex); }
-				if (Itm.OwnerName != NAME_None) { RegOwners.Add(Itm.OwnerName); }
-			}
-
-			if (LiveCount > QueryCount)
-			{
-				if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+				AUnitBase* Unit = *It;
+				if (!IsValid(Unit)) { continue; }
+				++LiveCount;
+				LiveOwners.Add(Unit->GetFName());
+				if (Unit->UnitIndex != INDEX_NONE)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("ServerKick: Live Units (%d) exceed ReplicationQuery count (%d). Attempting re-register of missing units."), LiveCount, QueryCount);
+					LiveIndices.Add(Unit->UnitIndex);
 				}
-				UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-				FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
-				int32 Inserted = 0;
-				for (TActorIterator<AUnitBase> It2(World); It2; ++It2)
+			}
+
+			AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World);
+			if (Reg)
+			{
+				TSet<int32> RegIndices;
+				TSet<FName> RegOwners;
+				RegIndices.Reserve(Reg->Registry.Items.Num());
+				RegOwners.Reserve(Reg->Registry.Items.Num());
+				for (const FUnitRegistryItem& Itm : Reg->Registry.Items)
 				{
-					AUnitBase* Unit = *It2;
-					if (!IsValid(Unit)) { continue; }
-					// Consider unit missing if either UnitIndex is not registered OR OwnerName is not registered.
-					const bool bMissing = (!RegIndices.Contains(Unit->UnitIndex)) || (!RegOwners.Contains(Unit->GetFName()));
-					if (!bMissing)
+					if (Itm.UnitIndex != INDEX_NONE) { RegIndices.Add(Itm.UnitIndex); }
+					if (Itm.OwnerName != NAME_None) { RegOwners.Add(Itm.OwnerName); }
+				}
+
+				if (LiveCount > QueryCount)
+				{
+					if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
 					{
-						continue;
+						UE_LOG(LogTemp, Warning, TEXT("ServerKick: Live Units (%d) exceed ReplicationQuery count (%d). Attempting re-register of missing units."), LiveCount, QueryCount);
 					}
-					
-					FMassNetworkID NetIDValue;
-					bool bHaveNetID = false;
-					if (EM)
+					UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+					FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
+					int32 Inserted = 0;
+					for (TActorIterator<AUnitBase> It2(World); It2; ++It2)
 					{
-						if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
+						AUnitBase* Unit = *It2;
+						if (!IsValid(Unit)) { continue; }
+						// Consider unit missing if either UnitIndex is not registered OR OwnerName is not registered.
+						const bool bMissing = (!RegIndices.Contains(Unit->UnitIndex)) || (!RegOwners.Contains(Unit->GetFName()));
+						if (!bMissing)
 						{
-							const FMassEntityHandle EHandle = Bind->GetMassEntityHandle();
-							if (EHandle.IsSet() && EM->IsEntityValid(EHandle))
+							continue;
+						}
+						
+						FMassNetworkID NetIDValue;
+						bool bHaveNetID = false;
+						if (EM)
+						{
+							if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
 							{
-								if (FMassNetworkIDFragment* NetFrag = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+								const FMassEntityHandle EHandle = Bind->GetMassEntityHandle();
+								if (EHandle.IsSet() && EM->IsEntityValid(EHandle))
 								{
-									if (NetFrag->NetID.GetValue() != 0)
+									if (FMassNetworkIDFragment* NetFrag = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
 									{
-										NetIDValue = NetFrag->NetID;
-										bHaveNetID = true;
+										if (NetFrag->NetID.GetValue() != 0)
+										{
+											NetIDValue = NetFrag->NetID;
+											bHaveNetID = true;
+										}
+										else
+										{
+											NetIDValue = FMassNetworkID(Reg->GetNextNetID());
+											NetFrag->NetID = NetIDValue;
+											bHaveNetID = true;
+										}
 									}
 									else
 									{
+										// Add missing NetID fragment on-the-fly so the entity becomes eligible for replication queries
 										NetIDValue = FMassNetworkID(Reg->GetNextNetID());
-										NetFrag->NetID = NetIDValue;
-										bHaveNetID = true;
+										EM->AddFragmentToEntity(EHandle, FMassNetworkIDFragment::StaticStruct());
+										if (FMassNetworkIDFragment* NewFragPtr = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+										{
+											NewFragPtr->NetID = NetIDValue;
+											bHaveNetID = true;
+										}
+										if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+										{
+											UE_LOG(LogTemp, Warning, TEXT("ServerKick: Added FMassNetworkIDFragment for %s with NetID=%u"), *Unit->GetName(), NetIDValue.GetValue());
+										}
 									}
-								}
-								else
-								{
-									// Add missing NetID fragment on-the-fly so the entity becomes eligible for replication queries
-									NetIDValue = FMassNetworkID(Reg->GetNextNetID());
-									EM->AddFragmentToEntity(EHandle, FMassNetworkIDFragment::StaticStruct());
-									if (FMassNetworkIDFragment* NewFragPtr = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
-									{
-										NewFragPtr->NetID = NetIDValue;
-										bHaveNetID = true;
-									}
-									if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
-									{
-										UE_LOG(LogTemp, Warning, TEXT("ServerKick: Added FMassNetworkIDFragment for %s with NetID=%u"), *Unit->GetName(), NetIDValue.GetValue());
-									}
-								}
 							}
-						}
 						}
 						if (!bHaveNetID)
 						{
@@ -347,17 +365,22 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 						Reg->Registry.Items[NewIdx].NetID = NetIDValue;
 						Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx]);
 						Inserted++;
-				}
-				if (Inserted > 0)
-				{
-					Reg->Registry.MarkArrayDirty();
-					Reg->ForceNetUpdate();
-					if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+					}
+					if (Inserted > 0)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("ServerKick: Inserted %d missing units into UnitRegistry (world=%s)"), Inserted, *World->GetName());
+						Reg->Registry.MarkArrayDirty();
+						Reg->ForceNetUpdate();
+						if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("ServerKick: Inserted %d missing units into UnitRegistry (world=%s)"), Inserted, *World->GetName());
+						}
 					}
 				}
 			}
+		}
+		else if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+		{
+			UE_LOG(LogTemp, Log, TEXT("ServerKick: Re-register missing is disabled (net.RTS.ServerReplicationKick.ReRegisterMissing=0)"));
 		}
 	}
 
@@ -425,7 +448,31 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, &ProcessedT
 		return; // budget used up this tick; try again next tick
 	}
 	const int32 RemainingBudget = MaxPerTick - ProcessedThisTick;
-	const int32 SliceSize = FMath::Clamp(FMath::Min3(RemainingBudget, MaxPerChunk, Num), 0, Num);
+
+	// Decide slice size with optional enforcement of full slices
+	const bool bEnforceFullSlices = (CVarRTS_ServerKick_EnforceFullSlices.GetValueOnGameThread() != 0) && (MaxPerTick >= MaxPerChunk);
+	int32 SliceSize = 0;
+	const int32 DesiredSliceSize = FMath::Min(MaxPerChunk, Num);
+	if (bEnforceFullSlices && Num >= MaxPerChunk)
+	{
+		// Require enough global budget to produce a full slice for this chunk
+		if (RemainingBudget < MaxPerChunk)
+		{
+			if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+			{
+				UE_LOG(LogTemp, Log, TEXT("ServerKick: Deferring chunk (Num=%d) this tick to keep full slice size=%d (RemainingBudget=%d < MaxPerChunk=%d)"),
+					Num, MaxPerChunk, RemainingBudget, MaxPerChunk);
+			}
+			return; // try next chunk or next tick
+		}
+		SliceSize = MaxPerChunk;
+	}
+	else
+	{
+		// Either chunk is smaller than MaxPerChunk or enforcement disabled; use remaining budget
+		SliceSize = FMath::Clamp(FMath::Min3(RemainingBudget, MaxPerChunk, Num), 0, Num);
+	}
+
 	// Build a more stable per-chunk key using a hash of NetIDs values and the replicator pointer
 	uint64 ChunkKey = static_cast<uint64>(reinterpret_cast<uintptr_t>(Replicator));
 	auto AccHash = [&ChunkKey](uint32 V)
@@ -597,5 +644,6 @@ if (ProcessedThisTick < MaxPerTick && TotalChunksThisTick > 0 && ChunkStartIndex
 if (TotalChunksThisTick > 0)
 {
 	ChunkStartIndex = (ChunkStartIndex + FMath::Max(1, ChunksUsedThisTick)) % TotalChunksThisTick;
+}
 }
 }

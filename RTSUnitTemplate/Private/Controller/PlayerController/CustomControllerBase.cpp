@@ -386,6 +386,22 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 
 	UE_LOG(LogTemp, Log, TEXT("[BatchMove] Finished processing %d entries."), Count);
 }
+
+void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementation(
+	UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
+{
+	// Ensure only server triggers the multicast
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+}
 /*
 void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
@@ -646,7 +662,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			// Send a single batched RPC for all valid mass units gathered above
 			if (BatchUnits.Num() > 0)
 			{
-				Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, false);
+    Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, false);
 			}
 
 			if (Transporter->GetUnitState() != UnitData::Casting)
@@ -977,7 +993,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     if (BatchUnits.Num() > 0)
     {
-        Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
+        Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
     }
 
     if (WaypointSound && PlayWaypoint)
@@ -1241,7 +1257,7 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 
 	if (BatchUnits.Num() > 0)
 	{
-		Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, AttackT);
+  Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, AttackT);
 	}
 }
 
