@@ -31,7 +31,7 @@ namespace ReplicationSliceControl
 // Configurable grace period CVAR: number of seconds after world start to bypass change-based skip
 static TAutoConsoleVariable<float> CVarRTSUnitStartupRepGraceSeconds(
 	TEXT("r.RTSUnit.StartupRepGraceSeconds"),
-	10.0f,
+	5.0f,
 	TEXT("Seconds to force server replication regardless of transform change after world start."),
 	ECVF_Default);
 
@@ -61,7 +61,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 // transform and signature appear unchanged, allowing tag-only updates to propagate.
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 	TEXT("net.RTS.ServerReplicationKick.ProcessCleanChunks"),
-	1,
+	0,
 	TEXT("Process chunks even when signature unchanged (0=skip clean chunks, 1=process anyway). Default 1 to ensure tag-only changes replicate."),
 	ECVF_Default);
 
@@ -70,14 +70,14 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 // than MaxPerChunk entities are processed with their actual size.
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_EnforceFullSlices(
 	TEXT("net.RTS.ServerReplicationKick.EnforceFullSlices"),
-	0,
+	1,
 	TEXT("When 1, only process a chunk if at least MaxPerChunk budget remains (unless the chunk has < MaxPerChunk entities). This keeps slices consistently filled and avoids partial slices."),
 	ECVF_Default);
 
 // CVAR: Control the legacy server-side re-registration fallback. Default OFF now that UnitSignalingProcessor assists.
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 	TEXT("net.RTS.ServerReplicationKick.ReRegisterMissing"),
-	1,
+	0,
 	TEXT("When 1, perform server-side recovery to re-register Units missing in the replication query by adding NetID and registry entries. Default 0 (disabled) because UnitSignalingProcessor assists."),
 	ECVF_Default);
 
