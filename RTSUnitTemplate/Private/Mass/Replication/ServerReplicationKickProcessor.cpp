@@ -31,7 +31,7 @@ namespace ReplicationSliceControl
 // Configurable grace period CVAR: number of seconds after world start to bypass change-based skip
 static TAutoConsoleVariable<float> CVarRTSUnitStartupRepGraceSeconds(
 	TEXT("r.RTSUnit.StartupRepGraceSeconds"),
-	5.0f,
+	10.0f,
 	TEXT("Seconds to force server replication regardless of transform change after world start."),
 	ECVF_Default);
 

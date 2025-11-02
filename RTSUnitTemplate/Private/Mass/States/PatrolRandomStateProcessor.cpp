@@ -117,6 +117,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                         SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::PatrolIdle, Entity);
                     }
                     StateFrag.StateTimer = 0.f;
+                    ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                     StopMovement(MoveTarget, World);
 
                     continue;

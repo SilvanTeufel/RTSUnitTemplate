@@ -192,26 +192,30 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
-        // Fill MoveTarget replication fields if available
-        if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+        // Fill MoveTarget replication fields if available and not explicitly suppressed
+        const bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassSkipMoveReplicationTag::StaticStruct());
+        if (!bSkipMoveRep)
         {
-            NewItem.Move_bHasTarget = true;
-            NewItem.Move_Center = MT->Center;
-            NewItem.Move_SlackRadius = MT->SlackRadius;
-            NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
-            NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
-            NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
-        }
-        else
-        {
-            // Unconditional warning: this entity is missing FMassMoveTargetFragment while being replicated
-            static TSet<uint32> WarnedOnce; // avoid log spam per NetID
-            const uint32 IdVal = NetID.GetValue();
-            if (!WarnedOnce.Contains(IdVal))
+            if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
             {
-                WarnedOnce.Add(IdVal);
-                const FName OwnerName = (ActorFrag && ActorFrag->GetMutable()) ? ActorFrag->GetMutable()->GetFName() : NAME_None;
-                UE_LOG(LogTemp, Warning, TEXT("[ServerRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s"), IdVal, *OwnerName.ToString());
+                NewItem.Move_bHasTarget = true;
+                NewItem.Move_Center = MT->Center;
+                NewItem.Move_SlackRadius = MT->SlackRadius;
+                NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
+                NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
+                NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+            }
+            else
+            {
+                // Unconditional warning: this entity is missing FMassMoveTargetFragment while being replicated
+                static TSet<uint32> WarnedOnce; // avoid log spam per NetID
+                const uint32 IdVal = NetID.GetValue();
+                if (!WarnedOnce.Contains(IdVal))
+                {
+                    WarnedOnce.Add(IdVal);
+                    const FName OwnerName = (ActorFrag && ActorFrag->GetMutable()) ? ActorFrag->GetMutable()->GetFName() : NAME_None;
+                    UE_LOG(LogTemp, Warning, TEXT("[ServerRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s"), IdVal, *OwnerName.ToString());
+                }
             }
         }
         // Fill AI target replication fields if available
@@ -584,15 +588,19 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
-                        // Fill MoveTarget fields if fragment exists
-                        if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                        // Fill MoveTarget fields if fragment exists and not suppressed
+                        const bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
+                        if (!bSkipMoveRep)
                         {
-                            NewItem.Move_bHasTarget = true;
-                            NewItem.Move_Center = MT->Center;
-                            NewItem.Move_SlackRadius = MT->SlackRadius;
-                            NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
-                            NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
-                            NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                            if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                            {
+                                NewItem.Move_bHasTarget = true;
+                                NewItem.Move_Center = MT->Center;
+                                NewItem.Move_SlackRadius = MT->SlackRadius;
+                                NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
+                                NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
+                                NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                            }
                         }
                         // Fill AI target fields if fragment exists
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
@@ -744,19 +752,31 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetPrevSeenIDs != NewPrevIDs) { Item->AITargetPrevSeenIDs = MoveTemp(NewPrevIDs); bDirty = true; }
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
-                        // Update MoveTarget fields
-                        if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                        // Update MoveTarget fields (unless explicitly suppressed)
+                        if (!DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct()))
                         {
-                            bool bMoveDirty = false;
-                            if (Item->Move_bHasTarget != true) { Item->Move_bHasTarget = true; bMoveDirty = true; }
-                            if (!Item->Move_Center.Equals(MT->Center, 0.1f)) { Item->Move_Center = MT->Center; bMoveDirty = true; }
-                            if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 0.01f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
-                            const float DesiredSpeed = MT->DesiredSpeed.Get();
-                            if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 0.01f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
-                            const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
-                            if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
-                            if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
-                            if (bMoveDirty) { bDirty = true; }
+                            if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                            {
+                                bool bMoveDirty = false;
+                                if (Item->Move_bHasTarget != true) { Item->Move_bHasTarget = true; bMoveDirty = true; }
+                                if (!Item->Move_Center.Equals(MT->Center, 0.1f)) { Item->Move_Center = MT->Center; bMoveDirty = true; }
+                                if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 0.01f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
+                                const float DesiredSpeed = MT->DesiredSpeed.Get();
+                                if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 0.01f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
+                                const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
+                                if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
+                                if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
+                                if (bMoveDirty) { bDirty = true; }
+                            }
+                        }
+                        else
+                        {
+                            // Explicitly clear move replication when FMassSkipMoveReplicationTag is present
+                            if (Item->Move_bHasTarget != false)
+                            {
+                                Item->Move_bHasTarget = false;
+                                bDirty = true;
+                            }
                         }
                         // Keep additional replicated fragments in sync
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))

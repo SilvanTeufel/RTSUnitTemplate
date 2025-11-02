@@ -1144,6 +1144,7 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
         return;
     }
 
+	EntityManager->Defer().RemoveTag<FMassSkipMoveReplicationTag>(EntityHandle);
 	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
 
 

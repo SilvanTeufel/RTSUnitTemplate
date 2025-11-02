@@ -146,6 +146,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 // Queue signal instead of sending directly
+                ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                 UpdateMoveTarget(
                  MoveTarget,
                  StateFrag.StoredLocation,
@@ -172,6 +173,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
+                ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
@@ -187,6 +189,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
            FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
            StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
+           ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
            UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
 
 

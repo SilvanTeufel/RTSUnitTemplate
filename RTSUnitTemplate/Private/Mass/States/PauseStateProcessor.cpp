@@ -95,6 +95,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
             {
                 SightFrag.AttackerTeamOverlapsPerTeam.Empty();
+                ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                 UpdateMoveTarget(
                  MoveTarget,
                  StateFrag.StoredLocation,

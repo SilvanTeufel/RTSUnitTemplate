@@ -195,7 +195,10 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
+	
+	if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
 
+	
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 
@@ -342,6 +345,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 		}
 
 		// Apply move target
+		if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+		
 		AiStatePtr->StoredLocation = NewTargetLocation;
 		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] UpdateMoveTarget -> Loc:%s Speed:%.1f"), *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
@@ -482,6 +487,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    		UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
    		return;
    	}
+
+	if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
 	
    	AiStatePtr->StoredLocation = NewTargetLocation;
    	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
