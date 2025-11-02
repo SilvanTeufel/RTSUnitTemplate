@@ -229,19 +229,50 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Build additional authoritative mapping from Bubble payload (client-replicated)
 	TMap<FName, FMassNetworkID> BubbleByOwnerName;
 	TSet<uint32> BubbleIDs;
-	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
-	{
-		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+		if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
 		{
-			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
+			if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
 			{
-				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
-				BubbleIDs.Add(Item.NetID.GetValue());
+				for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
+				{
+					BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
+					BubbleIDs.Add(Item.NetID.GetValue());
+				}
 			}
 		}
-	}
-	
-	EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
+		// Compare Registry vs Bubble mappings by OwnerName and log mismatches (diagnostic)
+		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1 && AuthoritativeByOwnerName.Num() > 0 && BubbleByOwnerName.Num() > 0)
+		{
+			int32 MismatchCount = 0;
+			int32 OnlyInRegistry = 0;
+			int32 OnlyInBubble = 0;
+			for (const auto& KVP : AuthoritativeByOwnerName)
+			{
+				const FMassNetworkID* B = BubbleByOwnerName.Find(KVP.Key);
+				if (!B)
+				{
+					OnlyInRegistry++;
+				}
+				else if (B->GetValue() != KVP.Value.GetValue())
+				{
+					MismatchCount++;
+				}
+			}
+			for (const auto& KVP : BubbleByOwnerName)
+			{
+				if (!AuthoritativeByOwnerName.Contains(KVP.Key))
+				{
+					OnlyInBubble++;
+				}
+			}
+			if (MismatchCount > 0 || OnlyInRegistry > 0 || OnlyInBubble > 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ClientRegistryVsBubble: Mismatch=%d OnlyInReg=%d OnlyInBubble=%d (Reg=%d Bubble=%d)"),
+					MismatchCount, OnlyInRegistry, OnlyInBubble, AuthoritativeByOwnerName.Num(), BubbleByOwnerName.Num());
+			}
+		}
+		
+		EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
 		const TConstArrayView<FMassNetworkIDFragment> NetIDs = Ctx.GetFragmentView<FMassNetworkIDFragment>();
@@ -427,7 +458,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
- EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
+		// If we hit the per-tick action budget, warn so we can correlate with units not moving on client
+		if (Actions >= MaxActionsPerTick)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
+		}
+		
+		 EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -896,15 +933,27 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
  							// Apply MoveTarget if present
- 							if (MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
- 							{
- 								FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
- 								MT.Center = FVector(UseItem->Move_Center);
- 								MT.SlackRadius = UseItem->Move_SlackRadius;
- 								MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
- 								MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
- 								MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
- 							}
+        if (MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
+        {
+            FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+            MT.Center = FVector(UseItem->Move_Center);
+            MT.SlackRadius = UseItem->Move_SlackRadius;
+            MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+            MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+            MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+        }
+        else if (UseItem->Move_bHasTarget)
+        {
+            // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
+            static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
+            const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
+            if (!WarnedOnceClient.Contains(IdVal))
+            {
+                WarnedOnceClient.Add(IdVal);
+                const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
+                UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
+            }
+        }
 							}
 						}
 						}
@@ -969,6 +1018,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						{
 							FMassSteeringFragment& Steer = SteeringList[EntityIdx];
 							Steer.DesiredVelocity += Corrective * 0.1f; // small bias
+						}
+						// Diagnostic: log corrective force magnitude and error distance (warning level)
+						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+						{
+							const float Err = FMath::Sqrt(ErrorDistSq);
+							UE_LOG(LogTemp, Warning, TEXT("ClientReconcileForce: NetID=%u ErrXY=%.1f Corr=(%.1f,%.1f,%.1f) Kp=%.1f MaxAccel=%.1f"),
+								NetIDList[EntityIdx].NetID.GetValue(), Err, Corrective.X, Corrective.Y, Corrective.Z, Kp, MaxCorrectionAccel);
 						}
 					}
 				}

@@ -102,7 +102,10 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	GetCapsuleComponent()->SetIsReplicated(false);
 	GetMesh()->SetIsReplicated(false);
-	bReplicates = true;
+	bReplicates = false;
+	SetNetUpdateFrequency(1);
+	SetMinNetUpdateFrequency(1);
+	SetReplicates(false);
 }
 
 // Called when the game starts or when spawned

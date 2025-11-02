@@ -133,15 +133,17 @@ void ACustomControllerBase::AgentInit_Implementation()
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
 	// Server authoritative path. Also dispatch a client-side prediction request.
-	if (!Unit) return;
-	
-	if (!Unit->IsInitialized) return;
-	
-	if (!Unit->CanMove) return;
-	
+	UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] CorrectSetUnitMoveTarget: Unit=%s Target=%s Speed=%.1f Acc=%.1f AttackT=%s HasAuth=%s"),
+		*GetNameSafe(Unit), *NewTargetLocation.ToCompactString(), DesiredSpeed, AcceptanceRadius, AttackT?TEXT("true"):TEXT("false"), HasAuthority()?TEXT("true"):TEXT("false"));
+	if (!Unit) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit is null")); return; }
+		
+	if (!Unit->IsInitialized) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s not initialized"), *GetNameSafe(Unit)); return; }
+		
+	if (!Unit->CanMove) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s CanMove=false"), *GetNameSafe(Unit)); return; }
+		
 	// Do not accept move orders for dead units
-	if (Unit->UnitState == UnitData::Dead) return;
-	
+	if (Unit->UnitState == UnitData::Dead) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s is Dead"), *GetNameSafe(Unit)); return; }
+		
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
 

@@ -161,6 +161,18 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
             NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
         }
+        else
+        {
+            // Unconditional warning: this entity is missing FMassMoveTargetFragment while being replicated
+            static TSet<uint32> WarnedOnce; // avoid log spam per NetID
+            const uint32 IdVal = NetID.GetValue();
+            if (!WarnedOnce.Contains(IdVal))
+            {
+                WarnedOnce.Add(IdVal);
+                const FName OwnerName = (ActorFrag && ActorFrag->GetMutable()) ? ActorFrag->GetMutable()->GetFName() : NAME_None;
+                UE_LOG(LogTemp, Warning, TEXT("[ServerRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s"), IdVal, *OwnerName.ToString());
+            }
+        }
         // Fill AI target replication fields if available
         if (const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
         {

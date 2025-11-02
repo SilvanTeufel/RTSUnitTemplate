@@ -30,7 +30,10 @@ AMinimapActor::AMinimapActor()
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
 
-
+    bReplicates = false;
+    SetNetUpdateFrequency(1);
+    SetMinNetUpdateFrequency(1);
+    SetReplicates(false);
 }
 
 void AMinimapActor::BeginPlay()
