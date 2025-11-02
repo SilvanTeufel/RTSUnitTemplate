@@ -1,7 +1,4 @@
-﻿#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
+﻿
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -9,6 +6,14 @@
 #include "Mass/Traits/UnitReplicationFragments.h"
 #include "MassCommonFragments.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
+#include "HAL/IConsoleManager.h"
+
+// 0=Off, 1=Warn, 2=Verbose
+static TAutoConsoleVariable<int32> CVarRTS_Bubble_LogLevel(
+	TEXT("net.RTS.Bubble.LogLevel"),
+	2,
+	TEXT("Logging level for UnitClientBubbleInfo: 0=Off, 1=Warn, 2=Verbose."),
+	ECVF_Default);
 
 // Implementierung der Fast Array Item Callbacks
 static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
@@ -54,7 +59,13 @@ AUnitClientBubbleInfo::AUnitClientBubbleInfo(const FObjectInitializer& ObjectIni
 	// Aktiviere Replikation für diesen Actor
 	bReplicates = true;
 	bAlwaysRelevant = true;
-	SetNetUpdateFrequency(10.0f);
+	// Read desired replication rate (Hz) from CVAR; default 10
+	float Hz = 10.0f;
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.Bubble.NetUpdateHz")))
+	{
+		Hz = FMath::Max(0.1f, Var->GetFloat());
+	}
+	SetNetUpdateFrequency(Hz);
 
 	// Setze Owner Pointer für Fast Array
 	Agents.OwnerBubble = this;
@@ -70,6 +81,23 @@ void AUnitClientBubbleInfo::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 void AUnitClientBubbleInfo::OnRep_Agents()
 {
 	Agents.OwnerBubble = this;
+	const int32 Level = CVarRTS_Bubble_LogLevel.GetValueOnGameThread();
+	if (Level >= 1)
+	{
+		const int32 Count = Agents.Items.Num();
+		UE_LOG(LogTemp, Log, TEXT("[Bubble] OnRep_Agents: Items=%d (World=%s)"), Count, *GetWorld()->GetName());
+		if (Level >= 2 && Count > 0)
+		{
+			const int32 MaxLog = FMath::Min(20, Count);
+			FString IdList;
+			for (int32 i = 0; i < MaxLog; ++i)
+			{
+				if (i > 0) IdList += TEXT(", ");
+				IdList += FString::Printf(TEXT("%u"), Agents.Items[i].NetID.GetValue());
+			}
+			UE_LOG(LogTemp, Log, TEXT("[Bubble] NetIDs[%d]: %s%s"), MaxLog, *IdList, (Count > MaxLog ? TEXT(" ...") : TEXT("")));
+		}
+	}
 }
 
 void AUnitClientBubbleInfo::BeginPlay()
@@ -78,6 +106,14 @@ void AUnitClientBubbleInfo::BeginPlay()
 
 	// Stelle sicher dass der Owner Pointer gesetzt ist
 	Agents.OwnerBubble = this;
+
+	const int32 Level = CVarRTS_Bubble_LogLevel.GetValueOnGameThread();
+	if (Level >= 1)
+	{
+		const ENetMode Mode = GetNetMode();
+		const TCHAR* ModeStr = (Mode == NM_DedicatedServer) ? TEXT("Server") : (Mode == NM_ListenServer ? TEXT("ListenServer") : (Mode == NM_Client ? TEXT("Client") : TEXT("Standalone")));
+		UE_LOG(LogTemp, Log, TEXT("[Bubble] BeginPlay in %s world %s, NetUpdateHz=%.1f"), ModeStr, *GetWorld()->GetName(), GetNetUpdateFrequency());
+	}
 }
 
 #if WITH_EDITORONLY_DATA

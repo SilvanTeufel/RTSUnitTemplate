@@ -1,7 +1,10 @@
-﻿#if RTSUNITTEMPLATE_NO_LOGS
+﻿
+/*
+#if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG
 #define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
 #endif
+*/
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
@@ -13,6 +16,16 @@
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassReplicationFragments.h"
+#include "HAL/IConsoleManager.h"
+
+// 0=Off, 1=Warn, 2=Verbose
+static TAutoConsoleVariable<int32> CVarRTS_Registry_LogLevel(
+	TEXT("net.RTS.Registry.LogLevel"),
+	2,
+	TEXT("Logging level for UnitRegistryReplicator diagnostics: 0=Off, 1=Warn, 2=Verbose."),
+	ECVF_Default);
+
+namespace { inline int32 RegLogLevel(){ return CVarRTS_Registry_LogLevel.GetValueOnGameThread(); } }
 
 namespace { constexpr bool GRegistryImportantLogs = false; }
 
@@ -35,9 +48,9 @@ void AUnitRegistryReplicator::BeginPlay()
 		{
 			W->GetTimerManager().SetTimer(DiagnosticsTimerHandle, this, &AUnitRegistryReplicator::ServerDiagnosticsTick, 5.0f, true, 5.0f);
 		}
-		if (GRegistryImportantLogs)
+		if (RegLogLevel() >= 1)
 		{
-			UE_LOG(LogTemp, Log, TEXT("UnitRegistryReplicator: Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
+			UE_LOG(LogTemp, Log, TEXT("[RTS.Registry] Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
 		}
 	}
 }
@@ -111,7 +124,10 @@ void AUnitRegistryReplicator::OnRep_Registry()
 			}
 			if (Cleaned > 0)
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
+				if (RegLogLevel() >= 2)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[RTS.Registry] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
+				}
 			}
 
 			// Trim client-side transform cache entries whose NetIDs are no longer present in the registry
@@ -135,7 +151,10 @@ void AUnitRegistryReplicator::OnRep_Registry()
 				}
 				if (Trimmed > 0)
 				{
-					//UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
+					if (RegLogLevel() >= 2)
+					{
+						UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
+					}
 				}
 			}
 		}
@@ -230,30 +249,38 @@ static void RunDiagnosticsForWorld(UWorld& World, const FUnitRegistryArray& Regi
 		auto JoinInts = [](const TArray<int32>& Arr){ FString S; for (int32 i = 0; i < Arr.Num() && i < 20; ++i){ if (i>0) S += TEXT(", "); S += FString::FromInt(Arr[i]); } if (Arr.Num()>20) S += TEXT(", ..."); return S; };
 		auto JoinNames = [](const TArray<FName>& Arr){ FString S; for (int32 i = 0; i < Arr.Num() && i < 20; ++i){ if (i>0) S += TEXT(", "); S += Arr[i].ToString(); } if (Arr.Num()>20) S += TEXT(", ..."); return S; };
 
-		//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] DIAG[%s|%s]: LiveUnits=%d, Registry=%d, Missing(Index)=%d, Missing(Owner)=%d, Stale(Index)=%d, Stale(Owner)=%d"),
-		//	Context, ModeStr, LiveUnits, RegCount, MissingByIndex.Num(), MissingByOwner.Num(), StaleByIndex.Num(), StaleByOwner.Num());
-
-		if (MissingByIndex.Num() > 0)
+		if (RegLogLevel() >= 1)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
-		}
-		if (MissingByOwner.Num() > 0)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
-		}
-		if (StaleByIndex.Num() > 0)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
-		}
-		if (StaleByOwner.Num() > 0)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
+			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] DIAG[%s|%s]: LiveUnits=%d, Registry=%d, Missing(Index)=%d, Missing(Owner)=%d, Stale(Index)=%d, Stale(Owner)=%d"),
+				Context, ModeStr, LiveUnits, RegCount, MissingByIndex.Num(), MissingByOwner.Num(), StaleByIndex.Num(), StaleByOwner.Num());
+			if (RegLogLevel() >= 2)
+			{
+				if (MissingByIndex.Num() > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
+				}
+				if (MissingByOwner.Num() > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
+				}
+				if (StaleByIndex.Num() > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
+				}
+				if (StaleByOwner.Num() > 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
+				}
+			}
 		}
 	}
 	else
 	{
 		// Low verbosity success summary
-		//UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
+		if (RegLogLevel() >= 2)
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
+		}
 	}
 }
 

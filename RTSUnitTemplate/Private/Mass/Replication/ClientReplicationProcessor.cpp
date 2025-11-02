@@ -1,10 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
 
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
@@ -22,7 +18,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_CacheRebuildSeconds
     ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_BudgetPerTick(
     TEXT("net.RTS.ClientReplication.BudgetPerTick"),
-    16,
+    64,
     TEXT("Max reconcile/link/unlink operations per tick on client."),
     ECVF_Default);
 // 0=Off, 1=Warn, 2=Verbose
@@ -36,12 +32,6 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
     TEXT("net.RTS.ClientReplication.UnlinkDebounceSeconds"),
     0.10f,
     TEXT("Seconds to wait after the registry changes before executing unlink reconciliation."),
-    ECVF_Default);
-// Toggle between full replication and reconciliation (0 = reconciliation, 1 = full replication)
-static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_FullReplication(
-    TEXT("net.RTS.ClientReplication.FullReplication"),
-    1,
-    TEXT("1 = Full transform replication (disable steering/force reconciliation). 0 = Reconciliation via steering/force."),
     ECVF_Default);
 
 #include "MassCommonFragments.h"

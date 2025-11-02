@@ -1,13 +1,34 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
 #include "Mass/Replication/MassUnitReplicatorBase.h"
 
 #include "MassCommonFragments.h"
+
+// Optional slice control to limit how many entities of a chunk are processed this call.
+namespace ReplicationSliceControl
+{
+	static int32 GStartIndex = -1;
+	static int32 GCount = -1;
+	static bool IsActive()
+	{
+		return GStartIndex >= 0 && GCount >= 0;
+	}
+	void SetSlice(int32 StartIndex, int32 Count)
+	{
+		GStartIndex = FMath::Max(0, StartIndex);
+		GCount = Count;
+	}
+	void ClearSlice()
+	{
+		GStartIndex = -1; GCount = -1;
+	}
+	void GetSlice(int32& OutStartIndex, int32& OutCount)
+	{
+		OutStartIndex = GStartIndex;
+		OutCount = GCount;
+	}
+}
 #include "MassReplicationTypes.h"
 #include "MassClientBubbleHandler.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
@@ -30,11 +51,38 @@
 // CVAR to control server-side MassUnitReplicatorBase logging
 static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
 	TEXT("net.RTS.ServerReplicator.LogLevel"),
-	0,
+	2,
 	TEXT("Logging level for MassUnitReplicatorBase: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
+// CVARs to reduce replication bandwidth by throttling dirty detection thresholds
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_LocThresholdCm(
+	TEXT("net.RTS.ServerRep.LocThresholdCm"),
+	2.0f,
+	TEXT("Minimum location delta (cm) before marking replicated item dirty. Default 2cm."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_AngleThresholdDeg(
+	TEXT("net.RTS.ServerRep.AngleThresholdDeg"),
+	1.5f,
+	TEXT("Minimum rotation delta (deg) before marking replicated item dirty. Default 1.5deg."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_ScaleThreshold(
+	TEXT("net.RTS.ServerRep.ScaleThreshold"),
+	0.02f,
+	TEXT("Minimum scale component delta before marking replicated item dirty. Default 0.02."),
+	ECVF_Default);
+
 namespace { inline int32 RepLogLevel(){ return CVarRTS_ServerReplicator_LogLevel.GetValueOnGameThread(); } }
+
+// Helper: read bubble replication frequency (Hz) from CVAR
+static float GetBubbleNetUpdateHz()
+{
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.Bubble.NetUpdateHz")))
+	{
+		return FMath::Max(0.1f, Var->GetFloat());
+	}
+	return 10.0f;
+}
 
 // Helper: find or spawn a UnitClientBubbleInfo on the server
 static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
@@ -53,7 +101,7 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
 		if (Bubble)
 		{
 			Bubble->SetReplicates(true);
-			Bubble->SetNetUpdateFrequency(10.0f);
+			Bubble->SetNetUpdateFrequency(GetBubbleNetUpdateHz());
 			Bubble->ForceNetUpdate();
 		}
 	}
@@ -297,22 +345,30 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     }
     else
     {
-        // Update initial values just in case and mark dirty
+        // Update initial values just in case and mark dirty using configurable thresholds
+        const float LocThresh = FMath::Max(0.0f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
+        const float AngleThresh = FMath::Clamp(CVarRTS_ServerRep_AngleThresholdDeg.GetValueOnGameThread(), 0.0f, 180.0f);
+        const float ScaleThresh = FMath::Max(0.0f, CVarRTS_ServerRep_ScaleThreshold.GetValueOnGameThread());
         bool bDirty = false;
-        if (!Item->Location.Equals(Xf.GetLocation(), 0.01f)) { Item->Location = Xf.GetLocation(); bDirty = true; }
-        auto QuantizeAngle = [](float AngleDeg)->uint16
+        const FVector NewLoc = Xf.GetLocation();
+        if (!Item->Location.Equals(NewLoc, LocThresh)) { Item->Location = NewLoc; bDirty = true; }
+        // Angle snapping helper based on threshold to reduce churn
+        auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
         {
-            const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
+            const float ClampedStep = FMath::Max(0.1f, AngleThresh); // avoid zero
+            const float Snapped = FMath::RoundToFloat(AngleDeg / ClampedStep) * ClampedStep;
+            const float Norm = FMath::Fmod(Snapped + 360.0f, 360.0f);
             return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
         };
         const FRotator Rot = Xf.Rotator();
-        const uint16 NewP = QuantizeAngle(Rot.Pitch);
-        const uint16 NewY = QuantizeAngle(Rot.Yaw);
-        const uint16 NewR = QuantizeAngle(Rot.Roll);
+        const uint16 NewP = QuantizeAngleWithThreshold(Rot.Pitch);
+        const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
+        const uint16 NewR = QuantizeAngleWithThreshold(Rot.Roll);
         if (Item->PitchQuantized != NewP) { Item->PitchQuantized = NewP; bDirty = true; }
         if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
         if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
-        if (!Item->Scale.Equals(Xf.GetScale3D(), 0.01f)) { Item->Scale = Xf.GetScale3D(); bDirty = true; }
+        const FVector NewScale = Xf.GetScale3D();
+        if (!Item->Scale.Equals(NewScale, ScaleThresh)) { Item->Scale = NewScale; bDirty = true; }
         if (bDirty)
         {
             BubbleInfo->Agents.MarkItemDirty(*Item);
@@ -436,6 +492,12 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
 {
     const int32 NumEntities = Context.GetNumEntities();
 
+    int32 SliceStart = -1, SliceCount = -1;
+    ReplicationSliceControl::GetSlice(SliceStart, SliceCount);
+    const bool bUseSlice = (SliceStart >= 0 && SliceCount >= 0);
+    const int32 LoopStart = bUseSlice ? FMath::Clamp(SliceStart, 0, FMath::Max(0, NumEntities-1)) : 0;
+    const int32 LoopEnd = bUseSlice ? FMath::Clamp(SliceStart + SliceCount, LoopStart, NumEntities) : NumEntities;
+
     // Use World from replication context to branch server/client
     if (ReplicationContext.World.GetNetMode() != NM_Client)
     {
@@ -482,7 +544,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         for (AUnitClientBubbleInfo* BubbleInfo : Bubbles)
         {
             bool bAnyDirty = false;
-            for (int32 Idx = 0; Idx < NumEntities; ++Idx)
+            for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
             {
                 const FMassNetworkID& NetID = NetIDList[Idx].NetID;
 

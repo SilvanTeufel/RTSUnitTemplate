@@ -1,8 +1,4 @@
 ﻿
-#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
 
 #include "Mass/Replication/ServerReplicationKickProcessor.h"
 
@@ -22,6 +18,13 @@
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
 
+// Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
+namespace ReplicationSliceControl
+{
+	void SetSlice(int32 StartIndex, int32 Count);
+	void ClearSlice();
+}
+
 // Configurable grace period CVAR: number of seconds after world start to bypass change-based skip
 static TAutoConsoleVariable<float> CVarRTSUnitStartupRepGraceSeconds(
 	TEXT("r.RTSUnit.StartupRepGraceSeconds"),
@@ -37,17 +40,17 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_Enable(
 	ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerChunk(
 	TEXT("net.RTS.ServerReplicationKick.MaxPerChunk"),
-	400,
-	TEXT("Max entities allowed per chunk this tick; chunks exceeding are deferred. Default 400."),
+	16,
+	TEXT("Max entities allowed per chunk this tick; chunks exceeding are deferred. Default 16. Raise to trade bandwidth for latency."),
 	ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		TEXT("net.RTS.ServerReplicationKick.MaxPerTick"),
-		400,
-		TEXT("Max total entities processed by this processor per tick; extra chunks are skipped. Default 400 for higher concurrency."),
+		16,
+		TEXT("Max total entities processed by this processor per tick; extra chunks are skipped. Default 16 for bandwidth safety."),
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("net.RTS.ServerReplicationKick.LogLevel"),
-	0,
+	2,
 	TEXT("Logging level: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
@@ -72,6 +75,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 			static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
 			static TMap<const UWorld*, int32> GProcessedCountByWorld;
 			static TMap<const UWorld*, double> GLastExecTimeByWorld;
+			static TMap<const UWorld*, int32> GNextStartOffsetByWorld; // rotate slice start within chunk across ticks
 			static bool GCleanupRegistered = false;
 			static FDelegateHandle GCleanupHandle;
 			static void EnsureServerKickCleanupRegistered()
@@ -79,9 +83,10 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 				if (!GCleanupRegistered)
 				{
 					GCleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* InWorld, bool, bool){
-						GLastSigByID.Reset();
+   			GLastSigByID.Reset();
 						GProcessedCountByWorld.Remove(InWorld);
 						GLastExecTimeByWorld.Remove(InWorld);
+						GNextStartOffsetByWorld.Remove(InWorld);
 					});
 					GCleanupRegistered = true;
 				}
@@ -145,7 +150,16 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	if (bSkipReplication) return;
-	
+
+	/*		
+	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+	if (TimeSinceLastRun < ExecutionInterval)
+	{
+		return;
+	}
+	TimeSinceLastRun = 0.f;
+	*/
+			
 	UWorld* World = GetWorld();
 	if (!World || World->GetNetMode() == NM_Client)
 	{
@@ -245,11 +259,35 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		const TConstArrayView<FMassNetworkIDFragment> NetIDs = ChunkContext.GetFragmentView<FMassNetworkIDFragment>();
 		const TConstArrayView<FTransformFragment> Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
 
-		// Budget caps: skip heavy chunks or when per-tick cap reached
-		if (ProcessedThisTick >= MaxPerTick || Num > MaxPerChunk || (ProcessedThisTick + Num) > MaxPerTick)
+		// If our budgets are low, process a slice of this chunk this tick and continue next tick.
+		if (ProcessedThisTick >= MaxPerTick)
 		{
-			return; // defer this chunk to a later tick
+			return; // budget used up this tick; try again next tick
 		}
+		const int32 RemainingBudget = MaxPerTick - ProcessedThisTick;
+		const int32 SliceSize = FMath::Clamp(FMath::Min3(RemainingBudget, MaxPerChunk, Num), 0, Num);
+		int32& StartOffset = GNextStartOffsetByWorld.FindOrAdd(World);
+		if (StartOffset >= Num)
+		{
+			StartOffset = 0;
+		}
+		const int32 SliceStart = StartOffset;
+		// Advance start offset for next tick; wrap within this chunk size
+		StartOffset = (StartOffset + SliceSize) % FMath::Max(1, Num);
+
+		if (SliceSize <= 0)
+		{
+			return;
+		}
+
+		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+		{
+			UE_LOG(LogTemp, Log, TEXT("ServerKick: Processing slice Start=%d Count=%d (ChunkNum=%d Remain=%d MaxPerTick=%d MaxPerChunk=%d)"),
+				SliceStart, SliceSize, Num, RemainingBudget, MaxPerTick, MaxPerChunk);
+		}
+
+		// Instruct replicator to only process the slice of this chunk
+		ReplicationSliceControl::SetSlice(SliceStart, SliceSize);
 
 		bool bAnyChanged = true;
 
@@ -328,10 +366,15 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 		// Invoke the same function the MassReplicationProcessor would call on the server.
 		Replicator->ProcessClientReplication(ChunkContext, RepCtx);
-		ProcessedThisTick += Num; // account budget usage
 
-		// Update stored signatures after replication to reflect the latest sent state, including tag bits
-		for (int32 i=0; i<Num; ++i)
+		// Account budget usage for this slice
+		ProcessedThisTick += SliceSize;
+
+		// Clear slice control so other paths process full ranges by default
+		ReplicationSliceControl::ClearSlice();
+
+		// Update stored signatures after replication to reflect the latest sent state for the slice
+		for (int32 i = SliceStart; i < SliceStart + SliceSize && i < Num; ++i)
 		{
 			const uint32 ID = NetIDs[i].NetID.GetValue();
 			const FTransform& Xf = Transforms[i].GetTransform();
