@@ -110,17 +110,10 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
 
 void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
 {
-    // Declare unique requirements for this replicator query.
-    // Note: UMassReplicatorBase already adds FMassNetworkIDFragment by default.
-    // Adding it again causes a duplicate-requirement assertion in UE 5.6.
+    // Keep requirements minimal to avoid excluding entities that lack optional fragments.
+    // UMassReplicatorBase already requires FMassNetworkIDFragment; only add Transform here.
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
-    // Do NOT add FMassNetworkIDFragment here to avoid duplicates.
+    // Do NOT add optional fragments as hard requirements; we read them conditionally during serialization.
 }
 
 void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicationContext& ReplicationContext)

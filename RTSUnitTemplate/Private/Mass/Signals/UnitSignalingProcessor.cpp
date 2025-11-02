@@ -12,6 +12,7 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
+#include "Mass/Replication/UnitClientBubbleInfo.h"
 
 // CVARs for tuning client registration throughput
 static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_BudgetPerTick(
@@ -122,6 +123,46 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
     // Client-side proactive registry reconciliation for Mass replication mode
     const bool bIsClient = World->GetNetMode() == NM_Client;
+
+    // Optional diagnostic: log counts to help find missing registrations
+    static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_LogCounts(
+        TEXT("net.RTS.UnitSignaling.LogCounts"),
+        1,
+        TEXT("Log diagnostic counts in UnitSignalingProcessor Execute (0=off,1=on)."),
+        ECVF_Default);
+
+    if (CVarRTS_UnitSignaling_LogCounts.GetValueOnGameThread() > 0)
+    {
+        int32 LiveUnits = 0;
+        int32 Bound = 0;
+        for (TActorIterator<AUnitBase> It(World); It; ++It)
+        {
+            ++LiveUnits;
+            if (UMassActorBindingComponent* B = It->MassActorBindingComponent)
+            {
+                if (B->GetMassEntityHandle().IsValid())
+                {
+                    ++Bound;
+                }
+            }
+        }
+        int32 RegistryCount = 0;
+        int32 AgentsCount = 0;
+        if (URTSWorldCacheSubsystem* CacheSubDbg = World->GetSubsystem<URTSWorldCacheSubsystem>())
+        {
+            if (AUnitRegistryReplicator* RegDbg = CacheSubDbg->GetRegistry(false))
+            {
+                RegistryCount = RegDbg->Registry.Items.Num();
+            }
+            if (AUnitClientBubbleInfo* BubbleDbg = CacheSubDbg->GetBubble(false))
+            {
+                AgentsCount = BubbleDbg->Agents.Items.Num();
+            }
+        }
+        UE_LOG(LogTemp, Log, TEXT("[UnitSignaling] Counts: Units=%d Bound=%d Registry=%d Agents=%d (World=%s)"),
+            LiveUnits, Bound, RegistryCount, AgentsCount, *World->GetName());
+    }
+
     if (bIsClient && RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass)
     {
         URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>();
