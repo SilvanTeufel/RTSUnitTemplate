@@ -444,9 +444,14 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         bool PlayWaypointSound = false;
         bool PlayAttackSound = false;
 
+        // Collect all mass units and their positions to issue one RPC
+        TArray<AUnitBase*> MassUnits;
+        TArray<FVector>    MassLocations;
+
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
-            if (CustomControllerBase->SelectedUnits[i] != CustomControllerBase->CameraUnitWithTag && !CustomControllerBase->SelectedUnits[i]->IsWorker)
+            AUnitBase* U = CustomControllerBase->SelectedUnits[i];
+            if (U != CustomControllerBase->CameraUnitWithTag && !U->IsWorker)
             {
                 int32 Row = i / GridSize;     // Row index
                 int32 Col = i % GridSize;     // Column index
@@ -456,20 +461,33 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;
                 
-                if (CustomControllerBase->SetBuildingWaypoint(RunLocation, CustomControllerBase->SelectedUnits[i], BWaypoint, PlayWaypointSound))
+                if (CustomControllerBase->SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
                 {
                     // Do Nothing
                 }
                 else
                 {
                     CustomControllerBase->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-                    CustomControllerBase->LeftClickAttackMass(CustomControllerBase->SelectedUnits[i], RunLocation, AttackToggled);
+                    if (U->bIsMassUnit)
+                    {
+                        MassUnits.Add(U);
+                        MassLocations.Add(RunLocation);
+                    }
+                    else
+                    {
+                        CustomControllerBase->LeftClickAttack(U, RunLocation);
+                    }
                     PlayAttackSound = true;
                 }
             }
 
-            if (CustomControllerBase->SelectedUnits[i])
-                CustomControllerBase->FireAbilityMouseHit(CustomControllerBase->SelectedUnits[i], HitResult);
+            if (U)
+                CustomControllerBase->FireAbilityMouseHit(U, HitResult);
+        }
+
+        if (MassUnits.Num() > 0)
+        {
+            CustomControllerBase->LeftClickAttackMass(MassUnits, MassLocations, AttackToggled);
         }
 
         if (CustomControllerBase->WaypointSound && PlayWaypointSound)
@@ -494,6 +512,8 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
     CustomControllerBase->LeftClickIsPressed = false; // Reset the pressed state
 }
+
+
 void ARLAgent::AddWorkerToResource(EResourceType ResourceType, int TeamId)
 {
     AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));

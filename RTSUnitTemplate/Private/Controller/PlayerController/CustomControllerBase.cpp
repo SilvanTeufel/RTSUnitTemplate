@@ -238,6 +238,152 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		}
 	}*/
 }
+
+void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
+{
+	// ENTRY LOG
+	UE_LOG(LogTemp, Log, TEXT("[BatchMove] Entered. Units:%d Locs:%d Speeds:%d AccRadius:%.1f AttackT:%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadius, AttackT ? TEXT("true") : TEXT("false"));
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BatchMove] Invalid WorldContextObject (World == nullptr)."));
+		return;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[BatchMove] NetMode:%d HasAuthority:%s"), (int32)World->GetNetMode(), HasAuthority() ? TEXT("true") : TEXT("false"));
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BatchMove] MassEntitySubsystem not found. Is Mass enabled?"));
+		return;
+	}
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Array size mismatch. Units:%d Locs:%d Speeds:%d (processing min count)"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	}
+
+	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		AUnitBase* Unit = Units[Index];
+		const FVector& NewTargetLocation = NewTargetLocations[Index];
+		const float DesiredSpeed = DesiredSpeeds[Index];
+
+		if (!Unit)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%d] Unit is null. Skipping."), Index);
+			continue;
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%d] Unit:%s Target:%s Speed:%.1f"), Index, *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
+
+		if (!Unit->IsInitialized)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (!Unit->CanMove)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (Unit->UnitState == UnitData::Dead)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			const bool bCancelable = !(AbilityCDO && !AbilityCDO->AbilityCanBeCanceled);
+			UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Ability present. Cancelable:%s"), *GetNameSafe(Unit), bCancelable ? TEXT("true") : TEXT("false"));
+			if (!bCancelable)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Ability cannot be canceled. Skipping."), *GetNameSafe(Unit));
+				continue;
+			}
+			CancelCurrentAbility(Unit);
+		}
+
+		Unit->bHoldPosition = false;
+
+		// Mass entity handle
+		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Invalid MassEntityHandle. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		// Skip if Mass has Dead tag
+		if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Mass entity has Dead tag. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+		if (!MoveTargetFragmentPtr || !AiStatePtr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Missing fragments. MoveTarget:%s AI:%s"), *GetNameSafe(Unit), MoveTargetFragmentPtr ? TEXT("OK") : TEXT("NULL"), AiStatePtr ? TEXT("OK") : TEXT("NULL"));
+			continue;
+		}
+
+		// Apply move target
+		AiStatePtr->StoredLocation = NewTargetLocation;
+		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] UpdateMoveTarget -> Loc:%s Speed:%.1f"), *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
+		UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+
+		// Tags manipulation
+		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+		if (AttackT)
+		{
+			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
+			{
+				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+				UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Added Detect tag (AttackT)."), *GetNameSafe(Unit));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] AttackT set but AI cannot attack or not initialized."), *GetNameSafe(Unit));
+			}
+		}
+		else
+		{
+			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+			UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Removed Detect tag (no AttackT)."), *GetNameSafe(Unit));
+		}
+
+		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Move command applied."), *GetNameSafe(Unit));
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[BatchMove] Finished processing %d entries."), Count);
+}
 /*
 void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
@@ -422,6 +568,10 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			// Perform the line trace on a suitable collision channel, e.g., ECC_Visibility or a custom one
 			bool DidHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
 			
+			// Prepare batch arrays for mass units
+			TArray<AUnitBase*> BatchUnits;
+			TArray<FVector>    BatchLocations;
+			TArray<float>      BatchSpeeds;
 			
 			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
 			{
@@ -461,24 +611,27 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 					}
 					
 
-                    bool UnitIsValid = true;
-                    
-                    if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
-                    if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
-                
-                    if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
-                    {
-
-                        UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-                    
-                        if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
-                        else CancelCurrentAbility(SelectedUnits[i]);
-                    }
+					bool UnitIsValid = true;
+					
+					if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
+					if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
+				
+					if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+					{
+					
+						UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+						
+						if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
+						else CancelCurrentAbility(SelectedUnits[i]);
+					}
 
 					if (SelectedUnits[i]->bIsMassUnit && UnitIsValid)
 					{
 						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
-						CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], UnitsToLoad[i]->RunLocation, Speed, 40.f);
+						// Accumulate for batched RPC instead of sending one RPC per unit
+						BatchUnits.Add(SelectedUnits[i]);
+						BatchLocations.Add(UnitsToLoad[i]->RunLocation);
+						BatchSpeeds.Add(Speed);
 						SetUnitState_Replication(SelectedUnits[i], 1);
 					}
 					else
@@ -486,6 +639,12 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 						RightClickRunUEPF(UnitsToLoad[i], UnitsToLoad[i]->RunLocation, true);
 					}
 				}
+			}
+
+			// Send a single batched RPC for all valid mass units gathered above
+			if (BatchUnits.Num() > 0)
+			{
+				Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, false);
 			}
 
 			if (Transporter->GetUnitState() != UnitData::Casting)
@@ -754,17 +913,21 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     }
 
     // 4. Issue moves & sounds
+    TArray<AUnitBase*> BatchUnits;
+    TArray<FVector>    BatchLocs;
+    TArray<float>      BatchSpeeds;
+
     for (auto& P : Finals)
     {
         auto* U = P.Key;
         FVector Loc = P.Value;
         if (!U || U == CameraUnitWithTag || U->UnitState == UnitData::Dead) continue;
-    	
+    
         bool bNavMod;
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue;
 
-    	U->RemoveFocusEntityTarget();
+        U->RemoveFocusEntityTarget();
         float Speed = U->Attributes->GetBaseRunSpeed();
         if (SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint))
         {
@@ -776,12 +939,14 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
             {
-            	if (U->GetUnitState() != UnitData::Run)
-            	{
-            		CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f);
-            	}
-	           RightClickRunShift(U, Loc);
-            	SetUnitState_Replication(U, 1);
+                if (U->GetUnitState() != UnitData::Run)
+                {
+                    BatchUnits.Add(U);
+                    BatchLocs.Add(Loc);
+                    BatchSpeeds.Add(Speed);
+                }
+                RightClickRunShift(U, Loc);
+                SetUnitState_Replication(U, 1);
             }
             PlayRun = true;
         }
@@ -790,18 +955,36 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             DrawDebugCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
-                CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f), SetUnitState_Replication(U, 1);
+            {
+                BatchUnits.Add(U);
+                BatchLocs.Add(Loc);
+                BatchSpeeds.Add(Speed);
+                SetUnitState_Replication(U, 1);
+            }
             else if (UseUnrealEnginePathFinding)
+            {
                 RightClickRunUEPF(U, Loc, true);
+            }
             else
+            {
                 RightClickRunDijkstraPF(U, Loc, -1);
+            }
             PlayRun = true;
         }
     }
 
-    if (WaypointSound && PlayWaypoint) UGameplayStatics::PlaySound2D(this, WaypointSound);
-    if (RunSound && PlayRun &&
-        GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime)
+    if (BatchUnits.Num() > 0)
+    {
+        Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
+    }
+
+    if (WaypointSound && PlayWaypoint)
+    {
+        UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+
+    const bool bCanPlayRunSound = RunSound && PlayRun && (GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime);
+    if (bCanPlayRunSound)
     {
         UGameplayStatics::PlaySound2D(this, RunSound);
         LastRunSoundTime = GetWorld()->GetTimeSeconds();
@@ -844,43 +1027,50 @@ void ACustomControllerBase::LeftClickPressedMass()
         bool PlayWaypointSound = false;
         bool PlayAttackSound   = false;
 
-        // 3) issue each unit
+        // 3) issue each unit (collect arrays for mass units)
+        TArray<AUnitBase*> MassUnits;
+        TArray<FVector>    MassLocations;
         for (int32 i = 0; i < NumUnits; ++i)
         {
             AUnitBase* U = SelectedUnits[i];
             if (U == nullptr || U == CameraUnitWithTag) continue;
-        	
+        
             // apply the same slot-by-index approach
             FVector RunLocation = Hit.Location + Offsets[i];
 
             bool bNavMod;
             RunLocation = TraceRunLocation(RunLocation, bNavMod);
-			if (bNavMod) continue;
-        	
+            if (bNavMod) continue;
+        
             if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
             {
                 // waypoint placed
             }
             else
             {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                 if (U->bIsMassUnit)
                 {
-                    LeftClickAttackMass(U, RunLocation, AttackToggled, CursorHitActor);
-                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+                    MassUnits.Add(U);
+                    MassLocations.Add(RunLocation);
                 }
                 else
                 {
-                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     LeftClickAttack(U, RunLocation);
                 }
 
                 PlayAttackSound = true;
             }
 
-           // still fire any dragged ability on each unit
-           FireAbilityMouseHit(U, Hit);
+            // still fire any dragged ability on each unit
+            FireAbilityMouseHit(U, Hit);
         }
-		
+
+        if (MassUnits.Num() > 0)
+        {
+            LeftClickAttackMass(MassUnits, MassLocations, AttackToggled, CursorHitActor);
+        }
+
         AttackToggled = false;
 
         // 4) play sounds
@@ -966,56 +1156,91 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
 {
-	if (Unit && Unit->UnitState != UnitData::Dead)
-	{
-		AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
+	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
+	if (Count <= 0) return;
 
-		if (TargetUnitBase)
+	// If we clicked an enemy unit, set chase on all provided units
+	AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
+	if (TargetUnitBase)
+	{
+		for (int32 i = 0; i < Count; ++i)
 		{
-			/// Focus Enemy Units ///
+			AUnitBase* Unit = Units[i];
+			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
 			SetUnitState_Replication(Unit, 3);
 			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
 		}
-		else if (UseUnrealEnginePathFinding)
+		return;
+	}
+
+	if (UseUnrealEnginePathFinding)
+	{
+		// Delegate to UE pathfinding batched move
+		LeftClickAMoveUEPFMass(Units, Locations, AttackT);
+		for (int32 i = 0; i < Count; ++i)
 		{
-			if (Unit && Unit->UnitState != UnitData::Dead)
-			{
-				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
-			}
-			Unit->RemoveFocusEntityTarget();
+			if (Units[i]) Units[i]->RemoveFocusEntityTarget();
 		}
-		else
+	}
+	else
+	{
+		// Fallback: custom pathfinding per unit
+		for (int32 i = 0; i < Count; ++i)
 		{
-			LeftClickAMove(Unit, Location);
+			AUnitBase* Unit = Units[i];
+			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
+			LeftClickAMove(Unit, Locations[i]);
 			Unit->RemoveFocusEntityTarget();
 		}
 	}
 }
 
-void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
+void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT)
 {
-	if (!Unit) return;
+	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
+	if (Count <= 0) return;
 
-    if (!Unit->IsInitialized) return;
-    if (!Unit->CanMove) return;
-	
-    if (Unit->CurrentSnapshot.AbilityClass)
-    {
+	TArray<AUnitBase*> BatchUnits;
+	TArray<FVector> BatchLocations;
+	TArray<float> BatchSpeeds;
 
-    	UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		
-    	if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
-		else CancelCurrentAbility(Unit);
-    }
+	for (int32 i = 0; i < Count; ++i)
+	{
+		AUnitBase* Unit = Units[i];
+		if (!Unit) continue;
+		if (!Unit->IsInitialized) continue;
+		if (!Unit->CanMove) continue;
 
-	float Speed = Unit->Attributes->GetBaseRunSpeed();
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) continue;
+			else CancelCurrentAbility(Unit);
+		}
 
-	SetUnitState_Replication(Unit,1);
-	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f, AttackT);
+		float Speed = Unit->Attributes->GetBaseRunSpeed();
+		SetUnitState_Replication(Unit, 1);
+
+		if (Unit->bIsMassUnit)
+		{
+			BatchUnits.Add(Unit);
+			BatchLocations.Add(Locations[i]);
+			BatchSpeeds.Add(Speed);
+		}
+		else if (UseUnrealEnginePathFinding)
+		{
+			RightClickRunUEPF(Unit, Locations[i], true);
+		}
+	}
+
+	if (BatchUnits.Num() > 0)
+	{
+		Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, AttackT);
+	}
 }
 
 void ACustomControllerBase::LeftClickReleasedMass()

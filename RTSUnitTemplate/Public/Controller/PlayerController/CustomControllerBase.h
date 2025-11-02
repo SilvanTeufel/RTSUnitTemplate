@@ -15,6 +15,7 @@
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
 
+class AUnitBase;
 
 #include "CustomControllerBase.generated.h"
 
@@ -60,6 +61,16 @@ public:
 		AUnitBase* Unit,
 		const FVector& NewTargetLocation,
 		float DesiredSpeed = 300.0f,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
+	// Batched version to reduce per-unit RPC spamming when issuing group move orders
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Batch_CorrectSetUnitMoveTargets(
+		UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
@@ -141,10 +152,10 @@ public:
 	void LeftClickPressedMass();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAttackMass(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor = nullptr);
+	void LeftClickAttackMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor = nullptr);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location, bool AttackT);
+	void LeftClickAMoveUEPFMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT);
 
 
 	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
