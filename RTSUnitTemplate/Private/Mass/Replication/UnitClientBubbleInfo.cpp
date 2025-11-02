@@ -11,7 +11,7 @@
 // 0=Off, 1=Warn, 2=Verbose
 static TAutoConsoleVariable<int32> CVarRTS_Bubble_LogLevel(
 	TEXT("net.RTS.Bubble.LogLevel"),
-	2,
+	0,
 	TEXT("Logging level for UnitClientBubbleInfo: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 

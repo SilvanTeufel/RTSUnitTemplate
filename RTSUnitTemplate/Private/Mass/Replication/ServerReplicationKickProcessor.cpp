@@ -70,14 +70,14 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 // than MaxPerChunk entities are processed with their actual size.
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_EnforceFullSlices(
 	TEXT("net.RTS.ServerReplicationKick.EnforceFullSlices"),
-	1,
+	0,
 	TEXT("When 1, only process a chunk if at least MaxPerChunk budget remains (unless the chunk has < MaxPerChunk entities). This keeps slices consistently filled and avoids partial slices."),
 	ECVF_Default);
 
 // CVAR: Control the legacy server-side re-registration fallback. Default OFF now that UnitSignalingProcessor assists.
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 	TEXT("net.RTS.ServerReplicationKick.ReRegisterMissing"),
-	0,
+	1,
 	TEXT("When 1, perform server-side recovery to re-register Units missing in the replication query by adding NetID and registry entries. Default 0 (disabled) because UnitSignalingProcessor assists."),
 	ECVF_Default);
 
