@@ -36,15 +36,6 @@ public:
 	// Clear caches explicitly
 	void ClearAll();
 
- // Transient: bridge-tick override to suppress move replication before Mass tags are flushed
-	void MarkSkipMoveForNetID(uint32 NetID);
-	bool HasSkipMoveForNetID(uint32 NetID) const;
-	bool ConsumeSkipMoveForNetID(uint32 NetID); // optional, currently unused
-	// OwnerName-based bridge for cases where NetID is not yet assigned or zero
-	void MarkSkipMoveForOwnerName(FName OwnerName);
-	bool HasSkipMoveForOwnerName(FName OwnerName) const;
-	bool ConsumeSkipMoveForOwnerName(FName OwnerName);
-
 private:
 	TWeakObjectPtr<AUnitRegistryReplicator> CachedRegistry;
 	TWeakObjectPtr<AUnitClientBubbleInfo> CachedBubble;

@@ -90,7 +90,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || (!TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState))
             {
                   // Queue signal instead of sending directly
-                ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                   UpdateMoveTarget(
                    MoveTarget,
                    StateFrag.StoredLocation,

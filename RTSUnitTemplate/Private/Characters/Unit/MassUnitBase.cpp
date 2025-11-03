@@ -1143,8 +1143,7 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
         EntityManager->RemoveFragmentFromEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct()); // Clean up
         return;
     }
-
-	EntityManager->Defer().RemoveTag<FMassSkipMoveReplicationTag>(EntityHandle);
+	
 	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
 
 

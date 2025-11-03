@@ -2691,7 +2691,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 						WorkerStatsFrag->ResourcePosition = ResourcePosition;
 					      StateFrag.StoredLocation = ResourcePosition;
 						
-						EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(E);
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
 						SwitchState(UnitSignals::GoToResourceExtraction, E, EntityManager);
 					}else if (Unit->Base)
@@ -2700,7 +2699,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 						WorkerStatsFrag->ResourcePosition = BasePosition;
 					    StateFrag.StoredLocation = BasePosition;
 						
-						EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(E);
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
 						SwitchState(UnitSignals::GoToBase, E, EntityManager);
 					}else
@@ -2796,7 +2794,6 @@ void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEnt
 						if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 						{
 							StateFrag.StoredLocation = WorkerStatsFrag->ResourcePosition;
-							EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 							UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
 						}
 						else if (UnitBase->UnitState == UnitData::GoToBase)
@@ -2808,14 +2805,12 @@ void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEnt
 							if (UnitBase->WorkResource)
 							{
 								StateFrag.StoredLocation = WorkerStatsFrag->BasePosition;
-								EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 								UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
 							}
 						}
 						else if (UnitBase->UnitState == UnitData::GoToBuild)
 						{
 							StateFrag.StoredLocation = WorkerStatsFrag->BuildAreaPosition;
-							EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 							UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
 						}
 					}
@@ -2877,7 +2872,7 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 				{
 					StateFrag->StoredLocation = UnitBase->RunLocationArray[0];
 				}
-				EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
+				
 				UpdateMoveTarget(*MoveTargetFrag, UnitBase->RunLocationArray[0], StatsFrag->RunSpeed, GetWorld());
 				SwitchState(UnitSignals::Run, Entity, EntityManager);
 			}
@@ -2937,19 +2932,16 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
-			EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
-			EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
-			EntityManager.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition, StatsFrag.RunSpeed, World);
 		}
 	}

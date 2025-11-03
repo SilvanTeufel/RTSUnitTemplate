@@ -59,8 +59,6 @@ USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY()
 USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassDisableAvoidanceTag : public FMassTag { GENERATED_BODY() };
 // When present on server, the replicator will skip serializing FMassMoveTargetFragment for this entity.
-USTRUCT() struct FMassSkipMoveReplicationTag : public FMassTag { GENERATED_BODY() };
-
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {

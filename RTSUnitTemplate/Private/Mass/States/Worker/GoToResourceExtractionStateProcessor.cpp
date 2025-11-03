@@ -125,7 +125,6 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 AIState.SwitchingState = true;
                 // Stop movement and mirror to clients when reaching the resource
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                ChunkContext.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                 StopMovement(MoveTarget, World);
                 // Queue signals thread-safely using the deferred command buffer
                 if (SignalSubsystem)

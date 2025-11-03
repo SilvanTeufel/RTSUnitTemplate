@@ -115,7 +115,6 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                Context.Defer().RemoveTag<FMassSkipMoveReplicationTag>(Entity);
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
