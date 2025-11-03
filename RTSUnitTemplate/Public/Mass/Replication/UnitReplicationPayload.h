@@ -67,16 +67,17 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Last known location of the target
 	UPROPERTY()
 	FVector_NetQuantize AITargetLastKnownLocation;
- // Ability target location (coarse precision is fine)
- UPROPERTY()
- FVector_NetQuantize10 AbilityTargetLocation;
- // Replicate seen sets as NetID arrays (bounded on server)
- UPROPERTY()
- TArray<uint32> AITargetPrevSeenIDs;
- UPROPERTY()
- TArray<uint32> AITargetCurrSeenIDs;
+	// Ability target location (coarse precision is fine)
+	UPROPERTY()
+	FVector_NetQuantize10 AbilityTargetLocation;
+	// Replicate seen sets as NetID arrays (bounded on server)
+	UPROPERTY()
+	TArray<uint32> AITargetPrevSeenIDs;
+	
+	UPROPERTY()
+	TArray<uint32> AITargetCurrSeenIDs;
 
- // --- FMassCombatStatsFragment (full) ---
+	 // --- FMassCombatStatsFragment (full) ---
 	UPROPERTY() float CS_Health = 0.f;
 	UPROPERTY() float CS_MaxHealth = 0.f;
 	UPROPERTY() float CS_RunSpeed = 0.f;

@@ -263,6 +263,11 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 	}
 	UE_LOG(LogTemp, Log, TEXT("[BatchMove] NetMode:%d HasAuthority:%s"), (int32)World->GetNetMode(), HasAuthority() ? TEXT("true") : TEXT("false"));
 
+	if (World->GetNetMode() != NM_Client)
+	{
+		UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!! THIS IS RUNNING ON CLIENT!!!!!!!!!!!!!!!!!!!"));
+	}
+	
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
 	{
@@ -398,7 +403,17 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	float AcceptanceRadius,
 	bool AttackT)
 {
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+	if (UWorld* PCWorld = GetWorld())
+	{
+		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+			{
+				PC->Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+			}
+		}
+	}
+	//Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -419,6 +434,11 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
         return;
     }
 
+	if (World->GetNetMode() != NM_Client)
+	{
+		UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!! THIS IS RUNNING ON CLIENT!!!!!!!!!!!!!!!!!!!"));
+	}
+	
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
     {

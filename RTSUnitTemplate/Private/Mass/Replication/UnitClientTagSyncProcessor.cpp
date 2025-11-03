@@ -73,7 +73,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return DoesEntityHaveTag(EntityManager, Entity, TagStruct);
 	};
-	// Highest priority first
+
 	if (HasTag(FMassStateDeadTag::StaticStruct()))
 	{
 		return EState::Dead;
@@ -98,7 +98,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Chase;
 	}
-	// Worker flows
 	if (HasTag(FMassStateBuildTag::StaticStruct()))
 	{
 		return EState::Build;
@@ -119,7 +118,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::GoToBase;
 	}
-	// Patrol/Run
 	if (HasTag(FMassStatePatrolIdleTag::StaticStruct()))
 	{
 		return EState::PatrolIdle;
@@ -136,7 +134,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Run;
 	}
-	// Pause and Evasion
 	if (HasTag(FMassStatePauseTag::StaticStruct()))
 	{
 		return EState::Pause;
@@ -145,7 +142,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Evasion;
 	}
-	// Default fallback
 	if (HasTag(FMassStateIdleTag::StaticStruct()))
 	{
 		return EState::Idle;

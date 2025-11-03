@@ -66,7 +66,7 @@ public:
 
 	// Batched version to reduce per-unit RPC spamming when issuing group move orders
 	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
-	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Client, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Batch_CorrectSetUnitMoveTargets(
 		UObject* WorldContextObject,
 		const TArray<AUnitBase*>& Units,
