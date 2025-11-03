@@ -101,6 +101,8 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+	// Prediction fragment so we can skip reconciliation while client-side prediction is active
+	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.RegisterWithProcessor(*this);
 		
 }
@@ -478,6 +480,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+			// Prediction fragment view (read-only)
+			const TConstArrayView<FMassClientPredictionFragment> PredList = Context.GetFragmentView<FMassClientPredictionFragment>();
 
 			// Log registered NetIDs on client for this chunk (verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -1039,6 +1043,20 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 				else
 				{
+					// Skip reconciliation entirely while client-side prediction is active
+					bool bPredicting = false;
+					if (PredList.Num() > 0)
+					{
+						bPredicting = PredList[EntityIdx].bHasData;
+					}
+					if (bPredicting)
+					{
+						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Skipped (predicting) NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+						}
+						continue;
+					}
 					// Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
 					const FVector CurrentLoc = ClientXf.GetLocation();
