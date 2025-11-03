@@ -48,7 +48,33 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
     }
     TimeSinceLastRun -= ExecutionInterval;
     // Get World and Signal Subsystem once
-    UWorld* World = Context.GetWorld(); // Use Context to get World
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        //ExecuteRepClient(EntityManager, Context);
+        static int32 GActorSyncExecTickCounter = 0;
+        if ((++GActorSyncExecTickCounter % 60) == 0)
+        {
+            if (bShowLogs)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Client][URunStateProcessor] Execute tick"));
+            }
+        }
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+
+}
+
+void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+}
+
+void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+	UWorld* World = Context.GetWorld(); // Use Context to get World
     if (!World) return;
 
     if (!SignalSubsystem) return;
@@ -98,6 +124,5 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
             
         }
     }); // End ForEachEntityChunk
-
 
 }
