@@ -29,7 +29,7 @@ public:
 	float ExecutionInterval = 0.1f;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool bShowLogs = true;
+	bool bShowLogs = false;
 private:
 	FMassEntityQuery EntityQuery;
 

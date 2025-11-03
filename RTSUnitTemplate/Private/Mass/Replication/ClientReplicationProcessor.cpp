@@ -997,9 +997,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
 					const float ErrorDistSq = PosErrorXY.SizeSquared();
 					// Thresholds and gains
-					static const float MinErrorForCorrectionSq = FMath::Square(20.f); // 5 cm
-					static const float MaxCorrectionAccel = 3000.f; // cm/s^2
-					static const float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
+				
 					if (ErrorDistSq > MinErrorForCorrectionSq)
 					{
 						// Convert position error into a corrective acceleration vector
