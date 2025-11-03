@@ -733,17 +733,44 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.DeathTime = TagItem->AIS_DeathTime;
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
 							}
-							// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-							bool bSkipMoveRep_Client = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
-							if (!bSkipMoveRep_Client && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
-							{
-								FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-								MT.Center = FVector(TagItem->Move_Center);
-								MT.SlackRadius = TagItem->Move_SlackRadius;
-								MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
-								MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
-								MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
-							}
+								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
+								bool bSkipMoveRep_Client = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
+								if (!bSkipMoveRep_Client && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+								{
+									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
+									bool bIsNewer = true;
+									const uint16 IncomingID = TagItem->Move_ActionID;
+									const float IncomingSrvStart = TagItem->Move_ServerStartTime;
+									if (IncomingID != 0)
+									{
+										const uint16 LocalID = MT.GetCurrentActionID();
+										if (IncomingID < LocalID)
+										{
+											bIsNewer = false;
+										}
+										else if (IncomingID == LocalID)
+										{
+											const double LocalSrvStart = MT.GetCurrentActionServerStartTime();
+											bIsNewer = (IncomingSrvStart > LocalSrvStart);
+										}
+									}
+									if (bIsNewer)
+									{
+										MT.Center = FVector(TagItem->Move_Center);
+										MT.SlackRadius = TagItem->Move_SlackRadius;
+										MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
+										MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
+										MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
+										// Synchronize action timing so subsequent comparisons are correct
+										if (AActor* OwnerA2 = ActorList[EntityIdx].GetMutable())
+										{
+											UWorld* W = OwnerA2->GetWorld();
+											const double WorldStart = W ? (double)W->GetTimeSeconds() : 0.0;
+											MT.CreateReplicatedAction(static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal), IncomingID, WorldStart, (double)IncomingSrvStart);
+										}
+									}
+								}
 											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 											{
  											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
@@ -935,11 +962,37 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
        if (!bSkipMoveRep_Client2 && MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
        {
            FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-           MT.Center = FVector(UseItem->Move_Center);
-           MT.SlackRadius = UseItem->Move_SlackRadius;
-           MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
-           MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
-           MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+           // Decide newer vs older by Move_ActionID then Move_ServerStartTime
+           bool bIsNewer2 = true;
+           const uint16 IncomingID2 = UseItem->Move_ActionID;
+           const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
+           if (IncomingID2 != 0)
+           {
+               const uint16 LocalID2 = MT.GetCurrentActionID();
+               if (IncomingID2 < LocalID2)
+               {
+                   bIsNewer2 = false;
+               }
+               else if (IncomingID2 == LocalID2)
+               {
+                   const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
+                   bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
+               }
+           }
+           if (bIsNewer2)
+           {
+               MT.Center = FVector(UseItem->Move_Center);
+               MT.SlackRadius = UseItem->Move_SlackRadius;
+               MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+               MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+               MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+               if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
+               {
+                   UWorld* W3 = OwnerA3->GetWorld();
+                   const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
+                   MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
+               }
+           }
        }
        else if (!bSkipMoveRep_Client2 && !MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
        {

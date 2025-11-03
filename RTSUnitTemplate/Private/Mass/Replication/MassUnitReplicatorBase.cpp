@@ -204,6 +204,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
                 NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
                 NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                // Versioning fields to allow client to resolve newer vs older
+                NewItem.Move_ActionID = MT->GetCurrentActionID();
+                NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
             }
             else
             {
@@ -600,6 +604,10 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
                                 NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
                                 NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                                // Versioning fields to allow client to resolve newer vs older
+                                NewItem.Move_ActionID = MT->GetCurrentActionID();
+                                NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                                NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
                             }
                         }
                         // Fill AI target fields if fragment exists
@@ -767,6 +775,13 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
                                 if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
                                 if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
+                                // Versioning fields
+                                const uint16 NewActionID = MT->GetCurrentActionID();
+                                if (Item->Move_ActionID != NewActionID) { Item->Move_ActionID = NewActionID; bMoveDirty = true; }
+                                const float NewSrvStart = (float)MT->GetCurrentActionServerStartTime();
+                                if (!FMath::IsNearlyEqual(Item->Move_ServerStartTime, NewSrvStart, 0.001f)) { Item->Move_ServerStartTime = NewSrvStart; bMoveDirty = true; }
+                                const uint8 NewCurrAction = static_cast<uint8>(MT->GetCurrentAction());
+                                if (Item->Move_CurrentAction != NewCurrAction) { Item->Move_CurrentAction = NewCurrAction; bMoveDirty = true; }
                                 if (bMoveDirty) { bDirty = true; }
                             }
                         }

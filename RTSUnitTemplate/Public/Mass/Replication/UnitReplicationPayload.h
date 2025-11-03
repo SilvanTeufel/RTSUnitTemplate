@@ -133,13 +133,20 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float AIS_DeathTime = 0.f;
 	UPROPERTY() bool AIS_IsInitialized = true;
 
-	// --- FMassMoveTargetFragment (subset) ---
+	// --- FMassMoveTargetFragment (subset + versioning) ---
 	UPROPERTY() bool Move_bHasTarget = false;
 	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
 	UPROPERTY() float Move_SlackRadius = 0.f;
 	UPROPERTY() float Move_DesiredSpeed = 0.f;
 	UPROPERTY() uint8 Move_IntentAtGoal = 0; // EMassMovementAction
 	UPROPERTY() float Move_DistanceToGoal = 0.f;
+	// Versioning/ordering to resolve race conditions on client apply
+	// Current movement action ID (from FMassMoveTargetFragment::GetCurrentActionID). 0 means unknown/legacy
+	UPROPERTY() uint16 Move_ActionID = 0;
+	// Server time when the action started (quantized to float). Used as tiebreaker when IDs are equal
+	UPROPERTY() float Move_ServerStartTime = 0.f;
+	// Current movement action enum (from GetCurrentAction). Informational; can help client-side decision making
+	UPROPERTY() uint8 Move_CurrentAction = 0; // EMassMovementAction
 
 	// Default Constructor
 	FUnitReplicationItem()
