@@ -719,7 +719,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
-	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
+	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
 	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
@@ -752,7 +752,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 	SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 	SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-	//SetTag(UnitTagBits::Run,                 FMassStateRunTag());
+	SetTag(UnitTagBits::Run,                 FMassStateRunTag());
 	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
 	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
 	SetTag(UnitTagBits::Idle,                FMassStateIdleTag());

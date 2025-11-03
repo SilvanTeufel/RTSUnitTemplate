@@ -193,9 +193,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
 
-        bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct());
-        if (!bSkipMoveRep)
-        {
+        
             if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
             {
                 NewItem.Move_bHasTarget = true;
@@ -209,19 +207,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
                 NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
             }
-            else
-            {
-                // Unconditional warning: this entity is missing FMassMoveTargetFragment while being replicated
-                static TSet<uint32> WarnedOnce; // avoid log spam per NetID
-                const uint32 IdVal = NetID.GetValue();
-                if (!WarnedOnce.Contains(IdVal))
-                {
-                    WarnedOnce.Add(IdVal);
-                    const FName OwnerName = (ActorFrag && ActorFrag->GetMutable()) ? ActorFrag->GetMutable()->GetFName() : NAME_None;
-                    UE_LOG(LogTemp, Warning, TEXT("[ServerRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s"), IdVal, *OwnerName.ToString());
-                }
-            }
-        }
+       
         // Fill AI target replication fields if available
         if (const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
         {
@@ -593,23 +579,21 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
              
-                        bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
-                        if (!bSkipMoveRep)
+                
+                        if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
-                            if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
-                            {
-                                NewItem.Move_bHasTarget = true;
-                                NewItem.Move_Center = MT->Center;
-                                NewItem.Move_SlackRadius = MT->SlackRadius;
-                                NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
-                                NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
-                                NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                            NewItem.Move_bHasTarget = true;
+                            NewItem.Move_Center = MT->Center;
+                            NewItem.Move_SlackRadius = MT->SlackRadius;
+                            NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
+                            NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
+                            NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
                                 // Versioning fields to allow client to resolve newer vs older
-                                NewItem.Move_ActionID = MT->GetCurrentActionID();
-                                NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
-                                NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
-                            }
+                            NewItem.Move_ActionID = MT->GetCurrentActionID();
+                            NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                            NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
                         }
+                        
                         // Fill AI target fields if fragment exists
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
@@ -761,9 +745,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
    
-                        const bool bSkipMoveNow = DoesEntityHaveTag(*EM, EH, FMassStateIdleTag::StaticStruct()) ||DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
-                        if (!bSkipMoveNow)
-                        {
+                 
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                             {
                                 bool bMoveDirty = false;
@@ -784,16 +766,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 if (Item->Move_CurrentAction != NewCurrAction) { Item->Move_CurrentAction = NewCurrAction; bMoveDirty = true; }
                                 if (bMoveDirty) { bDirty = true; }
                             }
-                        }
-                        else
-                        {
-                            // Explicitly clear move replication when suppression is active (tag or override)
-                            if (Item->Move_bHasTarget != false)
-                            {
-                                Item->Move_bHasTarget = false;
-                                bDirty = true;
-                            }
-                        }
+                        
+    
                         // Keep additional replicated fragments in sync
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
                         {

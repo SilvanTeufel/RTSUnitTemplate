@@ -229,15 +229,13 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 }
 
-void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObject* WorldContextObject,
+void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContextObject,
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
 	float AcceptanceRadius,
 	bool AttackT)
 {
-	// ENTRY LOG
-
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World)
 	{
@@ -368,17 +366,18 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	float AcceptanceRadius,
 	bool AttackT)
 {
+	/*
 	if (UWorld* PCWorld = GetWorld())
 	{
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+				PC->Batch_CorrectSetUnitMoveTargets(GetWorld(), Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 			}
 		}
-	}
-	//Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+	}*/
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -884,7 +883,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     if (BatchUnits.Num() > 0)
     {
-        Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
+    	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
     }
 
     if (WaypointSound && PlayWaypoint)

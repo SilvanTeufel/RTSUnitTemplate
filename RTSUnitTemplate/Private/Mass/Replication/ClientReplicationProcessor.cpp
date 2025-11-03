@@ -734,8 +734,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
 							}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-								bool bSkipMoveRep_Client = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
-								if (!bSkipMoveRep_Client && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+								if (MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
 								{
 									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
 									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
@@ -853,7 +852,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								ClaimedIDs.Add(UseItem->NetID.GetValue());
 								}
 							}
-       if (UseItem)
+							if (UseItem)
 							{
 								// If we still have NetID 0, adopt the bubble's NetID (exact or nearest mapping)
 								if (NetIDList[EntityIdx].NetID.GetValue() == 0)
@@ -958,8 +957,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
 								// Apply MoveTarget if present (but skip when unit is in Run state)
-       bool bSkipMoveRep_Client2 = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
-       if (!bSkipMoveRep_Client2 && MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
+       if (MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
        {
            FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
            // Decide newer vs older by Move_ActionID then Move_ServerStartTime
@@ -994,7 +992,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
                }
            }
        }
-       else if (!bSkipMoveRep_Client2 && !MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
+       else if (!MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
        {
            // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
            static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID

@@ -37,8 +37,6 @@ void URTSWorldCacheSubsystem::ClearAll()
 	BindingByOwnerName.Reset();
 	BindingByUnitIndex.Reset();
 	LastBindingRebuildTime = -1000.0;
-	PendingSkipMoveNetIDs.Reset();
-	PendingSkipMoveOwnerNames.Reset();
 }
 
 AUnitRegistryReplicator* URTSWorldCacheSubsystem::GetRegistry(bool bAllowSpawnOnServer)

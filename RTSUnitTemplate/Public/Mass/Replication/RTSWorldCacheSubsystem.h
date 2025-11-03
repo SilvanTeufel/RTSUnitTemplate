@@ -42,8 +42,4 @@ private:
 	TMap<FName, TWeakObjectPtr<UMassActorBindingComponent>> BindingByOwnerName;
 	TMap<int32, TWeakObjectPtr<UMassActorBindingComponent>> BindingByUnitIndex;
 	double LastBindingRebuildTime = -1000.0;
-
-	// one-shot flags used by the server replicator to skip move replication immediately
-	TSet<uint32> PendingSkipMoveNetIDs;
-	TSet<FName> PendingSkipMoveOwnerNames;
 };
