@@ -135,9 +135,6 @@ void ACustomControllerBase::AgentInit_Implementation()
 
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
-	// Server authoritative path. Also dispatch a client-side prediction request.
-	UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] CorrectSetUnitMoveTarget: Unit=%s Target=%s Speed=%.1f Acc=%.1f AttackT=%s HasAuth=%s"),
-		*GetNameSafe(Unit), *NewTargetLocation.ToCompactString(), DesiredSpeed, AcceptanceRadius, AttackT?TEXT("true"):TEXT("false"), HasAuthority()?TEXT("true"):TEXT("false"));
 	if (!Unit) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit is null")); return; }
 		
 	if (!Unit->IsInitialized) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s not initialized"), *GetNameSafe(Unit)); return; }
@@ -230,19 +227,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-
-	// Multicast to all connected clients for client-side navigation mirror
-	/*
-	if (UWorld* PCWorld = World)
-	{
-		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
-		{
-			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
-			{
-				PC->Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
-			}
-		}
-	}*/
 }
 
 void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObject* WorldContextObject,
@@ -253,19 +237,12 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 	bool AttackT)
 {
 	// ENTRY LOG
-	UE_LOG(LogTemp, Log, TEXT("[BatchMove] Entered. Units:%d Locs:%d Speeds:%d AccRadius:%.1f AttackT:%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadius, AttackT ? TEXT("true") : TEXT("false"));
 
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World)
 	{
 		UE_LOG(LogTemp, Error, TEXT("[BatchMove] Invalid WorldContextObject (World == nullptr)."));
 		return;
-	}
-	UE_LOG(LogTemp, Log, TEXT("[BatchMove] NetMode:%d HasAuthority:%s"), (int32)World->GetNetMode(), HasAuthority() ? TEXT("true") : TEXT("false"));
-
-	if (World->GetNetMode() != NM_Client)
-	{
-		UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!! THIS IS RUNNING ON CLIENT!!!!!!!!!!!!!!!!!!!"));
 	}
 	
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
@@ -293,9 +270,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%d] Unit is null. Skipping."), Index);
 			continue;
 		}
-
-		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%d] Unit:%s Target:%s Speed:%.1f"), Index, *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
-
+		
 		if (!Unit->IsInitialized)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
@@ -316,7 +291,6 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 		{
 			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 			const bool bCancelable = !(AbilityCDO && !AbilityCDO->AbilityCanBeCanceled);
-			UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Ability present. Cancelable:%s"), *GetNameSafe(Unit), bCancelable ? TEXT("true") : TEXT("false"));
 			if (!bCancelable)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Ability cannot be canceled. Skipping."), *GetNameSafe(Unit));
@@ -352,7 +326,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 		
 		AiStatePtr->StoredLocation = NewTargetLocation;
 		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] UpdateMoveTarget -> Loc:%s Speed:%.1f"), *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
+		
 		UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
 
 		// Tags manipulation
@@ -362,17 +336,11 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
 			{
 				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
-				UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Added Detect tag (AttackT)."), *GetNameSafe(Unit));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] AttackT set but AI cannot attack or not initialized."), *GetNameSafe(Unit));
 			}
 		}
 		else
 		{
 			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
-			UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Removed Detect tag (no AttackT)."), *GetNameSafe(Unit));
 		}
 
 		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
@@ -388,11 +356,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-
-		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] Move command applied."), *GetNameSafe(Unit));
+		
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("[BatchMove] Finished processing %d entries."), Count);
 }
 
 void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementation(
@@ -433,11 +398,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: WorldContextObject is invalid or could not provide World."));
         return;
     }
-
-	if (World->GetNetMode() != NM_Client)
-	{
-		UE_LOG(LogTemp, Error, TEXT("!!!!!!!!!!!! THIS IS RUNNING ON CLIENT!!!!!!!!!!!!!!!!!!!"));
-	}
 	
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
@@ -496,61 +456,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
-
-	/*
-   	// Multicast to all connected clients for client-side navigation mirror (ability)
-   	if (UWorld* PCWorld = World)
-   	{
-   		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
-   		{
-   			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
-   			{
-   				PC->Client_CorrectSetUnitMoveTargetForAbility(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
-   			}
-   		}
-   	}
-	*/
+	
 }
-/*
-void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	if (!Unit->IsInitialized || !Unit->CanMove) return;
 
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
-
-	//UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTargetForAbility for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
-
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-	{
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
-		if (!bValidEntity)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client (Ability RPC): %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
-			Unit->Destroy();
-			return;
-		}
-
-		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-		{
-			// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
-			MoveTargetFragmentPtr->Center = NewTargetLocation;
-			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-			// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
-		}
-		if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-		{
-			AiStatePtr->StoredLocation = NewTargetLocation;
-			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-		}
-	}
-}
-*/
 void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
 {
 		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
