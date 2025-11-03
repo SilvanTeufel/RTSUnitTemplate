@@ -9,7 +9,7 @@
 
 URunStateProcessor::URunStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -70,6 +70,59 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
 void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UWorld* World = Context.GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    // On client, only check for arrival and switch to Idle locally by adjusting tags via deferred commands.
+    EntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i];
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
+            const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+            const FVector FinalDestination = MoveTarget.Center;
+            const float AcceptanceRadius = MoveTarget.SlackRadius;
+
+            // Only arrival check on client
+            if (FVector::Dist(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            {
+                StateFrag.SwitchingState = true;
+
+                // Emulate ClientIdle signal by removing all state tags and adding Idle locally via deferred command buffer tied to ChunkContext
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateRunTag>(Entity);
+                Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                //Defer.RemoveTag<FMassStateDeadTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+
+                Defer.AddTag<FMassStateIdleTag>(Entity);
+                continue;
+            }
+        }
+    });
 }
 
 void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
