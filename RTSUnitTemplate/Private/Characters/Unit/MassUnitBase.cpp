@@ -1133,8 +1133,7 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     {
     	return;
     }
-
-
+	
     // --- 2. Update FMassMoveTargetFragment ---
     FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
     if (!MoveTarget)
@@ -1145,8 +1144,7 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     }
 	
 	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
-
-
+	
     // --- 3. Set Charge Timer and Tag ---
     ChargeTimer->ChargeEndTime = ChargeDuration;
 	ChargeTimer->OriginalDesiredSpeed = Attributes->GetRunSpeed();
