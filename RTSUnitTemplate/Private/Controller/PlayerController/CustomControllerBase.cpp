@@ -366,18 +366,129 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	float AcceptanceRadius,
 	bool AttackT)
 {
-	/*
+	// Diagnostics: server received batch move
+	UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
+	// Apply authoritative changes on the server
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+
+	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
 	if (UWorld* PCWorld = GetWorld())
 	{
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Batch_CorrectSetUnitMoveTargets(GetWorld(), Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 			}
 		}
-	}*/
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+	}
+}
+
+void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
+	UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
+	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
+	if (HasAuthority())
+	{
+		return;
+	}
+
+	UWorld* World = nullptr;
+	if (WorldContextObject)
+	{
+		World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	}
+	if (!World)
+	{
+		World = GetWorld();
+	}
+	if (!World)
+	{
+		return;
+	}
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		return;
+	}
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		AUnitBase* Unit = Units[Index];
+		if (!Unit)
+		{
+			continue;
+		}
+
+		const FVector& NewTargetLocation = NewTargetLocations[Index];
+		const float DesiredSpeed = DesiredSpeeds[Index];
+
+		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			continue;
+		}
+
+		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+		if (!AiStatePtr)
+		{
+			continue;
+		}
+		
+		AiStatePtr->StoredLocation = NewTargetLocation;
+		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+		
+		// Add Run tag so client processors include this entity immediately
+		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+		// Populate client prediction fragment with location/speed/radius so client can move without editing MoveTarget
+		if (FMassClientPredictionFragment* PredFrag = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(MassEntityHandle))
+		{
+			PredFrag->Location = NewTargetLocation;
+			PredFrag->PredDesiredSpeed = DesiredSpeed;
+			PredFrag->PredAcceptanceRadius = AcceptanceRadius;
+			PredFrag->bHasData = true;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
+			*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
+		if (AttackT)
+		{
+			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
+			{
+				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+			}
+		}
+		else
+		{
+			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+		}
+
+		// Strip other mutually exclusive state tags
+		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+	}
+	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
+	EntityManager.FlushCommands();
+	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)

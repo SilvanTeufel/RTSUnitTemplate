@@ -58,7 +58,29 @@ USTRUCT() struct FMassStateChargingTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassDisableAvoidanceTag : public FMassTag { GENERATED_BODY() };
-// When present on server, the replicator will skip serializing FMassMoveTargetFragment for this entity.
+
+// Client-side prediction fragment to carry desired speed and acceptance radius without touching authoritative MoveTarget
+USTRUCT()
+struct FMassClientPredictionFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	// Predicted desired speed to use on client while FMassClientPredictedMoveTag is present
+	UPROPERTY()
+	float PredDesiredSpeed = 0.f;
+
+	// Predicted acceptance radius for steering/path arrival checks
+	UPROPERTY()
+	float PredAcceptanceRadius = 50.f;
+
+	// Whether the values above are initialized for this prediction
+	UPROPERTY()
+	bool bHasData = false;
+
+	UPROPERTY()
+	FVector Location = FVector::ZeroVector;
+};
+
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {

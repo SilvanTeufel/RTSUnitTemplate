@@ -85,6 +85,16 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
+	UFUNCTION(Client, Reliable)
+	void Client_Predict_Batch_CorrectSetUnitMoveTargets(
+		UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
 	// Client-side prediction mirror for movement request
 	/*
 	UFUNCTION(Client, Reliable)

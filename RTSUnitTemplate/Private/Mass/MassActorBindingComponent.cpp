@@ -276,7 +276,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
 		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
 		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
-		//FMassMovementParameters::StaticStruct(), 
+    	FMassClientPredictionFragment::StaticStruct(), 
+    	//FMassMovementParameters::StaticStruct(), 
 		// Steering & Avoidance
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
 		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **

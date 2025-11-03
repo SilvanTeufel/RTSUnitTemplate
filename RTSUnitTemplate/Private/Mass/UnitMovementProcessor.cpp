@@ -74,6 +74,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 	ClientEntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 
     ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
     
@@ -157,6 +158,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
+        TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
 
         int32 SkippedCannotMove = 0;
         int32 SkippedNotInit = 0;
@@ -201,16 +203,66 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             
             FVector CurrentLocation = CurrentMassTransform.GetLocation();
-            const FVector FinalDestination = MoveTarget.Center;
-            const float DesiredSpeed = MoveTarget.DesiredSpeed.Get();
-            const float AcceptanceRadius = MoveTarget.SlackRadius;
+            FVector FinalDestination = MoveTarget.Center;
+            float DesiredSpeedUsed = MoveTarget.DesiredSpeed.Get();
+            float AcceptanceRadiusUsed = MoveTarget.SlackRadius;
+            
+            FMassClientPredictionFragment& Pred = PredList[i];
+            if (Pred.bHasData)
+            {
+                FinalDestination = Pred.Location;
+                if (Pred.PredDesiredSpeed > KINDA_SMALL_NUMBER)
+                {
+                    DesiredSpeedUsed = Pred.PredDesiredSpeed;
+                }
+                else if (DesiredSpeedUsed <= KINDA_SMALL_NUMBER)
+                {
+                    DesiredSpeedUsed = 100.f;
+                    if (bShowLogs)
+                    {
+                        if (const AActor* PredActor = ActorList[i].Get())
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Using fallback speed for %s: %.1f (MoveTarget.DesiredSpeed was %.2f)"), *PredActor->GetName(), DesiredSpeedUsed, MoveTarget.DesiredSpeed.Get());
+                        }
+                    }
+                }
+                if (Pred.PredAcceptanceRadius > KINDA_SMALL_NUMBER)
+                {
+                    AcceptanceRadiusUsed = Pred.PredAcceptanceRadius;
+                }
+                else if (AcceptanceRadiusUsed <= KINDA_SMALL_NUMBER)
+                {
+                    AcceptanceRadiusUsed = 100.f;
+                }
+                if (bShowLogs)
+                {
+                    if (const AActor* PredActor = ActorList[i].Get())
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Active for %s -> Dest=%s (SrvTarget=%s), Speed=%.1f, AccRad=%.1f"),
+                            *PredActor->GetName(), *FinalDestination.ToString(), *MoveTarget.Center.ToString(), DesiredSpeedUsed, AcceptanceRadiusUsed);
+                    }
+                }
+                // Clear prediction when server target converges to predicted
+                if (FVector::DistSquared(MoveTarget.Center, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
+                {
+                    Pred.bHasData = false;
+                    if (bShowLogs)
+                    {
+                        if (const AActor* PredActor = ActorList[i].Get())
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Reconciled for %s (server MoveTarget matched predicted)"), *PredActor->GetName());
+                        }
+                    }
+                }
+            }
 
+            
             if (CharFrag.bIsFlying)
             {
-                if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadius))
+                if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadiusUsed))
                 {
                     FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                 }
                 continue;
             }
@@ -223,11 +275,23 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
             }
      
-            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
+            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsed))
             {
                 ++Arrivals;
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
+                FMassClientPredictionFragment& PredFragment = PredList[i];
+                if (PredFragment.bHasData)
+                {
+                    PredFragment.bHasData = false;
+                    if (bShowLogs)
+                    {
+                        if (const AActor* PredActor = ActorList[i].Get())
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Arrived at predicted destination for %s; clearing Pred.bHasData"), *PredActor->GetName());
+                        }
+                    }
+                }
             }
             else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
             {
@@ -257,7 +321,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                                 UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Project start failed for %s; steering directly"), *CurrentLocation.ToString());
                             }
                             FVector MoveDir = (ProjectedDestinationLocation.Location - CurrentLocation).GetSafeNormal();
-                            Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                            Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                             PathFrag.bIsPathfindingInProgress = false;
                         }
                     }
@@ -279,7 +343,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
                     if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
                     {
-                        Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                        Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                     }
                     PathFrag.bIsPathfindingInProgress = false;
                 }
@@ -305,7 +369,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
                     FVector MoveDir = (PathPoints[PathFrag.CurrentPathPointIndex].Location - CurrentLocation).GetSafeNormal();
-                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                 }
                 else
                 {
@@ -318,7 +382,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                  FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
                  if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
                  {
-                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
+                    Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                  }
             }
         }
