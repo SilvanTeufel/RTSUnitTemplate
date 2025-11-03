@@ -734,7 +734,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
 							}
 							// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-							if (MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+							bool bSkipMoveRep_Client = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
+							if (!bSkipMoveRep_Client && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
 							{
 								FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
 								MT.Center = FVector(TagItem->Move_Center);
@@ -929,28 +930,29 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
- 							// Apply MoveTarget if present
-        if (MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
-        {
-            FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-            MT.Center = FVector(UseItem->Move_Center);
-            MT.SlackRadius = UseItem->Move_SlackRadius;
-            MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
-            MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
-            MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
-        }
-        else if (UseItem->Move_bHasTarget)
-        {
-            // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
-            static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
-            const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
-            if (!WarnedOnceClient.Contains(IdVal))
-            {
-                WarnedOnceClient.Add(IdVal);
-                const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
-                UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
-            }
-        }
+								// Apply MoveTarget if present (but skip when unit is in Run state)
+       bool bSkipMoveRep_Client2 = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateRunTag::StaticStruct());
+       if (!bSkipMoveRep_Client2 && MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
+       {
+           FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+           MT.Center = FVector(UseItem->Move_Center);
+           MT.SlackRadius = UseItem->Move_SlackRadius;
+           MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+           MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+           MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+       }
+       else if (!bSkipMoveRep_Client2 && !MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
+       {
+           // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
+           static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
+           const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
+           if (!WarnedOnceClient.Contains(IdVal))
+           {
+               WarnedOnceClient.Add(IdVal);
+               const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
+               UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
+           }
+       }
 							}
 						}
 						}

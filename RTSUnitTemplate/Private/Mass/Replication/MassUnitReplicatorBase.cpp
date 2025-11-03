@@ -226,7 +226,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             }
         }
         */
-        bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct());
+        bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct());
         if (!bSkipMoveRep)
         {
             if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
@@ -638,7 +638,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             }
                         }*/
 
-                        bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
+                        bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassStateIdleTag::StaticStruct()) || DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
                         if (!bSkipMoveRep)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
@@ -822,7 +822,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         }
                         const bool bSkipMoveNow = bSkipMoveByTag || bSkipMoveByOverride;
                         */
-                        const bool bSkipMoveNow = DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
+                        const bool bSkipMoveNow = DoesEntityHaveTag(*EM, EH, FMassStateIdleTag::StaticStruct()) ||DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
                         if (!bSkipMoveNow)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
