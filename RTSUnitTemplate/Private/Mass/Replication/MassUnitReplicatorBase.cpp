@@ -192,8 +192,38 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
-        // Fill MoveTarget replication fields if available and not explicitly suppressed
-        const bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassSkipMoveReplicationTag::StaticStruct());
+        // Fill MoveTarget replication fields if available and not explicitly suppressed (one-shot override consumes here)
+        bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassSkipMoveReplicationTag::StaticStruct());
+        if (!bSkipMoveRep)
+        {
+            if (World)
+            {
+                if (URTSWorldCacheSubsystem* Cache2 = World->GetSubsystem<URTSWorldCacheSubsystem>())
+                {
+                    const uint32 NidVal = NetID.GetValue();
+                    const bool bConsumedID = Cache2->ConsumeSkipMoveForNetID(NidVal);
+                    bool bConsumedOwner = false;
+                    FName OwnerNameForSkip = NAME_None;
+                    if (ActorFrag)
+                    {
+                        if (AActor* Ow2 = ActorFrag->GetMutable())
+                        {
+                            OwnerNameForSkip = Ow2->GetFName();
+                        }
+                    }
+                    if (!bConsumedID && OwnerNameForSkip != NAME_None)
+                    {
+                        bConsumedOwner = Cache2->ConsumeSkipMoveForOwnerName(OwnerNameForSkip);
+                    }
+                    bSkipMoveRep = bConsumedID || bConsumedOwner;
+                    if (bSkipMoveRep && RepLogLevel() >= 2)
+                    {
+                        UE_LOG(LogTemp, Log, TEXT("[ServerRep][AddEntity] Suppressing initial MoveTarget for NetID=%u (ByTag=%d ByNetID=%d ByOwner=%d)"),
+                            NidVal, 0, bConsumedID?1:0, bConsumedOwner?1:0);
+                    }
+                }
+            }
+        }
         if (!bSkipMoveRep)
         {
             if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
@@ -589,7 +619,20 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
                         // Fill MoveTarget fields if fragment exists and not suppressed
-                        const bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
+                        bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
+                        if (!bSkipMoveRep)
+                        {
+                            if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+                            {
+                                const uint32 NidVal = NetID.GetValue();
+                                const bool bConsumedID = Cache->ConsumeSkipMoveForNetID(NidVal);
+                                const bool bConsumedOwner = (OwnerName != NAME_None) ? Cache->ConsumeSkipMoveForOwnerName(OwnerName) : false;
+                                if (bConsumedID || bConsumedOwner)
+                                {
+                                    bSkipMoveRep = true;
+                                }
+                            }
+                        }
                         if (!bSkipMoveRep)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
@@ -752,8 +795,26 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetPrevSeenIDs != NewPrevIDs) { Item->AITargetPrevSeenIDs = MoveTemp(NewPrevIDs); bDirty = true; }
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
-                        // Update MoveTarget fields (unless explicitly suppressed)
-                        if (!DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct()))
+                        // Update MoveTarget fields, but allow an immediate override to suppress replication if requested this frame
+                        bool bSkipMoveByTag = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
+                        bool bSkipMoveByOverride = false;
+                        //EM->Defer().AddTag<FMassSkipMoveReplicationTag>(EH);
+                        if (!bSkipMoveByTag)
+                        {
+                            if (URTSWorldCacheSubsystem* CacheSys = World->GetSubsystem<URTSWorldCacheSubsystem>())
+                            {
+                                const uint32 NidVal = NetID.GetValue();
+                                const bool bConsumedID = CacheSys->ConsumeSkipMoveForNetID(NidVal);
+                                bool bConsumedOwner = false;
+                                if (!bConsumedID && OwnerName != NAME_None)
+                                {
+                                    bConsumedOwner = CacheSys->ConsumeSkipMoveForOwnerName(OwnerName);
+                                }
+                                bSkipMoveByOverride = bConsumedID || bConsumedOwner;
+                            }
+                        }
+                        const bool bSkipMoveNow = bSkipMoveByTag || bSkipMoveByOverride;
+                        if (!bSkipMoveNow)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                             {
@@ -771,7 +832,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         }
                         else
                         {
-                            // Explicitly clear move replication when FMassSkipMoveReplicationTag is present
+                            // Explicitly clear move replication when suppression is active (tag or override)
                             if (Item->Move_bHasTarget != false)
                             {
                                 Item->Move_bHasTarget = false;

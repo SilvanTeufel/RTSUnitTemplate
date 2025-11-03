@@ -10,8 +10,11 @@
 #include "MassEntitySubsystem.h"     // Needed for FMassEntityManager, UMassEntitySubsystem
 #include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
+#include "MassEntityManager.h"  // For FMassEntityManager::FlushCommands
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "MassReplicationFragments.h" // For FMassNetworkIDFragment
+#include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
 #include "NavModifierVolume.h"
 #include "Actors/FogActor.h"
 #include "Actors/SelectionCircleActor.h"
@@ -155,6 +158,20 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	}
 
 	Unit->bHoldPosition = false;
+	// Bridge race: mark owner-name skip immediately to cover NetID==0 or pending
+	if (Unit)
+	{
+		if (UWorld* World2 = Unit->GetWorld())
+		{
+			if (World2->GetNetMode() != NM_Client)
+			{
+				if (URTSWorldCacheSubsystem* Cache2 = World2->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					Cache2->MarkSkipMoveForOwnerName(Unit->GetFName());
+				}
+			}
+		}
+	}
 	
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
@@ -195,9 +212,20 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
-	
-	if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
 
+	
+	if (World->GetNetMode() != NM_Client)
+	{
+		if (const FMassNetworkIDFragment* NetFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+		{
+			if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+			{
+				Cache->MarkSkipMoveForNetID(NetFrag->NetID.GetValue());
+			}
+		}
+		EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+	}
+	
 	
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
@@ -345,8 +373,19 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets_Implementation(UObje
 		}
 
 		// Apply move target
-		if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
-		
+		/*
+		if (World->GetNetMode() != NM_Client)
+		{
+			if (const FMassNetworkIDFragment* NetFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+			{
+				if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					Cache->MarkSkipMoveForNetID(NetFrag->NetID.GetValue());
+				}
+			}
+			EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+		}
+		*/
 		AiStatePtr->StoredLocation = NewTargetLocation;
 		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		UE_LOG(LogTemp, Log, TEXT("[BatchMove][%s] UpdateMoveTarget -> Loc:%s Speed:%.1f"), *GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed);
@@ -400,11 +439,44 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	float AcceptanceRadius,
 	bool AttackT)
 {
-	// Ensure only server triggers the multicast
+	// Ensure only server triggers
 	if (!HasAuthority())
 	{
 		return;
 	}
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return;
+	}
+
+	// Only do the skip-move marking on the server
+	if (World->GetNetMode() != NM_Client)
+	{
+		if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+		{
+			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+   if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					for (AUnitBase* Unit : Units)
+					{
+						if (!Unit || !Unit->MassActorBindingComponent) { continue; }
+						// Mark by OwnerName to cover NetID race
+						Cache->MarkSkipMoveForOwnerName(Unit->GetFName());
+						const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+						if (!EntityManager.IsEntityValid(MassEntityHandle)) { continue; }
+						if (const FMassNetworkIDFragment* NetFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+						{
+							Cache->MarkSkipMoveForNetID(NetFrag->NetID.GetValue());
+						}
+						EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+					}
+				}
+		}
+	}
+	
+	// Now perform the batch move updates
 	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 }
 /*
@@ -454,6 +526,21 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	// Do not accept move orders for dead units (ability path)
 	if (Unit->UnitState == UnitData::Dead) return;
 	
+	// Bridge race: mark owner-name skip immediately to cover NetID==0 or pending
+	if (Unit)
+	{
+		if (UWorld* W2 = Unit->GetWorld())
+		{
+			if (W2->GetNetMode() != NM_Client)
+			{
+				if (URTSWorldCacheSubsystem* Cache2 = W2->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					Cache2->MarkSkipMoveForOwnerName(Unit->GetFName());
+				}
+			}
+		}
+	}
+
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
@@ -488,7 +575,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    		return;
    	}
 
-	if (World->GetNetMode() != NM_Client) EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+	if (World->GetNetMode() != NM_Client)
+	{
+		if (const FMassNetworkIDFragment* NetFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+		{
+			if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+			{
+				Cache->MarkSkipMoveForNetID(NetFrag->NetID.GetValue());
+			}
+		}
+		EntityManager.Defer().AddTag<FMassSkipMoveReplicationTag>(MassEntityHandle);
+	}
 	
    	AiStatePtr->StoredLocation = NewTargetLocation;
    	AiStatePtr->PlaceholderSignal = UnitSignals::Run;

@@ -110,7 +110,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // --- 1. Arrival Check ---
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
 
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance) // && !AIState.SwitchingState
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState) // && !AIState.SwitchingState
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
