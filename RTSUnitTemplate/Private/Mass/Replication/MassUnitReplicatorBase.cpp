@@ -193,6 +193,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
         // Fill MoveTarget replication fields if available and not explicitly suppressed (one-shot override consumes here)
+        /*
         bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassSkipMoveReplicationTag::StaticStruct());
         if (!bSkipMoveRep)
         {
@@ -224,6 +225,8 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 }
             }
         }
+        */
+        bool bSkipMoveRep = DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct());
         if (!bSkipMoveRep)
         {
             if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
@@ -619,6 +622,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
                         // Fill MoveTarget fields if fragment exists and not suppressed
+                        /*
                         bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
                         if (!bSkipMoveRep)
                         {
@@ -632,7 +636,9 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                     bSkipMoveRep = true;
                                 }
                             }
-                        }
+                        }*/
+
+                        bool bSkipMoveRep = DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
                         if (!bSkipMoveRep)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
@@ -796,6 +802,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
                         // Update MoveTarget fields, but allow an immediate override to suppress replication if requested this frame
+                      /*
                         bool bSkipMoveByTag = DoesEntityHaveTag(*EM, EH, FMassSkipMoveReplicationTag::StaticStruct());
                         bool bSkipMoveByOverride = false;
                         //EM->Defer().AddTag<FMassSkipMoveReplicationTag>(EH);
@@ -814,6 +821,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             }
                         }
                         const bool bSkipMoveNow = bSkipMoveByTag || bSkipMoveByOverride;
+                        */
+                        const bool bSkipMoveNow = DoesEntityHaveTag(*EM, EH, FMassStateRunTag::StaticStruct());
                         if (!bSkipMoveNow)
                         {
                             if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
