@@ -280,10 +280,10 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 ++Arrivals;
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
-                FMassClientPredictionFragment& PredFragment = PredList[i];
-                if (PredFragment.bHasData)
+         
+                if (Pred.bHasData)
                 {
-                    PredFragment.bHasData = false;
+                    Pred.bHasData = false;
                     if (bShowLogs)
                     {
                         if (const AActor* PredActor = ActorList[i].Get())

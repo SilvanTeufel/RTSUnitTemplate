@@ -750,8 +750,15 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 
 inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntityHandle Entity, uint32 Bits)
 {
+	// If client-side prediction is active, skip syncing certain tags (start with Idle)
+	bool bPredicting = false;
+	if (const FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+	{
+		bPredicting = Pred->bHasData;
+	}
+
 	// Defer commands to safely modify tags on the client
-	auto SetTag = [&EntityManager, &Entity, Bits](uint32 Mask, auto TagStructType)
+	auto SetTag = [&EntityManager, &Entity, &Bits](uint32 Mask, auto TagStructType)
 	{
 		using T = decltype(TagStructType);
 		const bool bShouldHave = (Bits & Mask) != 0;
@@ -777,5 +784,9 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::Run,                 FMassStateRunTag());
 	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
 	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
-	SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
+	// Skip syncing Idle tag while predicting so local fast-start isn't overridden
+	if (!bPredicting)
+	{
+		SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
+	}
 }

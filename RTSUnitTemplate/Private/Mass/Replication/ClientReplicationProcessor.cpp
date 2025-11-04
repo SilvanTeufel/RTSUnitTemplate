@@ -738,7 +738,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
 							}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-								if (MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
 								{
 									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
 									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
@@ -960,54 +960,64 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
-								// Apply MoveTarget if present (but skip when unit is in Run state)
-       if (MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
-       {
-           FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-           // Decide newer vs older by Move_ActionID then Move_ServerStartTime
-           bool bIsNewer2 = true;
-           const uint16 IncomingID2 = UseItem->Move_ActionID;
-           const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
-           if (IncomingID2 != 0)
-           {
-               const uint16 LocalID2 = MT.GetCurrentActionID();
-               if (IncomingID2 < LocalID2)
-               {
-                   bIsNewer2 = false;
-               }
-               else if (IncomingID2 == LocalID2)
-               {
-                   const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
-                   bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
-               }
-           }
-           if (bIsNewer2)
-           {
-               MT.Center = FVector(UseItem->Move_Center);
-               MT.SlackRadius = UseItem->Move_SlackRadius;
-               MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
-               MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
-               MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
-               if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
-               {
-                   UWorld* W3 = OwnerA3->GetWorld();
-                   const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
-                   MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
-               }
-           }
-       }
-       else if (!MoveTargetList.IsValidIndex(EntityIdx) && UseItem->Move_bHasTarget)
-       {
-           // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
-           static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
-           const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
-           if (!WarnedOnceClient.Contains(IdVal))
-           {
-               WarnedOnceClient.Add(IdVal);
-               const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
-               UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
-           }
-       }
+								// Apply MoveTarget if present (guarded by bStopMovementReplication)
+		       if (UseItem->Move_bHasTarget)
+	       {
+	           if (bStopMovementReplication)
+	           {
+	               if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+	               {
+	                   UE_LOG(LogTemp, Verbose, TEXT("[ClientRep] Skipping MoveTarget replication (UseItem path) for NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+	               }
+	           }
+	           else if (MoveTargetList.IsValidIndex(EntityIdx))
+	           {
+	               FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+	               // Decide newer vs older by Move_ActionID then Move_ServerStartTime
+	               bool bIsNewer2 = true;
+	               const uint16 IncomingID2 = UseItem->Move_ActionID;
+	               const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
+	               if (IncomingID2 != 0)
+	               {
+	                   const uint16 LocalID2 = MT.GetCurrentActionID();
+	                   if (IncomingID2 < LocalID2)
+	                   {
+	                       bIsNewer2 = false;
+	                   }
+	                   else if (IncomingID2 == LocalID2)
+	                   {
+	                       const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
+	                       bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
+	                   }
+	               }
+	               if (bIsNewer2)
+	               {
+	                   MT.Center = FVector(UseItem->Move_Center);
+	                   MT.SlackRadius = UseItem->Move_SlackRadius;
+	                   MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+	                   MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+	                   MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+	                   if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
+	                   {
+	                       UWorld* W3 = OwnerA3->GetWorld();
+	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
+	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
+	                   }
+	               }
+	           }
+	           else
+	           {
+	               // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
+	               static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
+	               const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
+	               if (!WarnedOnceClient.Contains(IdVal))
+	               {
+	                   WarnedOnceClient.Add(IdVal);
+	                   const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
+	                   UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
+	               }
+	           }
+	       }
 							}
 						}
 						}

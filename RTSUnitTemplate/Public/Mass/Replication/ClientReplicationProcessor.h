@@ -20,16 +20,17 @@ public:
 	// Global toggle: when true, use full replication (directly set transform). When false, use reconciliation via steering/force.
 	bool bUseFullReplication = false;
 	bool bSkipReplication = false;
-
+	bool bStopMovementReplication = true;
+	
 	float TimeSinceLastRun = 0.0f;
 	const float ExecutionInterval = 0.25f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MinErrorForCorrectionSq = FMath::Square(1.f); // 5 cm
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MaxCorrectionAccel = 3000.f; // cm/s^2
+	float MaxCorrectionAccel = 1000.f; // cm/s^2
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float Kp = 60.0f; // proportional gain to turn error into desired velocity/accel
+	float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
