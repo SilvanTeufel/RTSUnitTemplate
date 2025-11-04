@@ -53,6 +53,14 @@ void ARTSGameModeBase::DataTableTimerStart()
 void ARTSGameModeBase::NavInitialisation()
 {
     UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		// This should almost never happen in a GameMode, but good to check
+		UE_LOG(LogTemp, Error, TEXT("NavInitialisation: GetWorld() returned NULL!"));
+		return;
+	}
+	
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     if (NavSystem)
     {

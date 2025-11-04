@@ -100,10 +100,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
-                }
+
 
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

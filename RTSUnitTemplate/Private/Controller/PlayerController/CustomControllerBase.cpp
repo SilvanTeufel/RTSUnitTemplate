@@ -10,8 +10,12 @@
 #include "MassEntitySubsystem.h"     // Needed for FMassEntityManager, UMassEntitySubsystem
 #include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
+#include "MassEntityManager.h"  // For FMassEntityManager::FlushCommands
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "Mass/UnitNavigationFragments.h"  // For FUnitNavigationPathFragment reset on client prediction
+#include "MassReplicationFragments.h" // For FMassNetworkIDFragment
+#include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
 #include "NavModifierVolume.h"
 #include "Actors/FogActor.h"
 #include "Actors/SelectionCircleActor.h"
@@ -132,16 +136,15 @@ void ACustomControllerBase::AgentInit_Implementation()
 
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
-	// Server authoritative path. Also dispatch a client-side prediction request.
-	if (!Unit) return;
-	
-	if (!Unit->IsInitialized) return;
-	
-	if (!Unit->CanMove) return;
-	
+	if (!Unit) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit is null")); return; }
+		
+	if (!Unit->IsInitialized) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s not initialized"), *GetNameSafe(Unit)); return; }
+		
+	if (!Unit->CanMove) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s CanMove=false"), *GetNameSafe(Unit)); return; }
+		
 	// Do not accept move orders for dead units
-	if (Unit->UnitState == UnitData::Dead) return;
-	
+	if (Unit->UnitState == UnitData::Dead) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s is Dead"), *GetNameSafe(Unit)); return; }
+		
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
 
@@ -153,7 +156,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	}
 
 	Unit->bHoldPosition = false;
-	
+	// Bridge race: mark owner-name skip immediately to cover NetID==0 or pending
+
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
@@ -193,7 +197,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: Entity %s does not have an FMassMoveTargetFragment."), *MassEntityHandle.DebugGetDescription());
         return;
     }
-
+	
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 
@@ -224,53 +228,295 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+}
 
-	// Multicast to all connected clients for client-side navigation mirror
-	if (UWorld* PCWorld = World)
+void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
+{
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BatchMove] Invalid WorldContextObject (World == nullptr)."));
+		return;
+	}
+	
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BatchMove] MassEntitySubsystem not found. Is Mass enabled?"));
+		return;
+	}
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Array size mismatch. Units:%d Locs:%d Speeds:%d (processing min count)"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	}
+
+	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		AUnitBase* Unit = Units[Index];
+		const FVector& NewTargetLocation = NewTargetLocations[Index];
+		const float DesiredSpeed = DesiredSpeeds[Index];
+
+		if (!Unit)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%d] Unit is null. Skipping."), Index);
+			continue;
+		}
+		
+		if (!Unit->IsInitialized)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (!Unit->CanMove)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (Unit->UnitState == UnitData::Dead)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			const bool bCancelable = !(AbilityCDO && !AbilityCDO->AbilityCanBeCanceled);
+			if (!bCancelable)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Ability cannot be canceled. Skipping."), *GetNameSafe(Unit));
+				continue;
+			}
+			CancelCurrentAbility(Unit);
+		}
+
+		Unit->bHoldPosition = false;
+
+		// Mass entity handle
+		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityValid(MassEntityHandle))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Invalid MassEntityHandle. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		// Skip if Mass has Dead tag
+		if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Mass entity has Dead tag. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+
+		FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
+		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+		if (!MoveTargetFragmentPtr || !AiStatePtr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Missing fragments. MoveTarget:%s AI:%s"), *GetNameSafe(Unit), MoveTargetFragmentPtr ? TEXT("OK") : TEXT("NULL"), AiStatePtr ? TEXT("OK") : TEXT("NULL"));
+			continue;
+		}
+		
+		AiStatePtr->StoredLocation = NewTargetLocation;
+		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+		
+		UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+
+		// Tags manipulation
+		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+		if (AttackT)
+		{
+			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
+			{
+				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+			}
+		}
+		else
+		{
+			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+		}
+
+		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+		
+	}
+}
+
+void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementation(
+	UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
+{
+	// Diagnostics: server received batch move
+	UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
+	// Apply authoritative changes on the server
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+
+	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
+	if (UWorld* PCWorld = GetWorld())
 	{
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_CorrectSetUnitMoveTarget(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 			}
 		}
 	}
 }
 
-void ACustomControllerBase::Client_CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
+void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
+	UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	float AcceptanceRadius,
+	bool AttackT)
 {
-	if (!IsLocalController()) { return; }
-	if (!Unit) { return; }
-	if (!Unit->IsInitialized || !Unit->CanMove) { return; }
-	
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) { return; }
-	if (!World->IsNetMode(NM_Client)) { return; }
-
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
+	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
+	if (HasAuthority())
 	{
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
-		if (!bValidEntity)
+		return;
+	}
+
+	UWorld* World = nullptr;
+	if (WorldContextObject)
+	{
+		World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	}
+	if (!World)
+	{
+		World = GetWorld();
+	}
+	if (!World)
+	{
+		return;
+	}
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		return;
+	}
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		AUnitBase* Unit = Units[Index];
+		if (!Unit)
 		{
-			Unit->Destroy();
-			return;
+			continue;
+		}
+		
+		if (!Unit->IsInitialized)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (!Unit->CanMove)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (Unit->UnitState == UnitData::Dead)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
+			continue;
 		}
 
-		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+		Unit->bHoldPosition = false;
+		const FVector& NewTargetLocation = NewTargetLocations[Index];
+		const float DesiredSpeed = DesiredSpeeds[Index];
+
+		Unit->SetUnitState(UnitData::Run);
+		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityValid(MassEntityHandle))
 		{
-			MoveTargetFragmentPtr->Center = NewTargetLocation;
-			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-			MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
+			continue;
 		}
-		if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+
+		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+		if (!AiStatePtr)
 		{
-			AiStatePtr->StoredLocation = NewTargetLocation;
-			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+			continue;
 		}
+		
+		AiStatePtr->StoredLocation = NewTargetLocation;
+		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+		
+		// Add Run tag so client processors include this entity immediately
+		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+		// Populate client prediction fragment with location/speed/radius so client can move without editing MoveTarget
+		if (FMassClientPredictionFragment* PredFrag = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(MassEntityHandle))
+		{
+			PredFrag->Location = NewTargetLocation;
+			PredFrag->PredDesiredSpeed = DesiredSpeed;
+			PredFrag->PredAcceptanceRadius = AcceptanceRadius;
+			PredFrag->bHasData = true;
+		}
+		// Ensure client won't skip movement this tick
+		AiStatePtr->CanMove = true;
+		AiStatePtr->HoldPosition = false;
+		// Reset local path state to avoid stale path following from previous order
+		if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
+		{
+			PathFrag->ResetPath();
+			PathFrag->bIsPathfindingInProgress = false;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
+			*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
+		if (AttackT)
+		{
+			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
+			{
+				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+			}
+		}
+		else
+		{
+			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+		}
+
+		// Strip other mutually exclusive state tags
+		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	}
+	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
+	EntityManager.FlushCommands();
+	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
@@ -283,14 +529,14 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	
 	// Do not accept move orders for dead units (ability path)
 	if (Unit->UnitState == UnitData::Dead) return;
-	
+
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
         UE_LOG(LogTemp, Error, TEXT("SetUnitMoveTarget: WorldContextObject is invalid or could not provide World."));
         return;
     }
-
+	
     UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
     if (!MassSubsystem)
     {
@@ -349,56 +595,6 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	
-   	// Multicast to all connected clients for client-side navigation mirror (ability)
-   	if (UWorld* PCWorld = World)
-   	{
-   		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
-   		{
-   			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
-   			{
-   				PC->Client_CorrectSetUnitMoveTargetForAbility(WorldContextObject, Unit, NewTargetLocation, DesiredSpeed, AcceptanceRadius, AttackT);
-   			}
-   		}
-   	}
-}
-
-void ACustomControllerBase::Client_CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	if (!Unit->IsInitialized || !Unit->CanMove) return;
-
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
-
-	//UE_LOG(LogTemp, Log, TEXT("[Client] Client_CorrectSetUnitMoveTargetForAbility for %s -> %s"), *Unit->GetName(), *NewTargetLocation.ToString());
-
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-	{
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		const bool bValidEntity = EntityManager.IsEntityValid(MassEntityHandle);
-		if (!bValidEntity)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Zombie actor detected on client (Ability RPC): %s has no valid Mass entity. Destroying local actor."), *Unit->GetName());
-			Unit->Destroy();
-			return;
-		}
-
-		if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-		{
-			// Client-safe prediction: avoid authority-only SetDesiredAction inside UpdateMoveTarget
-			MoveTargetFragmentPtr->Center = NewTargetLocation;
-			MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-			// Note: We intentionally do not call SetDesiredAction or modify tags on the client.
-		}
-		if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-		{
-			AiStatePtr->StoredLocation = NewTargetLocation;
-			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-		}
-	}
 }
 
 void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter)
@@ -419,6 +615,10 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			// Perform the line trace on a suitable collision channel, e.g., ECC_Visibility or a custom one
 			bool DidHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
 			
+			// Prepare batch arrays for mass units
+			TArray<AUnitBase*> BatchUnits;
+			TArray<FVector>    BatchLocations;
+			TArray<float>      BatchSpeeds;
 			
 			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
 			{
@@ -458,24 +658,27 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 					}
 					
 
-                    bool UnitIsValid = true;
-                    
-                    if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
-                    if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
-                
-                    if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
-                    {
-
-                        UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-                    
-                        if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
-                        else CancelCurrentAbility(SelectedUnits[i]);
-                    }
+					bool UnitIsValid = true;
+					
+					if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
+					if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
+				
+					if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+					{
+					
+						UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+						
+						if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
+						else CancelCurrentAbility(SelectedUnits[i]);
+					}
 
 					if (SelectedUnits[i]->bIsMassUnit && UnitIsValid)
 					{
 						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
-						CorrectSetUnitMoveTarget(GetWorld(), SelectedUnits[i], UnitsToLoad[i]->RunLocation, Speed, 40.f);
+						// Accumulate for batched RPC instead of sending one RPC per unit
+						BatchUnits.Add(SelectedUnits[i]);
+						BatchLocations.Add(UnitsToLoad[i]->RunLocation);
+						BatchSpeeds.Add(Speed);
 						SetUnitState_Replication(SelectedUnits[i], 1);
 					}
 					else
@@ -483,6 +686,12 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 						RightClickRunUEPF(UnitsToLoad[i], UnitsToLoad[i]->RunLocation, true);
 					}
 				}
+			}
+
+			// Send a single batched RPC for all valid mass units gathered above
+			if (BatchUnits.Num() > 0)
+			{
+    Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, false);
 			}
 
 			if (Transporter->GetUnitState() != UnitData::Casting)
@@ -751,17 +960,21 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     }
 
     // 4. Issue moves & sounds
+    TArray<AUnitBase*> BatchUnits;
+    TArray<FVector>    BatchLocs;
+    TArray<float>      BatchSpeeds;
+
     for (auto& P : Finals)
     {
         auto* U = P.Key;
         FVector Loc = P.Value;
         if (!U || U == CameraUnitWithTag || U->UnitState == UnitData::Dead) continue;
-    	
+    
         bool bNavMod;
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue;
 
-    	U->RemoveFocusEntityTarget();
+        U->RemoveFocusEntityTarget();
         float Speed = U->Attributes->GetBaseRunSpeed();
         if (SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint))
         {
@@ -773,12 +986,14 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
             {
-            	if (U->GetUnitState() != UnitData::Run)
-            	{
-            		CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f);
-            	}
-	           RightClickRunShift(U, Loc);
-            	SetUnitState_Replication(U, 1);
+                if (U->GetUnitState() != UnitData::Run)
+                {
+                    BatchUnits.Add(U);
+                    BatchLocs.Add(Loc);
+                    BatchSpeeds.Add(Speed);
+                }
+                RightClickRunShift(U, Loc);
+                SetUnitState_Replication(U, 1);
             }
             PlayRun = true;
         }
@@ -787,18 +1002,36 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             DrawDebugCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
-                CorrectSetUnitMoveTarget(GetWorld(), U, Loc, Speed, 40.f), SetUnitState_Replication(U, 1);
+            {
+                BatchUnits.Add(U);
+                BatchLocs.Add(Loc);
+                BatchSpeeds.Add(Speed);
+                SetUnitState_Replication(U, 1);
+            }
             else if (UseUnrealEnginePathFinding)
+            {
                 RightClickRunUEPF(U, Loc, true);
+            }
             else
+            {
                 RightClickRunDijkstraPF(U, Loc, -1);
+            }
             PlayRun = true;
         }
     }
 
-    if (WaypointSound && PlayWaypoint) UGameplayStatics::PlaySound2D(this, WaypointSound);
-    if (RunSound && PlayRun &&
-        GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime)
+    if (BatchUnits.Num() > 0)
+    {
+    	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
+    }
+
+    if (WaypointSound && PlayWaypoint)
+    {
+        UGameplayStatics::PlaySound2D(this, WaypointSound);
+    }
+
+    const bool bCanPlayRunSound = RunSound && PlayRun && (GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime);
+    if (bCanPlayRunSound)
     {
         UGameplayStatics::PlaySound2D(this, RunSound);
         LastRunSoundTime = GetWorld()->GetTimeSeconds();
@@ -841,43 +1074,50 @@ void ACustomControllerBase::LeftClickPressedMass()
         bool PlayWaypointSound = false;
         bool PlayAttackSound   = false;
 
-        // 3) issue each unit
+        // 3) issue each unit (collect arrays for mass units)
+        TArray<AUnitBase*> MassUnits;
+        TArray<FVector>    MassLocations;
         for (int32 i = 0; i < NumUnits; ++i)
         {
             AUnitBase* U = SelectedUnits[i];
             if (U == nullptr || U == CameraUnitWithTag) continue;
-        	
+        
             // apply the same slot-by-index approach
             FVector RunLocation = Hit.Location + Offsets[i];
 
             bool bNavMod;
             RunLocation = TraceRunLocation(RunLocation, bNavMod);
-			if (bNavMod) continue;
-        	
+            if (bNavMod) continue;
+        
             if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
             {
                 // waypoint placed
             }
             else
             {
+                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                 if (U->bIsMassUnit)
                 {
-                    LeftClickAttackMass(U, RunLocation, AttackToggled, CursorHitActor);
-                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+                    MassUnits.Add(U);
+                    MassLocations.Add(RunLocation);
                 }
                 else
                 {
-                	DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     LeftClickAttack(U, RunLocation);
                 }
 
                 PlayAttackSound = true;
             }
 
-           // still fire any dragged ability on each unit
-           FireAbilityMouseHit(U, Hit);
+            // still fire any dragged ability on each unit
+            FireAbilityMouseHit(U, Hit);
         }
-		
+
+        if (MassUnits.Num() > 0)
+        {
+            LeftClickAttackMass(MassUnits, MassLocations, AttackToggled, CursorHitActor);
+        }
+
         AttackToggled = false;
 
         // 4) play sounds
@@ -963,56 +1203,91 @@ void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerforma
 	}
 }
 
-void ACustomControllerBase::LeftClickAttackMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor)
+void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
 {
-	if (Unit && Unit->UnitState != UnitData::Dead)
-	{
-		AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
+	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
+	if (Count <= 0) return;
 
-		if (TargetUnitBase)
+	// If we clicked an enemy unit, set chase on all provided units
+	AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
+	if (TargetUnitBase)
+	{
+		for (int32 i = 0; i < Count; ++i)
 		{
-			/// Focus Enemy Units ///
+			AUnitBase* Unit = Units[i];
+			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
 			SetUnitState_Replication(Unit, 3);
 			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
 		}
-		else if (UseUnrealEnginePathFinding)
+		return;
+	}
+
+	if (UseUnrealEnginePathFinding)
+	{
+		// Delegate to UE pathfinding batched move
+		LeftClickAMoveUEPFMass(Units, Locations, AttackT);
+		for (int32 i = 0; i < Count; ++i)
 		{
-			if (Unit && Unit->UnitState != UnitData::Dead)
-			{
-				LeftClickAMoveUEPFMass(Unit, Location, AttackT);
-			}
-			Unit->RemoveFocusEntityTarget();
+			if (Units[i]) Units[i]->RemoveFocusEntityTarget();
 		}
-		else
+	}
+	else
+	{
+		// Fallback: custom pathfinding per unit
+		for (int32 i = 0; i < Count; ++i)
 		{
-			LeftClickAMove(Unit, Location);
+			AUnitBase* Unit = Units[i];
+			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
+			LeftClickAMove(Unit, Locations[i]);
 			Unit->RemoveFocusEntityTarget();
 		}
 	}
 }
 
-void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(AUnitBase* Unit, FVector Location, bool AttackT)
+void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT)
 {
-	if (!Unit) return;
+	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
+	if (Count <= 0) return;
 
-    if (!Unit->IsInitialized) return;
-    if (!Unit->CanMove) return;
-	
-    if (Unit->CurrentSnapshot.AbilityClass)
-    {
+	TArray<AUnitBase*> BatchUnits;
+	TArray<FVector> BatchLocations;
+	TArray<float> BatchSpeeds;
 
-    	UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		
-    	if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
-		else CancelCurrentAbility(Unit);
-    }
+	for (int32 i = 0; i < Count; ++i)
+	{
+		AUnitBase* Unit = Units[i];
+		if (!Unit) continue;
+		if (!Unit->IsInitialized) continue;
+		if (!Unit->CanMove) continue;
 
-	float Speed = Unit->Attributes->GetBaseRunSpeed();
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) continue;
+			else CancelCurrentAbility(Unit);
+		}
 
-	SetUnitState_Replication(Unit,1);
-	CorrectSetUnitMoveTarget(GetWorld(), Unit, Location, Speed, 40.f, AttackT);
+		float Speed = Unit->Attributes->GetBaseRunSpeed();
+		SetUnitState_Replication(Unit, 1);
+
+		if (Unit->bIsMassUnit)
+		{
+			BatchUnits.Add(Unit);
+			BatchLocations.Add(Locations[i]);
+			BatchSpeeds.Add(Speed);
+		}
+		else if (UseUnrealEnginePathFinding)
+		{
+			RightClickRunUEPF(Unit, Locations[i], true);
+		}
+	}
+
+	if (BatchUnits.Num() > 0)
+	{
+  Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, AttackT);
+	}
 }
 
 void ACustomControllerBase::LeftClickReleasedMass()
@@ -1308,105 +1583,4 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 }
 
 // === Client mirror helpers ===
-void ACustomControllerBase::Client_MirrorMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
 
-	// Retry-safe application: client may receive mirror before Mass entity is ready.
-	TWeakObjectPtr<UWorld> WorldPtr = World;
-	TWeakObjectPtr<AUnitBase> UnitPtr = Unit;
-	// Limit retries to avoid infinite loops (e.g., ~1s total)
-	constexpr int32 MaxAttempts = 20; // 20 x 0.05s = 1s
-	constexpr float RetryDelaySec = 0.05f;
-
-	// Define a recursive lambda using TSharedRef to allow rebinding in timer
-	TSharedRef<TFunction<void(int32)>> TryApplyRef = MakeShared<TFunction<void(int32)>>();
-	*TryApplyRef = [this, WorldPtr, UnitPtr, NewTargetLocation, DesiredSpeed, AcceptanceRadius, UnitState, UnitStatePlaceholder, PlaceholderSignal, TryApplyRef](int32 AttemptsLeft)
-	{
-		if (!WorldPtr.IsValid() || !UnitPtr.IsValid()) return;
-		UWorld* LWorld = WorldPtr.Get();
-		AUnitBase* LUnit = UnitPtr.Get();
-		if (!LWorld || !LUnit)
-		{
-			return;
-		}
-
-		// If the Unit isn't initialized or movable yet, retry later
-		if (!LUnit->IsInitialized || !LUnit->CanMove)
-		{
-			if (AttemptsLeft <= 0) return;
-			FTimerDelegate Del;
-			Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
-			FTimerHandle Th;
-			LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
-			return;
-		}
-
-		if (UMassEntitySubsystem* MassSubsystem = LWorld->GetSubsystem<UMassEntitySubsystem>())
-		{
-			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-			const FMassEntityHandle MassEntityHandle = LUnit->MassActorBindingComponent->GetMassEntityHandle();
-			if (!EntityManager.IsEntityValid(MassEntityHandle))
-			{
-				if (AttemptsLeft <= 0) return;
-				FTimerDelegate Del;
-				Del.BindLambda([TryApplyRef, AttemptsLeft]() { (*TryApplyRef)(AttemptsLeft - 1); });
-				FTimerHandle Th;
-				LWorld->GetTimerManager().SetTimer(Th, Del, RetryDelaySec, false);
-				return;
-			}
-
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Mirror movement target on client
-				MoveTargetFragmentPtr->Center = NewTargetLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				MoveTargetFragmentPtr->DesiredSpeed.Set(DesiredSpeed);
-				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = NewTargetLocation;
-				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
-			}
-		}
-	};
-
-	// Kick off with retries
-	(*TryApplyRef)(MaxAttempts);
-}
-
-void ACustomControllerBase::Client_MirrorStopMovement_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& StopLocation, float AcceptanceRadius, int32 UnitState, int32 UnitStatePlaceholder, FName PlaceholderSignal)
-{
-	if (!IsLocalController()) return;
-	if (!Unit) return;
-	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World) return;
-	if (!World->IsNetMode(NM_Client)) return;
-
-	if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-	{
-		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager.IsEntityValid(MassEntityHandle))
-		{
-			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
-			{
-				// Client mirror only: avoid authority-only CreateNewAction/SetDesiredAction on clients
-				MoveTargetFragmentPtr->Center = StopLocation;
-				MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
-				MoveTargetFragmentPtr->DesiredSpeed.Set(0.f);
-				MoveTargetFragmentPtr->IntentAtGoal = EMassMovementAction::Stand;
-			}
-			if (FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-			{
-				AiStatePtr->StoredLocation = StopLocation;
-				AiStatePtr->PlaceholderSignal = PlaceholderSignal;
-			}
-		}
-	}
-}

@@ -151,10 +151,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                  StateFrag.StoredLocation,
                  Stats.RunSpeed,
                  World);
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
-                }
                 
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
@@ -179,7 +175,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
+                    // MirrorStopMovement disabled (movement now replicated via Mass bubble)
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
                 }
                 StateFrag.SwitchingState = true;
@@ -192,10 +188,7 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
            StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
            UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-           if (SignalSubsystem)
-           {
-               SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
-           }
+
 
         }
     }); // End ForEachEntityChunk

@@ -17,6 +17,10 @@ public:
 	UServerReplicationKickProcessor();
 
 	bool bSkipReplication = false;
+
+	float TimeSinceLastRun = 0.0f;
+	const float ExecutionInterval = 0.25f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
+
 	
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;

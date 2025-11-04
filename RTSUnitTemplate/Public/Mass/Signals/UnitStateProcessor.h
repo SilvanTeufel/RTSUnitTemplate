@@ -43,7 +43,7 @@ private:
 	
 	FMassEntityQuery EntityQuery;
 	// Handler function for the signal (must match delegate signature)
-
+	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	// Thread-safe flags for shutdown/unbinding coordination
 	FThreadSafeBool bDelegatesUnbound = false;
 	// Set to true once BeginDestroy starts so handlers can early-out during teardown
@@ -53,7 +53,6 @@ private:
 	void UnbindDelegates_Internal();
 	void UnbindDelegates_GameThread();
 	
-	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	
 	UFUNCTION()
 	void IdlePatrolSwitcher(FName SignalName, TArray<FMassEntityHandle>& Entities);
@@ -129,9 +128,6 @@ private:
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
 	
-	// Mirror movement signals
-	FDelegateHandle MirrorMoveTargetDelegateHandle;
-	FDelegateHandle MirrorStopMovementDelegateHandle;
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
@@ -257,12 +253,6 @@ private:
 	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
-
-	// Mirror movement handlers
-	UFUNCTION()
-	void HandleMirrorMoveTarget(FName SignalName, TArray<FMassEntityHandle>& Entities);
-	UFUNCTION()
-	void HandleMirrorStopMovement(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	FDelegateHandle UpdateWorkerMovementDelegateHandle;
 		

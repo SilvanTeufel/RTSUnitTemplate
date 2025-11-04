@@ -95,10 +95,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                    StateFrag.StoredLocation,
                    Stats.RunSpeed,
                    World);
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorMoveTarget, Entity);
-                }
                 
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

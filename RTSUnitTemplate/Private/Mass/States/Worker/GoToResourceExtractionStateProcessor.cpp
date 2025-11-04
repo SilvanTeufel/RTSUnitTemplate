@@ -120,7 +120,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
             const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f))
+            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f) && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement and mirror to clients when reaching the resource
@@ -129,7 +129,6 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 // Queue signals thread-safely using the deferred command buffer
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::MirrorStopMovement, Entity);
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ResourceExtraction, Entity);
                 }
             }

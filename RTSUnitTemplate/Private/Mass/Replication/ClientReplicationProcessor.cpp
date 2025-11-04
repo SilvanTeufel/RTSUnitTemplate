@@ -1,10 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
 
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
@@ -22,7 +18,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_CacheRebuildSeconds
     ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_BudgetPerTick(
     TEXT("net.RTS.ClientReplication.BudgetPerTick"),
-    16,
+    64,
     TEXT("Max reconcile/link/unlink operations per tick on client."),
     ECVF_Default);
 // 0=Off, 1=Warn, 2=Verbose
@@ -36,12 +32,6 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
     TEXT("net.RTS.ClientReplication.UnlinkDebounceSeconds"),
     0.10f,
     TEXT("Seconds to wait after the registry changes before executing unlink reconciliation."),
-    ECVF_Default);
-// Toggle between full replication and reconciliation (0 = reconciliation, 1 = full replication)
-static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_FullReplication(
-    TEXT("net.RTS.ClientReplication.FullReplication"),
-    1,
-    TEXT("1 = Full transform replication (disable steering/force reconciliation). 0 = Reconciliation via steering/force."),
     ECVF_Default);
 
 #include "MassCommonFragments.h"
@@ -64,6 +54,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_FullReplication(
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
 
 UClientReplicationProcessor::UClientReplicationProcessor()
@@ -102,20 +93,30 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadWrite);
- EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+	// Prediction fragment so we can skip reconciliation while client-side prediction is active
+	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.RegisterWithProcessor(*this);
-	
+		
 }
 
 void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	if (bSkipReplication) return;
+
+	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
+	if (TimeSinceLastRun < ExecutionInterval)
+	{
+		return;
+	}
+	TimeSinceLastRun = 0.f;
 	
 	static int32 GExecCount = 0;
 	UWorld* World = GetWorld();
@@ -227,19 +228,50 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Build additional authoritative mapping from Bubble payload (client-replicated)
 	TMap<FName, FMassNetworkID> BubbleByOwnerName;
 	TSet<uint32> BubbleIDs;
-	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
-	{
-		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+		if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
 		{
-			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
+			if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
 			{
-				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
-				BubbleIDs.Add(Item.NetID.GetValue());
+				for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
+				{
+					BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
+					BubbleIDs.Add(Item.NetID.GetValue());
+				}
 			}
 		}
-	}
-	
-	EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
+		// Compare Registry vs Bubble mappings by OwnerName and log mismatches (diagnostic)
+		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1 && AuthoritativeByOwnerName.Num() > 0 && BubbleByOwnerName.Num() > 0)
+		{
+			int32 MismatchCount = 0;
+			int32 OnlyInRegistry = 0;
+			int32 OnlyInBubble = 0;
+			for (const auto& KVP : AuthoritativeByOwnerName)
+			{
+				const FMassNetworkID* B = BubbleByOwnerName.Find(KVP.Key);
+				if (!B)
+				{
+					OnlyInRegistry++;
+				}
+				else if (B->GetValue() != KVP.Value.GetValue())
+				{
+					MismatchCount++;
+				}
+			}
+			for (const auto& KVP : BubbleByOwnerName)
+			{
+				if (!AuthoritativeByOwnerName.Contains(KVP.Key))
+				{
+					OnlyInBubble++;
+				}
+			}
+			if (MismatchCount > 0 || OnlyInRegistry > 0 || OnlyInBubble > 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ClientRegistryVsBubble: Mismatch=%d OnlyInReg=%d OnlyInBubble=%d (Reg=%d Bubble=%d)"),
+					MismatchCount, OnlyInRegistry, OnlyInBubble, AuthoritativeByOwnerName.Num(), BubbleByOwnerName.Num());
+			}
+		}
+		
+		EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
 		const TConstArrayView<FMassNetworkIDFragment> NetIDs = Ctx.GetFragmentView<FMassNetworkIDFragment>();
@@ -425,7 +457,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 		
- EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
+		// If we hit the per-tick action budget, warn so we can correlate with units not moving on client
+		if (Actions >= MaxActionsPerTick)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
+		}
+		
+		 EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -441,6 +479,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassCombatStatsFragment> CombatList = Context.GetMutableFragmentView<FMassCombatStatsFragment>();
 			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
+			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+			// Prediction fragment view (read-only)
+			const TConstArrayView<FMassClientPredictionFragment> PredList = Context.GetFragmentView<FMassClientPredictionFragment>();
 
 			// Log registered NetIDs on client for this chunk (verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -681,21 +722,58 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
     								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
-    	    					if (AIStateList.IsValidIndex(EntityIdx))
-    							{
-    								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
-    								AIS.StateTimer = TagItem->AIS_StateTimer;
-    								AIS.CanAttack = TagItem->AIS_CanAttack;
-    								AIS.CanMove = TagItem->AIS_CanMove;
-    								AIS.HoldPosition = TagItem->AIS_HoldPosition;
-    								AIS.HasAttacked = TagItem->AIS_HasAttacked;
-    								AIS.PlaceholderSignal = TagItem->AIS_PlaceholderSignal;
-    								AIS.StoredLocation = FVector(TagItem->AIS_StoredLocation);
-    								AIS.SwitchingState = TagItem->AIS_SwitchingState;
-    								AIS.BirthTime = TagItem->AIS_BirthTime;
-    								AIS.DeathTime = TagItem->AIS_DeathTime;
-    								AIS.IsInitialized = TagItem->AIS_IsInitialized;
-    							}
+       							if (AIStateList.IsValidIndex(EntityIdx))
+							{
+								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+								AIS.StateTimer = TagItem->AIS_StateTimer;
+								AIS.CanAttack = TagItem->AIS_CanAttack;
+								AIS.CanMove = TagItem->AIS_CanMove;
+								AIS.HoldPosition = TagItem->AIS_HoldPosition;
+								AIS.HasAttacked = TagItem->AIS_HasAttacked;
+								AIS.PlaceholderSignal = TagItem->AIS_PlaceholderSignal;
+								AIS.StoredLocation = FVector(TagItem->AIS_StoredLocation);
+								AIS.SwitchingState = TagItem->AIS_SwitchingState;
+								AIS.BirthTime = TagItem->AIS_BirthTime;
+								AIS.DeathTime = TagItem->AIS_DeathTime;
+								AIS.IsInitialized = TagItem->AIS_IsInitialized;
+							}
+								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
+								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+								{
+									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
+									bool bIsNewer = true;
+									const uint16 IncomingID = TagItem->Move_ActionID;
+									const float IncomingSrvStart = TagItem->Move_ServerStartTime;
+									if (IncomingID != 0)
+									{
+										const uint16 LocalID = MT.GetCurrentActionID();
+										if (IncomingID < LocalID)
+										{
+											bIsNewer = false;
+										}
+										else if (IncomingID == LocalID)
+										{
+											const double LocalSrvStart = MT.GetCurrentActionServerStartTime();
+											bIsNewer = (IncomingSrvStart > LocalSrvStart);
+										}
+									}
+									if (bIsNewer)
+									{
+										MT.Center = FVector(TagItem->Move_Center);
+										MT.SlackRadius = TagItem->Move_SlackRadius;
+										MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
+										MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
+										MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
+										// Synchronize action timing so subsequent comparisons are correct
+										if (AActor* OwnerA2 = ActorList[EntityIdx].GetMutable())
+										{
+											UWorld* W = OwnerA2->GetWorld();
+											const double WorldStart = W ? (double)W->GetTimeSeconds() : 0.0;
+											MT.CreateReplicatedAction(static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal), IncomingID, WorldStart, (double)IncomingSrvStart);
+										}
+									}
+								}
 											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 											{
  											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
@@ -778,7 +856,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								ClaimedIDs.Add(UseItem->NetID.GetValue());
 								}
 							}
-       if (UseItem)
+							if (UseItem)
 							{
 								// If we still have NetID 0, adopt the bubble's NetID (exact or nearest mapping)
 								if (NetIDList[EntityIdx].NetID.GetValue() == 0)
@@ -820,68 +898,126 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									}
 								}
 								// Also apply replicated CombatStats/Characteristics/AIState from bubble item to ensure full data on client
-								if (CombatList.IsValidIndex(EntityIdx))
-								{
-									FMassCombatStatsFragment& CS = CombatList[EntityIdx];
-									CS.Health = UseItem->CS_Health;
-									CS.MaxHealth = UseItem->CS_MaxHealth;
-									CS.RunSpeed = UseItem->CS_RunSpeed;
-									CS.TeamId = UseItem->CS_TeamId;
-									CS.AttackRange = UseItem->CS_AttackRange;
-									CS.AttackDamage = UseItem->CS_AttackDamage;
-									CS.AttackDuration = UseItem->CS_AttackDuration;
-									CS.IsAttackedDuration = UseItem->CS_IsAttackedDuration;
-									CS.CastTime = UseItem->CS_CastTime;
-									CS.IsInitialized = UseItem->CS_IsInitialized;
-									CS.RotationSpeed = UseItem->CS_RotationSpeed;
-									CS.Armor = UseItem->CS_Armor;
-									CS.MagicResistance = UseItem->CS_MagicResistance;
-									CS.Shield = UseItem->CS_Shield;
-									CS.MaxShield = UseItem->CS_MaxShield;
-									CS.SightRadius = UseItem->CS_SightRadius;
-									CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
-									CS.PauseDuration = UseItem->CS_PauseDuration;
-									CS.bUseProjectile = UseItem->CS_bUseProjectile;
-								}
-								if (CharList.IsValidIndex(EntityIdx))
-								{
-									FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-									AC.bIsFlying = UseItem->AC_bIsFlying;
-									AC.bIsInvisible = UseItem->AC_bIsInvisible;
-									AC.FlyHeight = UseItem->AC_FlyHeight;
-									AC.bCanOnlyAttackFlying = UseItem->AC_bCanOnlyAttackFlying;
-									AC.bCanOnlyAttackGround = UseItem->AC_bCanOnlyAttackGround;
-									AC.bCanBeInvisible = UseItem->AC_bCanBeInvisible;
-									AC.bCanDetectInvisible = UseItem->AC_bCanDetectInvisible;
-									AC.LastGroundLocation = UseItem->AC_LastGroundLocation;
-									AC.DespawnTime = UseItem->AC_DespawnTime;
-									AC.RotatesToMovement = UseItem->AC_RotatesToMovement;
-									AC.RotatesToEnemy = UseItem->AC_RotatesToEnemy;
-									AC.RotationSpeed = UseItem->AC_RotationSpeed;
-									// Rebuild PositionedTransform from quantized pieces
-									const float PPitch = (static_cast<float>(UseItem->AC_PosPitch) / 65535.0f) * 360.0f;
-									const float PYaw   = (static_cast<float>(UseItem->AC_PosYaw)   / 65535.0f) * 360.0f;
-									const float PRoll  = (static_cast<float>(UseItem->AC_PosRoll)  / 65535.0f) * 360.0f;
-									const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
-									AC.PositionedTransform = FTransform(PRot, FVector(UseItem->AC_PosPosition), FVector(UseItem->AC_PosScale));
-									AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
-									AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
-								}
-								if (AIStateList.IsValidIndex(EntityIdx))
-								{
-									FMassAIStateFragment& AIS = AIStateList[EntityIdx];
-									AIS.StateTimer = UseItem->AIS_StateTimer;
-									AIS.CanAttack = UseItem->AIS_CanAttack;
-									AIS.CanMove = UseItem->AIS_CanMove;
-									AIS.HoldPosition = UseItem->AIS_HoldPosition;
-									AIS.HasAttacked = UseItem->AIS_HasAttacked;
-									AIS.PlaceholderSignal = UseItem->AIS_PlaceholderSignal;
-									AIS.StoredLocation = FVector(UseItem->AIS_StoredLocation);
-									AIS.SwitchingState = UseItem->AIS_SwitchingState;
-									AIS.BirthTime = UseItem->AIS_BirthTime;
-									AIS.DeathTime = UseItem->AIS_DeathTime;
-									AIS.IsInitialized = UseItem->AIS_IsInitialized;
-								}
+ 							if (CombatList.IsValidIndex(EntityIdx))
+ 							{
+ 								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
+ 								CS.Health = UseItem->CS_Health;
+ 								CS.MaxHealth = UseItem->CS_MaxHealth;
+ 								CS.RunSpeed = UseItem->CS_RunSpeed;
+ 								CS.TeamId = UseItem->CS_TeamId;
+ 								CS.AttackRange = UseItem->CS_AttackRange;
+ 								CS.AttackDamage = UseItem->CS_AttackDamage;
+ 								CS.AttackDuration = UseItem->CS_AttackDuration;
+ 								CS.IsAttackedDuration = UseItem->CS_IsAttackedDuration;
+ 								CS.CastTime = UseItem->CS_CastTime;
+ 								CS.IsInitialized = UseItem->CS_IsInitialized;
+ 								CS.RotationSpeed = UseItem->CS_RotationSpeed;
+ 								CS.Armor = UseItem->CS_Armor;
+ 								CS.MagicResistance = UseItem->CS_MagicResistance;
+ 								CS.Shield = UseItem->CS_Shield;
+ 								CS.MaxShield = UseItem->CS_MaxShield;
+ 								CS.SightRadius = UseItem->CS_SightRadius;
+ 								CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
+ 								CS.PauseDuration = UseItem->CS_PauseDuration;
+ 								CS.bUseProjectile = UseItem->CS_bUseProjectile;
+ 							}
+ 							if (CharList.IsValidIndex(EntityIdx))
+ 							{
+ 								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+ 								AC.bIsFlying = UseItem->AC_bIsFlying;
+ 								AC.bIsInvisible = UseItem->AC_bIsInvisible;
+ 								AC.FlyHeight = UseItem->AC_FlyHeight;
+ 								AC.bCanOnlyAttackFlying = UseItem->AC_bCanOnlyAttackFlying;
+ 								AC.bCanOnlyAttackGround = UseItem->AC_bCanOnlyAttackGround;
+ 								AC.bCanBeInvisible = UseItem->AC_bCanBeInvisible;
+ 								AC.bCanDetectInvisible = UseItem->AC_bCanDetectInvisible;
+ 								AC.LastGroundLocation = UseItem->AC_LastGroundLocation;
+ 								AC.DespawnTime = UseItem->AC_DespawnTime;
+ 								AC.RotatesToMovement = UseItem->AC_RotatesToMovement;
+ 								AC.RotatesToEnemy = UseItem->AC_RotatesToEnemy;
+ 								AC.RotationSpeed = UseItem->AC_RotationSpeed;
+ 								// Rebuild PositionedTransform from quantized pieces
+ 								const float PPitch = (static_cast<float>(UseItem->AC_PosPitch) / 65535.0f) * 360.0f;
+ 								const float PYaw   = (static_cast<float>(UseItem->AC_PosYaw)   / 65535.0f) * 360.0f;
+ 								const float PRoll  = (static_cast<float>(UseItem->AC_PosRoll)  / 65535.0f) * 360.0f;
+ 								const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
+ 								AC.PositionedTransform = FTransform(PRot, FVector(UseItem->AC_PosPosition), FVector(UseItem->AC_PosScale));
+ 								AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
+ 								AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
+ 							}
+ 							if (AIStateList.IsValidIndex(EntityIdx))
+ 							{
+ 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+ 								AIS.StateTimer = UseItem->AIS_StateTimer;
+ 								AIS.CanAttack = UseItem->AIS_CanAttack;
+ 								AIS.CanMove = UseItem->AIS_CanMove;
+ 								AIS.HoldPosition = UseItem->AIS_HoldPosition;
+ 								AIS.HasAttacked = UseItem->AIS_HasAttacked;
+ 								AIS.PlaceholderSignal = UseItem->AIS_PlaceholderSignal;
+ 								AIS.StoredLocation = FVector(UseItem->AIS_StoredLocation);
+ 								AIS.SwitchingState = UseItem->AIS_SwitchingState;
+ 								AIS.BirthTime = UseItem->AIS_BirthTime;
+ 								AIS.DeathTime = UseItem->AIS_DeathTime;
+ 								AIS.IsInitialized = UseItem->AIS_IsInitialized;
+ 							}
+								// Apply MoveTarget if present (guarded by bStopMovementReplication)
+		       if (UseItem->Move_bHasTarget)
+	       {
+	           if (bStopMovementReplication)
+	           {
+	               if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+	               {
+	                   UE_LOG(LogTemp, Verbose, TEXT("[ClientRep] Skipping MoveTarget replication (UseItem path) for NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+	               }
+	           }
+	           else if (MoveTargetList.IsValidIndex(EntityIdx))
+	           {
+	               FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+	               // Decide newer vs older by Move_ActionID then Move_ServerStartTime
+	               bool bIsNewer2 = true;
+	               const uint16 IncomingID2 = UseItem->Move_ActionID;
+	               const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
+	               if (IncomingID2 != 0)
+	               {
+	                   const uint16 LocalID2 = MT.GetCurrentActionID();
+	                   if (IncomingID2 < LocalID2)
+	                   {
+	                       bIsNewer2 = false;
+	                   }
+	                   else if (IncomingID2 == LocalID2)
+	                   {
+	                       const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
+	                       bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
+	                   }
+	               }
+	               if (bIsNewer2)
+	               {
+	                   MT.Center = FVector(UseItem->Move_Center);
+	                   MT.SlackRadius = UseItem->Move_SlackRadius;
+	                   MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+	                   MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+	                   MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+	                   if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
+	                   {
+	                       UWorld* W3 = OwnerA3->GetWorld();
+	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
+	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
+	                   }
+	               }
+	           }
+	           else
+	           {
+	               // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
+	               static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
+	               const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
+	               if (!WarnedOnceClient.Contains(IdVal))
+	               {
+	                   WarnedOnceClient.Add(IdVal);
+	                   const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
+	                   UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
+	               }
+	           }
+	       }
 							}
 						}
 						}
@@ -917,6 +1053,20 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 				else
 				{
+					// Skip reconciliation entirely while client-side prediction is active
+					bool bPredicting = false;
+					if (PredList.Num() > 0)
+					{
+						bPredicting = PredList[EntityIdx].bHasData;
+					}
+					if (bPredicting)
+					{
+						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Skipped (predicting) NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+						}
+						continue;
+					}
 					// Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
 					const FVector CurrentLoc = ClientXf.GetLocation();
@@ -926,9 +1076,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
 					const float ErrorDistSq = PosErrorXY.SizeSquared();
 					// Thresholds and gains
-					static const float MinErrorForCorrectionSq = FMath::Square(20.f); // 5 cm
-					static const float MaxCorrectionAccel = 3000.f; // cm/s^2
-					static const float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
+				
 					if (ErrorDistSq > MinErrorForCorrectionSq)
 					{
 						// Convert position error into a corrective acceleration vector
@@ -946,6 +1094,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						{
 							FMassSteeringFragment& Steer = SteeringList[EntityIdx];
 							Steer.DesiredVelocity += Corrective * 0.1f; // small bias
+						}
+						// Diagnostic: log corrective force magnitude and error distance (warning level)
+						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+						{
+							const float Err = FMath::Sqrt(ErrorDistSq);
+							UE_LOG(LogTemp, Warning, TEXT("ClientReconcileForce: NetID=%u ErrXY=%.1f Corr=(%.1f,%.1f,%.1f) Kp=%.1f MaxAccel=%.1f"),
+								NetIDList[EntityIdx].NetID.GetValue(), Err, Corrective.X, Corrective.Y, Corrective.Z, Kp, MaxCorrectionAccel);
 						}
 					}
 				}

@@ -31,6 +31,11 @@ AFogActor::AFogActor()
 
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
+
+	bReplicates = false;
+	SetNetUpdateFrequency(1);
+	SetMinNetUpdateFrequency(1);
+	SetReplicates(false);
 }
 
 void AFogActor::BeginPlay()

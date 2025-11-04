@@ -15,6 +15,7 @@
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
 
+class AUnitBase;
 
 #include "CustomControllerBase.generated.h"
 
@@ -63,7 +64,39 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+	// Batched version to reduce per-unit RPC spamming when issuing group move orders
+	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Batch_CorrectSetUnitMoveTargets(
+		UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
+	// Server wrapper to validate and then trigger the multicast from the authority
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_Batch_CorrectSetUnitMoveTargets(
+		UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
+	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
+	UFUNCTION(Client, Reliable)
+	void Client_Predict_Batch_CorrectSetUnitMoveTargets(
+		UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
+		float AcceptanceRadius = 50.0f,
+		bool AttackT = false);
+
 	// Client-side prediction mirror for movement request
+	/*
 	UFUNCTION(Client, Reliable)
 	void Client_CorrectSetUnitMoveTarget(
 		UObject* WorldContextObject,
@@ -71,7 +104,7 @@ public:
 		const FVector& NewTargetLocation,
 		float DesiredSpeed = 300.0f,
 		float AcceptanceRadius = 50.0f,
-		bool AttackT = false);
+		bool AttackT = false);*/
 
 	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTargetForAbility(
@@ -83,6 +116,7 @@ public:
 		bool AttackT = false);
 
 	// Client-side prediction mirror for ability movement request
+	/*
 	UFUNCTION(Client, Reliable)
 	void Client_CorrectSetUnitMoveTargetForAbility(
 		UObject* WorldContextObject,
@@ -90,7 +124,7 @@ public:
 		const FVector& NewTargetLocation,
 		float DesiredSpeed = 300.0f,
 		float AcceptanceRadius = 50.0f,
-		bool AttackT = false);
+		bool AttackT = false);*/
 
 	UFUNCTION(Server, Reliable)
 	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
@@ -139,10 +173,10 @@ public:
 	void LeftClickPressedMass();
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAttackMass(AUnitBase* Unit, FVector Location, bool AttackT, AActor* CursorHitActor = nullptr);
+	void LeftClickAttackMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor = nullptr);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
-	void LeftClickAMoveUEPFMass(AUnitBase* Unit, FVector Location, bool AttackT);
+	void LeftClickAMoveUEPFMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT);
 
 
 	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
@@ -178,25 +212,4 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_SetPendingTeam(int32 TeamId);
 
-	// Dedicated mirror RPCs for client-side navigation
-	UFUNCTION(Client, Reliable)
-	void Client_MirrorMoveTarget(
-		UObject* WorldContextObject,
-		AUnitBase* Unit,
-		const FVector& NewTargetLocation,
-		float DesiredSpeed = 300.0f,
-		float AcceptanceRadius = 50.0f,
-		int32 UnitState = 0,
-		int32 UnitStatePlaceholder = 0,
-		FName PlaceholderSignal = NAME_None);
-
-	UFUNCTION(Client, Reliable)
-	void Client_MirrorStopMovement(
-		UObject* WorldContextObject,
-		AUnitBase* Unit,
-		const FVector& StopLocation,
-		float AcceptanceRadius = 50.0f,
-		int32 UnitState = 0,
-		int32 UnitStatePlaceholder = 0,
-		FName PlaceholderSignal = NAME_None);
 };

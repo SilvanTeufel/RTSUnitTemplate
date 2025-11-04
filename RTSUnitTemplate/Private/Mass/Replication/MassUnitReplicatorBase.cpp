@@ -1,19 +1,41 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#if RTSUNITTEMPLATE_NO_LOGS
-#undef UE_LOG
-#define UE_LOG(CategoryName, Verbosity, Format, ...) ((void)0)
-#endif
 #include "Mass/Replication/MassUnitReplicatorBase.h"
 
 #include "MassCommonFragments.h"
+
+// Optional slice control to limit how many entities of a chunk are processed this call.
+namespace ReplicationSliceControl
+{
+	static int32 GStartIndex = -1;
+	static int32 GCount = -1;
+	static bool IsActive()
+	{
+		return GStartIndex >= 0 && GCount >= 0;
+	}
+	void SetSlice(int32 StartIndex, int32 Count)
+	{
+		GStartIndex = FMath::Max(0, StartIndex);
+		GCount = Count;
+	}
+	void ClearSlice()
+	{
+		GStartIndex = -1; GCount = -1;
+	}
+	void GetSlice(int32& OutStartIndex, int32& OutCount)
+	{
+		OutStartIndex = GStartIndex;
+		OutCount = GCount;
+	}
+}
 #include "MassReplicationTypes.h"
 #include "MassClientBubbleHandler.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
 #include "MassReplicationFragments.h"
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "MassNavigationFragments.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "EngineUtils.h"
 #include "MassEntitySubsystem.h"
@@ -33,7 +55,34 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
 	TEXT("Logging level for MassUnitReplicatorBase: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
+// CVARs to reduce replication bandwidth by throttling dirty detection thresholds
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_LocThresholdCm(
+	TEXT("net.RTS.ServerRep.LocThresholdCm"),
+	2.0f,
+	TEXT("Minimum location delta (cm) before marking replicated item dirty. Default 2cm."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_AngleThresholdDeg(
+	TEXT("net.RTS.ServerRep.AngleThresholdDeg"),
+	1.5f,
+	TEXT("Minimum rotation delta (deg) before marking replicated item dirty. Default 1.5deg."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ServerRep_ScaleThreshold(
+	TEXT("net.RTS.ServerRep.ScaleThreshold"),
+	0.02f,
+	TEXT("Minimum scale component delta before marking replicated item dirty. Default 0.02."),
+	ECVF_Default);
+
 namespace { inline int32 RepLogLevel(){ return CVarRTS_ServerReplicator_LogLevel.GetValueOnGameThread(); } }
+
+// Helper: read bubble replication frequency (Hz) from CVAR
+static float GetBubbleNetUpdateHz()
+{
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.Bubble.NetUpdateHz")))
+	{
+		return FMath::Max(0.1f, Var->GetFloat());
+	}
+	return 10.0f;
+}
 
 // Helper: find or spawn a UnitClientBubbleInfo on the server
 static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
@@ -52,7 +101,7 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
 		if (Bubble)
 		{
 			Bubble->SetReplicates(true);
-			Bubble->SetNetUpdateFrequency(10.0f);
+			Bubble->SetNetUpdateFrequency(GetBubbleNetUpdateHz());
 			Bubble->ForceNetUpdate();
 		}
 	}
@@ -61,16 +110,10 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
 
 void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
 {
-    // Declare unique requirements for this replicator query.
-    // Note: UMassReplicatorBase already adds FMassNetworkIDFragment by default.
-    // Adding it again causes a duplicate-requirement assertion in UE 5.6.
+    // Keep requirements minimal to avoid excluding entities that lack optional fragments.
+    // UMassReplicatorBase already requires FMassNetworkIDFragment; only add Transform here.
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-    // Do NOT add FMassNetworkIDFragment here to avoid duplicates.
+    // Do NOT add optional fragments as hard requirements; we read them conditionally during serialization.
 }
 
 void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicationContext& ReplicationContext)
@@ -149,6 +192,22 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
         NewItem.Scale = Xf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
+
+        
+            if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+            {
+                NewItem.Move_bHasTarget = true;
+                NewItem.Move_Center = MT->Center;
+                NewItem.Move_SlackRadius = MT->SlackRadius;
+                NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
+                NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
+                NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                // Versioning fields to allow client to resolve newer vs older
+                NewItem.Move_ActionID = MT->GetCurrentActionID();
+                NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
+            }
+       
         // Fill AI target replication fields if available
         if (const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
         {
@@ -273,22 +332,30 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     }
     else
     {
-        // Update initial values just in case and mark dirty
+        // Update initial values just in case and mark dirty using configurable thresholds
+        const float LocThresh = FMath::Max(0.0f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
+        const float AngleThresh = FMath::Clamp(CVarRTS_ServerRep_AngleThresholdDeg.GetValueOnGameThread(), 0.0f, 180.0f);
+        const float ScaleThresh = FMath::Max(0.0f, CVarRTS_ServerRep_ScaleThreshold.GetValueOnGameThread());
         bool bDirty = false;
-        if (!Item->Location.Equals(Xf.GetLocation(), 0.01f)) { Item->Location = Xf.GetLocation(); bDirty = true; }
-        auto QuantizeAngle = [](float AngleDeg)->uint16
+        const FVector NewLoc = Xf.GetLocation();
+        if (!Item->Location.Equals(NewLoc, LocThresh)) { Item->Location = NewLoc; bDirty = true; }
+        // Angle snapping helper based on threshold to reduce churn
+        auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
         {
-            const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
+            const float ClampedStep = FMath::Max(0.1f, AngleThresh); // avoid zero
+            const float Snapped = FMath::RoundToFloat(AngleDeg / ClampedStep) * ClampedStep;
+            const float Norm = FMath::Fmod(Snapped + 360.0f, 360.0f);
             return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
         };
         const FRotator Rot = Xf.Rotator();
-        const uint16 NewP = QuantizeAngle(Rot.Pitch);
-        const uint16 NewY = QuantizeAngle(Rot.Yaw);
-        const uint16 NewR = QuantizeAngle(Rot.Roll);
+        const uint16 NewP = QuantizeAngleWithThreshold(Rot.Pitch);
+        const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
+        const uint16 NewR = QuantizeAngleWithThreshold(Rot.Roll);
         if (Item->PitchQuantized != NewP) { Item->PitchQuantized = NewP; bDirty = true; }
         if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
         if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
-        if (!Item->Scale.Equals(Xf.GetScale3D(), 0.01f)) { Item->Scale = Xf.GetScale3D(); bDirty = true; }
+        const FVector NewScale = Xf.GetScale3D();
+        if (!Item->Scale.Equals(NewScale, ScaleThresh)) { Item->Scale = NewScale; bDirty = true; }
         if (bDirty)
         {
             BubbleInfo->Agents.MarkItemDirty(*Item);
@@ -412,6 +479,12 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
 {
     const int32 NumEntities = Context.GetNumEntities();
 
+    int32 SliceStart = -1, SliceCount = -1;
+    ReplicationSliceControl::GetSlice(SliceStart, SliceCount);
+    const bool bUseSlice = (SliceStart >= 0 && SliceCount >= 0);
+    const int32 LoopStart = bUseSlice ? FMath::Clamp(SliceStart, 0, FMath::Max(0, NumEntities-1)) : 0;
+    const int32 LoopEnd = bUseSlice ? FMath::Clamp(SliceStart + SliceCount, LoopStart, NumEntities) : NumEntities;
+
     // Use World from replication context to branch server/client
     if (ReplicationContext.World.GetNetMode() != NM_Client)
     {
@@ -458,7 +531,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         for (AUnitClientBubbleInfo* BubbleInfo : Bubbles)
         {
             bool bAnyDirty = false;
-            for (int32 Idx = 0; Idx < NumEntities; ++Idx)
+            for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
             {
                 const FMassNetworkID& NetID = NetIDList[Idx].NetID;
 
@@ -505,6 +578,22 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
+             
+                
+                        if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                        {
+                            NewItem.Move_bHasTarget = true;
+                            NewItem.Move_Center = MT->Center;
+                            NewItem.Move_SlackRadius = MT->SlackRadius;
+                            NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
+                            NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
+                            NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
+                                // Versioning fields to allow client to resolve newer vs older
+                            NewItem.Move_ActionID = MT->GetCurrentActionID();
+                            NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                            NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
+                        }
+                        
                         // Fill AI target fields if fragment exists
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
@@ -655,6 +744,30 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetPrevSeenIDs != NewPrevIDs) { Item->AITargetPrevSeenIDs = MoveTemp(NewPrevIDs); bDirty = true; }
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
+   
+                 
+                            if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                            {
+                                bool bMoveDirty = false;
+                                if (Item->Move_bHasTarget != true) { Item->Move_bHasTarget = true; bMoveDirty = true; }
+                                if (!Item->Move_Center.Equals(MT->Center, 0.1f)) { Item->Move_Center = MT->Center; bMoveDirty = true; }
+                                if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 0.01f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
+                                const float DesiredSpeed = MT->DesiredSpeed.Get();
+                                if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 0.01f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
+                                const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
+                                if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
+                                if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
+                                // Versioning fields
+                                const uint16 NewActionID = MT->GetCurrentActionID();
+                                if (Item->Move_ActionID != NewActionID) { Item->Move_ActionID = NewActionID; bMoveDirty = true; }
+                                const float NewSrvStart = (float)MT->GetCurrentActionServerStartTime();
+                                if (!FMath::IsNearlyEqual(Item->Move_ServerStartTime, NewSrvStart, 0.001f)) { Item->Move_ServerStartTime = NewSrvStart; bMoveDirty = true; }
+                                const uint8 NewCurrAction = static_cast<uint8>(MT->GetCurrentAction());
+                                if (Item->Move_CurrentAction != NewCurrAction) { Item->Move_CurrentAction = NewCurrAction; bMoveDirty = true; }
+                                if (bMoveDirty) { bDirty = true; }
+                            }
+                        
+    
                         // Keep additional replicated fragments in sync
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
                         {

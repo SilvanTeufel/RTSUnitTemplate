@@ -7,6 +7,7 @@
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
 #include "Characters/Unit/UnitBase.h"
+#include "HAL/IConsoleManager.h"
 
 URTSWorldCacheSubsystem::URTSWorldCacheSubsystem()
 {
@@ -89,7 +90,12 @@ AUnitClientBubbleInfo* URTSWorldCacheSubsystem::GetBubble(bool bAllowSpawnOnServ
 		if (Bubble)
 		{
 			Bubble->SetReplicates(true);
-			Bubble->SetNetUpdateFrequency(10.0f);
+			float Hz = 10.0f;
+			if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.Bubble.NetUpdateHz")))
+			{
+				Hz = FMath::Max(0.1f, Var->GetFloat());
+			}
+			Bubble->SetNetUpdateFrequency(Hz);
 			Bubble->ForceNetUpdate();
 			CachedBubble = Bubble;
 			return Bubble;

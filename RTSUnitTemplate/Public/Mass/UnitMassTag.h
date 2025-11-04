@@ -59,6 +59,28 @@ USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY()
 USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassDisableAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
+// Client-side prediction fragment to carry desired speed and acceptance radius without touching authoritative MoveTarget
+USTRUCT()
+struct FMassClientPredictionFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	// Predicted desired speed to use on client while FMassClientPredictedMoveTag is present
+	UPROPERTY()
+	float PredDesiredSpeed = 0.f;
+
+	// Predicted acceptance radius for steering/path arrival checks
+	UPROPERTY()
+	float PredAcceptanceRadius = 50.f;
+
+	// Whether the values above are initialized for this prediction
+	UPROPERTY()
+	bool bHasData = false;
+
+	UPROPERTY()
+	FVector Location = FVector::ZeroVector;
+};
+
 USTRUCT()
 struct FMassChargeTimerFragment : public FMassFragment
 {
@@ -719,17 +741,24 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
-	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
+	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
 }
 
 inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntityHandle Entity, uint32 Bits)
 {
+	// If client-side prediction is active, skip syncing certain tags (start with Idle)
+	bool bPredicting = false;
+	if (const FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+	{
+		bPredicting = Pred->bHasData;
+	}
+
 	// Defer commands to safely modify tags on the client
-	auto SetTag = [&EntityManager, &Entity, Bits](uint32 Mask, auto TagStructType)
+	auto SetTag = [&EntityManager, &Entity, &Bits](uint32 Mask, auto TagStructType)
 	{
 		using T = decltype(TagStructType);
 		const bool bShouldHave = (Bits & Mask) != 0;
@@ -737,6 +766,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (bShouldHave && !bHasNow) { EntityManager.Defer().AddTag<T>(Entity); }
 		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
 	};
+
 	SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
 	SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
 	SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
@@ -752,8 +782,13 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 	SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 	SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-	SetTag(UnitTagBits::Run,                 FMassStateRunTag());
 	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
 	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
-	SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
+
+	// Skip syncing Idle tag while predicting so local fast-start isn't overridden
+	if (!bPredicting)
+	{
+		SetTag(UnitTagBits::Run,                 FMassStateRunTag());
+		SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
+	}
 }

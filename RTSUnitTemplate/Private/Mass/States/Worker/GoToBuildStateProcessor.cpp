@@ -113,14 +113,13 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance)
+            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MirrorStopMovement, Entity);
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Build, Entity);
                 }
                 continue;

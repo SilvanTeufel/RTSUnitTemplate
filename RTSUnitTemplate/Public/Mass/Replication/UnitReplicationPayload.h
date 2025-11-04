@@ -14,9 +14,10 @@
 //   - FMassAgentCharacteristicsFragment (subset: bIsFlying, bIsInvisible, FlyHeight)
 //   - FMassAIStateFragment (subset: StateTimer, CanAttack, CanMove, HoldPosition)
 //   - FMassAITargetFragment (Target flags/NetID/locations)
+//   - FMassMoveTargetFragment (subset: bHasTarget, Center, SlackRadius, DesiredSpeed, IntentAtGoal, DistanceToGoal)
 // - Replicated tags: packed into TagBits (see ApplyReplicatedTagBits in UnitMassTag.h)
-// Writers: Mass/Replication/MassUnitReplicatorBase.cpp (server side)
-// Readers: Mass/Replication/ClientReplicationProcessor.cpp (client side)
+// Writers: Mass/Replication/MassUnitReplicatorBase.cpp (server side; populates Move_* from FMassMoveTargetFragment)
+// Readers: Mass/Replication/ClientReplicationProcessor.cpp (client side; applies Move_* back to FMassMoveTargetFragment)
 // Transport: Mass/Replication/UnitClientBubbleInfo.* (FastArray Agents)
 
 // Forward Declarations
@@ -66,16 +67,17 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Last known location of the target
 	UPROPERTY()
 	FVector_NetQuantize AITargetLastKnownLocation;
- // Ability target location (coarse precision is fine)
- UPROPERTY()
- FVector_NetQuantize10 AbilityTargetLocation;
- // Replicate seen sets as NetID arrays (bounded on server)
- UPROPERTY()
- TArray<uint32> AITargetPrevSeenIDs;
- UPROPERTY()
- TArray<uint32> AITargetCurrSeenIDs;
+	// Ability target location (coarse precision is fine)
+	UPROPERTY()
+	FVector_NetQuantize10 AbilityTargetLocation;
+	// Replicate seen sets as NetID arrays (bounded on server)
+	UPROPERTY()
+	TArray<uint32> AITargetPrevSeenIDs;
+	
+	UPROPERTY()
+	TArray<uint32> AITargetCurrSeenIDs;
 
- // --- FMassCombatStatsFragment (full) ---
+	 // --- FMassCombatStatsFragment (full) ---
 	UPROPERTY() float CS_Health = 0.f;
 	UPROPERTY() float CS_MaxHealth = 0.f;
 	UPROPERTY() float CS_RunSpeed = 0.f;
@@ -131,6 +133,21 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float AIS_BirthTime = 0.f;
 	UPROPERTY() float AIS_DeathTime = 0.f;
 	UPROPERTY() bool AIS_IsInitialized = true;
+
+	// --- FMassMoveTargetFragment (subset + versioning) ---
+	UPROPERTY() bool Move_bHasTarget = false;
+	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
+	UPROPERTY() float Move_SlackRadius = 0.f;
+	UPROPERTY() float Move_DesiredSpeed = 0.f;
+	UPROPERTY() uint8 Move_IntentAtGoal = 0; // EMassMovementAction
+	UPROPERTY() float Move_DistanceToGoal = 0.f;
+	// Versioning/ordering to resolve race conditions on client apply
+	// Current movement action ID (from FMassMoveTargetFragment::GetCurrentActionID). 0 means unknown/legacy
+	UPROPERTY() uint16 Move_ActionID = 0;
+	// Server time when the action started (quantized to float). Used as tiebreaker when IDs are equal
+	UPROPERTY() float Move_ServerStartTime = 0.f;
+	// Current movement action enum (from GetCurrentAction). Informational; can help client-side decision making
+	UPROPERTY() uint8 Move_CurrentAction = 0; // EMassMovementAction
 
 	// Default Constructor
 	FUnitReplicationItem()
