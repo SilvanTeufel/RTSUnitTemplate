@@ -428,7 +428,24 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		{
 			continue;
 		}
+		
+		if (!Unit->IsInitialized)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (!Unit->CanMove)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
+		if (Unit->UnitState == UnitData::Dead)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
+			continue;
+		}
 
+		Unit->bHoldPosition = false;
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 

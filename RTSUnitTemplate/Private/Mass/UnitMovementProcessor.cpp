@@ -186,6 +186,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             Steering.DesiredVelocity = FVector::ZeroVector;
 
             const FMassAIStateFragment& AIState = AIStateList[i];
+            
             if (!AIState.IsInitialized)
             {
                 ++SkippedNotInit;
