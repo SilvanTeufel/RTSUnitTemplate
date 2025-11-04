@@ -38,9 +38,17 @@ void ARLAgent::AgentInitialization()
             // Create the memory name using FString::Printf
             MemoryName = FString::Printf(TEXT("UnrealRLSharedMemory_TeamId_%d"), TeamId);
 
-            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] TRYING to create SharedMemoryManager."));
-            // Convert FString to TCHAR* for FSharedMemoryManager
-            SharedMemoryManager = new FSharedMemoryManager(*MemoryName, sizeof(SharedData));
+            // Create SharedMemoryManager only if explicitly enabled
+            if (bEnableSharedMemoryIO)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Creating SharedMemoryManager (bEnableSharedMemoryIO=true)."));
+                SharedMemoryManager = new FSharedMemoryManager(*MemoryName, sizeof(SharedData));
+            }
+            else
+            {
+                SharedMemoryManager = nullptr;
+                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemory disabled (bEnableSharedMemoryIO=false), skipping creation."));
+            }
         }
 
         // --- Initialize Behavior Tree brain components if enabled ---
@@ -67,8 +75,11 @@ void ARLAgent::AgentInitialization()
     FInputActionValue InputActionValue;
     InputActionValue = FInputActionValue(1.0f);
     Input_Tab_Released(InputActionValue, 0);
-    // Set up a timer to update the game state every 0.2 seconds (adjust as needed)
-    GetWorldTimerManager().SetTimer(RLUpdateTimerHandle, this, &ARLAgent::UpdateGameState, 0.1f, true);
+    // Set up a timer to update the game state only when SharedMemory IO is enabled (RL mode)
+    if (bEnableSharedMemoryIO)
+    {
+        GetWorldTimerManager().SetTimer(RLUpdateTimerHandle, this, &ARLAgent::UpdateGameState, 0.1f, true);
+    }
 }
 
 FString ARLAgent::CreateGameStateJSON(const FGameStateData& GameState)
@@ -571,6 +582,12 @@ void ARLAgent::Server_RequestGameState_Implementation(int32 SelectableTeamId)
 
 void ARLAgent::Client_ReceiveGameState_Implementation(const FGameStateData& GameState)
 {
+    // If Shared Memory IO is disabled, do nothing in this path (BT mode or non-RL usage)
+    if (!bEnableSharedMemoryIO)
+    {
+        return;
+    }
+
     // Convert GameStateData to JSON (or another format your RL process understands)
     FString GameStateJSON = CreateGameStateJSON(GameState);
     

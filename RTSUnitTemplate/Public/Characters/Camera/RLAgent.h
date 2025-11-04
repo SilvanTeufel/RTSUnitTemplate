@@ -87,10 +87,14 @@ private:
 
     UFUNCTION( Category = RLAgent)
     void CheckForNewActions();
-
+    
     
     FString CreateGameStateJSON(const FGameStateData& GameState); // New function
     
+    // Toggle to enable/disable using shared memory for RL IO (disabled by default for BT mode)
+    UPROPERTY(EditAnywhere, Category = RLAgent)
+    bool bEnableSharedMemoryIO = false;
+
     FSharedMemoryManager* SharedMemoryManager;
 
     FTimerHandle RLUpdateTimerHandle;

@@ -139,6 +139,55 @@ FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
     return OutputString;
 }
 
+// ============================================================================
+// ActionSpace index mapping (0..29)
+// ----------------------------------------------------------------------------
+// This maps each ActionIndex to the concrete action serialized by GetActionAsJSON.
+// NOTE:
+// - Valid indices are 0..29 (30 actions total). If you use an invalid index, GetActionAsJSON returns "{}" and logs an error.
+// - The older comment that mentioned 0..31 was outdated; this is the authoritative list.
+//
+//  0:  switch_camera_state 18   (Ctrl+R)
+//  1:  switch_camera_state 9    (Ctrl+Q)
+//  2:  switch_camera_state 10   (Ctrl+E)
+//  3:  switch_camera_state 1    (Ctrl+W)
+//  4:  switch_camera_state 21   (Ctrl+1)
+//  5:  switch_camera_state 22   (Ctrl+2)
+//  6:  switch_camera_state 23   (Ctrl+3)
+//  7:  switch_camera_state 24   (Ctrl+4)
+//  8:  switch_camera_state 25   (Ctrl+5)
+//  9:  switch_camera_state 26   (Ctrl+6)
+// 10:  switch_camera_state_ability 21   (Use ability 1)
+// 11:  switch_camera_state_ability 22   (Use ability 2)
+// 12:  switch_camera_state_ability 23   (Use ability 3)
+// 13:  switch_camera_state_ability 24   (Use ability 4)
+// 14:  switch_camera_state_ability 25   (Use ability 5)
+// 15:  switch_camera_state_ability 26   (Use ability 6)
+// 16:  change_ability_index 13
+// 17:  move_camera 1            (direction 1)
+// 18:  move_camera 2            (direction 2)
+// 19:  move_camera 3            (direction 3)
+// 20:  move_camera 4            (direction 4)
+// 21:  resource_management 1    (assign workers -> resource 1)
+// 22:  resource_management 2
+// 23:  resource_management 3
+// 24:  resource_management 4
+// 25:  resource_management 5
+// 26:  resource_management 6
+// 27:  left_click 1             (e.g., move)
+// 28:  left_click 2             (e.g., attack)
+// 29:  right_click 1
+// ----------------------------------------------------------------------------
+// Each action serializes to a JSON like:
+// {
+//   "type": "Control",
+//   "input_value": 1.0,
+//   "alt": false,
+//   "ctrl": true/false,
+//   "action": "<see above>",
+//   "camera_state": <number above>
+// }
+// ============================================================================
 void UInferenceComponent::InitializeActionSpace()
 {
   ActionSpace = {
@@ -321,10 +370,16 @@ FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
         return GetActionFromRLModel(GameState);
     }
     
-    if (BrainMode == EBrainMode::Behavior_Tree && BlackboardComp && BehaviorTreeComp)
+    if (BrainMode == EBrainMode::Behavior_Tree)
     {
+        if (!BlackboardComp || !BehaviorTreeComp)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ChooseJsonAction(BT): BlackboardComp (%p) or BehaviorTreeComp (%p) is null. Did you call InitializeBehaviorTree() with a valid AIController? Is StrategyBehaviorTree assigned?"), BlackboardComp, BehaviorTreeComp);
+            return TEXT("{}");
+        }
+
         // --- 2. Use the BT Brain ---
-        
+        UE_LOG(LogTemp, Verbose, TEXT("InferenceComponent::ChooseJsonAction(BT): Updating Blackboard from GameState and ticking BT once."));
         // A. Update the Blackboard with the latest game state
         UpdateBlackboard(GameState);
 
@@ -335,41 +390,85 @@ FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
         BehaviorTreeComp->TickComponent(0.1f, ELevelTick::LEVELTICK_All, nullptr);
 
         // D. Get the action chosen by the BT task
-        FString ChosenAction = BlackboardComp->GetValueAsString(TEXT("SelectedActionJSON"));
+        const FString ChosenAction = BlackboardComp->GetValueAsString(TEXT("SelectedActionJSON"));
 
         if (!ChosenAction.IsEmpty())
         {
+            UE_LOG(LogTemp, Verbose, TEXT("InferenceComponent::ChooseJsonAction(BT): SelectedActionJSON set (len=%d)."), ChosenAction.Len());
             return ChosenAction;
         }
 
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ChooseJsonAction(BT): SelectedActionJSON is empty after BT tick. Ensure a task (e.g., UBTT_ChooseAction_RuleBased) writes to this key and the Blackboard has a String key named 'SelectedActionJSON'."));
         // Failsafe: if BT doesn't pick an action, do nothing
         return TEXT("{}"); 
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("ChooseJsonAction: No valid brain mode selected or BT not initialized."));
+    UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ChooseJsonAction: No valid brain mode selected or BT not initialized."));
     return TEXT("{}");
 }
 
 void UInferenceComponent::InitializeBehaviorTree(AController* OwnerController)
 {
-    if (BrainMode != EBrainMode::Behavior_Tree || !StrategyBehaviorTree || !OwnerController)
+    if (BrainMode != EBrainMode::Behavior_Tree)
     {
-        // Only init if in BT mode and all assets are correctly set
-        return; 
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::InitializeBehaviorTree skipped: BrainMode is not Behavior_Tree (current=%d)."), static_cast<int32>(BrainMode));
+        return;
+    }
+    if (!StrategyBehaviorTree)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::InitializeBehaviorTree: StrategyBehaviorTree is NOT assigned. Assign a BT asset on the component."));
+        return;
+    }
+    if (!OwnerController)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::InitializeBehaviorTree: OwnerController is null. Ensure you call this after possession with a valid AI Controller."));
+        return;
     }
 
-    // BT components are owned by the Controller
+    // Preferred: if the owner is an AIController, use the standard helpers. They will create
+    // UBlackboardComponent and UBehaviorTreeComponent for you and wire everything correctly.
+    if (AAIController* AI = Cast<AAIController>(OwnerController))
+    {
+        UBlackboardComponent* OutBB = nullptr;
+        if (AI->UseBlackboard(StrategyBehaviorTree->BlackboardAsset, OutBB))
+        {
+            BlackboardComp = OutBB;
+
+            const bool bStarted = AI->RunBehaviorTree(StrategyBehaviorTree);
+            if (!bStarted)
+            {
+                UE_LOG(LogTemp, Error, TEXT("InferenceComponent: RunBehaviorTree failed for '%s'"), *StrategyBehaviorTree->GetName());
+            }
+
+            BehaviorTreeComp = Cast<UBehaviorTreeComponent>(AI->GetBrainComponent());
+            UE_LOG(LogTemp, Log, TEXT("InferenceComponent: BT initialized via AAIController (UseBlackboard/RunBehaviorTree)."));
+            return;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("InferenceComponent: UseBlackboard failed. Check BT's Blackboard asset on '%s'."), *StrategyBehaviorTree->GetName());
+        }
+    }
+
+    // Fallback (non-AIController owner): create and register components manually.
+    // Note: This path is less common; prefer owning the BT via an AAIController.
     BlackboardComp = NewObject<UBlackboardComponent>(OwnerController, TEXT("BlackboardComp"));
     if (BlackboardComp)
     {
+        BlackboardComp->RegisterComponent();
         BlackboardComp->InitializeBlackboard(*StrategyBehaviorTree->BlackboardAsset);
     }
 
     BehaviorTreeComp = NewObject<UBehaviorTreeComponent>(OwnerController, TEXT("BehaviorTreeComp"));
+    if (BehaviorTreeComp)
+    {
+        BehaviorTreeComp->RegisterComponent();
+        BehaviorTreeComp->StartTree(*StrategyBehaviorTree);
+    }
+
     if (BehaviorTreeComp && BlackboardComp)
     {
-        BehaviorTreeComp->StartTree(*StrategyBehaviorTree);
-        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Behavior Tree initialized and started."));
+        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Behavior Tree initialized (manual components)."));
     }
 }
 
@@ -386,6 +485,7 @@ void UInferenceComponent::UpdateBlackboard(const FGameStateData& GameState)
     
     BlackboardComp->SetValueAsFloat(TEXT("PrimaryResource"), GameState.PrimaryResource);
     BlackboardComp->SetValueAsFloat(TEXT("SecondaryResource"), GameState.SecondaryResource);
+    BlackboardComp->SetValueAsFloat(TEXT("TertiaryResource"), GameState.TertiaryResource);
 
     BlackboardComp->SetValueAsVector(TEXT("AgentPosition"), GameState.AgentPosition);
     BlackboardComp->SetValueAsVector(TEXT("AverageFriendlyPosition"), GameState.AverageFriendlyPosition);
