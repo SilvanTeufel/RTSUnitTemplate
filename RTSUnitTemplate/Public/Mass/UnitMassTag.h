@@ -741,9 +741,9 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
-	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
+	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
 }
@@ -766,6 +766,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (bShouldHave && !bHasNow) { EntityManager.Defer().AddTag<T>(Entity); }
 		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
 	};
+
 	SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
 	SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
 	SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
@@ -781,12 +782,13 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 	SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 	SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-	SetTag(UnitTagBits::Run,                 FMassStateRunTag());
 	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
 	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
+
 	// Skip syncing Idle tag while predicting so local fast-start isn't overridden
 	if (!bPredicting)
 	{
+		SetTag(UnitTagBits::Run,                 FMassStateRunTag());
 		SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
 	}
 }

@@ -13,6 +13,7 @@
 #include "MassEntityManager.h"  // For FMassEntityManager::FlushCommands
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "Mass/UnitNavigationFragments.h"  // For FUnitNavigationPathFragment reset on client prediction
 #include "MassReplicationFragments.h" // For FMassNetworkIDFragment
 #include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
 #include "NavModifierVolume.h"
@@ -449,6 +450,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 
+		Unit->SetUnitState(UnitData::Run);
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
 		if (!EntityManager.IsEntityValid(MassEntityHandle))
 		{
@@ -473,6 +475,15 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			PredFrag->PredDesiredSpeed = DesiredSpeed;
 			PredFrag->PredAcceptanceRadius = AcceptanceRadius;
 			PredFrag->bHasData = true;
+		}
+		// Ensure client won't skip movement this tick
+		AiStatePtr->CanMove = true;
+		AiStatePtr->HoldPosition = false;
+		// Reset local path state to avoid stale path following from previous order
+		if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
+		{
+			PathFrag->ResetPath();
+			PathFrag->bIsPathfindingInProgress = false;
 		}
 		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
 			*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
