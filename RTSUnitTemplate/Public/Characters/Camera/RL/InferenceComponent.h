@@ -136,6 +136,9 @@ public:
 	// Call this from ARLAgent after the controller is set
 	void InitializeBehaviorTree(class AController* OwnerController);
 
+	// Expose current brain mode to other systems
+	EBrainMode GetBrainMode() const { return BrainMode; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -146,6 +149,10 @@ protected:
 	// Brain routing and BT assets
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI")
 	EBrainMode BrainMode = EBrainMode::RL_Model;
+
+	// Require an AIController to own/run BT. When true, manual fallback (NewObject) is disabled.
+	UPROPERTY(EditAnywhere, Category = "AI|BehaviorTree")
+	bool bRequireAIControllerForBT = true;
 
 	// Assign the BT asset to run when BrainMode is Behavior_Tree
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (EditCondition = "BrainMode == EBrainMode::Behavior_Tree"))

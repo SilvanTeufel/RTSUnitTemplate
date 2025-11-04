@@ -15,7 +15,8 @@ ARTSBTController::ARTSBTController()
 void ARTSBTController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
-
+    UE_LOG(LogTemp, Warning, TEXT("!!!!!!!RTSBTController: OnPossess!!!!"));
+    
     if (!ensure(InPawn))
     {
         return;

@@ -6,6 +6,7 @@
 #include "GameModes/UpgradeGameMode.h"
 #include "Kismet/GameplayStatics.h"
 #include "Landscape.h"
+#include "AIController.h"
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -54,7 +55,15 @@ void ARLAgent::AgentInitialization()
         // --- Initialize Behavior Tree brain components if enabled ---
         if (InferenceComponent)
         {
-            InferenceComponent->InitializeBehaviorTree(ExtendedController);
+            AController* C = GetController();
+            if (AAIController* AI = Cast<AAIController>(C))
+            {
+                InferenceComponent->InitializeBehaviorTree(AI);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ARLAgent: Skipping InferenceComponent::InitializeBehaviorTree because controller is not an AAIController. Expect ARTSBTController::OnPossess to start the BT."));
+            }
         }
     }
     

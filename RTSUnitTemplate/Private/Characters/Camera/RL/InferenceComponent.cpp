@@ -452,6 +452,12 @@ void UInferenceComponent::InitializeBehaviorTree(AController* OwnerController)
 
     // Fallback (non-AIController owner): create and register components manually.
     // Note: This path is less common; prefer owning the BT via an AAIController.
+    if (bRequireAIControllerForBT)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent: bRequireAIControllerForBT=true and OwnerController is not an AAIController. Skipping manual BT initialization. Ensure the pawn is possessed by an AAIController (e.g., ARTSBTController) which calls UseBlackboard/RunBehaviorTree."));
+        return;
+    }
+
     BlackboardComp = NewObject<UBlackboardComponent>(OwnerController, TEXT("BlackboardComp"));
     if (BlackboardComp)
     {

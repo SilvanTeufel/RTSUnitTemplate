@@ -4,6 +4,7 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Controller.h"
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 #include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData
 
@@ -16,17 +17,66 @@ UBTT_ChooseAction_RuleBased::UBTT_ChooseAction_RuleBased()
 EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent();
-    AAIController* Controller = OwnerComp.GetAIOwner();
-    if (!BB || !Controller)
+    if (!BB)
     {
-        UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Missing Blackboard (%p) or AIController (%p). Ensure UseBlackboard/RunBehaviorTree was called and the BT is owned by an AAIController."), BB, Controller);
+        UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Missing BlackboardComponent. Ensure your Behavior Tree has a valid Blackboard asset and UseBlackboard was called by an AAIController."));
         return EBTNodeResult::Failed;
     }
 
-    APawn* Pawn = Controller->GetPawn();
+    // Prefer AAIController if available, but don't require it. Fallback to AvatarActor (Pawn).
+    AAIController* Controller = OwnerComp.GetAIOwner();
+    APawn* Pawn = nullptr;
+    if (Controller)
+    {
+        Pawn = Controller->GetPawn();
+        if (!Pawn)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: AAIController present but has no Pawn. Was the pawn possessed?"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: Using Pawn from AAIController: %s"), *Pawn->GetName());
+        }
+    }
+
     if (!Pawn)
     {
-        UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: AIController has no Pawn. Was the pawn possessed?"));
+        // Fallback: inspect the owner of the behavior tree component
+        AActor* OwnerActor = OwnerComp.GetOwner();
+        if (OwnerActor)
+        {
+            // If Owner is any Controller (AI or Player), ask it for its Pawn
+            if (AController* AnyController = Cast<AController>(OwnerActor))
+            {
+                Pawn = AnyController->GetPawn();
+                if (Pawn)
+                {
+                    UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: Using Pawn from Controller owner (%s): %s"), *OwnerActor->GetClass()->GetName(), *Pawn->GetName());
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Controller owner (%s) has no Pawn (not possessed?)."), *OwnerActor->GetClass()->GetName());
+                }
+            }
+            else
+            {
+                // In some manual setups the owner itself might be a Pawn
+                Pawn = Cast<APawn>(OwnerActor);
+                if (Pawn)
+                {
+                    UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: Using Owner actor cast to Pawn: %s"), *Pawn->GetName());
+                }
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: BehaviorTreeComponent has no Owner actor. Cannot resolve Pawn."));
+        }
+    }
+
+    if (!Pawn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Failed to resolve Pawn. Aborting task."));
         return EBTNodeResult::Failed;
     }
 
