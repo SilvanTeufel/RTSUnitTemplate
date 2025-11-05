@@ -10,6 +10,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "AIController.h"
+#include "Characters/Camera/RLAgent.h"
 
 // Bring the NNE namespace into scope to simplify type names
 using namespace UE::NNE;
@@ -29,6 +30,13 @@ UInferenceComponent::~UInferenceComponent()
 void UInferenceComponent::BeginPlay()
 {
     Super::BeginPlay();
+
+    // Only initialize the RL model when running in RL mode. In BT mode we skip this to avoid noise and unnecessary setup.
+    if (BrainMode != EBrainMode::RL_Model)
+    {
+        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Skipping RL model init (BrainMode is Behavior_Tree)."));
+        return;
+    }
 
     if (!QNetworkModelData)
     {
@@ -137,6 +145,71 @@ FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
     FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
 
     return OutputString;
+}
+
+void UInferenceComponent::ExecuteActionFromJSON(const FString& Json)
+{
+    if (Json.IsEmpty())
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("InferenceComponent::ExecuteActionFromJSON: Empty JSON string."));
+        return;
+    }
+
+    ARLAgent* RLAgent = Cast<ARLAgent>(GetOwner());
+    if (!RLAgent)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ExecuteActionFromJSON: Owner is not an ARLAgent; cannot forward action."));
+        return;
+    }
+
+    // Helper lambda to process one object by serializing and forwarding to RLAgent
+    auto ProcessObject = [RLAgent](const TSharedPtr<FJsonObject>& Obj)
+    {
+        if (!Obj.IsValid()) return;
+
+        // Log a compact summary for diagnostics
+        const FString Type = Obj->HasField(TEXT("type")) ? Obj->GetStringField(TEXT("type")) : TEXT("?");
+        const FString Action = Obj->HasField(TEXT("action")) ? Obj->GetStringField(TEXT("action")) : TEXT("?");
+        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Forwarding Parsed Action to RLAgent -> type=%s action=%s"), *Type, *Action);
+
+        // Serialize this object back to a compact JSON string
+        FString OutJson;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+        FJsonSerializer::Serialize(Obj.ToSharedRef(), Writer);
+
+        // Forward to RLAgent for execution
+        RLAgent->ReceiveRLAction(OutJson);
+    };
+
+    // Detect array vs object quickly
+    const TCHAR FirstChar = Json[0];
+    if (FirstChar == '[')
+    {
+        TArray<TSharedPtr<FJsonValue>> Arr;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+        if (!FJsonSerializer::Deserialize(Reader, Arr))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ExecuteActionFromJSON: Failed to parse JSON array."));
+            return;
+        }
+        for (const TSharedPtr<FJsonValue>& V : Arr)
+        {
+            ProcessObject(V.IsValid() ? V->AsObject() : nullptr);
+        }
+        return;
+    }
+
+    // Single object: we can forward directly without re-serializing, but we parse to validate
+    TSharedPtr<FJsonObject> Obj;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Obj) || !Obj.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::ExecuteActionFromJSON: Failed to parse JSON object."));
+        return;
+    }
+
+    // Forward the validated object
+    ProcessObject(Obj);
 }
 
 // ============================================================================
@@ -499,4 +572,25 @@ void UInferenceComponent::UpdateBlackboard(const FGameStateData& GameState)
 
     // NOTE: You should add GameTime to your FGameStateData struct and update it here
     // BlackboardComp->SetValueAsFloat(TEXT("GameTime"), GameState.GameTime);
+}
+
+
+
+void UInferenceComponent::PushBlackboardFromGameState(const FGameStateData& GameState)
+{
+    // External entry point to push Blackboard values without ticking the BT.
+    // Useful for controller-driven BT where we only want to mirror state.
+    if (BrainMode != EBrainMode::Behavior_Tree)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("InferenceComponent::PushBlackboardFromGameState called while BrainMode != Behavior_Tree (current=%d). Skipping."), static_cast<int32>(BrainMode));
+        return;
+    }
+
+    if (!BlackboardComp)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent::PushBlackboardFromGameState: BlackboardComp is null. Ensure InitializeBehaviorTree was called and a BT/Blackboard is running."));
+        return;
+    }
+
+    UpdateBlackboard(GameState);
 }

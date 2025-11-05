@@ -155,7 +155,7 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
         const int32 CenterX = FMath::RoundToInt(U * MinimapTexSize);
         const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
         const float NormalizedRadius = FogRadii[i] / WorldExtentX;
-        const int32 PixelRadius = FMath::RoundToInt(NormalizedRadius * MinimapTexSize);
+        const int32 PixelRadius = FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier);
         DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, BackgroundColor);
     }
     

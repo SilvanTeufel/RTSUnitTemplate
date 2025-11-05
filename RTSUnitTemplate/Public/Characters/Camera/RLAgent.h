@@ -106,5 +106,6 @@ private:
 
 private:
     FTimerHandle MyTimerHandle;
+    int32 BlackboardPushTickCounter = 0;
 };
 

@@ -3,10 +3,12 @@
 
 #include "Characters/Camera/RLAgent.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameModes/UpgradeGameMode.h"
 #include "Kismet/GameplayStatics.h"
 #include "Landscape.h"
 #include "AIController.h"
+#include "BehaviorTree/BlackboardComponent.h"
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -88,6 +90,12 @@ void ARLAgent::AgentInitialization()
     if (bEnableSharedMemoryIO)
     {
         GetWorldTimerManager().SetTimer(RLUpdateTimerHandle, this, &ARLAgent::UpdateGameState, 0.1f, true);
+    }
+
+    // In BT mode (or whenever SharedMemory IO is disabled), expect a BT Service to feed the Blackboard.
+    if (!bEnableSharedMemoryIO)
+    {
+        UE_LOG(LogTemp, Log, TEXT("ARLAgent: Expecting BT Service (UBTService_PushGameStateToBB) to feed Blackboard (no agent-side or controller-side BB timer)."));
     }
 }
 

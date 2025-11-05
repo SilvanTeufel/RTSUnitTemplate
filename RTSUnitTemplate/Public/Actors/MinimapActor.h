@@ -52,6 +52,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     int32 MinimapTexSize = 256;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    float DotMultiplier = 1.f;
     /** The background color of the map where fog of war is not active. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor BackgroundColor = FColor(50, 60, 50, 255);

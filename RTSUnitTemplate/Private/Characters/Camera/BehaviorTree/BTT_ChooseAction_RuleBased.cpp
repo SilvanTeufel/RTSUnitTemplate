@@ -35,7 +35,7 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
         }
         else
         {
-            UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: Using Pawn from AAIController: %s"), *Pawn->GetName());
+            UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Using Pawn from AAIController: %s"), *Pawn->GetName());
         }
     }
 
@@ -74,6 +74,18 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
         }
     }
 
+    if (!Pawn && BB && !AgentPawnKey.IsNone())
+    {
+        if (UObject* Obj = BB->GetValueAsObject(AgentPawnKey))
+        {
+            Pawn = Cast<APawn>(Obj);
+            if (Pawn)
+            {
+                UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Using Pawn from BB '%s': %s"), *AgentPawnKey.ToString(), *Pawn->GetName());
+            }
+        }
+    }
+
     if (!Pawn)
     {
         UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Failed to resolve Pawn. Aborting task."));
@@ -96,7 +108,7 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     GS.AgentPosition = BB->GetValueAsVector(AgentPositionKey);
     GS.AverageEnemyPosition = BB->GetValueAsVector(AverageEnemyPositionKey);
 
-    UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, Prim=%.2f, Sec=%.2f, Ter=%.2f, AgentPos=(%.1f,%.1f,%.1f), AvgEnemy=(%.1f,%.1f,%.1f)"),
+    UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, Prim=%.2f, Sec=%.2f, Ter=%.2f, AgentPos=(%.1f,%.1f,%.1f), AvgEnemy=(%.1f,%.1f,%.1f)"),
         GS.MyUnitCount, GS.EnemyUnitCount, GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource,
         GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
         GS.AverageEnemyPosition.X, GS.AverageEnemyPosition.Y, GS.AverageEnemyPosition.Z);
@@ -108,7 +120,35 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
         return EBTNodeResult::Failed;
     }
 
+    // Immediate execution path
+    if (bExecuteActionImmediately)
+    {
+        if (UInferenceComponent* Inference = Pawn->FindComponentByClass<UInferenceComponent>())
+        {
+            if (bLogExecution)
+            {
+                UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Executing action immediately via InferenceComponent (len=%d)."), Json.Len());
+            }
+            Inference->ExecuteActionFromJSON(Json);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Pawn %s has no UInferenceComponent; cannot execute action immediately."), *Pawn->GetName());
+        }
+
+        if (bAlsoWriteToBB)
+        {
+            BB->SetValueAsString(GetSelectedBlackboardKey(), Json);
+            if (bLogExecution)
+            {
+                UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Also wrote SelectedActionJSON (len=%d) to key '%s'."), Json.Len(), *GetSelectedBlackboardKey().ToString());
+            }
+        }
+        return EBTNodeResult::Succeeded;
+    }
+
+    // Default: write to BB and let a controller consume it
     BB->SetValueAsString(GetSelectedBlackboardKey(), Json);
-    UE_LOG(LogTemp, Verbose, TEXT("BTT_ChooseAction_RuleBased: Wrote SelectedActionJSON (len=%d) to key '%s'."), Json.Len(), *GetSelectedBlackboardKey().ToString());
+    UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Wrote SelectedActionJSON (len=%d) to key '%s'."), Json.Len(), *GetSelectedBlackboardKey().ToString());
     return EBTNodeResult::Succeeded;
 }

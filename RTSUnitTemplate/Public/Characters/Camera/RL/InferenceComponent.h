@@ -133,11 +133,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString GetActionAsJSON(int32 ActionIndex);
 
+	// Dispatch and execute one or more JSON actions (object or array of objects)
+	UFUNCTION(BlueprintCallable, Category = "AI|Actions")
+	void ExecuteActionFromJSON(const FString& Json);
+
+	// Implement this in Blueprint to actually perform a parsed action (input/camera/ability, etc.)
+	UFUNCTION(BlueprintImplementableEvent, Category = "AI|Actions")
+	void PerformParsedAction(const FString& Type, const FString& Action, int32 CameraState, float InputValue, bool bAlt, bool bCtrl);
+
 	// Call this from ARLAgent after the controller is set
 	void InitializeBehaviorTree(class AController* OwnerController);
 
-	// Expose current brain mode to other systems
+// Expose current brain mode to other systems
 	EBrainMode GetBrainMode() const { return BrainMode; }
+
+	// Public wrapper to push GameState into the Blackboard (safe to call from controllers/pawns/services)
+	UFUNCTION(BlueprintCallable, Category = "AI|BehaviorTree")
+	void PushBlackboardFromGameState(const FGameStateData& GameState);
 
 protected:
 	virtual void BeginPlay() override;

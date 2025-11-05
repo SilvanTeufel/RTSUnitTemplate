@@ -123,17 +123,17 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	// Rules 2,3,4: if any resource rule triggers, output two-step: Selection then Ability
 	if (ShouldTriggerPrimary(GameState))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Primary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), PrimaryThreshold, PrimaryMaxMyUnitCount, PrimarySelectionActionIndex, PrimaryAbilityActionIndex);
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Primary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), PrimaryThreshold, PrimaryMaxMyUnitCount, PrimarySelectionActionIndex, PrimaryAbilityActionIndex);
 		return BuildCompositeActionJSON({ PrimarySelectionActionIndex, PrimaryAbilityActionIndex }, Inference);
 	}
 	if (ShouldTriggerSecondary(GameState))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Secondary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), SecondaryThreshold, SecondaryMaxMyUnitCount, SecondarySelectionActionIndex, SecondaryAbilityActionIndex);
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Secondary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), SecondaryThreshold, SecondaryMaxMyUnitCount, SecondarySelectionActionIndex, SecondaryAbilityActionIndex);
 		return BuildCompositeActionJSON({ SecondarySelectionActionIndex, SecondaryAbilityActionIndex }, Inference);
 	}
 	if (ShouldTriggerTertiary(GameState))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Tertiary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), TertiaryThreshold, TertiaryMaxMyUnitCount, TertiarySelectionActionIndex, TertiaryAbilityActionIndex);
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Tertiary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), TertiaryThreshold, TertiaryMaxMyUnitCount, TertiarySelectionActionIndex, TertiaryAbilityActionIndex);
 		return BuildCompositeActionJSON({ TertiarySelectionActionIndex, TertiaryAbilityActionIndex }, Inference);
 	}
 
@@ -141,7 +141,7 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	if (bEnableWander)
 	{
 		const int32 WanderMoveIdx = PickWanderActionIndex(GameState);
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Wander chosen. MoveIdx=%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), WanderMoveIdx, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander chosen. MoveIdx=%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), WanderMoveIdx, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
 		if (bWanderTwoStep)
 		{
 			TArray<int32> Steps;

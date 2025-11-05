@@ -28,9 +28,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary")
 	bool bEnablePrimaryRule = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	float PrimaryThreshold = 10.0f;
+	float PrimaryThreshold = 100.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	int32 PrimaryMaxMyUnitCount = 5;
+	int32 PrimaryMaxMyUnitCount = 999;
 	// Two-step output: first do selection, then ability (indices into InferenceComponent ActionSpace, 0..29)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
 	int32 PrimarySelectionActionIndex = 10; // default: left_click 1 (select)
@@ -40,9 +40,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary")
 	bool bEnableSecondaryRule = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	float SecondaryThreshold = 10.0f;
+	float SecondaryThreshold = 200.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	int32 SecondaryMaxMyUnitCount = 5;
+	int32 SecondaryMaxMyUnitCount = 999;
 	// Two-step output for Secondary
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
 	int32 SecondarySelectionActionIndex = 11; // left_click 1
@@ -52,9 +52,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary")
 	bool bEnableTertiaryRule = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	float TertiaryThreshold = 10.0f;
+	float TertiaryThreshold = 300.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	int32 TertiaryMaxMyUnitCount = 5;
+	int32 TertiaryMaxMyUnitCount = 999;
 	// Two-step output for Tertiary
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
 	int32 TertiarySelectionActionIndex = 12; // left_click 1
