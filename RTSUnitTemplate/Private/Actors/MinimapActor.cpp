@@ -155,7 +155,7 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
         const int32 CenterX = FMath::RoundToInt(U * MinimapTexSize);
         const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
         const float NormalizedRadius = FogRadii[i] / WorldExtentX;
-        const int32 PixelRadius = FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier);
+        const int32 PixelRadius = FMath::RoundToInt(NormalizedRadius * MinimapTexSize);
         DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, BackgroundColor);
     }
     
@@ -184,7 +184,7 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
             const int32 CenterX = FMath::RoundToInt(U * MinimapTexSize);
             const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
             const float NormalizedRadius = UnitRadii[i] / WorldExtentX;
-            const int32 PixelRadius = FMath::Max(1, FMath::RoundToInt(NormalizedRadius * MinimapTexSize));
+            const int32 PixelRadius = FMath::Max(1, FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier));
             const FColor& UnitColor = (UnitTeamIds[i] == TeamId) ? FriendlyUnitColor : EnemyUnitColor;
 
             DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, UnitColor);
