@@ -241,6 +241,37 @@ void UDetectionProcessor::Execute(
             continue;
         }
         
+        // Squad target sharing: if this unit is in a squad (> 0) and has no target,
+        // copy the target from any squadmate with the same SquadId and TeamId.
+        if (Det.Stats->SquadId > 0 && (!Det.TargetFrag->bHasValidTarget || !Det.TargetFrag->TargetEntity.IsSet()))
+        {
+            for (const auto& Mate : DetectorUnits)
+            {
+                if (Mate.Entity == Det.Entity) continue;
+                if (!Mate.Stats || !Mate.TargetFrag) continue;
+                if (Mate.Stats->TeamId != Det.Stats->TeamId) continue;
+                if (Mate.Stats->SquadId != Det.Stats->SquadId || Mate.Stats->SquadId <= 0) continue;
+                if (!Mate.TargetFrag->bHasValidTarget || !Mate.TargetFrag->TargetEntity.IsSet()) continue;
+
+                const FMassEntityHandle SquadTarget = Mate.TargetFrag->TargetEntity;
+
+                // Validate basic target conditions (alive and enemy). Range does not matter here.
+                const FMassCombatStatsFragment* SquadTgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SquadTarget);
+                if (!SquadTgtStats) continue;
+                if (SquadTgtStats->TeamId == Det.Stats->TeamId) continue;
+                if (SquadTgtStats->Health <= 0) continue;
+
+                FTransformFragment* SquadTgtTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(SquadTarget);
+                const FVector SquadTgtLocation = SquadTgtTransform ? SquadTgtTransform->GetTransform().GetLocation() : FVector::ZeroVector;
+
+                // Mark as newly found target. The normal update section will set the fragment and send chase signal.
+                BestEntity   = SquadTarget;
+                BestLocation = SquadTgtLocation;
+                bFoundNew    = true;
+                break;
+            }
+        }
+        
         InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
    
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not allready inside

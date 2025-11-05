@@ -840,7 +840,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             //CombatStatsFrag->AttackSpeed = UnitAttributes->GetAttackSpeed();
             CombatStatsFrag->RunSpeed = UnitAttributes->GetRunSpeed();
             CombatStatsFrag->TeamId = UnitOwner->TeamId; // Assuming GetTeamId() is on AUnitBase
-            CombatStatsFrag->Armor = UnitAttributes->GetArmor();
+        	CombatStatsFrag->SquadId = UnitOwner->SquadId; // Assuming GetSquadId() is on AUnitBase
+        	CombatStatsFrag->Armor = UnitAttributes->GetArmor();
             CombatStatsFrag->MagicResistance = UnitAttributes->GetMagicResistance();
             CombatStatsFrag->MaxShield = UnitAttributes->GetMaxShield();
             CombatStatsFrag->Shield = CombatStatsFrag->MaxShield; // Start full

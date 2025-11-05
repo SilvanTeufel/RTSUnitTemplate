@@ -397,6 +397,8 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     int32 TeamId = 0;
 
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	int32 SquadId = 0;
     // --- Zusätzliche Attribute (Beispiele basierend auf deinem Code) ---
     UPROPERTY(EditAnywhere, Category = "Stats")
     float Armor = 0.f;
