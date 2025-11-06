@@ -72,13 +72,13 @@ public:
 	// Directional action indices to use when biasing (configure to match your action mapping)
 	// Defaults correspond to ActionSpace indices 17..20 (move_camera 1..4)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveUpIndex = 17;
+	int32 MoveUpIndex = 19;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveDownIndex = 18;
+	int32 MoveDownIndex = 20;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveLeftIndex = 19;
+	int32 MoveLeftIndex = 18;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveRightIndex = 20;
+	int32 MoveRightIndex = 17;
 
 	// If no bias, pick randomly from this set
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")

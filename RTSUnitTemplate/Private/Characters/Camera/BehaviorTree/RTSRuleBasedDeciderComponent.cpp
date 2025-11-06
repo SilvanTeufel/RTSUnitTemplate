@@ -47,6 +47,7 @@ UInferenceComponent* URTSRuleBasedDeciderComponent::GetInferenceComponent() cons
 
 int32 URTSRuleBasedDeciderComponent::PickWanderActionIndex(const FGameStateData& GS) const
 {
+	/*
 	// If bias is enabled and we have a meaningful direction to the enemy average position, choose among 4 directions
 	if (bBiasTowardEnemy)
 	{
@@ -66,6 +67,7 @@ int32 URTSRuleBasedDeciderComponent::PickWanderActionIndex(const FGameStateData&
 			}
 		}
 	}
+	*/
 
 	// Fallback: random from provided indices
 	if (RandomWanderIndices.Num() > 0)
@@ -120,37 +122,70 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 		return TEXT("{}");
 	}
 
-	// Rules 2,3,4: if any resource rule triggers, output two-step: Selection then Ability
-	if (ShouldTriggerPrimary(GameState))
+	// Randomize the order in which rules and wandering are evaluated each call
+	enum class ERBChoice { Primary, Secondary, Tertiary, Wander };
+	TArray<ERBChoice> Order;
+	Order.Add(ERBChoice::Primary);
+	Order.Add(ERBChoice::Secondary);
+	Order.Add(ERBChoice::Tertiary);
+	Order.Add(ERBChoice::Wander);
+
+	// Fisher–Yates shuffle using FMath::RandRange
+	for (int32 i = Order.Num() - 1; i > 0; --i)
 	{
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Primary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), PrimaryThreshold, PrimaryMaxMyUnitCount, PrimarySelectionActionIndex, PrimaryAbilityActionIndex);
-		return BuildCompositeActionJSON({ PrimarySelectionActionIndex, PrimaryAbilityActionIndex }, Inference);
-	}
-	if (ShouldTriggerSecondary(GameState))
-	{
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Secondary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), SecondaryThreshold, SecondaryMaxMyUnitCount, SecondarySelectionActionIndex, SecondaryAbilityActionIndex);
-		return BuildCompositeActionJSON({ SecondarySelectionActionIndex, SecondaryAbilityActionIndex }, Inference);
-	}
-	if (ShouldTriggerTertiary(GameState))
-	{
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Tertiary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), TertiaryThreshold, TertiaryMaxMyUnitCount, TertiarySelectionActionIndex, TertiaryAbilityActionIndex);
-		return BuildCompositeActionJSON({ TertiarySelectionActionIndex, TertiaryAbilityActionIndex }, Inference);
+		const int32 j = FMath::RandRange(0, i);
+		if (i != j)
+		{
+			const ERBChoice Temp = Order[i];
+			Order[i] = Order[j];
+			Order[j] = Temp;
+		}
 	}
 
-	// Rule 1: random small movement, with optional two-step
-	if (bEnableWander)
+	for (ERBChoice C : Order)
 	{
-		const int32 WanderMoveIdx = PickWanderActionIndex(GameState);
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander chosen. MoveIdx=%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), WanderMoveIdx, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
-		if (bWanderTwoStep)
+		switch (C)
 		{
-			TArray<int32> Steps;
-			Steps.Add(WanderSelectionActionIndex);
-			// If a specific ability is provided, use it; otherwise use the movement as the second step
-			Steps.Add((WanderAbilityActionIndex != INDEX_NONE) ? WanderAbilityActionIndex : WanderMoveIdx);
-			return BuildCompositeActionJSON(Steps, Inference);
+			case ERBChoice::Primary:
+				if (ShouldTriggerPrimary(GameState))
+				{
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Primary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), PrimaryThreshold, PrimaryMaxMyUnitCount, PrimarySelectionActionIndex, PrimaryAbilityActionIndex);
+					return BuildCompositeActionJSON({ PrimarySelectionActionIndex, PrimaryAbilityActionIndex }, Inference);
+				}
+				break;
+			case ERBChoice::Secondary:
+				if (ShouldTriggerSecondary(GameState))
+				{
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Secondary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), SecondaryThreshold, SecondaryMaxMyUnitCount, SecondarySelectionActionIndex, SecondaryAbilityActionIndex);
+					return BuildCompositeActionJSON({ SecondarySelectionActionIndex, SecondaryAbilityActionIndex }, Inference);
+				}
+				break;
+			case ERBChoice::Tertiary:
+				if (ShouldTriggerTertiary(GameState))
+				{
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Tertiary rule fired (Threshold=%.2f, MaxUnits=%d). Indices: Sel=%d, Ab=%d"), TertiaryThreshold, TertiaryMaxMyUnitCount, TertiarySelectionActionIndex, TertiaryAbilityActionIndex);
+					return BuildCompositeActionJSON({ TertiarySelectionActionIndex, TertiaryAbilityActionIndex }, Inference);
+				}
+				break;
+			case ERBChoice::Wander:
+				if (bEnableWander)
+				{
+					const int32 WanderMoveIdx = PickWanderActionIndex(GameState);
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander chosen. MoveIdx=%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), WanderMoveIdx, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
+					if (bWanderTwoStep)
+					{
+						TArray<int32> Steps;
+						Steps.Add(WanderSelectionActionIndex);
+						// If a specific ability is provided, use it; otherwise use the movement as the second step
+						Steps.Add((WanderAbilityActionIndex != INDEX_NONE) ? WanderAbilityActionIndex : WanderMoveIdx);
+						return BuildCompositeActionJSON(Steps, Inference);
+					}
+					return Inference->GetActionAsJSON(WanderMoveIdx);
+				}
+				break;
+			default:
+				break;
 		}
-		return Inference->GetActionAsJSON(WanderMoveIdx);
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: All rules disabled and wander disabled. Returning {}."));

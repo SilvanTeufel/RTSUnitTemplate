@@ -9,6 +9,11 @@
 #include "Landscape.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "EngineUtils.h"
+#include "Components/SceneComponent.h"
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -219,61 +224,101 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
             if(ActionName.StartsWith("move_camera"))
             {
+                // Helper that moves the camera while constraining it to an optional bounding box actor
+                // placed in the level and tagged with "RLAgentCameraBounds". If no such actor exists,
+                // it falls back to the legacy min/max checks and bounce behavior.
+                auto MoveWithBounds = [&](const FVector& Delta, const FVector& FallbackBounceDelta)
+                {
+                    const FVector CurrentLocation = GetActorLocation();
+                    const FVector Proposed = CurrentLocation + Delta;
+
+                    // Try to find a bounds provider: 1) Actor tag; 2) Component tag on any component (e.g., BoxComponent)
+                    TArray<AActor*> BoundsActors;
+                    FBox BoundsBox(EForceInit::ForceInit);
+                    bool bHasBounds = false;
+                    if (GetWorld())
+                    {
+                        // Prefer an Actor with the tag; then try to use its BoxComponent (or any primitive component) tagged with the same tag
+                        UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName(TEXT("RLAgentCameraBounds")), BoundsActors);
+                        if (BoundsActors.Num() > 0 && BoundsActors[0])
+                        {
+                            AActor* BoundsActor = BoundsActors[0];
+                            // Look for a component on this actor with ComponentTag "RLAgentCameraBounds"
+                            TInlineComponentArray<UActorComponent*> Comps;
+                            BoundsActor->GetComponents(Comps);
+                            for (UActorComponent* Comp : Comps)
+                            {
+                                if (Comp && Comp->ComponentHasTag(FName(TEXT("RLAgentCameraBounds"))))
+                                {
+                                    if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Comp))
+                                    {
+                                        const FBoxSphereBounds B = Prim->Bounds;
+                                        BoundsBox = FBox(B.Origin - B.BoxExtent, B.Origin + B.BoxExtent);
+                                        bHasBounds = true;
+                                        UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Component tag on: %s.%s"), *BoundsActor->GetName(), *Comp->GetName());
+                                    }
+                                    else
+                                    {
+                                        // Use owner's bounds as a fallback if the component is not primitive
+                                        FVector Origin, Extent;
+                                        BoundsActor->GetActorBounds(true, Origin, Extent);
+                                        BoundsBox = FBox(Origin - Extent, Origin + Extent);
+                                        bHasBounds = true;
+                                        UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from non-primitive Component tag on: %s.%s (using owner bounds)"), *BoundsActor->GetName(), *Comp->GetName());
+                                    }
+                                    break;
+                                }
+                            }
+
+                            // If no tagged component found on the tagged actor, fallback to actor bounds
+                            if (!bHasBounds)
+                            {
+                                FVector Origin, Extent;
+                                BoundsActor->GetActorBounds(true, Origin, Extent);
+                                BoundsBox = FBox(Origin - Extent, Origin + Extent);
+                                bHasBounds = true;
+                                UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Actor tag on: %s (no tagged component found; using actor bounds)"), *BoundsActor->GetName());
+                            }
+                        }
+                    }
+
+                    if (bHasBounds)
+                    {
+                        FVector Clamped = Proposed;
+                        Clamped.X = FMath::Clamp(Clamped.X, BoundsBox.Min.X, BoundsBox.Max.X);
+                        Clamped.Y = FMath::Clamp(Clamped.Y, BoundsBox.Min.Y, BoundsBox.Max.Y);
+                        SetActorLocation(Clamped);
+                    }
+                    else
+                    {
+                        // Fallback to legacy behavior if no bounds actor is placed in the map.
+                        if (Proposed.X < CameraPositionMin.X || Proposed.X > CameraPositionMax.X ||
+                            Proposed.Y < CameraPositionMin.Y || Proposed.Y > CameraPositionMax.Y)
+                        {
+                            SetActorLocation(CurrentLocation + FallbackBounceDelta);
+                        }
+                        else
+                        {
+                            SetActorLocation(Proposed);
+                        }
+                    }
+                };
+
                 if (NewCameraState == 1)
                 {
-                    FVector NewLocation = GetActorLocation()+FVector(50.0f, 0.0f, 0.0f);
-
-                    // Check if the proposed location is within the set limits.
-                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
-                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
-                    {
-                        SetActorLocation(GetActorLocation()+FVector(-200.0f, 0.0f, 0.0f));
-                    }else
-                    {
-                        SetActorLocation(NewLocation);
-                    }
+                    MoveWithBounds(FVector(50.0f, 0.0f, 0.0f), FVector(-200.0f, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 2)
                 {
-                    FVector NewLocation = GetActorLocation()+FVector(-50.0f, 0.0f, 0.0f);
-
-                    // Check if the proposed location is within the set limits.
-                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
-                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
-                    {
-                        SetActorLocation(GetActorLocation()+FVector(200.0f, 0.0f, 0.0f));
-                    }else
-                    {
-                        SetActorLocation(NewLocation);
-                    }
+                    MoveWithBounds(FVector(-50.0f, 0.0f, 0.0f), FVector(200.0f, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 3)
                 {
-                    FVector NewLocation = GetActorLocation()+FVector(0.0f, 50.0f, 0.0f);
-
-                    // Check if the proposed location is within the set limits.
-                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
-                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
-                    {
-                        SetActorLocation(GetActorLocation()+FVector(0.0f, -200.0f, 0.0f));
-                    }else
-                    {
-                        SetActorLocation(NewLocation);
-                    }
+                    MoveWithBounds(FVector(0.0f, 50.0f, 0.0f), FVector(0.0f, -200.0f, 0.0f));
                 }
                 else if (NewCameraState == 4)
                 {
-                    FVector NewLocation = GetActorLocation()+FVector(0.0f, -50.0f, 0.0f);
-
-                    // Check if the proposed location is within the set limits.
-                    if (NewLocation.X < CameraPositionMin.X || NewLocation.X > CameraPositionMax.X ||
-                        NewLocation.Y < CameraPositionMin.Y || NewLocation.Y > CameraPositionMax.Y)
-                    {
-                        SetActorLocation(GetActorLocation()+FVector(0.0f, 200.0f, 0.0f));
-                    }else
-                    {
-                        SetActorLocation(NewLocation);
-                    }
+                    MoveWithBounds(FVector(0.0f, -50.0f, 0.0f), FVector(0.0f, 200.0f, 0.0f));
                 }
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
