@@ -2,8 +2,67 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/DataTable.h"
 #include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData and UInferenceComponent
 #include "RTSRuleBasedDeciderComponent.generated.h"
+
+USTRUCT(BlueprintType)
+struct FRTSRuleRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	// If false, this row is ignored
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	bool bEnabled = true;
+
+	// Optional label for readability in the editor
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	FName RuleName;
+
+	// Resource thresholds. All must be strictly exceeded to trigger the rule.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float PrimaryThreshold = 100.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float SecondaryThreshold = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float TertiaryThreshold = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float RareThreshold = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float EpicThreshold = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	float LegendaryThreshold = 0.f;
+
+	// Caps
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	int32 MaxFriendlyUnitCount = 999;
+
+	// Per-tag caps for friendly unit counts (defaults = 999)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMaxFriendlyUnitCount = 999;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMaxFriendlyUnitCount = 999;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMaxFriendlyUnitCount = 999;
+
+	// Output actions (indices into InferenceComponent's ActionSpace)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	int32 SelectionActionIndex = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	int32 AbilityActionIndex = 10;
+};
 
 /**
  * Easy-to-configure rule-based decider.
@@ -24,42 +83,13 @@ public:
 	FString ChooseJsonActionRuleBased(const FGameStateData& GameState);
 
 public:
-	// ---------------- Resource rules (trigger when Resource > Threshold AND MyUnitCount < MaxUnitCount) ----------------
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary")
-	bool bEnablePrimaryRule = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	float PrimaryThreshold = 100.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	int32 PrimaryMaxMyUnitCount = 999;
-	// Two-step output: first do selection, then ability (indices into InferenceComponent ActionSpace, 0..29)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	int32 PrimarySelectionActionIndex = 10; // default: left_click 1 (select)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Primary", meta=(EditCondition="bEnablePrimaryRule"))
-	int32 PrimaryAbilityActionIndex = 10;   // default: use ability 1
+	// ---------------- DataTable-based rules (optional) ----------------
+	// If true and RulesDataTable is assigned, the component evaluates rows to choose actions.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table")
+	bool bUseDataTableRules = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table", meta=(EditCondition="bUseDataTableRules"))
+	UDataTable* RulesDataTable = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary")
-	bool bEnableSecondaryRule = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	float SecondaryThreshold = 200.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	int32 SecondaryMaxMyUnitCount = 999;
-	// Two-step output for Secondary
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	int32 SecondarySelectionActionIndex = 11; // left_click 1
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Secondary", meta=(EditCondition="bEnableSecondaryRule"))
-	int32 SecondaryAbilityActionIndex = 11;   // use ability 2
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary")
-	bool bEnableTertiaryRule = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	float TertiaryThreshold = 300.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	int32 TertiaryMaxMyUnitCount = 999;
-	// Two-step output for Tertiary
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	int32 TertiarySelectionActionIndex = 12; // left_click 1
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Tertiary", meta=(EditCondition="bEnableTertiaryRule"))
-	int32 TertiaryAbilityActionIndex = 12;   // use ability 3
 
 	// ---------------- Wander (small movement) fallback ----------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")
@@ -98,11 +128,17 @@ public:
 	int32 WanderAbilityActionIndex = INDEX_NONE;
 
 private:
-	bool ShouldTriggerPrimary(const FGameStateData& GS) const;
-	bool ShouldTriggerSecondary(const FGameStateData& GS) const;
-	bool ShouldTriggerTertiary(const FGameStateData& GS) const;
 	int32 PickWanderActionIndex(const FGameStateData& GS) const;
 	UInferenceComponent* GetInferenceComponent() const;
+
+	// Returns the maximum among all friendly tag unit counts contained in GS
+	int32 GetMaxFriendlyTagUnitCount(const FGameStateData& GS) const;
+
+	// Evaluate a single DataTable rule row. Returns empty string if not matched.
+	FString EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const;
+
+	// If a RulesDataTable is set, iterate rows and return the first matching rule's JSON
+	FString EvaluateRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference) const;
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;

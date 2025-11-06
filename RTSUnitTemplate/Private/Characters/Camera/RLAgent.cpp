@@ -14,6 +14,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "EngineUtils.h"
 #include "Components/SceneComponent.h"
+#include "GameplayTagContainer.h"
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -684,6 +685,26 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
     FVector SumEnemyPositions = FVector::ZeroVector;
     int32 NumEnemyUnits = 0;
 
+    // Pre-resolve the gameplay tags we care about
+    static const FGameplayTag TagAlt1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt1"));
+    static const FGameplayTag TagAlt2 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt2"));
+    static const FGameplayTag TagAlt3 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt3"));
+    static const FGameplayTag TagAlt4 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt4"));
+    static const FGameplayTag TagAlt5 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt5"));
+    static const FGameplayTag TagAlt6 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Alt6"));
+
+    static const FGameplayTag TagCtrl1 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl1"));
+    static const FGameplayTag TagCtrl2 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl2"));
+    static const FGameplayTag TagCtrl3 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl3"));
+    static const FGameplayTag TagCtrl4 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl4"));
+    static const FGameplayTag TagCtrl5 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl5"));
+    static const FGameplayTag TagCtrl6 = FGameplayTag::RequestGameplayTag(FName("KeyTag.Ctrl6"));
+
+    static const FGameplayTag TagCtrlQ = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlQ"));
+    static const FGameplayTag TagCtrlW = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlW"));
+    static const FGameplayTag TagCtrlE = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlE"));
+    static const FGameplayTag TagCtrlR = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlR"));
+
     for (AActor* Unit : GameMode->AllUnits)
     {
         AUnitBase* MyUnit = Cast<AUnitBase>(Unit);
@@ -693,7 +714,8 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
             UAttributeSetBase* Attributes = MyUnit->Attributes;
             if (Attributes && Attributes->IsValidLowLevelFast()) // Ensure attributes are valid
             {
-                if (MyUnit->TeamId == SelectableTeamId)
+                const bool bFriendly = (MyUnit->TeamId == SelectableTeamId);
+                if (bFriendly)
                 {
                     GameState.MyUnitCount++;
                     GameState.MyTotalHealth += Attributes->GetHealth();
@@ -709,6 +731,34 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
                     SumEnemyPositions += MyUnit->GetActorLocation();
                     NumEnemyUnits++;
                 }
+
+                // Count per-tag unit membership
+                auto CountTag = [&MyUnit, bFriendly](const FGameplayTag& T, int32& FriendlyCounter, int32& EnemyCounter)
+                {
+                    if (T.IsValid() && MyUnit->UnitTags.HasTagExact(T))
+                    {
+                        if (bFriendly) { ++FriendlyCounter; } else { ++EnemyCounter; }
+                    }
+                };
+
+                CountTag(TagAlt1, GameState.Alt1TagFriendlyUnitCount, GameState.Alt1TagEnemyUnitCount);
+                CountTag(TagAlt2, GameState.Alt2TagFriendlyUnitCount, GameState.Alt2TagEnemyUnitCount);
+                CountTag(TagAlt3, GameState.Alt3TagFriendlyUnitCount, GameState.Alt3TagEnemyUnitCount);
+                CountTag(TagAlt4, GameState.Alt4TagFriendlyUnitCount, GameState.Alt4TagEnemyUnitCount);
+                CountTag(TagAlt5, GameState.Alt5TagFriendlyUnitCount, GameState.Alt5TagEnemyUnitCount);
+                CountTag(TagAlt6, GameState.Alt6TagFriendlyUnitCount, GameState.Alt6TagEnemyUnitCount);
+
+                CountTag(TagCtrl1, GameState.Ctrl1TagFriendlyUnitCount, GameState.Ctrl1TagEnemyUnitCount);
+                CountTag(TagCtrl2, GameState.Ctrl2TagFriendlyUnitCount, GameState.Ctrl2TagEnemyUnitCount);
+                CountTag(TagCtrl3, GameState.Ctrl3TagFriendlyUnitCount, GameState.Ctrl3TagEnemyUnitCount);
+                CountTag(TagCtrl4, GameState.Ctrl4TagFriendlyUnitCount, GameState.Ctrl4TagEnemyUnitCount);
+                CountTag(TagCtrl5, GameState.Ctrl5TagFriendlyUnitCount, GameState.Ctrl5TagEnemyUnitCount);
+                CountTag(TagCtrl6, GameState.Ctrl6TagFriendlyUnitCount, GameState.Ctrl6TagEnemyUnitCount);
+
+                CountTag(TagCtrlQ, GameState.CtrlQTagFriendlyUnitCount, GameState.CtrlQTagEnemyUnitCount);
+                CountTag(TagCtrlW, GameState.CtrlWTagFriendlyUnitCount, GameState.CtrlWTagEnemyUnitCount);
+                CountTag(TagCtrlE, GameState.CtrlETagFriendlyUnitCount, GameState.CtrlETagEnemyUnitCount);
+                CountTag(TagCtrlR, GameState.CtrlRTagFriendlyUnitCount, GameState.CtrlRTagEnemyUnitCount);
             }
         }
     }

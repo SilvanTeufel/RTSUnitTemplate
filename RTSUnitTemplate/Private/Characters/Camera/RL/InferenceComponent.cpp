@@ -565,10 +565,51 @@ void UInferenceComponent::UpdateBlackboard(const FGameStateData& GameState)
     BlackboardComp->SetValueAsFloat(TEXT("PrimaryResource"), GameState.PrimaryResource);
     BlackboardComp->SetValueAsFloat(TEXT("SecondaryResource"), GameState.SecondaryResource);
     BlackboardComp->SetValueAsFloat(TEXT("TertiaryResource"), GameState.TertiaryResource);
+    BlackboardComp->SetValueAsFloat(TEXT("RareResource"), GameState.RareResource);
+    BlackboardComp->SetValueAsFloat(TEXT("EpicResource"), GameState.EpicResource);
+    BlackboardComp->SetValueAsFloat(TEXT("LegendaryResource"), GameState.LegendaryResource);
 
     BlackboardComp->SetValueAsVector(TEXT("AgentPosition"), GameState.AgentPosition);
     BlackboardComp->SetValueAsVector(TEXT("AverageFriendlyPosition"), GameState.AverageFriendlyPosition);
     BlackboardComp->SetValueAsVector(TEXT("AverageEnemyPosition"), GameState.AverageEnemyPosition);
+
+    // Per-tag counts: Alt1..Alt6
+    BlackboardComp->SetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"), GameState.Alt1TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt1TagEnemyUnitCount"), GameState.Alt1TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt2TagFriendlyUnitCount"), GameState.Alt2TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt2TagEnemyUnitCount"), GameState.Alt2TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt3TagFriendlyUnitCount"), GameState.Alt3TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt3TagEnemyUnitCount"), GameState.Alt3TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt4TagFriendlyUnitCount"), GameState.Alt4TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt4TagEnemyUnitCount"), GameState.Alt4TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt5TagFriendlyUnitCount"), GameState.Alt5TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt5TagEnemyUnitCount"), GameState.Alt5TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt6TagFriendlyUnitCount"), GameState.Alt6TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Alt6TagEnemyUnitCount"), GameState.Alt6TagEnemyUnitCount);
+
+    // Ctrl1..Ctrl6
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl1TagFriendlyUnitCount"), GameState.Ctrl1TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl1TagEnemyUnitCount"), GameState.Ctrl1TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl2TagFriendlyUnitCount"), GameState.Ctrl2TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl2TagEnemyUnitCount"), GameState.Ctrl2TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl3TagFriendlyUnitCount"), GameState.Ctrl3TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl3TagEnemyUnitCount"), GameState.Ctrl3TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl4TagFriendlyUnitCount"), GameState.Ctrl4TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl4TagEnemyUnitCount"), GameState.Ctrl4TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl5TagFriendlyUnitCount"), GameState.Ctrl5TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl5TagEnemyUnitCount"), GameState.Ctrl5TagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl6TagFriendlyUnitCount"), GameState.Ctrl6TagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("Ctrl6TagEnemyUnitCount"), GameState.Ctrl6TagEnemyUnitCount);
+
+    // Ctrl Q/W/E/R
+    BlackboardComp->SetValueAsInt(TEXT("CtrlQTagFriendlyUnitCount"), GameState.CtrlQTagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlQTagEnemyUnitCount"), GameState.CtrlQTagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlWTagFriendlyUnitCount"), GameState.CtrlWTagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlWTagEnemyUnitCount"), GameState.CtrlWTagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlETagFriendlyUnitCount"), GameState.CtrlETagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlETagEnemyUnitCount"), GameState.CtrlETagEnemyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlRTagFriendlyUnitCount"), GameState.CtrlRTagFriendlyUnitCount);
+    BlackboardComp->SetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"), GameState.CtrlRTagEnemyUnitCount);
 
     // NOTE: You should add GameTime to your FGameStateData struct and update it here
     // BlackboardComp->SetValueAsFloat(TEXT("GameTime"), GameState.GameTime);

@@ -161,9 +161,48 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 	BB->SetValueAsFloat(PrimaryResourceKey, GS.PrimaryResource);
 	BB->SetValueAsFloat(SecondaryResourceKey, GS.SecondaryResource);
 	BB->SetValueAsFloat(TertiaryResourceKey, GS.TertiaryResource);
+	BB->SetValueAsFloat(TEXT("RareResource"), GS.RareResource);
+	BB->SetValueAsFloat(TEXT("EpicResource"), GS.EpicResource);
+	BB->SetValueAsFloat(TEXT("LegendaryResource"), GS.LegendaryResource);
 	BB->SetValueAsVector(AgentPositionKey, GS.AgentPosition);
 	BB->SetValueAsVector(AverageFriendlyPositionKey, GS.AverageFriendlyPosition);
 	BB->SetValueAsVector(AverageEnemyPositionKey, GS.AverageEnemyPosition);
+
+	// Per-tag unit counts (friendly/enemy)
+	BB->SetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"), GS.Alt1TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt1TagEnemyUnitCount"), GS.Alt1TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt2TagFriendlyUnitCount"), GS.Alt2TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt2TagEnemyUnitCount"), GS.Alt2TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt3TagFriendlyUnitCount"), GS.Alt3TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt3TagEnemyUnitCount"), GS.Alt3TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt4TagFriendlyUnitCount"), GS.Alt4TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt4TagEnemyUnitCount"), GS.Alt4TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt5TagFriendlyUnitCount"), GS.Alt5TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt5TagEnemyUnitCount"), GS.Alt5TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt6TagFriendlyUnitCount"), GS.Alt6TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Alt6TagEnemyUnitCount"), GS.Alt6TagEnemyUnitCount);
+
+	BB->SetValueAsInt(TEXT("Ctrl1TagFriendlyUnitCount"), GS.Ctrl1TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl1TagEnemyUnitCount"), GS.Ctrl1TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl2TagFriendlyUnitCount"), GS.Ctrl2TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl2TagEnemyUnitCount"), GS.Ctrl2TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl3TagFriendlyUnitCount"), GS.Ctrl3TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl3TagEnemyUnitCount"), GS.Ctrl3TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl4TagFriendlyUnitCount"), GS.Ctrl4TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl4TagEnemyUnitCount"), GS.Ctrl4TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl5TagFriendlyUnitCount"), GS.Ctrl5TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl5TagEnemyUnitCount"), GS.Ctrl5TagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl6TagFriendlyUnitCount"), GS.Ctrl6TagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("Ctrl6TagEnemyUnitCount"), GS.Ctrl6TagEnemyUnitCount);
+
+	BB->SetValueAsInt(TEXT("CtrlQTagFriendlyUnitCount"), GS.CtrlQTagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlQTagEnemyUnitCount"), GS.CtrlQTagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlWTagFriendlyUnitCount"), GS.CtrlWTagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlWTagEnemyUnitCount"), GS.CtrlWTagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlETagFriendlyUnitCount"), GS.CtrlETagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlETagEnemyUnitCount"), GS.CtrlETagEnemyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlRTagFriendlyUnitCount"), GS.CtrlRTagFriendlyUnitCount);
+	BB->SetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"), GS.CtrlRTagEnemyUnitCount);
 
 	const double Now = World->GetTimeSeconds();
 	if (Now - LastDebugPrintTime >= DebugPrintInterval)

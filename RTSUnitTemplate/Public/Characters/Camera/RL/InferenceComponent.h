@@ -98,6 +98,45 @@ struct FGameStateData
 
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
 	float LegendaryResource = 0.0f;
+
+	// Per-tag unit counts (friendly/enemy) for selection/ability groups
+	// Alt1..Alt6
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt2TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt2TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt3TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt3TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt4TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt4TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt5TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt5TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt6TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt6TagEnemyUnitCount = 0;
+
+	// Ctrl1..Ctrl6
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl1TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl1TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl2TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl2TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl3TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl3TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl4TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl4TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl5TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl5TagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl6TagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl6TagEnemyUnitCount = 0;
+
+	// CtrlQ, CtrlW, CtrlE, CtrlR
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlQTagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlQTagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlWTagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlWTagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagEnemyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagFriendlyUnitCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagEnemyUnitCount = 0;
 };
 
 UENUM(BlueprintType)

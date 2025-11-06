@@ -105,8 +105,32 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     GS.PrimaryResource = BB->GetValueAsFloat(PrimaryResourceKey);
     GS.SecondaryResource = BB->GetValueAsFloat(SecondaryResourceKey);
     GS.TertiaryResource = BB->GetValueAsFloat(TertiaryResourceKey);
+    // Additional resources (provided by BT service/component under fixed keys)
+    GS.RareResource = BB->GetValueAsFloat(TEXT("RareResource"));
+    GS.EpicResource = BB->GetValueAsFloat(TEXT("EpicResource"));
+    GS.LegendaryResource = BB->GetValueAsFloat(TEXT("LegendaryResource"));
     GS.AgentPosition = BB->GetValueAsVector(AgentPositionKey);
     GS.AverageEnemyPosition = BB->GetValueAsVector(AverageEnemyPositionKey);
+
+    // Populate friendly tag counts (used for MaxFriendlyTagUnitCount rule checks)
+    GS.Alt1TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"));
+    GS.Alt2TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt2TagFriendlyUnitCount"));
+    GS.Alt3TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt3TagFriendlyUnitCount"));
+    GS.Alt4TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt4TagFriendlyUnitCount"));
+    GS.Alt5TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt5TagFriendlyUnitCount"));
+    GS.Alt6TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt6TagFriendlyUnitCount"));
+
+    GS.Ctrl1TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl1TagFriendlyUnitCount"));
+    GS.Ctrl2TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl2TagFriendlyUnitCount"));
+    GS.Ctrl3TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl3TagFriendlyUnitCount"));
+    GS.Ctrl4TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl4TagFriendlyUnitCount"));
+    GS.Ctrl5TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl5TagFriendlyUnitCount"));
+    GS.Ctrl6TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl6TagFriendlyUnitCount"));
+
+    GS.CtrlQTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlQTagFriendlyUnitCount"));
+    GS.CtrlWTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlWTagFriendlyUnitCount"));
+    GS.CtrlETagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlETagFriendlyUnitCount"));
+    GS.CtrlRTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlRTagFriendlyUnitCount"));
 
     UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, Prim=%.2f, Sec=%.2f, Ter=%.2f, AgentPos=(%.1f,%.1f,%.1f), AvgEnemy=(%.1f,%.1f,%.1f)"),
         GS.MyUnitCount, GS.EnemyUnitCount, GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource,
