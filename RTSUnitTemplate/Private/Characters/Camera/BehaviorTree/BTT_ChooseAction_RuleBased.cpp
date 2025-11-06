@@ -111,8 +111,13 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     GS.LegendaryResource = BB->GetValueAsFloat(TEXT("LegendaryResource"));
     GS.AgentPosition = BB->GetValueAsVector(AgentPositionKey);
     GS.AverageEnemyPosition = BB->GetValueAsVector(AverageEnemyPositionKey);
+    GS.AverageFriendlyPosition = BB->GetValueAsVector(TEXT("AverageFriendlyPosition"));
 
-    // Populate friendly tag counts (used for MaxFriendlyTagUnitCount rule checks)
+    // Additional totals
+    GS.MyTotalHealth = BB->GetValueAsFloat(TEXT("MyTotalHealth"));
+    GS.EnemyTotalHealth = BB->GetValueAsFloat(TEXT("EnemyTotalHealth"));
+
+    // Populate friendly tag counts
     GS.Alt1TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"));
     GS.Alt2TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt2TagFriendlyUnitCount"));
     GS.Alt3TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt3TagFriendlyUnitCount"));
@@ -132,10 +137,43 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     GS.CtrlETagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlETagFriendlyUnitCount"));
     GS.CtrlRTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlRTagFriendlyUnitCount"));
 
-    UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, Prim=%.2f, Sec=%.2f, Ter=%.2f, AgentPos=(%.1f,%.1f,%.1f), AvgEnemy=(%.1f,%.1f,%.1f)"),
-        GS.MyUnitCount, GS.EnemyUnitCount, GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource,
+    // Populate enemy tag counts
+    GS.Alt1TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt1TagEnemyUnitCount"));
+    GS.Alt2TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt2TagEnemyUnitCount"));
+    GS.Alt3TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt3TagEnemyUnitCount"));
+    GS.Alt4TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt4TagEnemyUnitCount"));
+    GS.Alt5TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt5TagEnemyUnitCount"));
+    GS.Alt6TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt6TagEnemyUnitCount"));
+
+    GS.Ctrl1TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl1TagEnemyUnitCount"));
+    GS.Ctrl2TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl2TagEnemyUnitCount"));
+    GS.Ctrl3TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl3TagEnemyUnitCount"));
+    GS.Ctrl4TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl4TagEnemyUnitCount"));
+    GS.Ctrl5TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl5TagEnemyUnitCount"));
+    GS.Ctrl6TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl6TagEnemyUnitCount"));
+
+    GS.CtrlQTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlQTagEnemyUnitCount"));
+    GS.CtrlWTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlWTagEnemyUnitCount"));
+    GS.CtrlETagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlETagEnemyUnitCount"));
+    GS.CtrlRTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"));
+
+    // Detailed Blackboard snapshot logs (multi-line)
+    UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, MyHP=%.1f, EnemyHP=%.1f"),
+        GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
+    UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.2f Sec=%.2f Ter=%.2f Rare=%.2f Epic=%.2f Leg=%.2f"),
+        GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource, GS.RareResource, GS.EpicResource, GS.LegendaryResource);
+    UE_LOG(LogTemp, Log, TEXT("  Positions -> Agent=(%.1f,%.1f,%.1f) AvgFriendly=(%.1f,%.1f,%.1f) AvgEnemy=(%.1f,%.1f,%.1f)"),
         GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
+        GS.AverageFriendlyPosition.X, GS.AverageFriendlyPosition.Y, GS.AverageFriendlyPosition.Z,
         GS.AverageEnemyPosition.X, GS.AverageEnemyPosition.Y, GS.AverageEnemyPosition.Z);
+    UE_LOG(LogTemp, Log, TEXT("  Tags Friendly -> Alt=[%d,%d,%d,%d,%d,%d] Ctrl=[%d,%d,%d,%d,%d,%d] Keys[QWER]=[%d,%d,%d,%d]"),
+        GS.Alt1TagFriendlyUnitCount, GS.Alt2TagFriendlyUnitCount, GS.Alt3TagFriendlyUnitCount, GS.Alt4TagFriendlyUnitCount, GS.Alt5TagFriendlyUnitCount, GS.Alt6TagFriendlyUnitCount,
+        GS.Ctrl1TagFriendlyUnitCount, GS.Ctrl2TagFriendlyUnitCount, GS.Ctrl3TagFriendlyUnitCount, GS.Ctrl4TagFriendlyUnitCount, GS.Ctrl5TagFriendlyUnitCount, GS.Ctrl6TagFriendlyUnitCount,
+        GS.CtrlQTagFriendlyUnitCount, GS.CtrlWTagFriendlyUnitCount, GS.CtrlETagFriendlyUnitCount, GS.CtrlRTagFriendlyUnitCount);
+    UE_LOG(LogTemp, Log, TEXT("  Tags Enemy    -> Alt=[%d,%d,%d,%d,%d,%d] Ctrl=[%d,%d,%d,%d,%d,%d] Keys[QWER]=[%d,%d,%d,%d]"),
+        GS.Alt1TagEnemyUnitCount, GS.Alt2TagEnemyUnitCount, GS.Alt3TagEnemyUnitCount, GS.Alt4TagEnemyUnitCount, GS.Alt5TagEnemyUnitCount, GS.Alt6TagEnemyUnitCount,
+        GS.Ctrl1TagEnemyUnitCount, GS.Ctrl2TagEnemyUnitCount, GS.Ctrl3TagEnemyUnitCount, GS.Ctrl4TagEnemyUnitCount, GS.Ctrl5TagEnemyUnitCount, GS.Ctrl6TagEnemyUnitCount,
+        GS.CtrlQTagEnemyUnitCount, GS.CtrlWTagEnemyUnitCount, GS.CtrlETagEnemyUnitCount, GS.CtrlRTagEnemyUnitCount);
 
     const FString Json = Decider->ChooseJsonActionRuleBased(GS);
     if (Json.IsEmpty())

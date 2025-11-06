@@ -205,14 +205,26 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 	BB->SetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"), GS.CtrlRTagEnemyUnitCount);
 
 	const double Now = World->GetTimeSeconds();
-	if (Now - LastDebugPrintTime >= DebugPrintInterval)
-	{
-		LastDebugPrintTime = Now;
-		UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB -> MyUnits=%d EnemyUnits=%d Prim=%.1f Sec=%.1f Ter=%.1f AgentPos=(%.0f,%.0f,%.0f) AvgEnemy=(%.0f,%.0f,%.0f)"),
-			GS.MyUnitCount, GS.EnemyUnitCount, GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource,
-			GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
-			GS.AverageEnemyPosition.X, GS.AverageEnemyPosition.Y, GS.AverageEnemyPosition.Z);
-	}
+ if (Now - LastDebugPrintTime >= DebugPrintInterval)
+ {
+     LastDebugPrintTime = Now;
+     UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB -> MyUnits=%d EnemyUnits=%d MyHP=%.1f EnemyHP=%.1f"),
+         GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
+     UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.1f Sec=%.1f Ter=%.1f Rare=%.1f Epic=%.1f Leg=%.1f"),
+         GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource, GS.RareResource, GS.EpicResource, GS.LegendaryResource);
+     UE_LOG(LogTemp, Log, TEXT("  Positions -> Agent=(%.0f,%.0f,%.0f) AvgFriendly=(%.0f,%.0f,%.0f) AvgEnemy=(%.0f,%.0f,%.0f)"),
+         GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
+         GS.AverageFriendlyPosition.X, GS.AverageFriendlyPosition.Y, GS.AverageFriendlyPosition.Z,
+         GS.AverageEnemyPosition.X, GS.AverageEnemyPosition.Y, GS.AverageEnemyPosition.Z);
+     UE_LOG(LogTemp, Verbose, TEXT("  Tags Friendly -> Alt=[%d,%d,%d,%d,%d,%d] Ctrl=[%d,%d,%d,%d,%d,%d] Keys[QWER]=[%d,%d,%d,%d]"),
+         GS.Alt1TagFriendlyUnitCount, GS.Alt2TagFriendlyUnitCount, GS.Alt3TagFriendlyUnitCount, GS.Alt4TagFriendlyUnitCount, GS.Alt5TagFriendlyUnitCount, GS.Alt6TagFriendlyUnitCount,
+         GS.Ctrl1TagFriendlyUnitCount, GS.Ctrl2TagFriendlyUnitCount, GS.Ctrl3TagFriendlyUnitCount, GS.Ctrl4TagFriendlyUnitCount, GS.Ctrl5TagFriendlyUnitCount, GS.Ctrl6TagFriendlyUnitCount,
+         GS.CtrlQTagFriendlyUnitCount, GS.CtrlWTagFriendlyUnitCount, GS.CtrlETagFriendlyUnitCount, GS.CtrlRTagFriendlyUnitCount);
+     UE_LOG(LogTemp, Verbose, TEXT("  Tags Enemy    -> Alt=[%d,%d,%d,%d,%d,%d] Ctrl=[%d,%d,%d,%d,%d,%d] Keys[QWER]=[%d,%d,%d,%d]"),
+         GS.Alt1TagEnemyUnitCount, GS.Alt2TagEnemyUnitCount, GS.Alt3TagEnemyUnitCount, GS.Alt4TagEnemyUnitCount, GS.Alt5TagEnemyUnitCount, GS.Alt6TagEnemyUnitCount,
+         GS.Ctrl1TagEnemyUnitCount, GS.Ctrl2TagEnemyUnitCount, GS.Ctrl3TagEnemyUnitCount, GS.Ctrl4TagEnemyUnitCount, GS.Ctrl5TagEnemyUnitCount, GS.Ctrl6TagEnemyUnitCount,
+         GS.CtrlQTagEnemyUnitCount, GS.CtrlWTagEnemyUnitCount, GS.CtrlETagEnemyUnitCount, GS.CtrlRTagEnemyUnitCount);
+ }
 
 	// Ping the controller watchdog so it knows the service is alive
 	if (AController* OwnerController = Cast<AController>(OwnerComp.GetOwner()))

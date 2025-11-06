@@ -127,39 +127,42 @@ int32 URTSRuleBasedDeciderComponent::GetMaxFriendlyTagUnitCount(const FGameState
 
 FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const
 {
+	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<Unnamed>") : Row.RuleName.ToString();
 	if (!Row.bEnabled)
 	{
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' is disabled."), *RowLabel);
 		return TEXT("{}");
 	}
 
-	// Resources must exceed thresholds (strictly greater), using defaults in row
-	if (!(GS.PrimaryResource > Row.PrimaryThreshold)) return TEXT("{}");
-	if (!(GS.SecondaryResource > Row.SecondaryThreshold)) return TEXT("{}");
-	if (!(GS.TertiaryResource > Row.TertiaryThreshold)) return TEXT("{}");
-	if (!(GS.RareResource > Row.RareThreshold)) return TEXT("{}");
-	if (!(GS.EpicResource > Row.EpicThreshold)) return TEXT("{}");
-	if (!(GS.LegendaryResource > Row.LegendaryThreshold)) return TEXT("{}");
+	// Resources must meet or exceed thresholds (>=), using defaults in row
+	if (!(GS.PrimaryResource >= Row.PrimaryThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Primary: %.2f < Thr %.2f"), *RowLabel, GS.PrimaryResource, Row.PrimaryThreshold); return TEXT("{}"); }
+	if (!(GS.SecondaryResource >= Row.SecondaryThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Secondary: %.2f < Thr %.2f"), *RowLabel, GS.SecondaryResource, Row.SecondaryThreshold); return TEXT("{}"); }
+	if (!(GS.TertiaryResource >= Row.TertiaryThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Tertiary: %.2f < Thr %.2f"), *RowLabel, GS.TertiaryResource, Row.TertiaryThreshold); return TEXT("{}"); }
+	if (!(GS.RareResource >= Row.RareThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Rare: %.2f < Thr %.2f"), *RowLabel, GS.RareResource, Row.RareThreshold); return TEXT("{}"); }
+	if (!(GS.EpicResource >= Row.EpicThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Epic: %.2f < Thr %.2f"), *RowLabel, GS.EpicResource, Row.EpicThreshold); return TEXT("{}"); }
+	if (!(GS.LegendaryResource >= Row.LegendaryThreshold)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Legendary: %.2f < Thr %.2f"), *RowLabel, GS.LegendaryResource, Row.LegendaryThreshold); return TEXT("{}"); }
 
 	// Caps
-	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) return TEXT("{}");
+	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
 	// Per-tag friendly unit caps
-	if (!(GS.Alt1TagFriendlyUnitCount <= Row.Alt1TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Alt2TagFriendlyUnitCount <= Row.Alt2TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Alt3TagFriendlyUnitCount <= Row.Alt3TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Alt4TagFriendlyUnitCount <= Row.Alt4TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Alt5TagFriendlyUnitCount <= Row.Alt5TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Alt6TagFriendlyUnitCount <= Row.Alt6TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl1TagFriendlyUnitCount <= Row.Ctrl1TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl2TagFriendlyUnitCount <= Row.Ctrl2TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl3TagFriendlyUnitCount <= Row.Ctrl3TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl4TagFriendlyUnitCount <= Row.Ctrl4TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl5TagFriendlyUnitCount <= Row.Ctrl5TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.Ctrl6TagFriendlyUnitCount <= Row.Ctrl6TagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.CtrlQTagFriendlyUnitCount <= Row.CtrlQTagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.CtrlWTagFriendlyUnitCount <= Row.CtrlWTagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.CtrlETagFriendlyUnitCount <= Row.CtrlETagMaxFriendlyUnitCount)) return TEXT("{}");
-	if (!(GS.CtrlRTagFriendlyUnitCount <= Row.CtrlRTagMaxFriendlyUnitCount)) return TEXT("{}");
+	if (!(GS.Alt1TagFriendlyUnitCount <= Row.Alt1TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt1 cap: %d > %d"), *RowLabel, GS.Alt1TagFriendlyUnitCount, Row.Alt1TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt2TagFriendlyUnitCount <= Row.Alt2TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt2 cap: %d > %d"), *RowLabel, GS.Alt2TagFriendlyUnitCount, Row.Alt2TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt3TagFriendlyUnitCount <= Row.Alt3TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt3 cap: %d > %d"), *RowLabel, GS.Alt3TagFriendlyUnitCount, Row.Alt3TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt4TagFriendlyUnitCount <= Row.Alt4TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt4 cap: %d > %d"), *RowLabel, GS.Alt4TagFriendlyUnitCount, Row.Alt4TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt5TagFriendlyUnitCount <= Row.Alt5TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt5 cap: %d > %d"), *RowLabel, GS.Alt5TagFriendlyUnitCount, Row.Alt5TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt6TagFriendlyUnitCount <= Row.Alt6TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt6 cap: %d > %d"), *RowLabel, GS.Alt6TagFriendlyUnitCount, Row.Alt6TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl1TagFriendlyUnitCount <= Row.Ctrl1TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl1 cap: %d > %d"), *RowLabel, GS.Ctrl1TagFriendlyUnitCount, Row.Ctrl1TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl2TagFriendlyUnitCount <= Row.Ctrl2TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl2 cap: %d > %d"), *RowLabel, GS.Ctrl2TagFriendlyUnitCount, Row.Ctrl2TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl3TagFriendlyUnitCount <= Row.Ctrl3TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl3 cap: %d > %d"), *RowLabel, GS.Ctrl3TagFriendlyUnitCount, Row.Ctrl3TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl4TagFriendlyUnitCount <= Row.Ctrl4TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl4 cap: %d > %d"), *RowLabel, GS.Ctrl4TagFriendlyUnitCount, Row.Ctrl4TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl5TagFriendlyUnitCount <= Row.Ctrl5TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl5 cap: %d > %d"), *RowLabel, GS.Ctrl5TagFriendlyUnitCount, Row.Ctrl5TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl6TagFriendlyUnitCount <= Row.Ctrl6TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl6 cap: %d > %d"), *RowLabel, GS.Ctrl6TagFriendlyUnitCount, Row.Ctrl6TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlQTagFriendlyUnitCount <= Row.CtrlQTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlQ cap: %d > %d"), *RowLabel, GS.CtrlQTagFriendlyUnitCount, Row.CtrlQTagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlWTagFriendlyUnitCount <= Row.CtrlWTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlW cap: %d > %d"), *RowLabel, GS.CtrlWTagFriendlyUnitCount, Row.CtrlWTagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlETagFriendlyUnitCount <= Row.CtrlETagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlE cap: %d > %d"), *RowLabel, GS.CtrlETagFriendlyUnitCount, Row.CtrlETagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlRTagFriendlyUnitCount <= Row.CtrlRTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlR cap: %d > %d"), *RowLabel, GS.CtrlRTagFriendlyUnitCount, Row.CtrlRTagMaxFriendlyUnitCount); return TEXT("{}"); }
 
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Ability=%d"), *RowLabel, Row.SelectionActionIndex, Row.AbilityActionIndex);
 	// Build output
 	return BuildCompositeActionJSON({ Row.SelectionActionIndex, Row.AbilityActionIndex }, Inference);
 }
@@ -168,21 +171,27 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 {
 	if (!RulesDataTable)
 	{
+		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: RulesDataTable is null; skipping table evaluation."));
 		return TEXT("{}");
 	}
 	TArray<FName> RowNames = RulesDataTable->GetRowNames();
 	if (RowNames.Num() == 0)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: RulesDataTable has 0 rows."));
 		return TEXT("{}");
 	}
 	// Randomize which row is evaluated first by picking a random start index and iterating circularly
 	const int32 StartIndex = FMath::RandRange(0, RowNames.Num() - 1);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d DataTable rules (start index=%d)."), RowNames.Num(), StartIndex);
 	for (int32 Offset = 0; Offset < RowNames.Num(); ++Offset)
 	{
-		const FName& Name = RowNames[(StartIndex + Offset) % RowNames.Num()];
+		const int32 EvalIdx = (StartIndex + Offset) % RowNames.Num();
+		const FName& Name = RowNames[EvalIdx];
+		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Evaluating row[%d]='%s'"), EvalIdx, *Name.ToString());
 		const FRTSRuleRow* Row = RulesDataTable->FindRow<FRTSRuleRow>(Name, TEXT("RTSRules"));
 		if (!Row)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
 		const FString Out = EvaluateRuleRow(*Row, GS, Inference);
@@ -192,6 +201,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 			return Out;
 		}
 	}
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No DataTable rule matched."));
 	return TEXT("{}");
 }
 

@@ -19,7 +19,7 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
 	FName RuleName;
 
-	// Resource thresholds. All must be strictly exceeded to trigger the rule.
+	// Resource thresholds. All must be met or exceeded (>=) to trigger the rule.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
 	float PrimaryThreshold = 100.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
