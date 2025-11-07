@@ -98,6 +98,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Chase;
 	}
+	
 	if (HasTag(FMassStateBuildTag::StaticStruct()))
 	{
 		return EState::Build;

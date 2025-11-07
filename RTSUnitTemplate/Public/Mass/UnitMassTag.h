@@ -745,8 +745,8 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
 	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
-	if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
-	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
+	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
+	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
 }
 

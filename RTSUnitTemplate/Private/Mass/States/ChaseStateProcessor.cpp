@@ -22,7 +22,7 @@
 
 UChaseStateProcessor::UChaseStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -92,7 +92,90 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
-    // Get World and Signal Subsystem once
+
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    UWorld* World = Context.GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    EntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i];
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // Case 1: Hold position => switch to Idle locally
+            if (StateFrag.HoldPosition)
+            {
+                StateFrag.SwitchingState = true;
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateRunTag>(Entity);
+                Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                Defer.AddTag<FMassStateIdleTag>(Entity);
+                continue;
+            }
+
+            // Case 2: Lost/invalid target AND placeholder is Idle => switch to Idle locally
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
+            {
+                if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
+                {
+                    StateFrag.SwitchingState = true;
+                    auto& Defer = ChunkContext.Defer();
+                    Defer.RemoveTag<FMassStateRunTag>(Entity);
+                    Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                    Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                    Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                    Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                    Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                    Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                    Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                    Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                    Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                    Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                    Defer.AddTag<FMassStateIdleTag>(Entity);
+                    continue;
+                }
+            }
+        }
+    });
+}
+
+void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
     UWorld* World = Context.GetWorld(); // Use Context to get World
     if (!World) return;
 
@@ -112,7 +195,6 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
 
-            //UE_LOG(LogTemp, Log, TEXT("UChaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
@@ -182,15 +264,11 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                 continue;
             }
 
-
            // You might want to adjust Min/Max Radius based on unit size or target.
            FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
            StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
            UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
-
-
         }
     }); // End ForEachEntityChunk
-
 }

@@ -1051,7 +1051,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 
 				TArray<FMassEntityHandle> CapturedEntitys;
 				CapturedEntitys.Emplace(CapturedEntity);
-
+    	
     			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
 						   && StrongUnitActor->GetUnitState() == UnitData::Idle
 						   && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
