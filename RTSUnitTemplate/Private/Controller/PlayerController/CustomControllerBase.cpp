@@ -397,6 +397,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
 	if (HasAuthority())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: HasAuthority()==true. Skipping client prediction."));
 		return;
 	}
 
@@ -411,22 +412,26 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	}
 	if (!World)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: World is null (WorldContextObject=%s)."), *GetNameSafe(WorldContextObject));
 		return;
 	}
 
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: MassEntitySubsystem is null for world %s."), *GetNameSafe(World));
 		return;
 	}
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
 	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Units[Index];
 		if (!Unit)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] Unit is null. Skipping."), Index);
 			continue;
 		}
 		
@@ -440,11 +445,13 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
+		
 		if (Unit->UnitState == UnitData::Dead)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
+		
 
 		Unit->bHoldPosition = false;
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
@@ -454,12 +461,14 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
 		if (!EntityManager.IsEntityValid(MassEntityHandle))
 		{
+			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
 		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 		if (!AiStatePtr)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] Missing FMassAIStateFragment. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		
