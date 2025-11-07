@@ -265,10 +265,10 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             }
 
            // You might want to adjust Min/Max Radius based on unit size or target.
-           FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
+           //FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
-           StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
-           UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, Stats.RunSpeed, World);
+           //StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
+           UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 }
