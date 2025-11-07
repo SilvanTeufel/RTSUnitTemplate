@@ -25,7 +25,7 @@ public:
     UUnitMovementProcessor();
 
     // Global logging toggle for this processor
-    bool bShowLogs = true;
+    bool bShowLogs = false;
 
 protected:
     // Configuration function called during initialization.

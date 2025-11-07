@@ -769,6 +769,8 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
 	};
 
+
+		
 	SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
 	SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
 	SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
@@ -787,10 +789,11 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
 	SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
 
-	// Skip syncing Idle tag while predicting so local fast-start isn't overridden
 	if (!bPredicting)
 	{
-		SetTag(UnitTagBits::Run,                 FMassStateRunTag());
-		SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
+	// Skip syncing Idle tag while predicting so local fast-start isn't overridden
+	
+		//SetTag(UnitTagBits::Run,                 FMassStateRunTag());
+		//SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
 	}
 }

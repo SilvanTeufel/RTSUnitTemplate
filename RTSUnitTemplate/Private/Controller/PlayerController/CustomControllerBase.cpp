@@ -393,7 +393,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	float AcceptanceRadius,
 	bool AttackT)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
+	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
 	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
 	if (HasAuthority())
 	{
@@ -485,8 +485,8 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			PathFrag->ResetPath();
 			PathFrag->bIsPathfindingInProgress = false;
 		}
-		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
-			*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
+		//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
+		//	*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
 		if (AttackT)
 		{
 			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
@@ -516,7 +516,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	}
 	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
 	EntityManager.FlushCommands();
-	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
+	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)

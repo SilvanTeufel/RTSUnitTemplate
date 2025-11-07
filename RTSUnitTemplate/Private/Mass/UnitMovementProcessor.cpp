@@ -281,18 +281,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 ++Arrivals;
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
-         
-                if (Pred.bHasData)
-                {
-                    Pred.bHasData = false;
-                    if (bShowLogs)
-                    {
-                        if (const AActor* PredActor = ActorList[i].Get())
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Arrived at predicted destination for %s; clearing Pred.bHasData"), *PredActor->GetName());
-                        }
-                    }
-                }
             }
             else if ((!PathFrag.HasValidPath() || FVector::DistSquared2D(PathFrag.PathTargetLocation, FinalDestination) > FMath::Square(1.f)) && !PathFrag.bIsPathfindingInProgress)
             {

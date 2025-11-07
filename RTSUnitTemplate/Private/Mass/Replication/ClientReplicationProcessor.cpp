@@ -102,7 +102,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
-	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.RegisterWithProcessor(*this);
 		
 }
@@ -480,8 +480,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
-			// Prediction fragment view (read-only)
-			const TConstArrayView<FMassClientPredictionFragment> PredList = Context.GetFragmentView<FMassClientPredictionFragment>();
+			// Prediction fragment view (mutable)
+			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
 
 			// Log registered NetIDs on client for this chunk (verbose only)
 			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
@@ -758,22 +758,34 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 											bIsNewer = (IncomingSrvStart > LocalSrvStart);
 										}
 									}
-									if (bIsNewer)
-									{
-										MT.Center = FVector(TagItem->Move_Center);
-										MT.SlackRadius = TagItem->Move_SlackRadius;
-										MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
-										MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
-										MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
-										// Synchronize action timing so subsequent comparisons are correct
-										if (AActor* OwnerA2 = ActorList[EntityIdx].GetMutable())
-										{
-											UWorld* W = OwnerA2->GetWorld();
-											const double WorldStart = W ? (double)W->GetTimeSeconds() : 0.0;
-											MT.CreateReplicatedAction(static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal), IncomingID, WorldStart, (double)IncomingSrvStart);
-										}
-									}
-								}
+ 								if (bIsNewer)
+ 								{
+ 									MT.Center = FVector(TagItem->Move_Center);
+ 									MT.SlackRadius = TagItem->Move_SlackRadius;
+ 									MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
+ 									MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
+ 									MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
+ 									// Synchronize action timing so subsequent comparisons are correct
+ 									if (AActor* OwnerA2 = ActorList[EntityIdx].GetMutable())
+ 									{
+ 										UWorld* W = OwnerA2->GetWorld();
+ 										const double WorldStart = W ? (double)W->GetTimeSeconds() : 0.0;
+ 										MT.CreateReplicatedAction(static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal), IncomingID, WorldStart, (double)IncomingSrvStart);
+ 									}
+ 									// Turn off client prediction if a really new MoveTarget arrived
+ 									if (PredList.IsValidIndex(EntityIdx))
+ 									{
+ 										FMassClientPredictionFragment& Pred = PredList[EntityIdx];
+ 										if (Pred.bHasData)
+ 										{
+ 											Pred.bHasData = false;
+ 											Pred.Location = FVector::ZeroVector;
+ 											Pred.PredDesiredSpeed = 0.f;
+ 											Pred.PredAcceptanceRadius = 0.f;
+ 										}
+ 									}
+ 								}
+ 							}
 											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 											{
  											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
@@ -1002,6 +1014,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	                       UWorld* W3 = OwnerA3->GetWorld();
 	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
 	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
+	                   }
+	                   // Turn off client prediction if a really new MoveTarget arrived
+	                   if (PredList.IsValidIndex(EntityIdx))
+	                   {
+	                       FMassClientPredictionFragment& Pred = PredList[EntityIdx];
+	                       if (Pred.bHasData)
+	                       {
+	                           Pred.bHasData = false;
+	                           Pred.Location = FVector::ZeroVector;
+	                           Pred.PredDesiredSpeed = 0.f;
+	                           Pred.PredAcceptanceRadius = 0.f;
+	                       }
 	                   }
 	               }
 	           }
