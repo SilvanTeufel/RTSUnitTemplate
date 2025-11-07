@@ -19,7 +19,7 @@ public:
 	bool bSkipReplication = false;
 
 	float TimeSinceLastRun = 0.0f;
-	const float ExecutionInterval = 0.25f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
+	const float ExecutionInterval = 0.1f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	
 protected:

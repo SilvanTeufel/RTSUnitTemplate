@@ -578,8 +578,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
-             
-                
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
                             NewItem.Move_bHasTarget = true;
@@ -588,7 +586,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
                             NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
                             NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
-                                // Versioning fields to allow client to resolve newer vs older
+                            // Versioning fields to allow client to resolve newer vs older
                             NewItem.Move_ActionID = MT->GetCurrentActionID();
                             NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
                             NewItem.Move_CurrentAction = static_cast<uint8>(MT->GetCurrentAction());
@@ -681,20 +679,27 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 }
                 else
                 {
+                    // Read CVAR thresholds once per bubble pass
+                    const float LocThresh = FMath::Max(0.0f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
+                    const float AngleThresh = FMath::Clamp(CVarRTS_ServerRep_AngleThresholdDeg.GetValueOnGameThread(), 0.0f, 180.0f);
+                    const float ScaleThresh = FMath::Max(0.0f, CVarRTS_ServerRep_ScaleThreshold.GetValueOnGameThread());
+
                     bool bDirty = false;
-                    if (!Item->Location.Equals(Loc, 0.1f)) { Item->Location = Loc; bDirty = true; }
-                    auto QuantizeAngle = [](float AngleDeg)->uint16
+                    if (!Item->Location.Equals(Loc, LocThresh)) { Item->Location = Loc; bDirty = true; }
+                    auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
                     {
-                        const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
+                        const float ClampedStep = FMath::Max(0.1f, AngleThresh);
+                        const float Snapped = FMath::RoundToFloat(AngleDeg / ClampedStep) * ClampedStep;
+                        const float Norm = FMath::Fmod(Snapped + 360.0f, 360.0f);
                         return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
                     };
-                    const uint16 NewP = QuantizeAngle(Rot.Pitch);
-                    const uint16 NewY = QuantizeAngle(Rot.Yaw);
-                    const uint16 NewR = QuantizeAngle(Rot.Roll);
+                    const uint16 NewP = QuantizeAngleWithThreshold(Rot.Pitch);
+                    const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
+                    const uint16 NewR = QuantizeAngleWithThreshold(Rot.Roll);
                     if (Item->PitchQuantized != NewP) { Item->PitchQuantized = NewP; bDirty = true; }
                     if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
                     if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
-                    if (!Item->Scale.Equals(Sca, 0.01f)) { Item->Scale = Sca; bDirty = true; }
+                    if (!Item->Scale.Equals(Sca, ScaleThresh)) { Item->Scale = Sca; bDirty = true; }
                     // Update tag bits and AI target if EntityManager is available
                     if (EM)
                     {
@@ -744,30 +749,27 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetPrevSeenIDs != NewPrevIDs) { Item->AITargetPrevSeenIDs = MoveTemp(NewPrevIDs); bDirty = true; }
                             if (Item->AITargetCurrSeenIDs != NewCurrIDs) { Item->AITargetCurrSeenIDs = MoveTemp(NewCurrIDs); bDirty = true; }
                         }
-   
-                 
-                            if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
-                            {
-                                bool bMoveDirty = false;
-                                if (Item->Move_bHasTarget != true) { Item->Move_bHasTarget = true; bMoveDirty = true; }
-                                if (!Item->Move_Center.Equals(MT->Center, 0.1f)) { Item->Move_Center = MT->Center; bMoveDirty = true; }
-                                if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 0.01f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
-                                const float DesiredSpeed = MT->DesiredSpeed.Get();
-                                if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 0.01f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
-                                const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
-                                if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
-                                if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
-                                // Versioning fields
-                                const uint16 NewActionID = MT->GetCurrentActionID();
-                                if (Item->Move_ActionID != NewActionID) { Item->Move_ActionID = NewActionID; bMoveDirty = true; }
-                                const float NewSrvStart = (float)MT->GetCurrentActionServerStartTime();
-                                if (!FMath::IsNearlyEqual(Item->Move_ServerStartTime, NewSrvStart, 0.001f)) { Item->Move_ServerStartTime = NewSrvStart; bMoveDirty = true; }
-                                const uint8 NewCurrAction = static_cast<uint8>(MT->GetCurrentAction());
-                                if (Item->Move_CurrentAction != NewCurrAction) { Item->Move_CurrentAction = NewCurrAction; bMoveDirty = true; }
-                                if (bMoveDirty) { bDirty = true; }
-                            }
-                        
-    
+                        if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
+                        {
+                            bool bMoveDirty = false;
+                            if (Item->Move_bHasTarget != true) { Item->Move_bHasTarget = true; bMoveDirty = true; }
+                            if (!Item->Move_Center.Equals(MT->Center, 0.1f)) { Item->Move_Center = MT->Center; bMoveDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 0.01f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
+                            const float DesiredSpeed = MT->DesiredSpeed.Get();
+                            if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 0.01f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
+                            const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
+                            if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 0.01f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
+                            // Versioning fields
+                            const uint16 NewActionID = MT->GetCurrentActionID();
+                            if (Item->Move_ActionID != NewActionID) { Item->Move_ActionID = NewActionID; bMoveDirty = true; }
+                            const float NewSrvStart = (float)MT->GetCurrentActionServerStartTime();
+                            if (!FMath::IsNearlyEqual(Item->Move_ServerStartTime, NewSrvStart, 0.001f)) { Item->Move_ServerStartTime = NewSrvStart; bMoveDirty = true; }
+                            const uint8 NewCurrAction = static_cast<uint8>(MT->GetCurrentAction());
+                            if (Item->Move_CurrentAction != NewCurrAction) { Item->Move_CurrentAction = NewCurrAction; bMoveDirty = true; }
+                            if (bMoveDirty) { bDirty = true; }
+                        }
+
                         // Keep additional replicated fragments in sync
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
                         {

@@ -23,7 +23,7 @@ public:
 	bool bStopMovementReplication = false;
 	
 	float TimeSinceLastRun = 0.0f;
-	const float ExecutionInterval = 0.25f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
+	const float ExecutionInterval = 0.1f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MinErrorForCorrectionSq = FMath::Square(1.f); // 5 cm
