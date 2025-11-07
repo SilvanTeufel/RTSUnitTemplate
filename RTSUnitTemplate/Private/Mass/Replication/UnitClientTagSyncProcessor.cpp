@@ -130,10 +130,11 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Patrol;
 	}
+	/*
 	if (HasTag(FMassStateRunTag::StaticStruct()))
 	{
 		return EState::Run;
-	}
+	}*/
 	if (HasTag(FMassStatePauseTag::StaticStruct()))
 	{
 		return EState::Pause;
@@ -142,10 +143,11 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Evasion;
 	}
+	/*
 	if (HasTag(FMassStateIdleTag::StaticStruct()))
 	{
 		return EState::Idle;
-	}
+	}*/
 	return EState::None;
 }
 
@@ -167,6 +169,7 @@ void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, T
 				*AbilityUnit->GetName(), *OldStr, *NewStr);
 		}
 		
-		AbilityUnit->SetUnitState(NewState);
+		if (NewState != UnitData::None)
+			AbilityUnit->SetUnitState(NewState);
 	}
 }
