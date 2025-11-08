@@ -351,6 +351,21 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 				}
 				Agent->SetActorLocation(FinalLoc);
 				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
+
+				// After returning to the original location, perform an additional action:
+				// Issue a left_click 1 (ActionSpace index 27). This is typically a move/confirm click.
+				/*
+				if (Agent)
+				{
+					if (UInferenceComponent* PostInf = Agent->FindComponentByClass<UInferenceComponent>())
+					{
+						const int32 LeftClickMoveIndex = 29; // left_click 1
+						const FString ClickJson = PostInf->GetActionAsJSON(LeftClickMoveIndex);
+						PostInf->ExecuteActionFromJSON(ClickJson);
+						UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), LeftClickMoveIndex);
+					}
+				}
+				*/
 			}
 		}, AttackReturnDelaySeconds, false);
 	}
