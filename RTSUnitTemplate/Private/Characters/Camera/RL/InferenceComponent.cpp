@@ -213,11 +213,11 @@ void UInferenceComponent::ExecuteActionFromJSON(const FString& Json)
 }
 
 // ============================================================================
-// ActionSpace index mapping (0..29)
+// ActionSpace index mapping (0..35)
 // ----------------------------------------------------------------------------
 // This maps each ActionIndex to the concrete action serialized by GetActionAsJSON.
 // NOTE:
-// - Valid indices are 0..29 (30 actions total). If you use an invalid index, GetActionAsJSON returns "{}" and logs an error.
+// - Valid indices are 0..35 (36 actions total). If you use an invalid index, GetActionAsJSON returns "{}" and logs an error.
 // - The older comment that mentioned 0..31 was outdated; this is the authoritative list.
 //
 //  0:  switch_camera_state 18   (Ctrl+R)
@@ -250,12 +250,18 @@ void UInferenceComponent::ExecuteActionFromJSON(const FString& Json)
 // 27:  left_click 1             (e.g., move)
 // 28:  left_click 2             (e.g., attack)
 // 29:  right_click 1
+// 30:  switch_camera_state 21   (Alt+1)
+// 31:  switch_camera_state 22   (Alt+2)
+// 32:  switch_camera_state 23   (Alt+3)
+// 33:  switch_camera_state 24   (Alt+4)
+// 34:  switch_camera_state 25   (Alt+5)
+// 35:  switch_camera_state 26   (Alt+6)
 // ----------------------------------------------------------------------------
 // Each action serializes to a JSON like:
 // {
 //   "type": "Control",
 //   "input_value": 1.0,
-//   "alt": false,
+//   "alt": false/true,
 //   "ctrl": true/false,
 //   "action": "<see above>",
 //   "camera_state": <number above>
@@ -308,7 +314,15 @@ void UInferenceComponent::InitializeActionSpace()
         {"Control", 1.0f, false, false, "left_click", 2},
 
         // No Modifier + Right Click
-        {"Control", 1.0f, false, false, "right_click", 1}
+        {"Control", 1.0f, false, false, "right_click", 1},
+
+        // Alt + 1-6
+        {"Control", 1.0f, true,  false, "switch_camera_state", 21},
+        {"Control", 1.0f, true,  false, "switch_camera_state", 22},
+        {"Control", 1.0f, true,  false, "switch_camera_state", 23},
+        {"Control", 1.0f, true,  false, "switch_camera_state", 24},
+        {"Control", 1.0f, true,  false, "switch_camera_state", 25},
+        {"Control", 1.0f, true,  false, "switch_camera_state", 26}
     };
 }
 

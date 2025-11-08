@@ -232,6 +232,14 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		}
 	};
 
+	// Alt 1..6 (new indices 30..35)
+	if (GS.Alt1TagFriendlyUnitCount > Row.Alt1TagMinFriendlyUnitCount) AddPair(30);
+	if (GS.Alt2TagFriendlyUnitCount > Row.Alt2TagMinFriendlyUnitCount) AddPair(31);
+	if (GS.Alt3TagFriendlyUnitCount > Row.Alt3TagMinFriendlyUnitCount) AddPair(32);
+	if (GS.Alt4TagFriendlyUnitCount > Row.Alt4TagMinFriendlyUnitCount) AddPair(33);
+	if (GS.Alt5TagFriendlyUnitCount > Row.Alt5TagMinFriendlyUnitCount) AddPair(34);
+	if (GS.Alt6TagFriendlyUnitCount > Row.Alt6TagMinFriendlyUnitCount) AddPair(35);
+
 	// Ctrl 1..6
 	if (GS.Ctrl1TagFriendlyUnitCount > Row.Ctrl1TagMinFriendlyUnitCount) AddPair(4);
 	if (GS.Ctrl2TagFriendlyUnitCount > Row.Ctrl2TagMinFriendlyUnitCount) AddPair(5);
