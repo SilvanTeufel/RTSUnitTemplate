@@ -9,6 +9,7 @@
 #include "Engine/DataTable.h"
 #include "TimerManager.h"
 #include "Characters/Camera/RLAgent.h"
+#include "Components/CapsuleComponent.h"
 
 URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 {
@@ -260,7 +261,43 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	}
 
 	const FVector OriginalLocation = RLAgent->GetActorLocation();
-	RLAgent->SetActorLocation(Row.AttackPosition);
+	// Adjust target location to ground with capsule clearance while not sinking below current Z
+	auto ComputeGroundAdjusted = [&](const FVector& TargetXYOnly) -> FVector
+	{
+		UWorld* World = GetWorld();
+		if (!World)
+		{
+			return FVector(TargetXYOnly.X, TargetXYOnly.Y, OriginalLocation.Z);
+		}
+		// Determine capsule half height (fallback to 88 if no capsule)
+		float CapsuleHalfHeight = 88.f;
+		if (UCapsuleComponent* Cap = RLAgent->FindComponentByClass<UCapsuleComponent>())
+		{
+			CapsuleHalfHeight = Cap->GetScaledCapsuleHalfHeight();
+		}
+		const float CurrentZ = RLAgent->GetActorLocation().Z;
+		const FVector TraceStart(TargetXYOnly.X, TargetXYOnly.Y, CurrentZ + 10000.f);
+		const FVector TraceEnd(TargetXYOnly.X, TargetXYOnly.Y, CurrentZ - 10000.f);
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(AttackRuleGroundTrace), /*bTraceComplex*/ false);
+		Params.AddIgnoredActor(RLAgent);
+		bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
+		float OutZ = CurrentZ;
+		if (bHit)
+		{
+			const float GroundZ = Hit.ImpactPoint.Z;
+			if (GroundZ > CurrentZ)
+			{
+				OutZ = GroundZ + CapsuleHalfHeight;
+			}
+		}
+		return FVector(TargetXYOnly.X, TargetXYOnly.Y, OutZ);
+	};
+	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(Row.AttackPosition);
+	RLAgent->SetActorLocation(AdjustedAttackLoc);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Adjusted attack move to (%.1f, %.1f, %.1f) from desired (%.1f, %.1f, %.1f)"),
+		AdjustedAttackLoc.X, AdjustedAttackLoc.Y, AdjustedAttackLoc.Z,
+		Row.AttackPosition.X, Row.AttackPosition.Y, Row.AttackPosition.Z);
 
 	const FString Json = BuildCompositeActionJSON(Indices, Inference);
 	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), Row.AttackPosition.X, Row.AttackPosition.Y, Row.AttackPosition.Z);
@@ -276,8 +313,44 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		{
 			if (WeakAgent.IsValid())
 			{
-				WeakAgent->SetActorLocation(ReturnLocation);
-				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to original location after attack."));
+				ARLAgent* Agent = WeakAgent.Get();
+				UWorld* W = Agent ? Agent->GetWorld() : nullptr;
+				float CapsuleHalfHeight = 88.f;
+				if (Agent)
+				{
+					if (UCapsuleComponent* Cap = Agent->FindComponentByClass<UCapsuleComponent>())
+					{
+						CapsuleHalfHeight = Cap->GetScaledCapsuleHalfHeight();
+					}
+				}
+				FVector FinalLoc = ReturnLocation;
+				if (Agent && W)
+				{
+					const float CurrentZ = Agent->GetActorLocation().Z;
+					const FVector TraceStart(ReturnLocation.X, ReturnLocation.Y, CurrentZ + 10000.f);
+					const FVector TraceEnd(ReturnLocation.X, ReturnLocation.Y, CurrentZ - 10000.f);
+					FHitResult Hit;
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(AttackRuleGroundTraceReturn), false);
+					Params.AddIgnoredActor(Agent);
+					if (W->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
+					{
+						const float GroundZ = Hit.ImpactPoint.Z;
+						if (GroundZ > CurrentZ)
+						{
+							FinalLoc.Z = GroundZ + CapsuleHalfHeight;
+						}
+						else
+						{
+							FinalLoc.Z = CurrentZ;
+						}
+					}
+					else
+					{
+						FinalLoc.Z = CurrentZ;
+					}
+				}
+				Agent->SetActorLocation(FinalLoc);
+				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
 			}
 		}, AttackReturnDelaySeconds, false);
 	}
@@ -327,13 +400,24 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 		return TEXT("{}");
 	}
 
-	// Attack rules have priority: if enabled and data exists, attempt them first. They execute actions internally and return true if fired.
+	// Attack rules have priority but are throttled by AttackRuleCheckIntervalSeconds.
 	if (bUseAttackDataTableRules && AttackRulesDataTable)
 	{
-		if (EvaluateAttackRulesFromDataTable(GameState, Inference))
+		UWorld* World = GetWorld();
+		const float Now = World ? World->GetTimeSeconds() : 0.f;
+		const float SinceLast = Now - LastAttackRuleCheckTimeSeconds;
+		if (SinceLast >= AttackRuleCheckIntervalSeconds)
 		{
-			// Actions executed internally; no external JSON needed
-			return TEXT("{}");
+			LastAttackRuleCheckTimeSeconds = Now; // mark the attempt time regardless of outcome
+			if (EvaluateAttackRulesFromDataTable(GameState, Inference))
+			{
+				// Actions executed internally; no external JSON needed
+				return TEXT("{}");
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Skipping AttackRules (cooldown %.1fs left)."), AttackRuleCheckIntervalSeconds - SinceLast);
 		}
 	}
 

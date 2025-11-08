@@ -135,6 +135,9 @@ public:
 	// Time to wait before returning the RLAgent to its original location after issuing attack orders
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0"))
 	float AttackReturnDelaySeconds = 3.0f;
+	// Minimum time between attack rule evaluations. If not elapsed, attack rules are skipped and normal rules/wander run.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0"))
+	float AttackRuleCheckIntervalSeconds = 30.0f;
 
 
 	// ---------------- Wander (small movement) fallback ----------------
@@ -192,4 +195,7 @@ private:
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;
+
+	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
+	float LastAttackRuleCheckTimeSeconds = -1000000.f;
 };
