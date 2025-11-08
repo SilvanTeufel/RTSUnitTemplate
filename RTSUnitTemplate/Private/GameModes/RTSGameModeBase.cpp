@@ -19,6 +19,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "System/PlayerTeamSubsystem.h"
+#include "Characters/Camera/BehaviorTree/RTSBTController.h"
+#include "BehaviorTree/BlackboardComponent.h"
 
 #include "NavigationSystem.h"
 #include "Actors/FogActor.h"
@@ -293,20 +295,28 @@ void ARTSGameModeBase::FillUnitArrays()
 
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
-	UE_LOG(LogTemp, Log, TEXT("SetTeamIdsAndWaypoints_Implementation!!!"));
+	UE_LOG(LogTemp, Log, TEXT("SetTeamIdsAndWaypoints_Implementation!!! World=%s HasAuthority=%s"), *GetNameSafe(GetWorld()), HasAuthority() ? TEXT("true") : TEXT("false"));
 	
-	// Sammle alle PlayerStarts im Level
+	// Gather all PlayerStarts in the level
 	TArray<APlayerStartBase*> PlayerStarts;
 	for (TActorIterator<APlayerStartBase> It(GetWorld()); It; ++It)
 	{
 		PlayerStarts.Add(*It);
 	}
+	UE_LOG(LogTemp, Log, TEXT("[GM] Found %d PlayerStarts. Listing..."), PlayerStarts.Num());
+	for (int32 i = 0; i < PlayerStarts.Num(); ++i)
+	{
+		const APlayerStartBase* PS = PlayerStarts[i];
+		UE_LOG(LogTemp, Log, TEXT("[GM] PlayerStart[%d]=%s TeamId=%d bIsAi=%s Waypoint=%s"), i, *GetNameSafe(PS), PS ? PS->SelectableTeamId : -1, (PS && PS->bIsAi) ? TEXT("true") : TEXT("false"), *GetNameSafe(PS ? PS->DefaultWaypoint : nullptr));
+	}
 
-	// Subsystem für Teamzuweisungen (Server)
+	// Team assignment subsystem (server)
 	UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>() : nullptr;
 
 	int32 PlayerIndex = 0;
+	TSet<int32> OccupiedTeamIds; // teams that already have a controller assigned
 
+	// First, assign existing player controllers (humans)
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
 		AController* PlayerController = It->Get();
@@ -321,35 +331,63 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			CameraControllerBase->CameraBase->BlockControls = true;
 		}
 
-		// 1) TeamId aus Lobby-Subsystem holen (falls vorhanden)
+		// 1) Get TeamId from Lobby subsystem (if any)
 		int32 LobbyTeamId = 0;
 		if (TeamSubsystem && CameraControllerBase->PlayerState)
 		{
-			UE_LOG(LogTemp, Error, TEXT("TeamSubsystem FOUND!"));
-			// bConsume=true: Eintrag wird nach Verwendung entfernt
+			UE_LOG(LogTemp, Log, TEXT("TeamSubsystem FOUND!"));
+			// bConsume=true: remove the entry after using it
 			TeamSubsystem->GetTeamForPlayer(CameraControllerBase, LobbyTeamId, true);
-			UE_LOG(LogTemp, Error, TEXT("LobbyTeamId: %d"), LobbyTeamId);
+			UE_LOG(LogTemp, Log, TEXT("LobbyTeamId: %d"), LobbyTeamId);
 		}
 
-		// 2) Passenden PlayerStart anhand SelectableTeamId suchen
+		// 2) Find appropriate PlayerStart
 		APlayerStartBase* CustomPlayerStart = nullptr;
 		if (LobbyTeamId != 0)
 		{
 			for (APlayerStartBase* Start : PlayerStarts)
 			{
-				if (Start && Start->SelectableTeamId == LobbyTeamId)
+				if (Start && Start->SelectableTeamId == LobbyTeamId && !Start->bIsAi)
 				{
-					CustomPlayerStart = Start;
+					CustomPlayerStart = Start; // prefer human-designated starts
 					break;
+				}
+			}
+			// If no non-AI start found for this team, allow any start with that team id
+			if (!CustomPlayerStart)
+			{
+				for (APlayerStartBase* Start : PlayerStarts)
+				{
+					if (Start && Start->SelectableTeamId == LobbyTeamId)
+					{
+						CustomPlayerStart = Start;
+						break;
+					}
 				}
 			}
 		}
 
-		// Fallback: wenn keine Lobby-Auswahl vorhanden war oder kein passender Start gefunden wurde
+		// Fallback: when no lobby selection present or not found
 		if (!CustomPlayerStart && PlayerStarts.Num() > 0)
 		{
-			CustomPlayerStart = PlayerStarts[PlayerIndex];
-			LobbyTeamId = CustomPlayerStart->SelectableTeamId; // TeamId aus dem Start übernehmen
+			// If no lobby selection, prefer a non-AI PlayerStart for humans when available
+			if (LobbyTeamId == 0)
+			{
+				for (APlayerStartBase* Start : PlayerStarts)
+				{
+					if (Start && !Start->bIsAi)
+					{
+						CustomPlayerStart = Start;
+						break;
+					}
+				}
+			}
+			// If still none, fallback to index-based selection
+			if (!CustomPlayerStart)
+			{
+				CustomPlayerStart = PlayerStarts[PlayerIndex % PlayerStarts.Num()];
+				LobbyTeamId = CustomPlayerStart->SelectableTeamId; // adopt team id from the start
+			}
 		}
 
 		if (!CustomPlayerStart)
@@ -362,23 +400,24 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			continue;
 		}
 
-		// 3) Anpassungen vom PlayerStart anwenden und Team/Waypoint setzen
+		// 3) Apply customizations and set team/waypoint
 		ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
 
 		const int32 FinalTeamId = CustomPlayerStart->SelectableTeamId;
-		UE_LOG(LogTemp, Error, TEXT("Assigning TeamId: %d to Controller: %s"), FinalTeamId, *CameraControllerBase->GetName());
+		UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), FinalTeamId, *CameraControllerBase->GetName());
 
 		SetTeamIdAndDefaultWaypoint_Implementation(FinalTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
+		OccupiedTeamIds.Add(FinalTeamId);
 
-		UE_LOG(LogTemp, Error, TEXT("TeamId is now: %d from Controller: %s"),
+		UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"),
 			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
-		UE_LOG(LogTemp, Error, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
+		UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
 
-		// 4) Übrige Initialisierung
+		// 4) Remaining initialization
 		CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
 		CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
 
-		// Kameraeinheit über TeamId-Tag finden (statt sequentiellem Index)
+		// Find camera unit by tag
 		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
 		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
 		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
@@ -395,6 +434,154 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 		CameraControllerBase->AgentInit();
 
+		PlayerIndex++;
+	}
+
+	// Now ensure AI players are spawned for AI-designated PlayerStarts whose teams have no controller
+	for (APlayerStartBase* Start : PlayerStarts)
+	{
+		if (!Start || !Start->bIsAi)
+		{
+			continue;
+		}
+
+		const int32 TeamId = Start->SelectableTeamId;
+		// Allow multiple PlayerControllers per TeamId and AI coexisting with humans/controllers.
+		if (OccupiedTeamIds.Contains(TeamId))
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GM] Team %d already has controllers, but multiple controllers per team are allowed. Proceeding to spawn AI."), TeamId);
+		}
+
+		UClass* PawnClass = AIPlayerPawnClass ? *AIPlayerPawnClass : ARLAgent::StaticClass();
+		UE_LOG(LogTemp, Log, TEXT("[GM] AI spawn candidate at Start=%s Team=%d PawnClass=%s ControllerClass=%s"), *GetNameSafe(Start), TeamId, *GetNameSafe(AIPlayerPawnClass ? *AIPlayerPawnClass : nullptr), *GetNameSafe(AIPlayerControllerClass ? *AIPlayerControllerClass : nullptr));
+		if (!PawnClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AIPlayerPawnClass is null and default ARLAgent class not found. Skipping AI spawn."));
+			continue;
+		}
+
+		// Spawn a PlayerController for the AI (configurable class)
+		UClass* AIControllerClass = AIPlayerControllerClass ? *AIPlayerControllerClass : ACameraControllerBase::StaticClass();
+		ACameraControllerBase* AIPC = GetWorld()->SpawnActor<ACameraControllerBase>(AIControllerClass);
+		if (!AIPC)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn AI PlayerController for Team %d"), TeamId);
+			continue;
+		}
+
+		// Spawn the AI pawn at the PlayerStart
+		FTransform SpawnTransform = Start->GetActorTransform();
+		APawn* AIPawn = GetWorld()->SpawnActor<APawn>(PawnClass, SpawnTransform);
+		if (!AIPawn)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn AI Pawn for Team %d"), TeamId);
+			AIPC->Destroy();
+			continue;
+		}
+
+		// Ensure AIController will not steal possession: keep PlayerController as owner
+		AIPawn->AutoPossessAI = EAutoPossessAI::Disabled;
+		AIPawn->AIControllerClass = nullptr;
+
+		AIPC->Possess(AIPawn);
+
+		// Ensure the AI PlayerController has a HUD (use the standard HUDClass from this GameMode)
+		if (!AIPC->GetHUD())
+		{
+			AIPC->SpawnDefaultHUD();
+			UE_LOG(LogTemp, Log, TEXT("[GM] Spawned default HUD for AI PC: %s -> HUD=%s (HUDClass=%s)"),
+				*GetNameSafe(AIPC), *GetNameSafe(AIPC->GetHUD()), *GetNameSafe(HUDClass));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GM] AI PC already has HUD: %s (HUDClass=%s)"), *GetNameSafe(AIPC->GetHUD()), *GetNameSafe(HUDClass));
+		}
+
+		AIPC->HUDBase = Cast<APathProviderHUD>(AIPC->GetHUD());
+		if (!AIPC->HUDBase)
+		{
+			// Fallback for server‑spawned AI PCs without a local viewport: manually spawn the HUD actor and bind it
+			UClass* HUDToSpawn = HUDClass ? *HUDClass : APathProviderHUD::StaticClass();
+			if (!HUDToSpawn->IsChildOf(AHUD::StaticClass()))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[GM] Configured HUDClass is not a HUD. Falling back to APathProviderHUD."));
+				HUDToSpawn = APathProviderHUD::StaticClass();
+			}
+			FActorSpawnParameters HUDSpawnParams;
+			HUDSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AHUD* SpawnedHUD = GetWorld()->SpawnActor<AHUD>(HUDToSpawn, FTransform::Identity, HUDSpawnParams);
+			if (SpawnedHUD)
+			{
+				SpawnedHUD->SetOwner(AIPC);
+				SpawnedHUD->PlayerOwner = AIPC;
+				AIPC->HUDBase = Cast<APathProviderHUD>(SpawnedHUD);
+				UE_LOG(LogTemp, Log, TEXT("[GM] Fallback-spawned HUD for AI PC: %s -> HUD=%s (HUDClass=%s)"),
+					*GetNameSafe(AIPC), *GetNameSafe(SpawnedHUD), *GetNameSafe(HUDToSpawn));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[GM] Failed to fallback-spawn HUD for AI PC: %s (HUDClass=%s)"),
+					*GetNameSafe(AIPC), *GetNameSafe(HUDToSpawn));
+			}
+		}
+		
+		// Spawn a non-possessing AIController that runs the Behavior Tree as an orchestrator
+	  UClass* OrchestratorClass = AIOrchestratorClass ? *AIOrchestratorClass : ARTSBTController::StaticClass();
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+   AActor* OrchestratorActor = GetWorld()->SpawnActor<AActor>(OrchestratorClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+			ARTSBTController* Orchestrator = Cast<ARTSBTController>(OrchestratorActor);
+			if (Orchestrator)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GM] Spawned ARTSBTController orchestrator: %s (no possession)"), *GetNameSafe(Orchestrator));
+
+			// If the orchestrator doesn't have a BT assigned, but the GameMode provides one, wire it up now
+			if (!Orchestrator->StrategyBehaviorTree && AIBehaviorTree)
+			{
+				Orchestrator->StrategyBehaviorTree = AIBehaviorTree;
+				UBlackboardComponent* OutBB = nullptr;
+				if (Orchestrator->UseBlackboard(AIBehaviorTree->BlackboardAsset, OutBB))
+				{
+					const bool bStarted = Orchestrator->RunBehaviorTree(AIBehaviorTree);
+					if (!bStarted)
+					{
+						UE_LOG(LogTemp, Error, TEXT("[GM] RunBehaviorTree failed when starting orchestrator with provided AIBehaviorTree '%s'"), *GetNameSafe(AIBehaviorTree));
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("[GM] UseBlackboard failed for orchestrator. Ensure AIBehaviorTree has a Blackboard asset assigned."));
+				}
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[GM] Failed to spawn ARTSBTController orchestrator for Team %d"), TeamId);
+		}
+	}
+
+		// Apply customizations and set team/waypoint
+		ApplyCustomizationsFromPlayerStart(AIPC, Start);
+		SetTeamIdAndDefaultWaypoint_Implementation(TeamId, Start->DefaultWaypoint, AIPC);
+		OccupiedTeamIds.Add(TeamId);
+
+		// Do same initialization as humans so the AI controller can act
+		AIPC->Multi_SetMyTeamUnits(AllUnits);
+		AIPC->Multi_SetCamLocation(Start->GetActorLocation());
+
+		FName SpecificCameraUnitTagNameAI = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
+		FGameplayTag SpecificCameraUnitTagAI = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagNameAI);
+		AIPC->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTagAI, AIPC->SelectableTeamId);
+		AIPC->Multi_SetCameraOnly();
+		AIPC->Multi_HideEnemyWaypoints();
+		AIPC->Multi_InitFogOfWar();
+		AIPC->Multi_SetupPlayerMiniMap();
+		if (AIPC->CameraBase)
+		{
+			AIPC->CameraBase->BlockControls = false;
+		}
+		AIPC->AgentInit();
 		PlayerIndex++;
 	}
 

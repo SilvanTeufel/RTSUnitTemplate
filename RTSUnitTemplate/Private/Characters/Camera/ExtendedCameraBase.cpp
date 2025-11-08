@@ -313,7 +313,7 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID InputID, ACameraControllerBase* CamController)
 {
 	if(!CamController) return;
-
+	
 	CamController->ActivateKeyboardAbilitiesOnMultipleUnits(InputID);
 	
 }

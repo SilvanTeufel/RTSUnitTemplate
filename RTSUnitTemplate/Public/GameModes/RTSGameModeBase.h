@@ -13,6 +13,12 @@
 #include "Developer/GraphColor/Private/appconst.h"
 #include "RTSGameModeBase.generated.h"
 
+class ARLAgent;
+class ACameraControllerBase;
+class APlayerStartBase;
+class ARTSBTController;
+class UBehaviorTree;
+
 
 USTRUCT(BlueprintType)
 struct FTimerHandleMapping
@@ -33,11 +39,26 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
 
-	public:
+public:
+	// Pawn class to use when spawning AI players for AI PlayerStarts
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AI")
+	TSubclassOf<ARLAgent> AIPlayerPawnClass;
+
+ // PlayerController class to use when spawning AI players (must derive from ACameraControllerBase)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AI")
+	TSubclassOf<ACameraControllerBase> AIPlayerControllerClass;
+
+	// Optional: AI orchestrator controller class (non-possessing) that runs the Behavior Tree
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AI")
+	TSubclassOf<ARTSBTController> AIOrchestratorClass;
+
+	// Optional: Behavior Tree to assign to the orchestrator if its StrategyBehaviorTree is not set
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AI")
+	TObjectPtr<UBehaviorTree> AIBehaviorTree;
 	
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void ApplyCustomizationsFromPlayerStart(APlayerController* PC, const APlayerStartBase* CustomStart);
-	
+		
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)

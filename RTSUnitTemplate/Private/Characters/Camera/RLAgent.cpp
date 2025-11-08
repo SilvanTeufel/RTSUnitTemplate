@@ -27,6 +27,7 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 void ARLAgent::BeginPlay()
 {
     Super::BeginPlay();
+    UE_LOG(LogTemp, Log, TEXT("[RLAgent] BeginPlay on %s Controller=%s HasAuthority=%s"), *GetNameSafe(this), *GetNameSafe(GetController()), HasAuthority() ? TEXT("true") : TEXT("false"));
 }
 
 
@@ -165,6 +166,7 @@ void ARLAgent::Tick(float DeltaTime)
 void ARLAgent::ReceiveRLAction(FString ActionJSON)
 {
 
+    UE_LOG(LogTemp, Warning, TEXT("ARLAgent::ReceiveRLAction: %s"), *ActionJSON);
     const FString UTF8_BOM = TEXT("\xEF\xBB\xBF");
     
     if (!ActionJSON.IsEmpty())
@@ -328,6 +330,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
                 if (ActionName.StartsWith("switch_camera_state_ability"))
                 {
+                    UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
                     ExtendedController->SetWorkArea(GetActorLocation());
                     ExtendedController->DropWorkArea();
                 }
@@ -495,7 +498,8 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled)
 {
-    
+
+    UE_LOG(LogTemp, Warning, TEXT("!!!!!PerformLeftClickAction!!!!!!!"));
     ACustomControllerBase* CustomControllerBase = Cast<ACustomControllerBase>(GetController());
     if (!CustomControllerBase)
     {
@@ -528,6 +532,11 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         TArray<AUnitBase*> MassUnits;
         TArray<FVector>    MassLocations;
 
+        UE_LOG(LogTemp, Warning, TEXT("!!!!!CustomControllerBase->SelectedUnits.Num(): %d!!!!!!!"), CustomControllerBase->SelectedUnits.Num());
+        if (CustomControllerBase->HUDBase)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("!!!!!CustomControllerBase->HUDBase->SelectedUnits.Num(): %d!!!!!!!"), CustomControllerBase->HUDBase->SelectedUnits.Num());
+        }
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
             AUnitBase* U = CustomControllerBase->SelectedUnits[i];

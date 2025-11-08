@@ -122,15 +122,24 @@ void ACustomControllerBase::Multi_InitFogOfWar_Implementation()
 
 void ACustomControllerBase::AgentInit_Implementation()
 {
-	// Only execute for the local controller
+	UE_LOG(LogTemp, Log, TEXT("[AgentInit] Enter Controller=%s IsLocal=%s HasAuthority=%s Role=%d"), *GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"), HasAuthority() ? TEXT("true") : TEXT("false"), (int32)GetLocalRole());
+	// Only execute for the local controller (Client RPC). Server-spawned AI controllers without owning client will skip here.
 	if (!IsLocalController())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[AgentInit] Skipping AgentInitialization because controller is not local (likely AI without owning client)."));
 		return;
 	}
 
 	ARLAgent* Camera = Cast<ARLAgent>(CameraBase);
 	if (Camera)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[AgentInit] Calling AgentInitialization on Pawn=%s (Controller TeamId=%d)"), *GetNameSafe(Camera), SelectableTeamId);
 		Camera->AgentInitialization();
+	}
+	else
+	{
+  UE_LOG(LogTemp, Warning, TEXT("[AgentInit] CameraBase is not ARLAgent. Name=%s Class=%s"), *GetNameSafe(CameraBase), *GetNameSafe(CameraBase ? CameraBase->GetClass() : nullptr));
+	}
 }
 
 
