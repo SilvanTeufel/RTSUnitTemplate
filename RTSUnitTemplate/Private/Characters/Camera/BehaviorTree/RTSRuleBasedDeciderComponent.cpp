@@ -7,6 +7,8 @@
 #include "Dom/JsonObject.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Engine/DataTable.h"
+#include "TimerManager.h"
+#include "Characters/Camera/RLAgent.h"
 
 URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 {
@@ -205,6 +207,117 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 	return TEXT("{}");
 }
 
+bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference)
+{
+	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<UnnamedAttack>") : Row.RuleName.ToString();
+	if (!Row.bEnabled)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' is disabled."), *RowLabel);
+		return false;
+	}
+	if (!Inference)
+	{
+		return false;
+	}
+
+	TArray<int32> Indices;
+	Indices.Reserve(32);
+	auto AddPair = [&Indices](int32 SelectIdx)
+	{
+		if (SelectIdx != INDEX_NONE)
+		{
+			Indices.Add(SelectIdx);
+			Indices.Add(28); // left_click 2 (attack)
+		}
+	};
+
+	// Ctrl 1..6
+	if (GS.Ctrl1TagFriendlyUnitCount > Row.Ctrl1TagMinFriendlyUnitCount) AddPair(4);
+	if (GS.Ctrl2TagFriendlyUnitCount > Row.Ctrl2TagMinFriendlyUnitCount) AddPair(5);
+	if (GS.Ctrl3TagFriendlyUnitCount > Row.Ctrl3TagMinFriendlyUnitCount) AddPair(6);
+	if (GS.Ctrl4TagFriendlyUnitCount > Row.Ctrl4TagMinFriendlyUnitCount) AddPair(7);
+	if (GS.Ctrl5TagFriendlyUnitCount > Row.Ctrl5TagMinFriendlyUnitCount) AddPair(8);
+	if (GS.Ctrl6TagFriendlyUnitCount > Row.Ctrl6TagMinFriendlyUnitCount) AddPair(9);
+
+	// Ctrl Q/W/E/R mapping: Q=1, W=3, E=2, R=0
+	if (GS.CtrlQTagFriendlyUnitCount > Row.CtrlQTagMinFriendlyUnitCount) AddPair(1);
+	if (GS.CtrlWTagFriendlyUnitCount > Row.CtrlWTagMinFriendlyUnitCount) AddPair(3);
+	if (GS.CtrlETagFriendlyUnitCount > Row.CtrlETagMinFriendlyUnitCount) AddPair(2);
+	if (GS.CtrlRTagFriendlyUnitCount > Row.CtrlRTagMinFriendlyUnitCount) AddPair(0);
+
+	if (Indices.Num() == 0)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' had no qualifying selections (no actions)."), *RowLabel);
+		return false;
+	}
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	ARLAgent* RLAgent = OwnerPawn ? Cast<ARLAgent>(OwnerPawn) : nullptr;
+	if (!RLAgent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: AttackRow '%s' could not execute: owner is not ARLAgent."), *RowLabel);
+		return false;
+	}
+
+	const FVector OriginalLocation = RLAgent->GetActorLocation();
+	RLAgent->SetActorLocation(Row.AttackPosition);
+
+	const FString Json = BuildCompositeActionJSON(Indices, Inference);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), Row.AttackPosition.X, Row.AttackPosition.Y, Row.AttackPosition.Z);
+	Inference->ExecuteActionFromJSON(Json);
+
+	// Schedule return to original location after delay
+	TWeakObjectPtr<ARLAgent> WeakAgent(RLAgent);
+	const FVector ReturnLocation = OriginalLocation;
+	if (UWorld* World = GetWorld())
+	{
+		FTimerHandle Handle;
+		World->GetTimerManager().SetTimer(Handle, [WeakAgent, ReturnLocation]()
+		{
+			if (WeakAgent.IsValid())
+			{
+				WeakAgent->SetActorLocation(ReturnLocation);
+				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to original location after attack."));
+			}
+		}, AttackReturnDelaySeconds, false);
+	}
+
+	return true;
+}
+
+bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference)
+{
+	if (!AttackRulesDataTable)
+	{
+		return false;
+	}
+	TArray<FName> RowNames = AttackRulesDataTable->GetRowNames();
+	if (RowNames.Num() == 0)
+	{
+		return false;
+	}
+	const int32 StartIndex = FMath::RandRange(0, RowNames.Num() - 1);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d Attack DataTable rows (start index=%d)."), RowNames.Num(), StartIndex);
+	for (int32 Offset = 0; Offset < RowNames.Num(); ++Offset)
+	{
+		const int32 EvalIdx = (StartIndex + Offset) % RowNames.Num();
+		const FName& Name = RowNames[EvalIdx];
+		const FRTSAttackRuleRow* Row = AttackRulesDataTable->FindRow<FRTSAttackRuleRow>(Name, TEXT("RTSAttackRules"));
+		if (!Row)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack DataTable row '%s' not found or mismatched type."), *Name.ToString());
+			continue;
+		}
+		if (ExecuteAttackRuleRow(*Row, GS, Inference))
+		{
+			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired."), *Name.ToString());
+			return true;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No Attack DataTable rule matched."));
+	return false;
+}
+
 FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStateData& GameState)
 {
 	UInferenceComponent* Inference = GetInferenceComponent();
@@ -212,6 +325,16 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	{
 		UE_LOG(LogTemp, Error, TEXT("URTSRuleBasedDeciderComponent: No UInferenceComponent found on owning pawn. Returning {}."));
 		return TEXT("{}");
+	}
+
+	// Attack rules have priority: if enabled and data exists, attempt them first. They execute actions internally and return true if fired.
+	if (bUseAttackDataTableRules && AttackRulesDataTable)
+	{
+		if (EvaluateAttackRulesFromDataTable(GameState, Inference))
+		{
+			// Actions executed internally; no external JSON needed
+			return TEXT("{}");
+		}
 	}
 
 	// Helper lambdas for paths

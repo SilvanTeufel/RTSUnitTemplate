@@ -64,6 +64,43 @@ struct FRTSRuleRow : public FTableRowBase
 	int32 AbilityActionIndex = 10;
 };
 
+
+USTRUCT(BlueprintType)
+struct FRTSAttackRuleRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	// If false, this row is ignored
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	bool bEnabled = true;
+
+	// Optional label for readability in the editor
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	FName RuleName;
+
+	// Per-tag caps for friendly unit counts (defaults = 999)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 999;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 999;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 999;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	FVector AttackPosition = FVector::ZeroVector;
+};
 /**
  * Easy-to-configure rule-based decider.
  * For each rule you can now output TWO actions in sequence: first a Selection, then an Ability.
@@ -89,6 +126,15 @@ public:
 	bool bUseDataTableRules = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table", meta=(EditCondition="bUseDataTableRules"))
 	UDataTable* RulesDataTable = nullptr;
+
+	// Attack rule DataTable: executes selection + attack at a target position, then returns camera after a delay
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	bool bUseAttackDataTableRules = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(EditCondition="bUseAttackDataTableRules"))
+	UDataTable* AttackRulesDataTable = nullptr;
+	// Time to wait before returning the RLAgent to its original location after issuing attack orders
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0"))
+	float AttackReturnDelaySeconds = 3.0f;
 
 
 	// ---------------- Wander (small movement) fallback ----------------
@@ -139,6 +185,10 @@ private:
 
 	// If a RulesDataTable is set, iterate rows and return the first matching rule's JSON
 	FString EvaluateRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference) const;
+
+	// Attack rules evaluation/execution: returns true if an attack rule executed actions
+	bool EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference);
+	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference);
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;
