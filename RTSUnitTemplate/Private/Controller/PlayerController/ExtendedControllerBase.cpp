@@ -1775,24 +1775,26 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	UE_LOG(LogTemp, Warning, TEXT("!!!NewSelection.Num(): %d!!!!"), NewSelection.Num());
 	UE_LOG(LogTemp, Warning, TEXT("!!!TeamId: %d!!!!"), TeamId);
 	// Update the HUD with the sorted selection
-	Client_UpdateHUDSelection(NewSelection, TeamId);
+
+	// Call this on Server
+	if (HasAuthority())
+		UpdateHUDSelection(NewSelection, TeamId);
+	else
+		Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 
-void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
+void AExtendedControllerBase::UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
-
-	UE_LOG(LogTemp, Warning, TEXT("!!!Client_UpdateHUDSelection_Implementation: %d!!!!"), NewSelection.Num());
 	if (SelectableTeamId != TeamId)
 	{
 		return;
 	}
-	UE_LOG(LogTemp, Warning, TEXT("!!!Client_UpdateHUDSelection_Implementation2: %d!!!!"), NewSelection.Num());
+	
 	if (!HUDBase)
 	{
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("!!!Client_UpdateHUDSelection_Implementation3: %d!!!!"), NewSelection.Num());
+	
 	HUDBase->DeselectAllUnits();
 
 	for (AUnitBase* NewUnit : NewSelection)
@@ -1802,7 +1804,29 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 	}
 	CurrentUnitWidgetIndex = 0;
 	SelectedUnits = HUDBase->SelectedUnits;
-	UE_LOG(LogTemp, Warning, TEXT("!!!Client_UpdateHUDSelection_Implementation SelectedUnits: %d!!!!"), SelectedUnits.Num());
+}
+
+void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
+{
+	if (SelectableTeamId != TeamId)
+	{
+		return;
+	}
+	
+	if (!HUDBase)
+	{
+		return;
+	}
+	
+	HUDBase->DeselectAllUnits();
+
+	for (AUnitBase* NewUnit : NewSelection)
+	{
+		NewUnit->SetSelected();
+		HUDBase->SelectedUnits.Emplace(NewUnit);
+	}
+	CurrentUnitWidgetIndex = 0;
+	SelectedUnits = HUDBase->SelectedUnits;
 }
 
 void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase* UnitToDeselect)

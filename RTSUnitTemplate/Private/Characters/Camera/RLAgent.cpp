@@ -498,8 +498,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackToggled)
 {
-
-    UE_LOG(LogTemp, Warning, TEXT("!!!!!PerformLeftClickAction!!!!!!!"));
+    
     ACustomControllerBase* CustomControllerBase = Cast<ACustomControllerBase>(GetController());
     if (!CustomControllerBase)
     {
@@ -531,12 +530,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         // Collect all mass units and their positions to issue one RPC
         TArray<AUnitBase*> MassUnits;
         TArray<FVector>    MassLocations;
-
-        UE_LOG(LogTemp, Warning, TEXT("!!!!!CustomControllerBase->SelectedUnits.Num(): %d!!!!!!!"), CustomControllerBase->SelectedUnits.Num());
-        if (CustomControllerBase->HUDBase)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("!!!!!CustomControllerBase->HUDBase->SelectedUnits.Num(): %d!!!!!!!"), CustomControllerBase->HUDBase->SelectedUnits.Num());
-        }
+        
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
             AUnitBase* U = CustomControllerBase->SelectedUnits[i];
