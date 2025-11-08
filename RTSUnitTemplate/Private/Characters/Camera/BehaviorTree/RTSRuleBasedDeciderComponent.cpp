@@ -316,8 +316,13 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	const FVector ReturnLocation = OriginalLocation;
 	if (UWorld* World = GetWorld())
 	{
+		// Activate block until the timer completes
+		bAttackReturnBlockActive = true;
+		AttackReturnBlockUntilTimeSeconds = World->GetTimeSeconds() + AttackReturnDelaySeconds;
+
 		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [WeakAgent, ReturnLocation]()
+		TWeakObjectPtr<URTSRuleBasedDeciderComponent> WeakDecider(this);
+		World->GetTimerManager().SetTimer(Handle, [WeakAgent, ReturnLocation, WeakDecider]()
 		{
 			if (WeakAgent.IsValid())
 			{
@@ -362,18 +367,23 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 				// After returning to the original location, perform an additional action:
 				// Issue a left_click 1 (ActionSpace index 27). This is typically a move/confirm click.
-				/*
 				if (Agent)
 				{
 					if (UInferenceComponent* PostInf = Agent->FindComponentByClass<UInferenceComponent>())
 					{
-						const int32 LeftClickMoveIndex = 29; // left_click 1
+						const int32 LeftClickMoveIndex = 27; // left_click 1
 						const FString ClickJson = PostInf->GetActionAsJSON(LeftClickMoveIndex);
 						PostInf->ExecuteActionFromJSON(ClickJson);
 						UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), LeftClickMoveIndex);
 					}
 				}
-				*/
+			}
+
+			// Clear block after timer finishes
+			if (WeakDecider.IsValid())
+			{
+				WeakDecider->bAttackReturnBlockActive = false;
+				WeakDecider->AttackReturnBlockUntilTimeSeconds = 0.f;
 			}
 		}, AttackReturnDelaySeconds, false);
 	}
@@ -421,6 +431,23 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	{
 		UE_LOG(LogTemp, Error, TEXT("URTSRuleBasedDeciderComponent: No UInferenceComponent found on owning pawn. Returning {}."));
 		return TEXT("{}");
+	}
+
+	// If we are in the middle of an attack-return block, do not produce any actions until timer finishes
+	{
+		UWorld* World = GetWorld();
+		const float Now = World ? World->GetTimeSeconds() : 0.f;
+		if (bAttackReturnBlockActive)
+		{
+			if (Now < AttackReturnBlockUntilTimeSeconds)
+			{
+				const float Remaining = AttackReturnBlockUntilTimeSeconds - Now;
+				UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Blocking actions during attack return (%.2fs remaining)."), Remaining);
+				return TEXT("{}");
+			}
+			// Safety: auto-clear if time elapsed but timer didn't clear it
+			bAttackReturnBlockActive = false;
+		}
 	}
 
 	// Attack rules have priority but are throttled by AttackRuleCheckIntervalSeconds.

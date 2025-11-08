@@ -198,4 +198,9 @@ private:
 
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;
+
+	// While true, block ChooseJsonActionRuleBased from returning any action until the return timer completes
+	bool bAttackReturnBlockActive = false;
+	// Absolute time (GetWorld()->GetTimeSeconds) when the block should auto-expire (safety in case the timer is canceled)
+	float AttackReturnBlockUntilTimeSeconds = 0.f;
 };
