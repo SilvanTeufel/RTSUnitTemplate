@@ -23,6 +23,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= RTSUnitTemplate)
 	int SelectableTeamId = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= RTSUnitTemplate)
+	bool bIsAi = false;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* DefaultWaypoint;
 	/*
