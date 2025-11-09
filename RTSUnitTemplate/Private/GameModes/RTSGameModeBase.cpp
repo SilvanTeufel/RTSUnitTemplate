@@ -998,7 +998,17 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->UnitState = SpawnParameter.State;
 				UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 				
-				UnitBase->SquadId = HighestSquadId;
+				// Assign SquadId only when the DataTable row specifies squad spawning
+				if (SpawnParameter.SpawnAsSquad)
+				{
+					UnitBase->SquadId = HighestSquadId;
+				}
+				else
+				{
+					UnitBase->SquadId = 0;
+				}
+				// Ensure proper healthbar ownership/state after squad decision
+				UnitBase->EnsureSquadHealthbarState();
 				if(SpawnParameter.SpawnAtWaypoint && UnitBase->NextWaypoint)
 				{
 					FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);

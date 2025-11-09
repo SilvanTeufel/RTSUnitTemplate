@@ -337,6 +337,11 @@ struct FUnitSpawnParameter : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool SpawnAtWaypoint = false;
+
+	// If true, units spawned from this row will be grouped into a squad and share a SquadId.
+	// If false, no SquadId is assigned (0) so units behave as independent units (e.g., individual healthbars on hit).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SpawnAsSquad = false;
 };
 
 USTRUCT(BlueprintType)
