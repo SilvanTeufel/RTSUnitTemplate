@@ -503,17 +503,38 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	{
 		if (bEnableWander)
 		{
-			const int32 WanderMoveIdx = PickWanderActionIndex(GameState);
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander path. MoveIdx=%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), WanderMoveIdx, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
+			// First pick a base candidate according to existing rules
+			const int32 BaseIdx = PickWanderActionIndex(GameState);
+			int32 ChosenIdx = BaseIdx;
+			// Initialize tracking if first time
+			if (LastWanderActionIndex == INDEX_NONE)
+			{
+				LastWanderActionIndex = BaseIdx;
+				WanderActionRepeatCount = 0; // will be incremented below when we emit
+			}
+			// Enforce repeating the same direction at least WanderMinSameDirectionRepeats times before switching
+			const bool bForceKeepLast = (LastWanderActionIndex != INDEX_NONE) && (LastWanderActionIndex != BaseIdx) && (WanderActionRepeatCount < WanderMinSameDirectionRepeats);
+			ChosenIdx = bForceKeepLast ? LastWanderActionIndex : BaseIdx;
+			// Update tracking based on the actually chosen direction
+			if (ChosenIdx == LastWanderActionIndex)
+			{
+				WanderActionRepeatCount = FMath::Max(1, WanderActionRepeatCount + 1);
+			}
+			else
+			{
+				LastWanderActionIndex = ChosenIdx;
+				WanderActionRepeatCount = 1;
+			}
+			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander path. Base=%d, Chosen=%d, Repeats=%d/%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), BaseIdx, ChosenIdx, WanderActionRepeatCount, WanderMinSameDirectionRepeats, bWanderTwoStep?TEXT("true"):TEXT("false"), WanderSelectionActionIndex, WanderAbilityActionIndex);
 			if (bWanderTwoStep)
 			{
 				TArray<int32> Steps;
 				Steps.Add(WanderSelectionActionIndex);
 				// If a specific ability is provided, use it; otherwise use the movement as the second step
-				Steps.Add((WanderAbilityActionIndex != INDEX_NONE) ? WanderAbilityActionIndex : WanderMoveIdx);
+				Steps.Add((WanderAbilityActionIndex != INDEX_NONE) ? WanderAbilityActionIndex : ChosenIdx);
 				return BuildCompositeActionJSON(Steps, Inference);
 			}
-			return Inference->GetActionAsJSON(WanderMoveIdx);
+			return Inference->GetActionAsJSON(ChosenIdx);
 		}
 		return TEXT("{}");
 	};

@@ -181,10 +181,16 @@ public:
 	// If you want a specific ability after wander selection, set this to 10..15. If left at INDEX_NONE, the second action is the movement itself.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(EditCondition="bWanderTwoStep"))
 	int32 WanderAbilityActionIndex = INDEX_NONE;
+	// Minimum number of consecutive wander moves to keep in the same direction before switching
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(ClampMin="1"))
+	int32 WanderMinSameDirectionRepeats = 3;
 
 private:
 	int32 PickWanderActionIndex(const FGameStateData& GS) const;
 	UInferenceComponent* GetInferenceComponent() const;
+	// Tracking for wander direction repetition
+	int32 LastWanderActionIndex = INDEX_NONE;
+	int32 WanderActionRepeatCount = 0;
 
 	// Returns the maximum among all friendly tag unit counts contained in GS
 	int32 GetMaxFriendlyTagUnitCount(const FGameStateData& GS) const;
