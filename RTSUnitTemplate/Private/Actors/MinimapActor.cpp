@@ -30,10 +30,10 @@ AMinimapActor::AMinimapActor()
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
 
-    bReplicates = false;
+    bReplicates = true;
     SetNetUpdateFrequency(1);
     SetMinNetUpdateFrequency(1);
-    SetReplicates(false);
+    SetReplicates(true);
 }
 
 void AMinimapActor::BeginPlay()
@@ -107,7 +107,8 @@ void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AMinimapActor, TeamId);
     DOREPLIFETIME(AMinimapActor, MinimapMinBounds);
-    DOREPLIFETIME(AMinimapActor, MinimapMinBounds);
+    DOREPLIFETIME(AMinimapActor, MinimapMaxBounds);
+    
 }
 
 void AMinimapActor::InitMinimapTexture()

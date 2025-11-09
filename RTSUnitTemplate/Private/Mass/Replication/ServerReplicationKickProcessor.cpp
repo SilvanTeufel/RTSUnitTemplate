@@ -136,6 +136,8 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				if (Bits & UnitTagBits::Pause)              Names.Add(TEXT("Pause"));
 				if (Bits & UnitTagBits::Evasion)            Names.Add(TEXT("Evasion"));
 				if (Bits & UnitTagBits::Idle)               Names.Add(TEXT("Idle"));
+				if (Bits & UnitTagBits::StopMovement)       Names.Add(TEXT("StopMovement"));
+				if (Bits & UnitTagBits::DisableObstacle)    Names.Add(TEXT("DisableObstacle"));
 				if (Names.Num() == 0)
 				{
 					return TEXT("<none>");
