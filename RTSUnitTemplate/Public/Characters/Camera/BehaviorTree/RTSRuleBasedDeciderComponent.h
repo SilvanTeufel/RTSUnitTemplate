@@ -100,6 +100,9 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	bool UseClassAttackPositions = false;
 };
 /**
  * Easy-to-configure rule-based decider.
@@ -138,6 +141,9 @@ public:
 	// Minimum time between attack rule evaluations. If not elapsed, attack rules are skipped and normal rules/wander run.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0"))
 	float AttackRuleCheckIntervalSeconds = 30.0f;
+	// Optional override positions for attack rules by table row index. Index 0 -> Row 0, 1 -> Row 1, etc.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	TArray<FVector> AttackPositions;
 
 
 	// ---------------- Wander (small movement) fallback ----------------
@@ -191,7 +197,7 @@ private:
 
 	// Attack rules evaluation/execution: returns true if an attack rule executed actions
 	bool EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference);
-	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference);
+	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference);
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;

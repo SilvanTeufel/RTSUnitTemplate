@@ -1778,32 +1778,9 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 
 	// Call this on Server
 	if (HasAuthority())
-		UpdateHUDSelection(NewSelection, TeamId);
+		Client_UpdateHUDSelection_Implementation(NewSelection, TeamId);
 	else
 		Client_UpdateHUDSelection(NewSelection, TeamId);
-}
-
-void AExtendedControllerBase::UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId)
-{
-	if (SelectableTeamId != TeamId)
-	{
-		return;
-	}
-	
-	if (!HUDBase)
-	{
-		return;
-	}
-	
-	HUDBase->DeselectAllUnits();
-
-	for (AUnitBase* NewUnit : NewSelection)
-	{
-		NewUnit->SetSelected();
-		HUDBase->SelectedUnits.Emplace(NewUnit);
-	}
-	CurrentUnitWidgetIndex = 0;
-	SelectedUnits = HUDBase->SelectedUnits;
 }
 
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)

@@ -303,9 +303,6 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SelectUnitsWithTag(FGameplayTag Tag, int TeamId);
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
-	
 	UFUNCTION(Client, Reliable)
 	void Client_UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
 	

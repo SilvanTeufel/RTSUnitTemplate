@@ -208,7 +208,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 	return TEXT("{}");
 }
 
-bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference)
+bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference)
 {
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<UnnamedAttack>") : Row.RuleName.ToString();
 	if (!Row.bEnabled)
@@ -268,6 +268,20 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		return false;
 	}
 
+	// Choose attack position: class array override if enabled and index exists, otherwise row's position
+	FVector DesiredAttackPos = Row.AttackPosition;
+	if (Row.UseClassAttackPositions)
+	{
+		if (AttackPositions.IsValidIndex(TableRowIndex))
+		{
+			DesiredAttackPos = AttackPositions[TableRowIndex];
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: AttackRow '%s' requested class AttackPositions[%d], but index is out of range (Num=%d). Falling back to row.AttackPosition."), *RowLabel, TableRowIndex, AttackPositions.Num());
+		}
+	}
+
 	const FVector OriginalLocation = RLAgent->GetActorLocation();
 	// Adjust target location to ground with capsule clearance while not sinking below current Z
 	auto ComputeGroundAdjusted = [&](const FVector& TargetXYOnly) -> FVector
@@ -301,14 +315,14 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		}
 		return FVector(TargetXYOnly.X, TargetXYOnly.Y, OutZ);
 	};
-	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(Row.AttackPosition);
+	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
 	RLAgent->SetActorLocation(AdjustedAttackLoc);
 	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Adjusted attack move to (%.1f, %.1f, %.1f) from desired (%.1f, %.1f, %.1f)"),
 		AdjustedAttackLoc.X, AdjustedAttackLoc.Y, AdjustedAttackLoc.Z,
-		Row.AttackPosition.X, Row.AttackPosition.Y, Row.AttackPosition.Z);
+		DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
 
 	const FString Json = BuildCompositeActionJSON(Indices, Inference);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), Row.AttackPosition.X, Row.AttackPosition.Y, Row.AttackPosition.Z);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
 	Inference->ExecuteActionFromJSON(Json);
 
 	// Schedule return to original location after delay
@@ -414,9 +428,9 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
-		if (ExecuteAttackRuleRow(*Row, GS, Inference))
+		if (ExecuteAttackRuleRow(*Row, EvalIdx, GS, Inference))
 		{
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired."), *Name.ToString());
+			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (row index %d)."), *Name.ToString(), EvalIdx);
 			return true;
 		}
 	}
