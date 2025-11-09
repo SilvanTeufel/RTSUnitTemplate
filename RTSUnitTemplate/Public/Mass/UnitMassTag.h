@@ -779,9 +779,14 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::StopMovement,        FMassStateStopMovementTag());
 	SetTag(UnitTagBits::DisableObstacle,     FMassStateDisableObstacleTag());
 
-	// If the client already has Dead tag, skip replication of other state tags
+	// If the client already has Dead tag AND Health <= 0 on client, skip replication of other state tags
 	const bool bClientHasDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());
-	if (!bClientHasDead)
+	bool bHealthNonPositive = false;
+	if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+	{
+		bHealthNonPositive = (CS->Health <= 0.f);
+	}
+	if (!(bClientHasDead && bHealthNonPositive))
 	{
 		SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
 		SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
