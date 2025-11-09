@@ -170,7 +170,7 @@ void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, T
 				*AbilityUnit->GetName(), *OldStr, *NewStr);
 		}
 		
-		if (NewState != UnitData::None)
+		if (NewState != UnitData::None && AbilityUnit->GetUnitState() != UnitData::Dead)
 			AbilityUnit->SetUnitState(NewState);
 	}
 }
