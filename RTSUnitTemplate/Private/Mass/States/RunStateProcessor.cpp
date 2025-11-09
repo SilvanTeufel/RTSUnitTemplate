@@ -3,6 +3,9 @@
 
 #include "MassExecutionContext.h"
 #include "MassSignalSubsystem.h"
+#include "MassCommonFragments.h"
+#include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
@@ -26,6 +29,7 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
@@ -84,12 +88,27 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // If already dead, do not modify any tags on client
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
+            {
+                continue;
+            }
+            // If health is zero or below, mark as dead and skip further processing
+            if (Stats.Health <= 0.f)
+            {
+                auto& Defer = ChunkContext.Defer();
+                Defer.AddTag<FMassStateDeadTag>(Entity);
+                continue;
+            }
 
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();

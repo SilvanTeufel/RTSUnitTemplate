@@ -10,7 +10,7 @@
 
 UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -56,10 +56,9 @@ void UMainStateProcessor::HandleUpdateSelectionCircle()
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Throttling Check ---
-
-    
     TimeSinceLastRunA += Context.GetDeltaTimeSeconds();
     TimeSinceLastRunB += Context.GetDeltaTimeSeconds();
+
     // --- Handle Update Selection Circle Logic ---
     if (TimeSinceLastRunB >= UpdateCircleInterval)
     {
@@ -73,21 +72,31 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     // Interval reached, reset timer
     TimeSinceLastRunA -= ExecutionInterval; // Or TimeSinceLastRun = 0.0f;
 
+    // Branch by net mode
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
     // --- Get World and Signal Subsystem (only if interval was met) ---
     UWorld* World = EntityManager.GetWorld(); // Use EntityManager for World consistently
     if (!World) return;
 
     if (!SignalSubsystem) return;
-    // Make a weak pointer copy for safe capture in the async task
-    
-    
+
     EntityQuery.ForEachEntityChunk(Context,
         [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
-            //UE_LOG(LogTemp, Warning, TEXT("UMainStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -107,8 +116,6 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                 }
             }
 
-            
-            
             // --- 1. Check CURRENT entity's health ---
             if (StatsFrag.Health <= 0.f)
             {
@@ -120,5 +127,47 @@ void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             }
         } // End Entity Loop
     }); // End ForEachEntityChunk
+}
 
+void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    UWorld* World = Context.GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    EntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            if (StatsFrag.Health <= 0.f)
+            {
+                auto& Defer = ChunkContext.Defer();
+                // Set Dead tag
+                Defer.AddTag<FMassStateDeadTag>(Entity);
+                // Remove other state tags on client side
+                Defer.RemoveTag<FMassStateRunTag>(Entity);
+                Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+            }
+        }
+    });
 }

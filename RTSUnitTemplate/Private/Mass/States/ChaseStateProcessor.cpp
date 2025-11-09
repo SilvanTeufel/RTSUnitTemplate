@@ -117,12 +117,27 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
+            const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // If already dead, skip any client-side tag manipulation
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
+            {
+                continue;
+            }
+            // If health zero or below, mark dead and skip further changes
+            if (Stats.Health <= 0.f)
+            {
+                auto& Defer = ChunkContext.Defer();
+                Defer.AddTag<FMassStateDeadTag>(Entity);
+                continue;
+            }
 
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)

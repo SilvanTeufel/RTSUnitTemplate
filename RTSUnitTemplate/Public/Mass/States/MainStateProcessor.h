@@ -4,6 +4,8 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
+#include "MassEntityManager.h"
+#include "MassExecutionContext.h"
 #include "MainStateProcessor.generated.h"
 
 /**
@@ -19,6 +21,10 @@ public:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+
+	// Split execution paths
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.5f;

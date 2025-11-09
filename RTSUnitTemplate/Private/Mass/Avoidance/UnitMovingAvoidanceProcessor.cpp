@@ -49,64 +49,89 @@ namespace UE::UnitMassAvoidance
 	constexpr int32 MinTouchingCellCount = 4;
 	constexpr int32 MaxObstacleResults = MaxExpectedAgentsPerCell * MinTouchingCellCount;
 
-	static void FindCloseObstacles(const FVector& Center, const FVector::FReal SearchRadius, const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid,
+		static void FindCloseObstacles(const FVector& Center, const FVector::FReal SearchRadius, const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid,
 									TArray<FMassNavigationObstacleItem, TFixedAllocator<MaxObstacleResults>>& OutCloseEntities, const int32 MaxResults)
-	{
-		OutCloseEntities.Reset();
-		const FVector Extent(SearchRadius, SearchRadius, 0.);
-		const FBox QueryBox = FBox(Center - Extent, Center + Extent);
-
-		struct FSortingCell
 		{
-			int32 X;
-			int32 Y;
-			int32 Level;
-			FVector::FReal SqDist;
-		};
-		TArray<FSortingCell, TInlineAllocator<64>> Cells;
-		const FVector QueryCenter = QueryBox.GetCenter();
-		
-		for (int32 Level = 0; Level < AvoidanceObstacleGrid.NumLevels; Level++)
-		{
-			const FVector::FReal CellSize = AvoidanceObstacleGrid.GetCellSize(Level);
-			const FNavigationObstacleHashGrid2D::FCellRect Rect = AvoidanceObstacleGrid.CalcQueryBounds(QueryBox, Level);
-			for (int32 Y = Rect.MinY; Y <= Rect.MaxY; Y++)
+			OutCloseEntities.Reset();
+			if (MaxResults <= 0)
 			{
-				for (int32 X = Rect.MinX; X <= Rect.MaxX; X++)
+				return;
+			}
+			if (AvoidanceObstacleGrid.NumLevels <= 0)
+			{
+				return;
+			}
+			const FVector Extent(SearchRadius, SearchRadius, 0.);
+			const FBox QueryBox = FBox(Center - Extent, Center + Extent);
+
+			struct FSortingCell
+			{
+				int32 X;
+				int32 Y;
+				int32 Level;
+				FVector::FReal SqDist;
+			};
+			TArray<FSortingCell, TInlineAllocator<64>> Cells;
+			const FVector QueryCenter = QueryBox.GetCenter();
+			
+			for (int32 Level = 0; Level < AvoidanceObstacleGrid.NumLevels; Level++)
+			{
+				const FVector::FReal CellSize = AvoidanceObstacleGrid.GetCellSize(Level);
+				const FNavigationObstacleHashGrid2D::FCellRect Rect = AvoidanceObstacleGrid.CalcQueryBounds(QueryBox, Level);
+				for (int32 Y = Rect.MinY; Y <= Rect.MaxY; Y++)
 				{
-					const FVector::FReal CenterX = (X + 0.5) * CellSize;
-					const FVector::FReal CenterY = (Y + 0.5) * CellSize;
-					const FVector::FReal DX = CenterX - QueryCenter.X;
-					const FVector::FReal DY = CenterY - QueryCenter.Y;
-					const FVector::FReal SqDist = DX * DX + DY * DY;
-					FSortingCell SortCell;
-					SortCell.X = X;
-					SortCell.Y = Y;
-					SortCell.Level = Level;
-					SortCell.SqDist = SqDist;
-					Cells.Add(SortCell);
+					for (int32 X = Rect.MinX; X <= Rect.MaxX; X++)
+					{
+						const FVector::FReal CenterX = (X + 0.5) * CellSize;
+						const FVector::FReal CenterY = (Y + 0.5) * CellSize;
+						const FVector::FReal DX = CenterX - QueryCenter.X;
+						const FVector::FReal DY = CenterY - QueryCenter.Y;
+						const FVector::FReal SqDist = DX * DX + DY * DY;
+						FSortingCell SortCell;
+						SortCell.X = X;
+						SortCell.Y = Y;
+						SortCell.Level = Level;
+						SortCell.SqDist = SqDist;
+						Cells.Add(SortCell);
+					}
 				}
 			}
-		}
 
-		Cells.Sort([](const FSortingCell& A, const FSortingCell& B) { return A.SqDist < B.SqDist; });
+			Cells.Sort([](const FSortingCell& A, const FSortingCell& B) { return A.SqDist < B.SqDist; });
 
-		for (const FSortingCell& SortedCell : Cells)
-		{
-			if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
+			// Defensive: cache reference to items once
+			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
+			for (const FSortingCell& SortedCell : Cells)
 			{
-				const TSparseArray<FNavigationObstacleHashGrid2D::FItem>&  Items = AvoidanceObstacleGrid.GetItems();
-				for (int32 Idx = Cell->First; Idx != INDEX_NONE; Idx = Items[Idx].Next)
+				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
 				{
-					OutCloseEntities.Add(Items[Idx].ID);
-					if (OutCloseEntities.Num() >= MaxResults)
+					// Validate starting index
+					int32 Idx = Cell->First;
+					// Put a hard cap to avoid potential infinite loops if data is corrupted
+					int32 SafetyCounter = 0;
+					constexpr int32 MaxSafetyIterations = 1024;
+					while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
 					{
-						return;
+						if (!Items.IsValidIndex(Idx))
+						{
+							break; // Corrupt index, stop scanning this cell
+						}
+						const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
+						OutCloseEntities.Add(It.ID);
+						if (OutCloseEntities.Num() >= MaxResults)
+						{
+							return;
+						}
+						const int32 NextIdx = It.Next;
+						if (NextIdx == Idx)
+						{
+							break; // Self-loop guard
+						}
+						Idx = NextIdx;
 					}
 				}
 			}
 		}
-	}
 
 	// Adapted from ray-capsule intersection: https://iquilezles.org/www/articles/intersectors/intersectors.htm
 	static FVector::FReal ComputeClosestPointOfApproach(const FVector2D Pos, const FVector2D Vel, const FVector::FReal Rad, const FVector2D SegStart, const FVector2D SegEnd, const FVector::FReal TimeHoriz)
