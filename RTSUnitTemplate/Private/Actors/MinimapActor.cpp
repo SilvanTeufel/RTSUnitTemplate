@@ -30,10 +30,10 @@ AMinimapActor::AMinimapActor()
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
 
-    bReplicates = true;
+    bReplicates = false;
     SetNetUpdateFrequency(1);
     SetMinNetUpdateFrequency(1);
-    SetReplicates(true);
+    SetReplicates(false);
 }
 
 void AMinimapActor::BeginPlay()
@@ -43,7 +43,7 @@ void AMinimapActor::BeginPlay()
     //MinimapMinBounds = FVector2D(-Size*40.f, -Size*40.f);
     //MinimapMaxBounds = FVector2D(Size*40.f, Size*40.f);
 
-    if (GetLocalRole() == ROLE_Authority && MapBoundsComponent)
+    if (MapBoundsComponent)
     {
         const FVector Origin = MapBoundsComponent->GetComponentLocation();
         const FVector Extent = MapBoundsComponent->GetScaledBoxExtent();
@@ -54,9 +54,9 @@ void AMinimapActor::BeginPlay()
 
     
     InitMinimapTexture();
-
     CaptureMapTopography();
 }
+
 
 void AMinimapActor::CaptureMapTopography()
 {
