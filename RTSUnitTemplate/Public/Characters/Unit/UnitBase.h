@@ -208,6 +208,9 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);
 
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void DeadMultiCast();
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DeadEffectsAndEvents();
 	

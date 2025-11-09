@@ -466,11 +466,18 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	HealthbarCollapseCheck(NewHealth, OldHealth);
 }
 
+void AUnitBase::DeadMultiCast_Implementation()
+{
+	SetUnitState(UnitData::Dead);
+	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
+	FireEffects_Implementation(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
+}
 void AUnitBase::DeadEffectsAndEvents()
 {
 	if (!DeadEffectsExecuted)
 	{
-		FireEffects(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
+		DeadMultiCast();
+		//FireEffects(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
 		StoppedMoving();
 		IsDead();
 		DeadEffectsExecuted = true;
