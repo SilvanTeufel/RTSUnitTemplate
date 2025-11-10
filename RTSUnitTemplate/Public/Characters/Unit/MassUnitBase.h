@@ -121,6 +121,10 @@ public:
 	// Updates MoveTarget and ClientPrediction fragments to reflect a new location and desired speed
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed = 0.f);
+
+	// Stops Mass movement for this unit by setting MoveTarget to Stand on the server
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool StopMassMovement();
 	
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);

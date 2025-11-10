@@ -1202,3 +1202,27 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     //EntityManager->AddTagToEntity(EntityHandle, FMassStateChargingTag::StaticStruct());
 	EntityManager->Defer().AddTag<FMassStateChargingTag>(EntityHandle);
 }
+
+bool AMassUnitBase::StopMassMovement()
+{
+	// Only meaningful on authority/server
+	if (GetNetMode() == NM_Client)
+	{
+		return false;
+	}
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle   EntityHandle;
+	if (!GetMassEntityData(EntityManager, EntityHandle) || EntityManager == nullptr || !EntityManager->IsEntityValid(EntityHandle))
+	{
+		return false;
+	}
+
+	if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+	{
+		StopMovement(*MoveTarget, GetWorld());
+		return true;
+	}
+
+	return false;
+}

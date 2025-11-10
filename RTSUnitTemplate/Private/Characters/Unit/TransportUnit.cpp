@@ -148,20 +148,7 @@ void ATransportUnit::UnloadNextUnit()
 			LoadedUnit->SetActorLocation(FinalUnloadLocation);
 			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
 			LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
-			// Ensure the Mass movement is stopped upon unload
-			if (GetNetMode() != NM_Client)
-			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(LoadedUnit))
-			{
-				FMassEntityManager* EntityManager = nullptr;
-				FMassEntityHandle   EntityHandle;
-				if (MassUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager && EntityManager->IsEntityValid(EntityHandle))
-				{
-					if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
-					{
-						StopMovement(*MoveTarget, GetWorld());
-					}
-				}
-			}
+			LoadedUnit->StopMassMovement();
 			
 			LoadedUnit->EnableDynamicObstacle(true);
 			LoadedUnit->EditUnitDetectable(true);
