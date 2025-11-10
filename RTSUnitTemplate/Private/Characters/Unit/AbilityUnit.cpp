@@ -66,7 +66,20 @@ void AAbilityUnit::TeleportToValidLocation_Implementation(const FVector& Destina
 			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this))
 			{
 				MassUnit->SyncTranslation();
-				MassUnit->UpdatePredictionFragment(TeleportLocation, 0.f);
+				//MassUnit->UpdatePredictionFragment(TeleportLocation, MassUnit->Attributes->GetBaseRunSpeed());
+
+				if (GetNetMode() != NM_Client)
+				{
+					FMassEntityManager* EntityManager = nullptr;
+					FMassEntityHandle   EntityHandle;
+					if (MassUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager && EntityManager->IsEntityValid(EntityHandle))
+					{
+						if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+						{
+							StopMovement(*MoveTarget, GetWorld());
+						}
+					}
+				}
 			}
 			
 			     // 1. Get the Mass Entity Subsystem and Entity Manager

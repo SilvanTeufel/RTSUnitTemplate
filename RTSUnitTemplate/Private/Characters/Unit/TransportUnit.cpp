@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Mass/UnitMassTag.h"
 
 void ATransportUnit::BindTransportOverlap()
 {
@@ -146,9 +147,22 @@ void ATransportUnit::UnloadNextUnit()
 			
 			LoadedUnit->SetActorLocation(FinalUnloadLocation);
 			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
+			LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
+			// Ensure the Mass movement is stopped upon unload
+			if (GetNetMode() != NM_Client)
+			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(LoadedUnit))
+			{
+				FMassEntityManager* EntityManager = nullptr;
+				FMassEntityHandle   EntityHandle;
+				if (MassUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager && EntityManager->IsEntityValid(EntityHandle))
+				{
+					if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+					{
+						StopMovement(*MoveTarget, GetWorld());
+					}
+				}
+			}
 			
-			//LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
-			//inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 			LoadedUnit->EnableDynamicObstacle(true);
 			LoadedUnit->EditUnitDetectable(true);
 			
