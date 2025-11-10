@@ -1038,21 +1038,6 @@ bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float D
 		return false;
 	}
 
-	/*
-	// Update movement target to point to new location or stop
-	if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
-	{
-		if (DesiredSpeed <= 0.f)
-		{
-			StopMovement(*MoveTarget, GetWorld());
-			MoveTarget->Center = NewLocation;
-		}
-		else
-		{
-			UpdateMoveTarget(*MoveTarget, NewLocation, DesiredSpeed, GetWorld());
-		}
-	}*/
-
 	// Update client prediction fragment
 	if (FMassClientPredictionFragment* Pred = EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle))
 	{
