@@ -177,11 +177,7 @@ public:
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void LeftClickAMoveUEPFMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT);
-
-
-	UFUNCTION(Server, Reliable,  Category = RTSUnitTemplate)
-	void Server_ReportUnitVisibility(APerformanceUnit* Unit, bool bVisible);
-
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickReleasedMass();
 	// Updates the Fog Mask using visible units

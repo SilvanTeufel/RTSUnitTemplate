@@ -400,6 +400,8 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			continue;
 		}
 
+		// Ensure this PlayerStart isn't assigned to another controller in this pass
+		PlayerStarts.RemoveSingle(CustomPlayerStart);
 		// 3) Apply customizations and set team/waypoint
 		ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
 

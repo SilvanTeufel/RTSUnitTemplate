@@ -46,8 +46,6 @@ void APerformanceUnit::Tick(float DeltaTime)
 	
 	CheckHealthBarVisibility();
 	CheckTimerVisibility();
-
-	UpdateClientVisibility();
 	
 }
 
@@ -77,7 +75,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
-	DOREPLIFETIME(APerformanceUnit, bClientIsVisible);
+
 	
 }
 
@@ -564,11 +562,6 @@ void APerformanceUnit::CheckTimerVisibility()
 }
 
 
-void APerformanceUnit::SetClientVisibility(bool bVisible)
-{
-	bClientIsVisible = bVisible;
-}
-
 void APerformanceUnit::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible)
 {
 	// Do nothing for own team or if state already matches
@@ -654,19 +647,4 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 		&& ( !EnableFog
 		   || IsVisibleEnemy
 		   || IsMyTeam );
-}
-
-void APerformanceUnit::UpdateClientVisibility()
-{
-	if (!HasAuthority()) // only on client
-	{
-		const bool bNew = ComputeLocalVisibility();
-		if (bNew != bClientIsVisible)
-		{
-			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController()))
-			{
-				PC->Server_ReportUnitVisibility(this, bNew);
-			}
-		}
-	}
 }

@@ -1213,14 +1213,6 @@ void ACustomControllerBase::LeftClickPressedMass()
 	
 }
 
-void ACustomControllerBase::Server_ReportUnitVisibility_Implementation(APerformanceUnit* Unit, bool bVisible)
-{
-	if (IsValid(Unit))
-	{
-		Unit->SetClientVisibility(bVisible);
-	}
-}
-
 void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
 {
 	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
