@@ -678,26 +678,26 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 
 					bool UnitIsValid = true;
 					
-					if (!SelectedUnits[i]->IsInitialized) UnitIsValid = false;
-					if (!SelectedUnits[i]->CanMove) UnitIsValid = false;
+					if (!UnitsToLoad[i]->IsInitialized) UnitIsValid = false;
+					if (!UnitsToLoad[i]->CanMove) UnitIsValid = false;
 				
-					if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+					if (UnitsToLoad[i]->CurrentSnapshot.AbilityClass)
 					{
 					
-						UGameplayAbilityBase* AbilityCDO = SelectedUnits[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+						UGameplayAbilityBase* AbilityCDO = UnitsToLoad[i]->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 						
 						if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
-						else CancelCurrentAbility(SelectedUnits[i]);
+						else CancelCurrentAbility(UnitsToLoad[i]);
 					}
 
-					if (SelectedUnits[i]->bIsMassUnit && UnitIsValid)
+					if (UnitsToLoad[i]->bIsMassUnit && UnitIsValid)
 					{
-						float Speed = SelectedUnits[i]->Attributes->GetBaseRunSpeed();
+						float Speed = UnitsToLoad[i]->Attributes->GetBaseRunSpeed();
 						// Accumulate for batched RPC instead of sending one RPC per unit
-						BatchUnits.Add(SelectedUnits[i]);
+						BatchUnits.Add(UnitsToLoad[i]);
 						BatchLocations.Add(UnitsToLoad[i]->RunLocation);
 						BatchSpeeds.Add(Speed);
-						SetUnitState_Replication(SelectedUnits[i], 1);
+						SetUnitState_Replication(UnitsToLoad[i], 1);
 					}
 					else
 					{
