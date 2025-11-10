@@ -144,24 +144,11 @@ void ATransportUnit::UnloadNextUnit()
 			}
 			const FVector FinalUnloadLocation = UnloadLocation + UnloadOffset;
 			
-			// Log FinalUnloadLocation with network context (client/server)
-			{
-				const ENetMode Mode = GetNetMode();
-				const TCHAR* ModeStr =
-					(Mode == NM_Client) ? TEXT("Client") :
-					(Mode == NM_DedicatedServer) ? TEXT("DedicatedServer") :
-					(Mode == NM_ListenServer) ? TEXT("ListenServer") :
-					(Mode == NM_Standalone) ? TEXT("Standalone") : TEXT("Unknown");
-			
-				UE_LOG(LogTemp, Log, TEXT("[Transport] UnloadNextUnit FinalUnloadLocation=%s | HasAuthority=%s | NetMode=%s | Transport=%s | LoadedUnit=%s"),
-					*FinalUnloadLocation.ToString(), HasAuthority() ? TEXT("true") : TEXT("false"), ModeStr, *GetName(), *GetNameSafe(LoadedUnit));
-			}
-			
 			LoadedUnit->SetActorLocation(FinalUnloadLocation);
 			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
 			
-			//LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, 0.f);
-
+			//LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
+			//inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 			LoadedUnit->EnableDynamicObstacle(true);
 			LoadedUnit->EditUnitDetectable(true);
 			

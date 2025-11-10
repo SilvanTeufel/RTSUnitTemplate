@@ -186,11 +186,8 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			bNeedsMassUnitSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
-
-			if(GetNetMode() == NM_Client)
-			{
-				UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
-			}
+			UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
+			
 			// Server: assign NetID and update authoritative registry so clients can reconcile
    if (UWorld* WorldPtr = GetWorld())
 			{
