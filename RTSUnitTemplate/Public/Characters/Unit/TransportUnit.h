@@ -41,7 +41,7 @@ public:
 	void LoadUnit(AUnitBase* UnitToLoad);
 
 	// Unloads all loaded units.
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void UnloadAllUnits();
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")

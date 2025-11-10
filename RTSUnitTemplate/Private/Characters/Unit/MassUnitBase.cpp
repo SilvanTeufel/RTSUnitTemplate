@@ -11,6 +11,9 @@
 #include "Mass/States/ChaseStateProcessor.h"
 #include "MassCommonFragments.h"
 #include "GameFramework/CharacterMovementComponent.h"
+// For updating FMassMoveTargetFragment and prediction helpers
+#include "Mass/UnitMassTag.h"
+#include "MassNavigationFragments.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -58,7 +61,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, MeshRotationOffset);
 	
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
-	DOREPLIFETIME(AMassUnitBase, FlyHeight)
+	DOREPLIFETIME(AMassUnitBase, FlyHeight);
 }
 
 FVector AMassUnitBase::GetMassActorLocation() const
@@ -996,8 +999,8 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncTranslation failed – entity %s invalid."),
-			   *GetName(), *EntityHandle.DebugGetDescription());
+		   TEXT("AMassUnitBase (%s): SyncTranslation failed – entity %s invalid."),
+		   *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
 
@@ -1006,14 +1009,57 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 	if (!TransformFrag)
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncTranslation failed – no FTransformFragment found."),
-			   *GetName());
+		   TEXT("AMassUnitBase (%s): SyncTranslation failed – no FTransformFragment found."),
+		   *GetName());
 		return false;
 	}
 
 	// Sync
 	FTransform& Current = TransformFrag->GetMutableTransform();
 	Current.SetTranslation(NewLocation);
+
+	return true;
+}
+
+bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed)
+{
+	if (GetNetMode() != NM_Client ) return false;
+	
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle   EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return false;
+	}
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): UpdateMovementAndPredictionAtLocation failed – entity %s invalid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	/*
+	// Update movement target to point to new location or stop
+	if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+	{
+		if (DesiredSpeed <= 0.f)
+		{
+			StopMovement(*MoveTarget, GetWorld());
+			MoveTarget->Center = NewLocation;
+		}
+		else
+		{
+			UpdateMoveTarget(*MoveTarget, NewLocation, DesiredSpeed, GetWorld());
+		}
+	}*/
+
+	// Update client prediction fragment
+	if (FMassClientPredictionFragment* Pred = EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle))
+	{
+		Pred->Location = NewLocation;
+		Pred->PredDesiredSpeed = DesiredSpeed;
+		Pred->bHasData = true;
+	}
 
 	return true;
 }

@@ -6,6 +6,7 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Widgets/UnitTimerWidget.h"
+#include "Characters/Unit/MassUnitBase.h"
 
 void ATransportUnit::BindTransportOverlap()
 {
@@ -92,7 +93,7 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	}
 }
 
-void ATransportUnit::UnloadAllUnits()
+void ATransportUnit::UnloadAllUnits_Implementation()
 {
 	if (!IsATransporter) return;
     
@@ -142,9 +143,25 @@ void ATransportUnit::UnloadNextUnit()
 				UnloadLocation.Z += 100.f;
 			}
 			const FVector FinalUnloadLocation = UnloadLocation + UnloadOffset;
-	
+			
+			// Log FinalUnloadLocation with network context (client/server)
+			{
+				const ENetMode Mode = GetNetMode();
+				const TCHAR* ModeStr =
+					(Mode == NM_Client) ? TEXT("Client") :
+					(Mode == NM_DedicatedServer) ? TEXT("DedicatedServer") :
+					(Mode == NM_ListenServer) ? TEXT("ListenServer") :
+					(Mode == NM_Standalone) ? TEXT("Standalone") : TEXT("Unknown");
+			
+				UE_LOG(LogTemp, Log, TEXT("[Transport] UnloadNextUnit FinalUnloadLocation=%s | HasAuthority=%s | NetMode=%s | Transport=%s | LoadedUnit=%s"),
+					*FinalUnloadLocation.ToString(), HasAuthority() ? TEXT("true") : TEXT("false"), ModeStr, *GetName(), *GetNameSafe(LoadedUnit));
+			}
+			
 			LoadedUnit->SetActorLocation(FinalUnloadLocation);
 			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
+			
+			//LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, 0.f);
+
 			LoadedUnit->EnableDynamicObstacle(true);
 			LoadedUnit->EditUnitDetectable(true);
 			

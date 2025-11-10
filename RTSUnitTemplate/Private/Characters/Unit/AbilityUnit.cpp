@@ -15,6 +15,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/CapsuleComponent.h"
 #include "Sound\SoundCue.h"
+#include "Characters/Unit/MassUnitBase.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -45,7 +46,7 @@ void AAbilityUnit::LevelUp_Implementation()
 	}
 }
 
-void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float MaxZDifference, float ZOffset)
+void AAbilityUnit::TeleportToValidLocation_Implementation(const FVector& Destination, float MaxZDifference, float ZOffset)
 {
 	FVector Start = Destination + FVector(0.f, 0.f, 1000.f);
 	FVector End = Destination - FVector(0.f, 0.f, 200.f);
@@ -61,7 +62,13 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float Max
 			FVector TeleportLocation = FVector(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z + ZOffset);
 			SetActorLocation(TeleportLocation);
 
-
+			// If this unit is a Mass unit, sync translation and update prediction after teleport
+			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this))
+			{
+				MassUnit->SyncTranslation();
+				MassUnit->UpdatePredictionFragment(TeleportLocation, 0.f);
+			}
+			
 			     // 1. Get the Mass Entity Subsystem and Entity Manager
 		          if (const UWorld* World = GetWorld())
 		          {
@@ -111,6 +118,7 @@ void AAbilityUnit::TeleportToValidLocation(const FVector& Destination, float Max
 		}
 	}
 
+	
 	//SetActorLocation(GetActorLocation());
 }
 

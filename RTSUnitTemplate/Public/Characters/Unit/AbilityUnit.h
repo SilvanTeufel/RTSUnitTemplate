@@ -37,7 +37,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool IsWorker = false;
 	
-	UFUNCTION(BlueprintCallable, Category = Ability)
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 1000.f, float ZOffset = 70.f);
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
