@@ -1252,6 +1252,11 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         }
                         TargetStats->Health = FMath::Max(0.0f, TargetStats->Health);
 
+                        // Notify the target that it has been attacked (Blueprint event)
+                        if (IsValid(StrongTarget))
+                        {
+                            StrongTarget->Attacked(StrongAttacker);
+                        }
 
                         // --- Rest of the Actor logic (RPCs, Abilities, State Changes etc.) ---
                         StrongAttacker->LevelData.Experience++;
@@ -1395,6 +1400,12 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
                         // --- Perform Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
+                        
+                        // Notify the target that it has been attacked (Blueprint event)
+                        if (IsValid(StrongTarget))
+                        {
+                            StrongTarget->Attacked(StrongAttacker);
+                        }
                     	
 						bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
 

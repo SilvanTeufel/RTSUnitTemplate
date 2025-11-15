@@ -153,6 +153,10 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void MeeleImpactEvent();
 	
+	// Called when this unit has been attacked by another actor (attacker can be nullptr)
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void Attacked(AActor* AttackingActor);
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "CreateCameraComp", Keywords = "RTSUnitTemplate CreateCameraComp"), Category = RTSUnitTemplate)
 	void IsAttacked(AActor* AttackingCharacter); // AActor* SelectedCharacter
 
