@@ -32,6 +32,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer lesen/schreiben, Zustand ändern
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
@@ -72,6 +73,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         auto SightList = ChunkContext.GetMutableFragmentView<FMassSightFragment>();
@@ -85,7 +87,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             FMassSightFragment& SightFrag = SightList[i];
-
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+            
             if (!StateFrag.CanAttack)
             {
                TargetFrag.TargetEntity.Reset();
@@ -117,7 +120,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            float AttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
+            float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
             
                 if (Dist <= AttackRange) // --- In Range ---
                 {

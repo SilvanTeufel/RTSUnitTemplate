@@ -1369,15 +1369,16 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
                     {
                        const FTransformFragment* AttackerTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity);
+                    	const FMassAgentCharacteristicsFragment* CharFrag = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(AttackerEntity);
 					   const FTransformFragment* TargetTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
                     	FMassAgentCharacteristicsFragment* TargetCharFrag = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
-					   if (AttackerTransformFrag && TargetTransformFrag && TargetCharFrag)
+					   if (AttackerTransformFrag && TargetTransformFrag && TargetCharFrag && CharFrag)
 					   {
 						   const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
 						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
 						   const float DistanceSquared = FVector::DistSquared2D(CurrentAttackerLocation, CurrentTargetLocation);
 
-					   		float RangeWithCapsule = AttackerRange + TargetCharFrag->CapsuleRadius/2.f;
+					   		float RangeWithCapsule = AttackerRange+CharFrag->CapsuleRadius/2.f + TargetCharFrag->CapsuleRadius/2.f;
 							const float AttackRangeSquared = FMath::Square(RangeWithCapsule); // AttackerRange was captured
 		   				
 

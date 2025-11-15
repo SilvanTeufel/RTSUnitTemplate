@@ -42,6 +42,8 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 
@@ -74,16 +76,21 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
+ 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // State modification stays here
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
 
+            
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
@@ -112,7 +119,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
                 FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-                const float AttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
+                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
             
                 if (Dist <= AttackRange)
                 {

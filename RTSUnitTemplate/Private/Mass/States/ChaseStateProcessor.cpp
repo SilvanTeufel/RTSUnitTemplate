@@ -38,6 +38,7 @@ void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly); // Ziel lesen
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
 
@@ -209,7 +210,9 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
@@ -217,7 +220,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassCombatStatsFragment& Stats = StatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
-
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
@@ -262,7 +265,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
             FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-            const float EffectiveAttackRange = Stats.AttackRange+TargetCharFrag->CapsuleRadius/2.f;
+            const float EffectiveAttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---
