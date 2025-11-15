@@ -952,7 +952,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						FVector Origin, BoxExtent;
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+100.f;
+						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+150.f;
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -983,7 +983,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
             		
-            		if (WorkerStats->BaseAvailable)
+            		if (WorkerStats->BaseAvailable && WorkerStats->ResourceAvailable)
             		{
             			WorkerStats->AutoMining	= StrongUnitActor->AutoMining;
             		}
@@ -1742,6 +1742,11 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
+						if (!UnitBase->ResourcePlace)
+						{
+							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+							return;
+						}
 						UpdateUnitMovement(Entity , UnitBase);
 						//SwitchState( UnitSignals::GoToBase, Entity, EntityManager);
 						UnitBase->SwitchEntityTagByState(UnitBase->UnitState, UnitBase->UnitStatePlaceholder);
