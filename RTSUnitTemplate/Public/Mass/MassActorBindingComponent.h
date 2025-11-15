@@ -128,4 +128,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float RotationSpeed = 15.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float AdditionalCapsuleRadius = 0.f;
 };

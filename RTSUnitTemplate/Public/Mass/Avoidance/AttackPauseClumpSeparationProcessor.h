@@ -47,7 +47,10 @@ protected:
 	float MaxCheckRadius = 300.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float DistanceMultiplier = 2.f;
+	float DistanceMultiplierFriendly = 2.f;
+	
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
+	float DistanceMultiplierEnemy = 1.f;
 private:
 	// We keep two queries since Mass tag queries do not support OR within a single requirement.
 	FMassEntityQuery AttackQuery;

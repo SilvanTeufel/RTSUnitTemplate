@@ -129,7 +129,7 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 
 			const FVector Delta = Horizontal(B.Location - A.Location);
 			const float DistSq = Delta.SizeSquared();
-			const float Desired = FMath::Max(1.f, A.CapsuleRadius + B.CapsuleRadius)*DistanceMultiplier; // center distance
+			const float Desired = FMath::Max(1.f, A.CapsuleRadius + B.CapsuleRadius)*DistanceMultiplierFriendly; // center distance
 
 			if (MaxCheckRadius > 0.f && DistSq > FMath::Square(MaxCheckRadius))
 			{
