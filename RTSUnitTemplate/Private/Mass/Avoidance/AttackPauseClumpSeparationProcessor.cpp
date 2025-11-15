@@ -115,11 +115,10 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 		{
 			const FClumpUnitInfo& B = Units[b];
 
-			if (A.TeamId != B.TeamId)
-			{
-				continue; // Only same team
-			}
-			if (bOnlySeparateWhenSameTarget)
+			const bool bSameTeam = (A.TeamId == B.TeamId);
+
+			// Only enforce the "same target" restriction for same-team separation
+			if (bOnlySeparateWhenSameTarget && bSameTeam)
 			{
 				if (A.Target != B.Target || !A.Target.IsSet())
 				{
@@ -129,7 +128,10 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 
 			const FVector Delta = Horizontal(B.Location - A.Location);
 			const float DistSq = Delta.SizeSquared();
-			const float Desired = FMath::Max(1.f, A.CapsuleRadius + B.CapsuleRadius)*DistanceMultiplierFriendly; // center distance
+
+			// Use different multipliers for friendly vs enemy pairs
+			const float DistanceMultiplier = bSameTeam ? DistanceMultiplierFriendly : DistanceMultiplierEnemy;
+			const float Desired = FMath::Max(1.f, A.CapsuleRadius + B.CapsuleRadius) * DistanceMultiplier; // center distance
 
 			if (MaxCheckRadius > 0.f && DistSq > FMath::Square(MaxCheckRadius))
 			{
@@ -143,7 +145,8 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 					? (Delta / Dist)
 					: FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f).GetSafeNormal2D();
 				const float Overlap = Desired - Dist; // how much too close
-				const FVector Push = DirAB * Overlap * RepulsionStrength; // push B away from A along AB, and A opposite
+				const float Strength = bSameTeam ? RepulsionStrengthFriendly : RepulsionStrengthEnemy;
+				const FVector Push = DirAB * Overlap * Strength; // push B away from A along AB, and A opposite
 
 				AccumPush.FindOrAdd(A.Entity) -= Push; // A pushed opposite
 				AccumPush.FindOrAdd(B.Entity) += Push; // B pushed along dir

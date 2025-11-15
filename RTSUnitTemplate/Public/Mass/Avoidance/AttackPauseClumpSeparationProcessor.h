@@ -35,8 +35,16 @@ protected:
 	float ExecutionInterval = 0.25f;
 
 	// Strength multiplier for separation. Units: (cm/s^2) like a pseudo acceleration added once per tick.
+	// Deprecated: Use RepulsionStrengthFriendly / RepulsionStrengthEnemy instead. Kept for backward compatibility (unused).
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float RepulsionStrength = 100.f;
+
+	// Separate repulsion strengths for friendly vs enemy interactions
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
+	float RepulsionStrengthFriendly = 100.f;
+
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
+	float RepulsionStrengthEnemy = 25.f;
 
 	// If true, only apply separation to units that share the same target entity.
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
