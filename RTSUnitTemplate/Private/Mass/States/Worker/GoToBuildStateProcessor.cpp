@@ -35,6 +35,7 @@ void UGoToBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly); // Contains target pos/radius now
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);       // For speed
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);   
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::All);
 
 
@@ -83,7 +84,8 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
         const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetFragmentView<FMassWorkerStatsFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
-
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+ 
         const int32 NumEntities = Context.GetNumEntities();
             
         //UE_LOG(LogTemp, Log, TEXT("UGoToBuildStateProcessor NumEntities: %d"), NumEntities);
@@ -95,7 +97,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
             FMassAIStateFragment& AIState = AIStateList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
-
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
             
@@ -110,9 +112,9 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                  continue;
             }
 
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
+            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition)-CharFrag.CapsuleRadius/2.f;
 
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter; // Update distance
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter-WorkerStats.BuildAreaArrivalDistance; // Update distance
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;

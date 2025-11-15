@@ -961,7 +961,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			FVector Origin, BoxExtent;
 						StrongUnitActor->BuildArea->GetActorBounds( false, Origin, BoxExtent);
 
-            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+50.f;
+            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+150.f;
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = FindGroundLocationForActor(this, StrongUnitActor->BuildArea, {StrongUnitActor, StrongUnitActor->BuildArea}); // StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
