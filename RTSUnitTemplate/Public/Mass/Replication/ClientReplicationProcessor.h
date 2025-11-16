@@ -31,6 +31,9 @@ public:
 	float MaxCorrectionAccel = 1000.f; // cm/s^2
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
+	// If reconciliation error exceeds this distance (cm), perform a one-time full replication (snap) on that tick
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float FullReplicationDistance = 2000.f; // cm
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;

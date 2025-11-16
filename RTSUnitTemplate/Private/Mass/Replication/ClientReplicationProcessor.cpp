@@ -1117,6 +1117,36 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// Only correct horizontal to avoid oscillations in height; vertical handled by other processors
 					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
 					const float ErrorDistSq = PosErrorXY.SizeSquared();
+					// One-time snap to server if overall error exceeds FullReplicationDistance and we're in reconciliation mode
+					{
+						static TSet<uint32> GSnappedOnce;
+						const uint32 ThisNetID = NetIDList[EntityIdx].NetID.GetValue();
+						const float Dist3DSq = FVector::DistSquared(TargetLoc, CurrentLoc);
+						const float SnapThreshSq = FullReplicationDistance > 0.f ? FMath::Square(FullReplicationDistance) : 0.f;
+						// If far away and haven't snapped yet, do a single full replication (snap) this tick
+						if (SnapThreshSq > 0.f && Dist3DSq > SnapThreshSq && !GSnappedOnce.Contains(ThisNetID))
+						{
+							FTransform& ClientXfSnap = TransformList[EntityIdx].GetMutableTransform();
+							ClientXfSnap = FinalXf;
+							// Zero force/steering this tick to avoid overshoot
+							TArrayView<FMassForceFragment> ForceListSnap = Context.GetMutableFragmentView<FMassForceFragment>();
+							TArrayView<FMassSteeringFragment> SteeringListSnap = Context.GetMutableFragmentView<FMassSteeringFragment>();
+							if (ForceListSnap.IsValidIndex(EntityIdx)) { ForceListSnap[EntityIdx].Value = FVector::ZeroVector; }
+							if (SteeringListSnap.IsValidIndex(EntityIdx)) { SteeringListSnap[EntityIdx].DesiredVelocity = FVector::ZeroVector; }
+							GSnappedOnce.Add(ThisNetID);
+							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+							{
+								UE_LOG(LogTemp, Warning, TEXT("ClientSnapOnce: NetID=%u Dist=%.1f (>%.1f)"), ThisNetID, FMath::Sqrt(Dist3DSq), FullReplicationDistance);
+							}
+							// Skip further reconciliation for this entity this tick
+							continue;
+						}
+						// If we've snapped previously and are now within half the threshold, allow future snaps again
+						if (GSnappedOnce.Contains(ThisNetID) && Dist3DSq <= FMath::Square(FMath::Max(FullReplicationDistance * 0.5f, 100.f)))
+						{
+							GSnappedOnce.Remove(ThisNetID);
+						}
+					}
 					// Thresholds and gains
 				
 					if (ErrorDistSq > MinErrorForCorrectionSq)
