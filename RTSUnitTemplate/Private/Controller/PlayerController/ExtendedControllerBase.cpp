@@ -10,6 +10,7 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Actors/WorkArea.h"
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
 #include "Mass/Signals/MySignals.h"
@@ -17,7 +18,34 @@
 #include "Hud/HUDBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Components/PrimitiveComponent.h"
 
+// Helper: compute snap center/extent for any actor (works with ISMs too)
+static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
+{
+	if (!Actor)
+	{
+		return false;
+	}
+
+	// Prefer explicit mesh on WorkArea
+	if (AWorkArea* WA = Cast<AWorkArea>(Actor))
+	{
+		if (WA->Mesh)
+		{
+			const FBoxSphereBounds B = WA->Mesh->CalcBounds(WA->Mesh->GetComponentTransform());
+			OutCenter = B.Origin;
+			OutExtent = B.BoxExtent;
+			return true;
+		}
+	}
+
+	// Otherwise, fall back to aggregate component bounds (works for ISM as well)
+	const FBox CompBox = Actor->GetComponentsBoundingBox(/*bNonColliding=*/true);
+	OutCenter = CompBox.GetCenter();
+	OutExtent = CompBox.GetExtent();
+	return true;
+}
 
 void AExtendedControllerBase::BeginPlay()
 {
@@ -653,134 +681,173 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         return;
 
     // 1) Get the dragged mesh
-   	UStaticMeshComponent* DraggedMesh = DraggedActor->Mesh;
+    UStaticMeshComponent* DraggedMesh = DraggedActor->Mesh;
     if (!DraggedMesh)
     {
         UE_LOG(LogTemp, Warning, TEXT("DraggedActor has no StaticMeshComponent!"));
         return;
     }
 
-    // 2) Get the other mesh
-   // UStaticMeshComponent* OtherMesh = OtherActor->FindComponentByClass<UStaticMeshComponent>();
-    if (!OtherMesh)
+    // 2) Compute each actor's bounds in world space
+    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+
+    FVector OtherCenter, OtherExtent;
+    if (OtherMesh)
     {
-        UE_LOG(LogTemp, Warning, TEXT("OtherActor has no StaticMeshComponent!"));
+        const FBoxSphereBounds OtherBounds = OtherMesh->CalcBounds(OtherMesh->GetComponentTransform());
+        OtherCenter = OtherBounds.Origin;
+        OtherExtent = OtherBounds.BoxExtent;
+    }
+    else
+    {
+        if (!GetActorBoundsForSnap(OtherActor, OtherCenter, OtherExtent))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SnapToActor: Could not derive bounds for OtherActor %s"), *OtherActor->GetName());
+            return;
+        }
+    }
+
+    // 3) Extract the centers and half-extents
+    const FVector DraggedCenter = DraggedBounds.Origin;
+    const FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+
+    // 4) Decide on a small gap so they don’t overlap visually
+    const float Gap = SnapGap;
+
+    // 5) Compute how much to offset on X and Y so they "just touch"
+    const float XOffset = DraggedExtent.X + OtherExtent.X + Gap;
+    const float YOffset = DraggedExtent.Y + OtherExtent.Y + Gap;
+
+    // 6) Determine which axis (X or Y) is closer based on current mouse ground hit
+    FVector Ref = DraggedActor->GetActorLocation();
+    {
+        FHitResult CursorHit;
+        if (GetHitResultUnderCursor(ECC_Visibility, false, CursorHit))
+        {
+            Ref = CursorHit.Location;
+        }
+        else
+        {
+            // Fallback: deproject and trace to ground
+            FVector MousePos, MouseDir;
+            if (DeprojectMousePositionToWorld(MousePos, MouseDir))
+            {
+                const FVector TraceStart = MousePos;
+                const FVector TraceEnd = TraceStart + MouseDir * 5000.f;
+                FCollisionQueryParams Params;
+                for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+                {
+                    Params.AddIgnoredActor(*It);
+                }
+                FHitResult GroundHit;
+                if (GetWorld() && GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+                {
+                    Ref = GroundHit.Location;
+                }
+            }
+        }
+    }
+
+    // Dynamic release: if MOUSE is farther from target than combined XY half-extents + 150, release
+    const float DragXY = FMath::Max(DraggedExtent.X, DraggedExtent.Y);
+    const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
+    const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+    const float MouseToTarget = FVector::Dist2D(Ref, OtherCenter);
+    if (MouseToTarget > ReleaseThreshold)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[SnapToActor] Release: MouseDist=%.1f > Threshold=%.1f. DragXY=%.1f OtherXY=%.1f Target=%s"),
+            MouseToTarget, ReleaseThreshold, DragXY, OtherXY, *OtherActor->GetName());
+        if (CurrentSnapActor == OtherActor) { CurrentSnapActor = nullptr; }
+        WorkAreaIsSnapped = false;
+        // Immediately move dragged area to follow the cursor so it visually releases this frame
+        FVector FreeRef = Ref;
+        FVector Desired = FVector(FreeRef.X, FreeRef.Y, DraggedActor->GetActorLocation().Z + DraggedAreaZOffset);
+        const FVector GroundedFree = ComputeGroundedLocation(DraggedActor, Desired);
+        DraggedActor->SetActorLocation(GroundedFree);
         return;
     }
 
-    // 3) Compute each mesh’s bounds in world space
-    //    (You could also use DraggedMesh->Bounds directly, but CalcBounds is explicit.)
-    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
-    FBoxSphereBounds OtherBounds   = OtherMesh->CalcBounds(OtherMesh->GetComponentTransform());
+    const float dx = FMath::Abs(Ref.X - OtherCenter.X);
+    const float dy = FMath::Abs(Ref.Y - OtherCenter.Y);
 
-    // 4) Extract the centers and half-extents
-    FVector DraggedCenter = DraggedBounds.Origin;
-    FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
-    FVector OtherCenter   = OtherBounds.Origin;
-    FVector OtherExtent   = OtherBounds.BoxExtent;
-
-    // 5) Decide on a small gap so they don’t overlap visually
-    float Gap = SnapGap;
-
-    // 6) Compute how much to offset on X and Y so they "just touch"
-    //    (i.e. sum of half-extents along that axis + Gap)
-    float XOffset = DraggedExtent.X + OtherExtent.X + Gap;
-    float YOffset = DraggedExtent.Y + OtherExtent.Y + Gap;
-
-    // 7) Determine which axis (X or Y) is already closer
-    //    - dx < dy => line them up on X; offset on Y
-    //    - else => line them up on Y; offset on X
-    float dx = FMath::Abs(DraggedCenter.X - OtherCenter.X);
-    float dy = FMath::Abs(DraggedCenter.Y - OtherCenter.Y);
-
-    // We’ll start with the current ActorLocation’s Z so we only adjust X/Y in snapping.
+    // Start with current ActorLocation’s Z, adjust X/Y only in snapping.
     FVector SnappedPos = DraggedActor->GetActorLocation();
 
     if (dx < dy)
     {
-        // They’re closer on X, so snap them to the same X
+        // Closer on X, keep same X to align columns
         SnappedPos.X = OtherCenter.X;
 
-        // Offset Y so they’re side-by-side
-        float SignY = (DraggedCenter.Y >= OtherCenter.Y) ? 1.f : -1.f;
+        // Offset Y so they’re side-by-side, choose side from reference point
+        const float SignY = (Ref.Y >= OtherCenter.Y) ? 1.f : -1.f;
         SnappedPos.Y = OtherCenter.Y + SignY * YOffset;
     }
     else
     {
-        // They’re closer on Y, so snap them to the same Y
+        // Closer on Y, keep same Y to align rows
         SnappedPos.Y = OtherCenter.Y;
 
-        // Offset X so they’re side-by-side
-        float SignX = (DraggedCenter.X >= OtherCenter.X) ? 1.f : -1.f;
+        // Offset X side from reference point
+        const float SignX = (Ref.X >= OtherCenter.X) ? 1.f : -1.f;
         SnappedPos.X = OtherCenter.X + SignX * XOffset;
     }
 
-    // 8) (Optional) If you need a specific Z (e.g., ground level), set it here.
-    //    Otherwise, we keep the dragged actor’s original Z.
+    // 7) Finally, move the dragged actor
+    // Client-only preview move; do not RPC during drag
+    const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedPos);
+    DraggedActor->SetActorLocation(GroundedSnap);
 
-    // 9) Finally, move the dragged actor
-	// Client-only preview move; do not RPC during drag
-	const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedPos);
-	DraggedActor->SetActorLocation(GroundedSnap);
+    // ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
 
-	//
-	// ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
-	//
+    // 1. Create an array of object types to test against
+    TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 
-	// 1. Create an array of object types to test against
-	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
-	// You can include as many object types as needed (e.g. WorldStatic, WorldDynamic, Pawn, etc.):
+    // 2. Create an array of actors to ignore
+    TArray<AActor*> ActorsToIgnore;
+    ActorsToIgnore.Add(DraggedActor);
+    ActorsToIgnore.Add(OtherActor);
 
-	// 2. Create an array of actors to ignore
-	TArray<AActor*> ActorsToIgnore;
-	ActorsToIgnore.Add(DraggedActor);
-	ActorsToIgnore.Add(OtherActor);
+    // 3. We'll store any overlapping actors here
+    TArray<AActor*> OverlappingActors;
 
-	// 3. We'll store any overlapping actors here
-	TArray<AActor*> OverlappingActors;
+    // 4. Perform the box overlap at the snapped position using the dragged actor's half-extents.
+    bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
+        GetWorld(),
+        SnappedPos,       // Box center
+        DraggedExtent,    // Half-extent (X, Y, Z)
+        TArray<TEnumAsByte<EObjectTypeQuery>>(),
+        nullptr,          // (Optional) Class filter
+        ActorsToIgnore,
+        OverlappingActors
+    );
 
-	// 4. Perform the box overlap at the snapped position
-	//    using the dragged actor's half-extents.
-	bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
-		GetWorld(),
-		SnappedPos,       // Box center
-		DraggedExtent,    // Half-extent (X, Y, Z)
-		TArray<TEnumAsByte<EObjectTypeQuery>>(),
-		nullptr,          // (Optional) Class filter. Could be AStaticMeshActor::StaticClass(), etc.
-		ActorsToIgnore,
-		OverlappingActors
-	);
+    bool bAnyOverlap = false;
 
-	bool bAnyOverlap = false;
+    // bSuccess tells you if the query was able to run. Then we check OverlappingActors for collisions.
+    if (bSuccess)
+    {
+        for (AActor* Overlapped : OverlappingActors)
+        {
+            if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
+                continue;
 
-	// bSuccess tells you if the query was *able* to run. Then we check OverlappingActors
-	// to see if we collided with anything.
-	if (bSuccess)
-	{
-		for (AActor* Overlapped : OverlappingActors)
-		{
-			if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
-				continue;
+            // If it’s a WorkArea or Building, it's a snap-relevant overlap
+            if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
+            {
+                bAnyOverlap = true;
+            }
+        }
+    }
 
-
-
-			// If it’s a WorkArea or Building, it's a snap-relevant overlap
-			if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
-			{
-				// Log to see which actor we are overlapping
-				bAnyOverlap = true;
-			}
-		}
-	}
-
-	if (!bAnyOverlap)
-	{
-		WorkAreaIsSnapped = true;
-	}
-	else
-	{
-		WorkAreaIsSnapped = false;
-	}
+    WorkAreaIsSnapped = !bAnyOverlap;
+    if (WorkAreaIsSnapped)
+    {
+        CurrentSnapActor = OtherActor;
+    }
+    else if (CurrentSnapActor == OtherActor)
+    {
+        CurrentSnapActor = nullptr;
+    }
 }
 
 
@@ -818,19 +885,64 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 		CollisionParams.AddIgnoredActor(*It);
 	}
 	
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        Start,
-        End,
-        ECC_Visibility,
-        CollisionParams
-    );
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		CollisionParams
+	);
 
-    // Compute distance from the drag’s current location to the raycast hit
-    float Distance = FVector::Dist(
-        HitResult.Location,
-        DraggedWorkArea->GetActorLocation()
-    );
+	// Compute distance from the drag’s current location to the raycast hit
+	const FVector MouseGround = HitResult.Location;
+	float Distance = FVector::Dist(
+		MouseGround,
+		DraggedWorkArea->GetActorLocation()
+	);
+
+	// If currently snapped, keep updating snap while mouse stays within release distance; otherwise release
+	if (CurrentSnapActor)
+	{
+		if (!IsValid(CurrentSnapActor))
+		{
+			CurrentSnapActor = nullptr;
+			WorkAreaIsSnapped = false;
+		}
+  else if (bHit)
+  {
+      // Dynamic release threshold: half-extent(Dragged) + half-extent(Target) + 150, using MOUSE->TARGET distance
+      FVector OtherCenter, OtherExtent;
+      if (GetActorBoundsForSnap(CurrentSnapActor, OtherCenter, OtherExtent))
+      {
+          UStaticMeshComponent* DragMeshLocal = DraggedWorkArea->Mesh;
+          const FBoxSphereBounds DragBoundsLocal = DragMeshLocal ? DragMeshLocal->CalcBounds(DragMeshLocal->GetComponentTransform()) : FBoxSphereBounds();
+          const FVector DragExtentLocal = DragBoundsLocal.BoxExtent;
+
+          const float DragXY = FMath::Max(DragExtentLocal.X, DragExtentLocal.Y);
+          const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
+          const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+
+          const float MouseToSnapTarget = FVector::Dist2D(MouseGround, OtherCenter);
+          if (MouseToSnapTarget > ReleaseThreshold)
+          {
+              UE_LOG(LogTemp, Warning, TEXT("[MoveWorkArea_Local] Release: MouseDist=%.1f > Threshold=%.1f. DragXY=%.1f OtherXY=%.1f Target=%s"),
+                  MouseToSnapTarget, ReleaseThreshold, DragXY, OtherXY, *CurrentSnapActor->GetName());
+              CurrentSnapActor = nullptr;
+              WorkAreaIsSnapped = false;
+          }
+          else
+          {
+              SnapToActor(DraggedWorkArea, CurrentSnapActor, nullptr);
+              return;
+          }
+      }
+      else
+      {
+          CurrentSnapActor = nullptr;
+          WorkAreaIsSnapped = false;
+      }
+  }
+	}
 
     //---------------------------------------
     // Get DraggedWorkArea bounding box info
@@ -889,66 +1001,62 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
                     ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
                     if (OverlappedWorkArea || OverlappedBuilding)
                     {
+                        // Gate by mouse distance using dynamic release threshold (sum half-XY extents + 150)
+                        {
+                            FVector TmpCenter, TmpExtent;
+                            if (GetActorBoundsForSnap(OverlappedActor, TmpCenter, TmpExtent))
+                            {
+                                const float DragXY = FMath::Max(Extent.X, Extent.Y);
+                                const float OtherXY = FMath::Max(TmpExtent.X, TmpExtent.Y);
+                                const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+                                const float MouseToCandidate = FVector::Dist2D(MouseGround, TmpCenter);
+                                if (MouseToCandidate > ReleaseThreshold)
+                                {
+                                    continue;
+                                }
+                            }
+                        }
 						bool StopLoop = false;
-                    	UStaticMeshComponent* OverlappedMesh = nullptr;
-                    	if (OverlappedBuilding)
-                    	{
-                    		OverlappedMesh = OverlappedBuilding->SnapMesh;
-                    	}
-                    	else if (OverlappedWorkArea)
-                    	{
-                    		OverlappedMesh = OverlappedWorkArea->Mesh;
-                    		if(OverlappedWorkArea->IsNoBuildZone)
-                    		{
-                    			//SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
-                    			DraggedWorkArea->TemporarilyChangeMaterial();
-                    			break;
-                    		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
-                    			OverlappedWorkArea->Type == WorkAreaData::Secondary ||
-                    			OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
-                    			OverlappedWorkArea->Type == WorkAreaData::Rare ||
-                    			OverlappedWorkArea->Type == WorkAreaData::Epic ||
-                    			OverlappedWorkArea->Type == WorkAreaData::Legendary)
-                    		{
-                    			break;
-                    		}
-                    	}
-                    	if (!OverlappedMesh)
-                    	{
-                    		continue;
-                    	}
-                    	
-                    	if (!OverlappedMesh)
-                    	{
-                    		// If there's no mesh on this overlapped actor, skip to the next actor
-                    		continue;
-                    	}
+                        UStaticMeshComponent* OverlappedMesh = nullptr;
+                        if (OverlappedWorkArea)
+                        {
+                            OverlappedMesh = OverlappedWorkArea->Mesh;
+                            if (OverlappedWorkArea->IsNoBuildZone)
+                            {
+                                DraggedWorkArea->TemporarilyChangeMaterial();
+                                break;
+                            }
+                            else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Secondary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Rare ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Epic ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Legendary)
+                            {
+                                break;
+                            }
+                        }
 
-				
-                    	
-                    	FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
-                    	FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
-                        //-------------------------------------------------
-                        // Also factor in the OverlappedActor's box extent
-                        //-------------------------------------------------
-                        // Example: we only care about XY distance for snapping
+                        FVector OtherCenter, OtherExtent;
+                        if (!GetActorBoundsForSnap(OverlappedActor, OtherCenter, OtherExtent))
+                        {
+                            continue;
+                        }
+
                         float XYDistance = FVector::Dist2D(
                             DraggedWorkArea->GetActorLocation(),
                             OverlappedActor->GetActorLocation()
                         );
 
-                        // Combine XY extents: (X1 + X2) + (Y1 + Y2)
-                        // 0.5f is optional if you want some average
-                        float CombinedXYExtent = (Extent.X + OverlappedExtent.X +
-                                                  Extent.Y + OverlappedExtent.Y) * 0.5f;
+                        float CombinedXYExtent = (Extent.X + OtherExtent.X +
+                                                  Extent.Y + OtherExtent.Y) * 0.5f;
 
                         float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
 
                         if (XYDistance < SnapThreshold)
                         {
-                            // Snap logic
                             SnapToActor(DraggedWorkArea, OverlappedActor, OverlappedMesh);
-                            return; // Break out if you only want one snap
+                            return;
                         }
                     }
                 }
@@ -956,21 +1064,94 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         }
     }
     //---------------------------------
+    // If no snap from overlap, try a fallback proximity scan (works with ISMs without overlaps)
+    //---------------------------------
+    {
+        AActor* BestCandidate = nullptr;
+        UStaticMeshComponent* BestCandidateMesh = nullptr;
+        float BestCandidateDist = TNumericLimits<float>::Max();
+
+        // Scan WorkAreas
+        for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+        {
+            AWorkArea* Candidate = *It;
+            if (!Candidate || Candidate == DraggedWorkArea) continue;
+
+            if (Candidate->IsNoBuildZone)
+            {
+                // Visual feedback only; don't snap to no-build zones
+                DraggedWorkArea->TemporarilyChangeMaterial();
+                continue;
+            }
+            if (Candidate->Type == WorkAreaData::Primary ||
+                Candidate->Type == WorkAreaData::Secondary ||
+                Candidate->Type == WorkAreaData::Tertiary ||
+                Candidate->Type == WorkAreaData::Rare ||
+                Candidate->Type == WorkAreaData::Epic ||
+                Candidate->Type == WorkAreaData::Legendary)
+            {
+                continue; // resources are not snap targets
+            }
+
+            FVector OtherCenter, OtherExtent;
+            if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent))
+                continue;
+
+            const float XYDistance = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Candidate->GetActorLocation());
+            const float CombinedXYExtent = (Extent.X + OtherExtent.X + Extent.Y + OtherExtent.Y) * 0.5f;
+            const float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
+            if (XYDistance < SnapThreshold && XYDistance < BestCandidateDist)
+            {
+                BestCandidate = Candidate;
+                BestCandidateMesh = Candidate->Mesh; // may be null; SnapToActor can handle
+                BestCandidateDist = XYDistance;
+            }
+        }
+
+        // Scan Buildings
+        for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
+        {
+            ABuildingBase* Candidate = *ItB;
+            if (!Candidate) continue;
+
+            FVector OtherCenter, OtherExtent;
+            if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent))
+                continue;
+
+            const float XYDistance = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Candidate->GetActorLocation());
+            const float CombinedXYExtent = (Extent.X + OtherExtent.X + Extent.Y + OtherExtent.Y) * 0.5f;
+            const float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
+            if (XYDistance < SnapThreshold && XYDistance < BestCandidateDist)
+            {
+                BestCandidate = Candidate;
+                BestCandidateMesh = nullptr; // buildings may be ISM; let SnapToActor resolve bounds
+                BestCandidateDist = XYDistance;
+            }
+        }
+
+        if (BestCandidate)
+        {
+            SnapToActor(DraggedWorkArea, BestCandidate, BestCandidateMesh);
+            return;
+        }
+    }
+
+    //---------------------------------
     // If no snap, move the WorkArea
     //---------------------------------
-        if (bHit && HitResult.GetActor() != nullptr) // && !bAnyOverlap
-        {
-            CurrentDraggedGround = HitResult.GetActor();
+    if (bHit && HitResult.GetActor() != nullptr) // && !bAnyOverlap
+    {
+        CurrentDraggedGround = HitResult.GetActor();
 
-            FVector NewActorPosition = HitResult.Location;
-            // Adjust Z if needed
-            NewActorPosition.Z += DraggedAreaZOffset; 
-            // Client-only preview move during drag with grounded Z
-            const FVector GroundedPos = ComputeGroundedLocation(DraggedWorkArea, NewActorPosition);
-            DraggedWorkArea->SetActorLocation(GroundedPos);
+        FVector NewActorPosition = HitResult.Location;
+        // Adjust Z if needed
+        NewActorPosition.Z += DraggedAreaZOffset; 
+        // Client-only preview move during drag with grounded Z
+        const FVector GroundedPos = ComputeGroundedLocation(DraggedWorkArea, NewActorPosition);
+        DraggedWorkArea->SetActorLocation(GroundedPos);
 
-            WorkAreaIsSnapped = false;
-        }
+        WorkAreaIsSnapped = false;
+    }
 }
 
 
@@ -1008,10 +1189,55 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
     );
 
     // Compute distance from the drag’s current location to the raycast hit
+    const FVector MouseGround = HitResult.Location;
     float Distance = FVector::Dist(
-        HitResult.Location,
+        MouseGround,
         DraggedWorkArea->GetActorLocation()
     );
+
+    // If currently snapped, keep updating snap while mouse stays within release distance; otherwise release
+    if (CurrentSnapActor)
+    {
+        if (!IsValid(CurrentSnapActor))
+        {
+            CurrentSnapActor = nullptr;
+            WorkAreaIsSnapped = false;
+        }
+        else if (bHit)
+        {
+            // Dynamic release threshold: half-extent(Dragged) + half-extent(Target) + 150, using MOUSE->TARGET distance
+            FVector OtherCenter, OtherExtent;
+            if (GetActorBoundsForSnap(CurrentSnapActor, OtherCenter, OtherExtent))
+            {
+                UStaticMeshComponent* DragMeshLocal = DraggedWorkArea->Mesh;
+                const FBoxSphereBounds DragBoundsLocal = DragMeshLocal ? DragMeshLocal->CalcBounds(DragMeshLocal->GetComponentTransform()) : FBoxSphereBounds();
+                const FVector DragExtentLocal = DragBoundsLocal.BoxExtent;
+
+                const float DragXY = FMath::Max(DragExtentLocal.X, DragExtentLocal.Y);
+                const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
+                const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+
+                const float MouseToSnapTarget = FVector::Dist2D(MouseGround, OtherCenter);
+                if (MouseToSnapTarget > ReleaseThreshold)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[SetWorkArea] Release: MouseDist=%.1f > Threshold=%.1f. DragXY=%.1f OtherXY=%.1f Target=%s"),
+                        MouseToSnapTarget, ReleaseThreshold, DragXY, OtherXY, *CurrentSnapActor->GetName());
+                    CurrentSnapActor = nullptr;
+                    WorkAreaIsSnapped = false;
+                }
+                else
+                {
+                    SnapToActor(DraggedWorkArea, CurrentSnapActor, nullptr);
+                    return;
+                }
+            }
+            else
+            {
+                CurrentSnapActor = nullptr;
+                WorkAreaIsSnapped = false;
+            }
+        }
+    }
 
     //---------------------------------------
     // Get DraggedWorkArea bounding box info
@@ -1070,71 +1296,141 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
                     ABuildingBase* OverlappedBuilding = Cast<ABuildingBase>(OverlappedActor);
                     if (OverlappedWorkArea || OverlappedBuilding)
                     {
+                        // Gate by mouse distance using dynamic release threshold (sum half-XY extents + 150)
+                        {
+                            FVector TmpCenter, TmpExtent;
+                            if (GetActorBoundsForSnap(OverlappedActor, TmpCenter, TmpExtent))
+                            {
+                                const FVector DraggedExtentLocal2 = DraggedBounds.BoxExtent;
+                                const float DragXY = FMath::Max(Extent.X, Extent.Y);
+                                const float OtherXY = FMath::Max(TmpExtent.X, TmpExtent.Y);
+                                const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+                                const float MouseToCandidate = FVector::Dist2D(MouseGround, TmpCenter);
+                                if (MouseToCandidate > ReleaseThreshold)
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                        UStaticMeshComponent* OverlappedMesh = nullptr;
+                        if (OverlappedWorkArea)
+                        {
+                            OverlappedMesh = OverlappedWorkArea->Mesh;
+                            if (OverlappedWorkArea->IsNoBuildZone)
+                            {
+                                DraggedWorkArea->TemporarilyChangeMaterial();
+                                break;
+                            }
+                            else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Secondary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Rare ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Epic ||
+                                     OverlappedWorkArea->Type == WorkAreaData::Legendary)
+                            {
+                                break;
+                            }
+                        }
 
-                    	UStaticMeshComponent* OverlappedMesh = nullptr;
-                    	if (OverlappedBuilding)
-                    	{
-                    		OverlappedMesh = OverlappedBuilding->SnapMesh;
-                    	}
-                    	else if (OverlappedWorkArea)
-                    	{
-                    		OverlappedMesh = OverlappedWorkArea->Mesh;
-                    		
-                    		if(OverlappedWorkArea->IsNoBuildZone)
-                    		{
-                    			//SelectedUnits[0]->ShowWorkAreaIfNoFog(OverlappedWorkArea);
-                    			DraggedWorkArea->TemporarilyChangeMaterial();
-                    			break;
-                    		}else if (OverlappedWorkArea->Type == WorkAreaData::Primary ||
-								OverlappedWorkArea->Type == WorkAreaData::Secondary ||
-								OverlappedWorkArea->Type == WorkAreaData::Tertiary ||
-								OverlappedWorkArea->Type == WorkAreaData::Rare ||
-								OverlappedWorkArea->Type == WorkAreaData::Epic ||
-								OverlappedWorkArea->Type == WorkAreaData::Legendary)
-                    		{
-                    			break;
-                    		}
-                    	}
-                    	if (!OverlappedMesh)
-                    	{
-                    		continue;
-                    	}
-                    	
-                    	if (!OverlappedMesh)
-                    	{
-                    		// If there's no mesh on this overlapped actor, skip to the next actor
-                    		continue;
-                    	}
-                    	
-                    	FBoxSphereBounds OverlappedDraggedBounds = OverlappedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
-                    	FVector OverlappedExtent = OverlappedDraggedBounds.BoxExtent;
-                        //-------------------------------------------------
-                        // Also factor in the OverlappedActor's box extent
-                        //-------------------------------------------------
-                        // Example: we only care about XY distance for snapping
+                        FVector OtherCenter, OtherExtent;
+                        if (!GetActorBoundsForSnap(OverlappedActor, OtherCenter, OtherExtent))
+                        {
+                            continue;
+                        }
+
                         float XYDistance = FVector::Dist2D(
                             DraggedWorkArea->GetActorLocation(),
                             OverlappedActor->GetActorLocation()
                         );
 
-                        // Combine XY extents: (X1 + X2) + (Y1 + Y2)
-                        // 0.5f is optional if you want some average
-                        float CombinedXYExtent = (Extent.X + OverlappedExtent.X +
-                                                  Extent.Y + OverlappedExtent.Y) * 0.5f;
+                        float CombinedXYExtent = (Extent.X + OtherExtent.X +
+                                                  Extent.Y + OtherExtent.Y) * 0.5f;
 
                         float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
 
                         if (XYDistance < SnapThreshold)
                         {
-                            // Snap logic
                             SnapToActor(DraggedWorkArea, OverlappedActor, OverlappedMesh);
-                            return; // Break out if you only want one snap
+                            return;
                         }
                     }
                 }
             }
         }
     }
+    //---------------------------------
+    // If no snap from overlap, try a fallback proximity scan (works with ISMs without overlaps)
+    //---------------------------------
+    {
+        AActor* BestCandidate = nullptr;
+        UStaticMeshComponent* BestCandidateMesh = nullptr;
+        float BestCandidateDist = TNumericLimits<float>::Max();
+
+        // Scan WorkAreas
+        for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+        {
+            AWorkArea* Candidate = *It;
+            if (!Candidate || Candidate == DraggedWorkArea) continue;
+
+            if (Candidate->IsNoBuildZone)
+            {
+                // Visual feedback only; don't snap to no-build zones
+                DraggedWorkArea->TemporarilyChangeMaterial();
+                continue;
+            }
+            if (Candidate->Type == WorkAreaData::Primary ||
+                Candidate->Type == WorkAreaData::Secondary ||
+                Candidate->Type == WorkAreaData::Tertiary ||
+                Candidate->Type == WorkAreaData::Rare ||
+                Candidate->Type == WorkAreaData::Epic ||
+                Candidate->Type == WorkAreaData::Legendary)
+            {
+                continue; // resources are not snap targets
+            }
+
+            FVector OtherCenter, OtherExtent;
+            if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent))
+                continue;
+
+            const float XYDistance = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Candidate->GetActorLocation());
+            const float CombinedXYExtent = (Extent.X + OtherExtent.X + Extent.Y + OtherExtent.Y) * 0.5f;
+            const float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
+            if (XYDistance < SnapThreshold && XYDistance < BestCandidateDist)
+            {
+                BestCandidate = Candidate;
+                BestCandidateMesh = Candidate->Mesh; // may be null; SnapToActor can handle
+                BestCandidateDist = XYDistance;
+            }
+        }
+
+        // Scan Buildings
+        for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
+        {
+            ABuildingBase* Candidate = *ItB;
+            if (!Candidate) continue;
+
+            FVector OtherCenter, OtherExtent;
+            if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent))
+                continue;
+
+            const float XYDistance = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Candidate->GetActorLocation());
+            const float CombinedXYExtent = (Extent.X + OtherExtent.X + Extent.Y + OtherExtent.Y) * 0.5f;
+            const float SnapThreshold = SnapDistance + SnapGap + CombinedXYExtent;
+            if (XYDistance < SnapThreshold && XYDistance < BestCandidateDist)
+            {
+                BestCandidate = Candidate;
+                BestCandidateMesh = nullptr; // buildings may be ISM; let SnapToActor resolve bounds
+                BestCandidateDist = XYDistance;
+            }
+        }
+
+        if (BestCandidate)
+        {
+            SnapToActor(DraggedWorkArea, BestCandidate, BestCandidateMesh);
+            return;
+        }
+    }
+
     //---------------------------------
     // If no snap, move the WorkArea
     //---------------------------------

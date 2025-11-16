@@ -157,9 +157,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapDistance = 100.f;
 	
+	// Distance threshold between mouse and snapped actor to release the snap
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float SnapReleaseDistance = 800.f;
+	
+	// The actor we are currently snapped to (if any)
+	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
+	AActor* CurrentSnapActor = nullptr;
+	
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	float DraggedAreaZOffset = 10.f;
-	
+
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	int MaxAbilityArrayIndex = 3;
 	
