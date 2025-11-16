@@ -19,6 +19,7 @@
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/CapsuleComponent.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -36,6 +37,21 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 			const FBoxSphereBounds B = WA->Mesh->CalcBounds(WA->Mesh->GetComponentTransform());
 			OutCenter = B.Origin;
 			OutExtent = B.BoxExtent;
+			return true;
+		}
+	}
+
+	// For buildings: approximate footprint as a square using the capsule radius (radius*2 side length)
+	if (ABuildingBase* Bld = Cast<ABuildingBase>(Actor))
+	{
+		if (UCapsuleComponent* Capsule = Bld->FindComponentByClass<UCapsuleComponent>())
+		{
+			const float R = Capsule->GetScaledCapsuleRadius();
+			OutCenter = Bld->GetActorLocation();
+			// Use radius for XY half-extents; keep Z from capsule half-height
+			OutExtent.X = R;
+			OutExtent.Y = R;
+			OutExtent.Z = Capsule->GetScaledCapsuleHalfHeight();
 			return true;
 		}
 	}
@@ -689,7 +705,10 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     }
 
     // 2) Compute each actor's bounds in world space
-    FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    const FBoxSphereBounds DraggedBounds = DraggedMesh->CalcBounds(DraggedMesh->GetComponentTransform());
+    const FVector DraggedCenter = DraggedBounds.Origin;
+    const FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+    const FVector CenterToActorOffset = DraggedCenter - DraggedActor->GetActorLocation(); // place actor so mesh center lands where we compute
 
     FVector OtherCenter, OtherExtent;
     if (OtherMesh)
@@ -707,18 +726,25 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         }
     }
 
-    // 3) Extract the centers and half-extents
-    const FVector DraggedCenter = DraggedBounds.Origin;
-    const FVector DraggedExtent = DraggedBounds.BoxExtent; // half-size in X, Y, Z
+    // Determine effective gap (allow per-building adjustment)
+    float EffectiveGap = SnapGap;
+    ABuildingBase* TargetBuilding = Cast<ABuildingBase>(OtherActor);
+    if (TargetBuilding)
+    {
+        EffectiveGap = FMath::Max(0.f, SnapGap + TargetBuilding->SnapGapAdjustment);
 
-    // 4) Decide on a small gap so they don’t overlap visually
-    const float Gap = SnapGap;
+        // Treat the building like a cube with length/width = CapsuleRadius*2.
+        // Use the capsule as the footprint when available and take actor location as center.
+        if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
+        {
+            const float R = Capsule->GetScaledCapsuleRadius();
+            OtherExtent.X = R;
+            OtherExtent.Y = R;
+            OtherCenter = TargetBuilding->GetActorLocation();
+        }
+    }
 
-    // 5) Compute how much to offset on X and Y so they "just touch"
-    const float XOffset = DraggedExtent.X + OtherExtent.X + Gap;
-    const float YOffset = DraggedExtent.Y + OtherExtent.Y + Gap;
-
-    // 6) Determine which axis (X or Y) is closer based on current mouse ground hit
+    // 3) Mouse reference on ground
     FVector Ref = DraggedActor->GetActorLocation();
     {
         FHitResult CursorHit;
@@ -748,7 +774,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         }
     }
 
-    // Dynamic release: if MOUSE is farther from target than combined XY half-extents + 150, release
+    // 4) Dynamic release: based on MOUSE to TARGET center
     const float DragXY = FMath::Max(DraggedExtent.X, DraggedExtent.Y);
     const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
     const float ReleaseThreshold = DragXY + OtherXY + 150.f;
@@ -760,41 +786,44 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         if (CurrentSnapActor == OtherActor) { CurrentSnapActor = nullptr; }
         WorkAreaIsSnapped = false;
         // Immediately move dragged area to follow the cursor so it visually releases this frame
-        FVector FreeRef = Ref;
-        FVector Desired = FVector(FreeRef.X, FreeRef.Y, DraggedActor->GetActorLocation().Z + DraggedAreaZOffset);
+        FVector Desired = FVector(Ref.X, Ref.Y, DraggedActor->GetActorLocation().Z + DraggedAreaZOffset);
         const FVector GroundedFree = ComputeGroundedLocation(DraggedActor, Desired);
         DraggedActor->SetActorLocation(GroundedFree);
         return;
     }
 
+    // 5) Axis-aligned snapping (consistent gap, corrected for actor/center offset)
+    FVector SnappedActorLocation = DraggedActor->GetActorLocation();
+
+    const float XOffset = DraggedExtent.X + OtherExtent.X + EffectiveGap;
+    const float YOffset = DraggedExtent.Y + OtherExtent.Y + EffectiveGap;
+
     const float dx = FMath::Abs(Ref.X - OtherCenter.X);
     const float dy = FMath::Abs(Ref.Y - OtherCenter.Y);
 
-    // Start with current ActorLocation’s Z, adjust X/Y only in snapping.
-    FVector SnappedPos = DraggedActor->GetActorLocation();
-
+    FVector DesiredCenter = DraggedCenter; // start from current center
     if (dx < dy)
     {
         // Closer on X, keep same X to align columns
-        SnappedPos.X = OtherCenter.X;
-
+        DesiredCenter.X = OtherCenter.X;
         // Offset Y so they’re side-by-side, choose side from reference point
         const float SignY = (Ref.Y >= OtherCenter.Y) ? 1.f : -1.f;
-        SnappedPos.Y = OtherCenter.Y + SignY * YOffset;
+        DesiredCenter.Y = OtherCenter.Y + SignY * YOffset;
     }
     else
     {
         // Closer on Y, keep same Y to align rows
-        SnappedPos.Y = OtherCenter.Y;
-
+        DesiredCenter.Y = OtherCenter.Y;
         // Offset X side from reference point
         const float SignX = (Ref.X >= OtherCenter.X) ? 1.f : -1.f;
-        SnappedPos.X = OtherCenter.X + SignX * XOffset;
+        DesiredCenter.X = OtherCenter.X + SignX * XOffset;
     }
 
-    // 7) Finally, move the dragged actor
-    // Client-only preview move; do not RPC during drag
-    const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedPos);
+    // Convert desired center to actor location
+    SnappedActorLocation.X = DesiredCenter.X - CenterToActorOffset.X;
+    SnappedActorLocation.Y = DesiredCenter.Y - CenterToActorOffset.Y;
+
+    const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedActorLocation);
     DraggedActor->SetActorLocation(GroundedSnap);
 
     // ---- Collision Check via BoxOverlapActors (ignoring both actors) ----
@@ -813,8 +842,8 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     // 4. Perform the box overlap at the snapped position using the dragged actor's half-extents.
     bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
         GetWorld(),
-        SnappedPos,       // Box center
-        DraggedExtent,    // Half-extent (X, Y, Z)
+        SnappedActorLocation,       // Box center at the actor pivot -> we want center; approximate using actor loc, same as placement
+        DraggedExtent,              // Half-extent (X, Y, Z)
         TArray<TEnumAsByte<EObjectTypeQuery>>(),
         nullptr,          // (Optional) Class filter
         ActorsToIgnore,
@@ -823,7 +852,6 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
 
     bool bAnyOverlap = false;
 
-    // bSuccess tells you if the query was able to run. Then we check OverlappingActors for collisions.
     if (bSuccess)
     {
         for (AActor* Overlapped : OverlappingActors)
@@ -831,7 +859,6 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
             if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
                 continue;
 
-            // If it’s a WorkArea or Building, it's a snap-relevant overlap
             if (Cast<AWorkArea>(Overlapped) || Cast<ABuildingBase>(Overlapped))
             {
                 bAnyOverlap = true;

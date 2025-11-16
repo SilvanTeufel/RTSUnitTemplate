@@ -33,7 +33,10 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsBase = false;
-	
+
+	// Per-building adjustment to controller SnapGap (can be negative). Effective gap is clamped to >= 0.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float SnapGapAdjustment = 0.f;
 	
 	virtual void Tick(float DeltaTime) override;
 
