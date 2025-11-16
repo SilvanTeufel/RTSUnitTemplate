@@ -952,7 +952,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						FVector Origin, BoxExtent;
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+150.f;
+						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+100.f;
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -961,7 +961,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			FVector Origin, BoxExtent;
 						StrongUnitActor->BuildArea->GetActorBounds( false, Origin, BoxExtent);
 
-            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+150.f;
+            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+100.f;
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = FindGroundLocationForActor(this, StrongUnitActor->BuildArea, {StrongUnitActor, StrongUnitActor->BuildArea}); // StrongUnitActor->BuildArea->GetActorLocation();
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
@@ -1378,7 +1378,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
 						   const float DistanceSquared = FVector::DistSquared2D(CurrentAttackerLocation, CurrentTargetLocation);
 
-					   		float RangeWithCapsule = AttackerRange+CharFrag->CapsuleRadius/2.f + TargetCharFrag->CapsuleRadius/2.f;
+					   		float RangeWithCapsule = AttackerRange+CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
 							const float AttackRangeSquared = FMath::Square(RangeWithCapsule); // AttackerRange was captured
 		   				
 

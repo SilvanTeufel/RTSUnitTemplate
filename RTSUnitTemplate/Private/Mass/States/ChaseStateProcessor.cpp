@@ -265,7 +265,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
             FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-            const float EffectiveAttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
+            const float EffectiveAttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---

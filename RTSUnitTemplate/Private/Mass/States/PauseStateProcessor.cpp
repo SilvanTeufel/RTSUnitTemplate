@@ -120,7 +120,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
+            float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
             
                 if (Dist <= AttackRange) // --- In Range ---
                 {

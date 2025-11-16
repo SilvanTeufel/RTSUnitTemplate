@@ -119,7 +119,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
                 FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius/2.f+TargetCharFrag->CapsuleRadius/2.f;
+                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
             
                 if (Dist <= AttackRange)
                 {
