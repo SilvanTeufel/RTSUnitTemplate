@@ -19,7 +19,11 @@ public class RTSUnitTemplate : ModuleRules
             "MassCommon",
             "MassReplication",
             "MassActors",
-            "MassRepresentation"
+            "MassRepresentation",
+            "MassNavigation",
+            "MassMovement",
+            "NavigationSystem",
+            "XRBase"
         });
 
         // Private: implementation-only dependencies

@@ -2,6 +2,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "UnrealClient.h"
 #include "Characters/Unit/UnitBase.h" // Include UnitBase for the RPC
 
 
