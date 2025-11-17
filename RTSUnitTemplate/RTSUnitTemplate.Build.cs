@@ -4,40 +4,48 @@ using UnrealBuildTool;
 
 public class RTSUnitTemplate : ModuleRules
 {
-	public RTSUnitTemplate(ReadOnlyTargetRules Target) : base(Target)
-	{
-		//PrivateDependencyModuleNames.AddRange(new string[] { "AITestSuite", "AITestSuite" });
-		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+    public RTSUnitTemplate(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		// Core dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "NNE", "Json", "CoreUObject", "RenderCore", "Engine", "Niagara", "InputCore", "EnhancedInput", "GameplayTags", "XRBase", "Landscape"});
-		
-		// Mass dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSimulation", "MassSpawner", "MassMovement", "MassNavigation", "MassCommon", "MassActors", "MassSignals", "MassRepresentation", "MassReplication", "MassAIReplication", "MassAIBehavior", "NavigationSystem", "StructUtils", "MassLOD", "ZoneGraph",
-			"ZoneGraphAnnotations", "MassGameplayDebug"  });
-		
-		// Gameplay Ability System
-		PublicDependencyModuleNames.AddRange(new string[] { "NetCore", "GameplayAbilities", "GameplayTags", "GameplayTasks"});
-		
-		// Slate dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore",});
-		
-		// EOS dependencies
-		// PublicDependencyModuleNames.AddRange(new string[] { "Networking", "Sockets", "OnlineSubsystemEOS", "OnlineSubsystem", "OnlineSubsystemUtils" });
+        // Public: only what our public headers require
+        PublicDependencyModuleNames.AddRange(new string[]
+        {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "NetCore",
+            "MassEntity",
+            "MassCommon",
+            "MassReplication",
+            "MassActors"
+        });
 
-		// Ai dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "AIModule" });
+        // Private: implementation-only dependencies
+        PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            // Mass stack (implementation-only)
+            "MassSimulation", "MassSpawner", "MassMovement", "MassNavigation", "MassSignals",
+            "MassRepresentation", "MassAIBehavior", "MassLOD",
 
-		// Hud dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "HeadMountedDisplay", "NavigationSystem" });
+            // ZoneGraph
+            "ZoneGraph", "ZoneGraphAnnotations",
 
-		// Widget dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "UMG", "MoviePlayer" });
-		
-		// Json dependencies
-		PublicDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities" });
-	
-		
-	}
+            // Gameplay Ability System & tags
+            "GameplayAbilities", "GameplayTasks", "GameplayTags",
+
+            // Navigation & AI
+            "NavigationSystem", "AIModule",
+
+            // UI
+            "UMG", "Slate", "SlateCore", "MoviePlayer",
+
+            // Input & FX
+            "InputCore", "EnhancedInput", "Niagara",
+
+            // Misc
+            "StructUtils", "Json", "JsonUtilities", "RenderCore", "XRBase", "Landscape",
+            "NNE"
+        });
+    }
 }

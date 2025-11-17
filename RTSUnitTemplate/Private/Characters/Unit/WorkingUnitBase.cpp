@@ -13,7 +13,6 @@
 // Project-Specific Headers
 #include "GAS/AttributeSetBase.h"
 #include "Widgets/UnitBaseHealthBar.h"
-#include "Actors/SelectedIcon.h"
 #include "Actors/Projectile.h"
 #include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"

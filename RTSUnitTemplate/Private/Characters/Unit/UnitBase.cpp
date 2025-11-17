@@ -7,7 +7,6 @@
 #include "NavCollision.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Components/CapsuleComponent.h"
-#include "Actors/SelectedIcon.h"
 #include "Actors/Projectile.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
