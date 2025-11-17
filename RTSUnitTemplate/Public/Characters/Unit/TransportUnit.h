@@ -6,6 +6,9 @@
 //#include "AbilityUnit.h"
 #include "PathSeekerBase.h"
 #include "Components/CapsuleComponent.h"
+
+class AUnitBase;
+
 #include "TransportUnit.generated.h"
 
 /**
@@ -27,7 +30,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void BindTransportOverlap();
 	
-	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetCollisionAndVisibility(bool IsVisible);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -41,8 +44,16 @@ public:
 	void LoadUnit(AUnitBase* UnitToLoad);
 
 	// Unloads all loaded units.
-	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UnloadAllUnits();
+
+	// Multicast to apply unload effects client-side for a unit
+	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastApplyUnloadEffects(class AUnitBase* LoadedUnit, const FVector& FinalUnloadLocation);
+
+	// Multicast to apply load effects client-side for a unit
+	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastApplyLoadEffects(class AUnitBase* UnitToLoad, const FVector& TransporterLocation);
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void LoadedUnit(int RemainingUnitCount);

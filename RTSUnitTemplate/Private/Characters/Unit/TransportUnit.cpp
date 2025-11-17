@@ -41,7 +41,7 @@ void ATransportUnit::SetRdyForTransport(bool Rdy)
 	RdyForTransport = Rdy;
 }
 
-void ATransportUnit::SetCollisionAndVisibility_Implementation(bool IsVisible)
+void ATransportUnit::SetCollisionAndVisibility(bool IsVisible)
 {
 	StopVisibilityTick = !IsVisible;
 	IsInitialized = IsVisible;
@@ -70,15 +70,8 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	
 	if (UnitToLoad && (CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded) <= MaxTransportUnits)
 	{
-		UnitToLoad->CanAttack = false;
-		UnitToLoad->IsInitialized = false;
-		UnitToLoad->CanActivateAbilities = false;
-		UnitToLoad->CanBeSelected = false;
-		UnitToLoad->AddStopMovementTagToEntity();
-		UnitToLoad->SetCollisionAndVisibility(false);
-		UnitToLoad->SetActorLocation(GetMassActorLocation());
-		UnitToLoad->EnableDynamicObstacle(false);
-		UnitToLoad->EditUnitDetectable(false);
+		// Apply replicated load effects so all clients update the unit consistently
+		MulticastApplyLoadEffects(UnitToLoad, GetMassActorLocation());
 		
 		CurrentUnitsLoaded = CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded;
 		LoadedUnits.Add(UnitToLoad);
@@ -94,7 +87,7 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	}
 }
 
-void ATransportUnit::UnloadAllUnits_Implementation()
+void ATransportUnit::UnloadAllUnits()
 {
 	if (!IsATransporter) return;
     
@@ -145,26 +138,16 @@ void ATransportUnit::UnloadNextUnit()
 			}
 			const FVector FinalUnloadLocation = UnloadLocation + UnloadOffset;
 			
-			LoadedUnit->SetActorLocation(FinalUnloadLocation);
-			LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
-			LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
-			LoadedUnit->StopMassMovement();
 			
-			LoadedUnit->EnableDynamicObstacle(true);
-			LoadedUnit->EditUnitDetectable(true);
-			
+			// Apply replicated unload effects so all clients update the unit consistently
+			MulticastApplyUnloadEffects(LoadedUnit, FinalUnloadLocation);
+			/*
 			if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(LoadedUnit->GetMovementComponent()))
 			{
 				MovementComponent->SetMovementMode(EMovementMode::MOVE_Walking);
 			}
-			
-			LoadedUnit->SetCollisionAndVisibility(true);
+			*/
 			LoadedUnit->UpdateEntityStateOnUnload(FinalUnloadLocation);
-			LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
-			LoadedUnit->CanAttack = true;
-			LoadedUnit->IsInitialized = true;
-			LoadedUnit->CanActivateAbilities = true;
-			LoadedUnit->CanBeSelected = true;
 		}
 		
 		LoadedUnits.RemoveAt(0);
@@ -233,4 +216,38 @@ void ATransportUnit::OnCapsuleOverlapBegin(
 			}
 		}
 	}
+}
+
+void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* LoadedUnit, const FVector& FinalUnloadLocation)
+{
+	if (!LoadedUnit) return;
+
+	LoadedUnit->SetActorLocation(FinalUnloadLocation);
+	LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
+	LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
+	LoadedUnit->StopMassMovement();
+	LoadedUnit->EnableDynamicObstacle(true);
+	LoadedUnit->EditUnitDetectable(true);
+	LoadedUnit->SetCollisionAndVisibility(true);
+
+	LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
+	LoadedUnit->CanAttack = true;
+	LoadedUnit->IsInitialized = true;
+	LoadedUnit->CanActivateAbilities = true;
+	LoadedUnit->CanBeSelected = true;
+}
+
+void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToLoad, const FVector& TransporterLocation)
+{
+	if (!UnitToLoad) return;
+
+	UnitToLoad->CanAttack = false;
+	UnitToLoad->IsInitialized = false;
+	UnitToLoad->CanActivateAbilities = false;
+	UnitToLoad->CanBeSelected = false;
+	UnitToLoad->AddStopMovementTagToEntity();
+	UnitToLoad->SetCollisionAndVisibility(false);
+	UnitToLoad->SetActorLocation(TransporterLocation);
+	UnitToLoad->EnableDynamicObstacle(false);
+	UnitToLoad->EditUnitDetectable(false);
 }
