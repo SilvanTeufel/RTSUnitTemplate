@@ -18,7 +18,8 @@ public class RTSUnitTemplate : ModuleRules
             "MassEntity",
             "MassCommon",
             "MassReplication",
-            "MassActors"
+            "MassActors",
+            "MassRepresentation"
         });
 
         // Private: implementation-only dependencies

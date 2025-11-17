@@ -40,11 +40,8 @@ namespace
 			if (UMassReplicationSubsystem* RepSub = World->GetSubsystem<UMassReplicationSubsystem>())
 			{
 				const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
-				FMassBubbleInfoClassHandle Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
-				if (!RepSub->IsBubbleClassHandleValid(Handle))
-				{
-					Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
-				}
+				// Register unconditionally to avoid early GetBubbleInfoClassHandle error logs in cook/packaging
+				const FMassBubbleInfoClassHandle Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
 				GWorldToUnitBubbleHandle.Add(World, Handle);
 				UE_LOG(LogTemp, Log, TEXT("[RTS] Registered UnitClientBubbleInfo for world %s (retry path)"), *World->GetName());
 
@@ -72,13 +69,8 @@ namespace
 			if (UMassReplicationSubsystem* RepSub = World.GetSubsystem<UMassReplicationSubsystem>())
 			{
 				const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
-
-				FMassBubbleInfoClassHandle Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
-				if (!RepSub->IsBubbleClassHandleValid(Handle))
-				{
-					Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
-				}
-
+				// Register unconditionally to avoid early GetBubbleInfoClassHandle error logs in cook/packaging
+				const FMassBubbleInfoClassHandle Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
 				GWorldToUnitBubbleHandle.Add(&World, Handle);
 				UE_LOG(LogTemp, Log, TEXT("[RTS] Registered UnitClientBubbleInfo for world %s (init path)"), *World.GetName());
 			}
