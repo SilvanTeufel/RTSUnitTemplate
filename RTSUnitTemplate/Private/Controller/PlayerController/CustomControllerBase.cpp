@@ -381,6 +381,7 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	// Apply authoritative changes on the server
 	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
 
+
 	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
 	if (UWorld* PCWorld = GetWorld())
 	{
@@ -392,6 +393,7 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 			}
 		}
 	}
+	
 }
 
 void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
@@ -404,6 +406,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 {
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
 	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
+
 	if (HasAuthority())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: HasAuthority()==true. Skipping client prediction."));
@@ -535,6 +538,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
 	EntityManager.FlushCommands();
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
+	
 }
 
 void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)

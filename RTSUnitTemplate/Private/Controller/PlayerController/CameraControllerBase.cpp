@@ -94,16 +94,6 @@ void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag
 				ClientSetCameraUnit(Unit, TeamId);
 				
 			}
-			
-				/*
-			FName NewTagName = FName(*FString::Printf(TEXT("%s.%d"), *Tag.ToString(), i));
-			
-			if (Unit && Unit->UnitTags.HasTagExact(FGameplayTag::RequestGameplayTag(NewTagName)) && Unit->TeamId == TeamId && TeamId == SelectableTeamId)
-			{
-				ServerSetCameraUnit(Unit, TeamId);
-				ClientSetCameraUnit(Unit, TeamId);
-			}
-				*/
 		}
 	}
 }

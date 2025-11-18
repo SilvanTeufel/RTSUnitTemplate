@@ -116,7 +116,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const float AcceptanceRadius = MoveTarget.SlackRadius;
 
             // Only arrival check on client
-            if (FVector::Dist(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
 
@@ -184,7 +184,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
                 }
-            }else if (FVector::Dist(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            }else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

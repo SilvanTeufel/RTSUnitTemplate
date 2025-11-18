@@ -231,7 +231,9 @@ void UDetectionProcessor::Execute(
         bool bFoundNew = false;
         bool bCurrentStillViable = false;
         FVector CurrentLocation = FVector::ZeroVector;
-        float DetectorSight = FMath::Square(Det.Stats->SightRadius);
+        // Track best candidate distance separately from threshold checks
+        bool bHasBestCandidate = false;
+        float BestCandidateDistSq = 0.f;
         const int32 DetectorTeamId = Det.Stats->TeamId;
 
         if (!Det.State->CanAttack)
@@ -300,36 +302,51 @@ void UDetectionProcessor::Execute(
                     continue;
                 }
 
-                
-                float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
-                
-                // “new” target if in sight radius and closer than anything before, and alive
-                if (DistSq < DetectorSight && Tgt.Stats->Health > 0)
+                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+                const float DetCapsule = Det.Char ? Det.Char->CapsuleRadius : 0.f;
+                const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
+
+                // Effective radii: add both capsule radii to base sight radii (2D)
+                const float EffectiveSight = Det.Stats->SightRadius + DetCapsule + TgtCapsule;
+                const float EffectiveSightSq = FMath::Square(EffectiveSight);
+
+                // “new” target if within effective sight radius and closer than previous best, and alive
+                if (DistSq < EffectiveSightSq && Tgt.Stats->Health > 0)
                 {
-                    BestEntity     = Tgt.Entity;
-                    BestLocation   = Tgt.Location;
-                    bFoundNew      = true;
-                    DetectorSight = DistSq;
+                    if (!bHasBestCandidate || DistSq < BestCandidateDistSq)
+                    {
+                        BestEntity           = Tgt.Entity;
+                        BestLocation         = Tgt.Location;
+                        bFoundNew            = true;
+                        bHasBestCandidate    = true;
+                        BestCandidateDistSq  = DistSq;
+                    }
                 }
 
-                // “current” target still viable if it’s the same one and within lose‐sight radius
-                if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < FMath::Square(Det.Stats->LoseSightRadius) && Tgt.Stats->Health > 0)
+                // “current” target still viable if it’s the same one and within effective lose‐sight radius
                 {
-                    CurrentLocation    = Tgt.Location;
-                    bCurrentStillViable = true;
+                    const float EffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    const float EffectiveLoseSightSq = FMath::Square(EffectiveLoseSight);
+                    if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && Tgt.Stats->Health > 0)
+                    {
+                        CurrentLocation      = Tgt.Location;
+                        bCurrentStillViable  = true;
+                    }
                 }
 
-                
+                // Fallback: use attacker sight counts if present AND within target’s effective lose-sight
                 if (!bFoundNew && !bCurrentStillViable)
                 {
-   
                     const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
-                    
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < FMath::Square(Tgt.Stats->LoseSightRadius))
+                    const float TgtEffectiveLoseSight = Tgt.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    const float TgtEffectiveLoseSightSq = FMath::Square(TgtEffectiveLoseSight);
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < TgtEffectiveLoseSightSq)
                     {
-                        BestEntity     = Tgt.Entity;
-                        BestLocation   = Tgt.Location;
-                        bFoundNew      = true;
+                        BestEntity             = Tgt.Entity;
+                        BestLocation           = Tgt.Location;
+                        bFoundNew              = true;
+                        bHasBestCandidate      = true;
+                        BestCandidateDistSq    = DistSq;
                     }
                     
                 }

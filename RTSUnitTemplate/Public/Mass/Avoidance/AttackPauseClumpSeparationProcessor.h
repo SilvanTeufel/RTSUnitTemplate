@@ -33,15 +33,10 @@ protected:
 	// Throttling
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float ExecutionInterval = 0.25f;
-
-	// Strength multiplier for separation. Units: (cm/s^2) like a pseudo acceleration added once per tick.
-	// Deprecated: Use RepulsionStrengthFriendly / RepulsionStrengthEnemy instead. Kept for backward compatibility (unused).
-	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float RepulsionStrength = 100.f;
-
+	
 	// Separate repulsion strengths for friendly vs enemy interactions
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float RepulsionStrengthFriendly = 100.f;
+	float RepulsionStrengthFriendly = 25.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float RepulsionStrengthEnemy = 25.f;
@@ -55,7 +50,7 @@ protected:
 	float MaxCheckRadius = 300.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float DistanceMultiplierFriendly = 2.f;
+	float DistanceMultiplierFriendly = 1.f;
 	
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float DistanceMultiplierEnemy = 1.f;
