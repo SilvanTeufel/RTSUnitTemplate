@@ -696,6 +696,14 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     if (!DraggedActor || !OtherActor || DraggedActor == OtherActor)
         return;
 
+    // Throttle initiating a new snap target to avoid flicker
+    const float Now = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+    const bool bTryingNewTarget = (CurrentSnapActor != OtherActor);
+    if (bTryingNewTarget && Now < NextAllowedSnapTime)
+    {
+        return;
+    }
+
     // 1) Get the dragged mesh
     UStaticMeshComponent* DraggedMesh = DraggedActor->Mesh;
     if (!DraggedMesh)
@@ -779,16 +787,43 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
     const float ReleaseThreshold = DragXY + OtherXY + 150.f;
     const float MouseToTarget = FVector::Dist2D(Ref, OtherCenter);
+    const float NowTime = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+
+    // Debounced unsnap: require sustained time beyond release threshold
     if (MouseToTarget > ReleaseThreshold)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[SnapToActor] Release: MouseDist=%.1f > Threshold=%.1f. DragXY=%.1f OtherXY=%.1f Target=%s"),
-            MouseToTarget, ReleaseThreshold, DragXY, OtherXY, *OtherActor->GetName());
-        if (CurrentSnapActor == OtherActor) { CurrentSnapActor = nullptr; }
-        WorkAreaIsSnapped = false;
-        // Immediately move dragged area to follow the cursor so it visually releases this frame
-        FVector Desired = FVector(Ref.X, Ref.Y, DraggedActor->GetActorLocation().Z + DraggedAreaZOffset);
-        const FVector GroundedFree = ComputeGroundedLocation(DraggedActor, Desired);
-        DraggedActor->SetActorLocation(GroundedFree);
+        if (LastBeyondReleaseTime < 0.f)
+        {
+            LastBeyondReleaseTime = NowTime;
+        }
+        const float Elapsed = NowTime - LastBeyondReleaseTime;
+        if (Elapsed >= UnsnapGraceSeconds)
+        {
+            if (CurrentSnapActor == OtherActor) { CurrentSnapActor = nullptr; }
+            WorkAreaIsSnapped = false;
+            LastBeyondReleaseTime = -1.f;
+            // Immediately move dragged area to follow the cursor so it visually releases this frame
+            FVector Desired = FVector(Ref.X, Ref.Y, DraggedActor->GetActorLocation().Z + DraggedAreaZOffset);
+            const FVector GroundedFree = ComputeGroundedLocation(DraggedActor, Desired);
+            DraggedActor->SetActorLocation(GroundedFree);
+            return;
+        }
+        else
+        {
+            // Keep snapping while grace period not elapsed
+            // Fall through to compute snap position
+        }
+    }
+    else
+    {
+        // Back within threshold, reset timer
+        LastBeyondReleaseTime = -1.f;
+    }
+
+    // If this is a new target, apply an acquire hysteresis (tighter threshold) to commit the snap
+    const float AcquireThreshold = ReleaseThreshold * FMath::Clamp(AcquireHysteresisFactor, 0.1f, 1.0f);
+    if (bTryingNewTarget && MouseToTarget > AcquireThreshold)
+    {
         return;
     }
 
@@ -869,7 +904,14 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     WorkAreaIsSnapped = !bAnyOverlap;
     if (WorkAreaIsSnapped)
     {
+        const bool bWasDifferentTarget = (CurrentSnapActor != OtherActor);
         CurrentSnapActor = OtherActor;
+        if (bWasDifferentTarget)
+        {
+            // Lock new snaps for the cooldown duration
+            const float NowLocal = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+            NextAllowedSnapTime = NowLocal + FMath::Max(0.f, SnapCooldownSeconds);
+        }
     }
     else if (CurrentSnapActor == OtherActor)
     {
@@ -950,15 +992,23 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
           const float ReleaseThreshold = DragXY + OtherXY + 150.f;
 
           const float MouseToSnapTarget = FVector::Dist2D(MouseGround, OtherCenter);
+          const float NowTime = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
           if (MouseToSnapTarget > ReleaseThreshold)
           {
-              UE_LOG(LogTemp, Warning, TEXT("[MoveWorkArea_Local] Release: MouseDist=%.1f > Threshold=%.1f. DragXY=%.1f OtherXY=%.1f Target=%s"),
-                  MouseToSnapTarget, ReleaseThreshold, DragXY, OtherXY, *CurrentSnapActor->GetName());
-              CurrentSnapActor = nullptr;
-              WorkAreaIsSnapped = false;
+              if (LastBeyondReleaseTime < 0.f)
+              {
+                  LastBeyondReleaseTime = NowTime;
+              }
+              if ((NowTime - LastBeyondReleaseTime) >= UnsnapGraceSeconds)
+              {
+                  CurrentSnapActor = nullptr;
+                  WorkAreaIsSnapped = false;
+                  LastBeyondReleaseTime = -1.f;
+              }
           }
           else
           {
+              LastBeyondReleaseTime = -1.f;
               SnapToActor(DraggedWorkArea, CurrentSnapActor, nullptr);
               return;
           }
@@ -1036,8 +1086,9 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
                                 const float DragXY = FMath::Max(Extent.X, Extent.Y);
                                 const float OtherXY = FMath::Max(TmpExtent.X, TmpExtent.Y);
                                 const float ReleaseThreshold = DragXY + OtherXY + 150.f;
+                                const float AcquireThreshold = ReleaseThreshold * FMath::Clamp(AcquireHysteresisFactor, 0.1f, 1.0f);
                                 const float MouseToCandidate = FVector::Dist2D(MouseGround, TmpCenter);
-                                if (MouseToCandidate > ReleaseThreshold)
+                                if (MouseToCandidate > AcquireThreshold)
                                 {
                                     continue;
                                 }

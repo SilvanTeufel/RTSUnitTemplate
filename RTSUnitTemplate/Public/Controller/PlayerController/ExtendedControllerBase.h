@@ -164,6 +164,26 @@ public:
 	// The actor we are currently snapped to (if any)
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
 	AActor* CurrentSnapActor = nullptr;
+
+	// Cooldown between initiating new snap targets to prevent flicker
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float SnapCooldownSeconds = 1.0f;
+
+	// Internal time when next snap is allowed (not replicated)
+	UPROPERTY(Transient)
+	float NextAllowedSnapTime = 0.f;
+
+	// Time the mouse must remain beyond the release threshold before we actually unsnap
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float UnsnapGraceSeconds = 0.15f;
+
+	// Acquire distance is tighter than release distance to add hysteresis (0.1..1.0)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap, meta=(ClampMin="0.1", ClampMax="1.0"))
+	float AcquireHysteresisFactor = 0.85f;
+
+	// Internal timestamp when we first detected being beyond release distance
+	UPROPERTY(Transient)
+	float LastBeyondReleaseTime = -1.f;
 	
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	float DraggedAreaZOffset = 10.f;
