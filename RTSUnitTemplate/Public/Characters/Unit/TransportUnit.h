@@ -47,6 +47,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UnloadAllUnits();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UnloadNextUnit();
 	// Multicast to apply unload effects client-side for a unit
 	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastApplyUnloadEffects(class AUnitBase* LoadedUnit, const FVector& FinalUnloadLocation);
@@ -119,9 +121,7 @@ protected:
 
 	// Timer handle used to schedule unloading.
 	FTimerHandle UnloadTimerHandle;
-
-	// Helper function to unload the next unit.
-	void UnloadNextUnit();
+	
 	
 	// Array holding the loaded units.
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
