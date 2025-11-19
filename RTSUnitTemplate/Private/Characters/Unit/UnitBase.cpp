@@ -471,6 +471,11 @@ void AUnitBase::DeadMultiCast_Implementation()
 	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
 	FireEffects_Implementation(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
 }
+void AUnitBase::Multicast_SwitchToIdle_Implementation()
+{
+	SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+}
+
 void AUnitBase::DeadEffectsAndEvents()
 {
 	if (!DeadEffectsExecuted)

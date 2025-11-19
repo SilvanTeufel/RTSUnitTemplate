@@ -214,6 +214,10 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void DeadMultiCast();
+
+	// Multicast to switch this unit to Idle state on all clients
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SwitchToIdle();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DeadEffectsAndEvents();

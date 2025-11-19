@@ -1735,18 +1735,20 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 
 						if (UnitBase->Base->IsFlying)
 						{
-							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+							UnitBase->Multicast_SwitchToIdle();
 							return;
 						}
 						
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
+						
 						if (!UnitBase->ResourcePlace)
 						{
-							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+							UnitBase->Multicast_SwitchToIdle();
 							return;
 						}
+						
 						UpdateUnitMovement(Entity , UnitBase);
 						//SwitchState( UnitSignals::GoToBase, Entity, EntityManager);
 						UnitBase->SwitchEntityTagByState(UnitBase->UnitState, UnitBase->UnitStatePlaceholder);
