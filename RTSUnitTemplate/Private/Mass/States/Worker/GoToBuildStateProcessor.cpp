@@ -101,7 +101,6 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
             
-    
             // Basic validation of data from fragment (more robust checks should be external)
             if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
             {
@@ -111,7 +110,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                  }
                  continue;
             }
-
+            
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition)-CharFrag.CapsuleRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter-WorkerStats.BuildAreaArrivalDistance; // Update distance
