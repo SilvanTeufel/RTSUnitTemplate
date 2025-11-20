@@ -952,7 +952,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						FVector Origin, BoxExtent;
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+500.f;
+						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+170.f;
             		}
 
             		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
@@ -1769,10 +1769,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						
 						if (!UnitBase->ResourcePlace)
 						{
-							UE_LOG(LogTemp, Log, TEXT("HandleReachedBase IDLE!!"));
-							UnitBase->Multicast_SwitchToIdle();
-							FMassMoveTargetFragment* MoveTargetPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
-							StopMovement(*MoveTargetPtr, World);
+							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
 							StateFrag->SwitchingState = false;
 							return;
 						}
@@ -2292,28 +2289,9 @@ void UUnitStateProcessor::SpawnWorkResource(
     // -- ASSIGN the freshly spawned resource to the unit --
     ActorToLockOn->WorkResource = NewRes;
 
-    // -- UPDATE the place’s remaining amount --
-    float& Remaining     = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
-    const float MaxRemain = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
-
-    Remaining = FMath::Max(0.f, Remaining - NewRes->Amount);
-
-    // If we’ve completely depleted it, just destroy it and bail
-    if (Remaining <= KINDA_SMALL_NUMBER)
-    {
-        ActorToLockOn->ResourcePlace->Destroy();
-        ActorToLockOn->ResourcePlace = nullptr;
-        return;
-    }
-
-    // Otherwise, update the visual scale of the “ResourcePlace” mesh
-    float Ratio    = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
-    float NewScale = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
-    ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
-
-    // -- FINALLY, ATTACH to the unit’s mesh socket --
+    // -- ATTACH to the unit’s mesh socket FIRST so the worker won't drop it even if the resource place gets destroyed --
     static const FName SocketName(TEXT("ResourceSocket"));
-    if (ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
+    if (ActorToLockOn->GetMesh() && ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
     {
         NewRes->AttachToComponent(
             ActorToLockOn->GetMesh(),
@@ -2323,95 +2301,27 @@ void UUnitStateProcessor::SpawnWorkResource(
         // Offset if needed
         NewRes->SetActorRelativeLocation(NewRes->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
     }
+
+    // -- UPDATE the place’s remaining amount --
+    float& Remaining     = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
+    const float MaxRemain = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
+
+    Remaining = FMath::Max(0.f, Remaining - NewRes->Amount);
+
+    // If we’ve completely depleted it, destroy the place after we've attached the resource
+    if (Remaining <= KINDA_SMALL_NUMBER)
+    {
+        ActorToLockOn->ResourcePlace->Destroy();
+        ActorToLockOn->ResourcePlace = nullptr;
+    }
+    else
+    {
+        // Otherwise, update the visual scale of the “ResourcePlace” mesh
+        float Ratio    = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
+        float NewScale = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
+        ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
+    }
 }
-
-/*
-void UUnitStateProcessor::SpawnWorkResource(EResourceType ResourceType, FVector Location, TSubclassOf<class AWorkResource> WRClass, AUnitBase* ActorToLockOn)
-{
-
-
-	if (!WRClass) return;
-	
-	FTransform Transform;
-
-	Transform.SetLocation(Location);
-	Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
-
-		
-	const auto MyWorkResource = Cast<AWorkResource>
-						(UGameplayStatics::BeginDeferredActorSpawnFromClass
-						(this, WRClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-	
-	if (MyWorkResource != nullptr)
-	{
-
-		if (!ActorToLockOn || !ActorToLockOn->ResourcePlace || !ActorToLockOn->ResourcePlace->Mesh)
-		{
-			return;
-		}
-		
-			if(ActorToLockOn->WorkResource) ActorToLockOn->WorkResource->Destroy(true);
-		
-	
-			//MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("ResourceSocket"));
-			MyWorkResource->IsAttached = true;
-			MyWorkResource->ResourceType = ResourceType;
-			
-			UGameplayStatics::FinishSpawningActor(MyWorkResource, Transform);
-			
-			ActorToLockOn->WorkResource = MyWorkResource;
-
-			
-			ActorToLockOn->ResourcePlace->AvailableResourceAmount = ActorToLockOn->ResourcePlace->AvailableResourceAmount - ActorToLockOn->WorkResource->Amount;
-
-			if (ActorToLockOn->ResourcePlace->AvailableResourceAmount == 0.f)
-			{
-				ActorToLockOn->ResourcePlace->Destroy(true);
-				ActorToLockOn->ResourcePlace = nullptr;
-			}else
-			{
-				// Retrieve the available and maximum resource amounts
-				float Available = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
-				float MaxAvailable = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
-
-				// Default scale if MaxAvailable is zero
-				float NewScale = 0.4f;
-
-				if (!FMath::IsNearlyZero(MaxAvailable))
-				{
-					// Compute the ratio and clamp it between 0.0 and 1.0 for safety
-					float Ratio = FMath::Clamp(Available / MaxAvailable, 0.0f, 1.0f);
-
-					// Linear interpolation: scale will be 0.4 when Ratio is 0 and 1.0 when Ratio is 1
-					NewScale = 0.4f + Ratio * (1.0f - 0.4f);
-				}
-			
-				// Set the mesh's uniform scale using the computed linear scale
-				ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
-			}
-
-	
-			/// Attach Socket with Delay //////////////
-			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, false);
-			FName SocketName = FName("ResourceSocket");
-			
-			auto AttachWorkResource = [MyWorkResource, ActorToLockOn, AttachmentRules, SocketName]()
-			{
-				if (ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
-				{
-					MyWorkResource->AttachToComponent(ActorToLockOn->GetMesh(), AttachmentRules, SocketName);
-					MyWorkResource->IsAttached = true;
-					// Now attempt to set the actor's relative location after attachment
-					MyWorkResource->SetActorRelativeLocation(MyWorkResource->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
-				}
-			};
-
-			AttachWorkResource();
-		
-	}
-	
-}
-*/
 
 void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
 {

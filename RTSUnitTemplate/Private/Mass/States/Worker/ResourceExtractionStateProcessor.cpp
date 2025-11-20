@@ -106,7 +106,7 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             }
             // --- 4. Check if Extraction Time Elapsed ---
            
-            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
+            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState) //  && !StateFrag.SwitchingState
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
@@ -114,6 +114,9 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
                 }
                 continue; // Move to next entity
+            }else if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime*1.5f && StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = false;
             }
         }
             

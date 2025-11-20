@@ -91,7 +91,7 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
       
         const int32 NumEntities = Context.GetNumEntities();
 
-        UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
+        //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = Context.GetEntity(i);
@@ -114,10 +114,10 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
             // --- 1. Arrival Check ---
             const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition)-CharFrag.CapsuleRadius;
-            UE_LOG(LogTemp, Log, TEXT("BBB! "));
+           
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState) // && !AIState.SwitchingState
             {
-                UE_LOG(LogTemp, Log, TEXT("Arrived! "));
+  
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
