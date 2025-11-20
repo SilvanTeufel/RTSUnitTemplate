@@ -9,12 +9,13 @@
 #include "Async/Async.h"
 #include "Engine/World.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/UnitMassTag.h"
 
 // No Actor includes needed
 
 UGoToBaseStateProcessor::UGoToBaseStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -60,80 +61,157 @@ void UGoToBaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
-        return; 
+        return;
     }
     TimeSinceLastRun -= ExecutionInterval;
-    
-    UWorld* World = EntityManager.GetWorld();
 
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    UWorld* World = Context.GetWorld();
     if (!World)
     {
-        //UE_LOG(LogTemp, Error, TEXT("UGoToBaseStateProcessor: Cannot execute without a valid UWorld."));
         return;
     }
 
     if (!SignalSubsystem) return;
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World](FMassExecutionContext& Context)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         // --- Get Fragment Views ---
-        
-        const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
-        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetFragmentView<FMassWorkerStatsFragment>();
-        const TConstArrayView<FMassCombatStatsFragment> CombatStatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
-        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
+        const TConstArrayView<FMassCombatStatsFragment> CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+        const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
-    
-        const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
-        const TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
-      
-        const int32 NumEntities = Context.GetNumEntities();
+        const int32 NumEntities = ChunkContext.GetNumEntities();
 
-        //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            const FMassEntityHandle Entity = Context.GetEntity(i);
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FTransform& CurrentTransform = TransformList[i].GetTransform();
             const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
             FMassAIStateFragment& AIState = AIStateList[i];
-             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
-            
-            if (!WorkerStats.BaseAvailable) // && AIState.StateTimer >= 5.f && !AIState.SwitchingState
+
+            if (!WorkerStats.BaseAvailable)
             {
-                 AIState.SwitchingState = true;
-                 if (SignalSubsystem)
-                 {
-                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Idle, Entity);
-                 }
-                 continue;
+                AIState.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
+                }
+                continue;
             }
 
             // --- 1. Arrival Check ---
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition)-CharFrag.CapsuleRadius;
-           
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState) // && !AIState.SwitchingState
+            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
+
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {
-  
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
                 FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ReachedBase, Entity);
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ReachedBase, Entity);
                 }
                 continue;
             }
-          
 
             // --- 2. Movement Logic ---
             // Use the externally provided helper function
         } // End loop through entities
-            
     }); // End ForEachEntityChunk
+}
 
+void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    UWorld* World = Context.GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    EntityQuery.ForEachEntityChunk(Context,
+        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FMassAIStateFragment& StateFrag = StateList[i];
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+            const FTransform& CurrentTransform = TransformList[i].GetTransform();
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // If base not available, switch to Idle locally
+            if (!WorkerStats.BaseAvailable)
+            {
+                StateFrag.SwitchingState = true;
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateRunTag>(Entity);
+                Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                Defer.AddTag<FMassStateIdleTag>(Entity);
+                continue;
+            }
+
+            // Arrival check using GoToBase conditions
+            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateRunTag>(Entity);
+                Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateCastingTag>(Entity);
+                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateBuildTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                Defer.AddTag<FMassStateIdleTag>(Entity);
+                continue;
+            }
+        }
+    });
 }
