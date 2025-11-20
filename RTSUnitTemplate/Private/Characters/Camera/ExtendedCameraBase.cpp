@@ -303,7 +303,7 @@ bool AExtendedCameraBase::InitAbiltiyChooserWidgetController(ACustomControllerBa
 void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGASUnit* SelectedUnit, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray)
 {
 
-	if(SelectedUnit)
+	if(SelectedUnit && InputID != EGASAbilityInputID::None)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
 		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray);

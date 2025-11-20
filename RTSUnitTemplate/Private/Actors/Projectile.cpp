@@ -728,7 +728,10 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		}
 		
 		ShootingUnit->IncreaseExperience();
-		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+		if (UnitToHit->DefensiveAbilityID != EGASAbilityInputID::None)
+		{
+			UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+		}
 		UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
@@ -803,7 +806,10 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		}
 		
 		ShootingUnit->IncreaseExperience();
-		UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+		if (UnitToHit->DefensiveAbilityID != EGASAbilityInputID::None)
+		{
+			UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
+		}
 		UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);

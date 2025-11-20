@@ -1155,13 +1155,13 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                             bool bIsActivated = false;
                             // Attempt to activate Throw Ability
                             // Add any prerequisite checks for ThrowAbility here if needed
-                            if (StrongAttacker->ThrowAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
+                            if (StrongAttacker->ThrowAbilityID != EGASAbilityInputID::None && StrongAttacker->ThrowAbilities.Num() > 0) // Good practice: check if ID is set
                             {
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
                             }
 
                             // If Throw Ability was not activated, attempt Offensive Ability
-                            if (!bIsActivated && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None) // Good practice: check if ID is set
+                            if (!bIsActivated && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None && StrongAttacker->OffensiveAbilities.Num() > 0) // Good practice: check if ID is set
                             {
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
                             }
@@ -1181,303 +1181,246 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
         } // End if (ActorFragPtr)
     } // End loop through Entities
 }
-
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-    if (!EntitySubsystem)
-    {
-       //UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack called but EntitySubsystem is null!")); // Changed log message context
-       return;
-    }
+    if (!EntitySubsystem) return;
 
     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
     for (const FMassEntityHandle& Entity : Entities)
     {
-       if (!EntityManager.IsEntityValid(Entity)) continue;
+        if (!EntityManager.IsEntityValid(Entity)) continue;
 
-       // Use mutable fragment ptr for Actor access needed later
-       FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-       if (ActorFragPtr)
-       {
-          AActor* Actor = ActorFragPtr->GetMutable();
-          if (IsValid(Actor))
-          {
-             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-             // Read Target Fragment directly here
-            FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
-          	const FMassAIStateFragment* TargetStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-          	FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
-          	FMassCombatStatsFragment* TargetStatsFragmentPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
-             // Ensure all prerequisites are met before proceeding and dispatching
-             if (UnitBase && IsValid(UnitBase->UnitToChase) && !UnitBase->UseProjectile &&
-                 TargetFrag && TargetFrag->bHasValidTarget && TargetFrag->TargetEntity.IsSet())
+        FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+        // Retrieve fragments needed for logic immediately
+        const FMassCombatStatsFragment* AttackerStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+        FMassCombatStatsFragment* TargetStatsFrag = nullptr; // Will fetch below
+        FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
+
+        if (ActorFragPtr && AttackerStats && TargetFrag && TargetFrag->bHasValidTarget && TargetFrag->TargetEntity.IsSet())
+        {
+             AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragPtr->GetMutable());
+             FMassEntityHandle TargetEntity = TargetFrag->TargetEntity;
+             
+             if (UnitBase && IsValid(UnitBase->UnitToChase) && !UnitBase->UseProjectile && EntityManager.IsEntityValid(TargetEntity))
              {
-                FMassEntityHandle AttackerEntity = Entity; // Attacker is the current entity in loop
-                const FMassEntityHandle TargetEntity = TargetFrag->TargetEntity; // Get target from fragment
+                // 1. HANDLE MATH & LOGIC HERE (While pointers are valid)
+                TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
+                if (!TargetStatsFrag) continue;
 
-                // Check if target entity is valid *before* dispatching
-                if (!EntityManager.IsEntityValid(TargetEntity))
+                bool bIsMagicDamage = UnitBase->IsDoingMagicDamage;
+                float BaseDamage = AttackerStats->AttackDamage;
+                float Defense = bIsMagicDamage ? TargetStatsFrag->MagicResistance : TargetStatsFrag->Armor;
+                float DamageAfterDefense = FMath::Max(0.0f, BaseDamage - Defense);
+                
+                float DamageToApply = DamageAfterDefense;
+                float ShieldDamage = 0.0f;
+                float HealthDamage = 0.0f;
+
+                // Calculate Shield/Health splits
+                if (TargetStatsFrag->Shield > 0)
                 {
-                    // UE_LOG(LogTemp, Warning, TEXT("UnitMeeleAttack: Target entity from TargetFragment is invalid for attacker %s."), *UnitBase->GetName());
-                    continue; // Skip this attack
+                    ShieldDamage = FMath::Min(TargetStatsFrag->Shield, DamageToApply);
+                    TargetStatsFrag->Shield -= ShieldDamage;
+                    DamageToApply -= ShieldDamage;
                 }
+                if (DamageToApply > 0)
+                {
+                    HealthDamage = FMath::Min(TargetStatsFrag->Health, DamageToApply);
+                    TargetStatsFrag->Health -= HealthDamage;
+                }
+                
+                // Clamp Health
+                TargetStatsFrag->Health = FMath::Max(0.0f, TargetStatsFrag->Health);
 
-                // Capture necessary variables for the AsyncTask
+                // 2. PREPARE ASYNC DATA
+                // We capture VALUES (HealthDamage, ShieldDamage), not pointers to fragments.
                 TWeakObjectPtr<AUnitBase> WeakAttacker(UnitBase);
                 TWeakObjectPtr<AUnitBase> WeakTarget(UnitBase->UnitToChase);
-                bool bIsMagicDamage = UnitBase->IsDoingMagicDamage; // Capture simple types by value
+                
+                // Capture Tag requirement logic as a bool or ID, don't pass the StateFragment pointer
+                bool bShouldApplyRootReduction = false; // Logic for this needs to stay on game thread or be pre-calculated
+                // Note: Updating StateTimer is complex across threads. It's safer to defer a Command or use a Signal.
 
-                // *** FIX: Capture 'this', 'AttackerEntity', and 'TargetEntity' in the lambda ***
-                AsyncTask(ENamedThreads::GameThread, [this, AttackerEntity, TargetEntity, WeakAttacker, WeakTarget, bIsMagicDamage, MoveTargetFragmentPtr, TargetStateFrag, TargetStatsFragmentPtr, TargetFrag]() mutable
+                // 3. DISPATCH GAME THREAD TASK (Visuals & Actor Updates only)
+                AsyncTask(ENamedThreads::GameThread, [WeakAttacker, WeakTarget, HealthDamage, ShieldDamage]()
                 {
-                    // Get Strong Pointers for Actor operations
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
                     AUnitBase* StrongTarget = WeakTarget.Get();
 
-                    // *** FIX: 'this' is now captured, so EntitySubsystem is accessible ***
-                    if (!EntitySubsystem)
+                    if (StrongAttacker && StrongTarget)
                     {
-                         // UE_LOG(LogTemp, Error, TEXT("UnitMeeleAttack (GameThread): EntitySubsystem became null!"));
-                         return;
-                    }
-                    FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
-                	
-                	// Ensure Actors and Entities are still valid
-                    if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
-                    {
-                    	
-                        const FMassCombatStatsFragment* AttackerStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(AttackerEntity);
-                        FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity); // Mutable required
-                    	FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity);
-                    	
-                    	if (!AttackerStats || !TargetStats)
+                        // Update Actor specific attributes (Syncing Mass data to Actor)
+                        if (ShieldDamage > 0)
                         {
-                            return;
+                            StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
                         }
-                        // --- Apply Damage using Fragment Stats (Example from previous answer) ---
-                        float BaseDamage = AttackerStats->AttackDamage;
-                        float Defense = bIsMagicDamage ? TargetStats->MagicResistance : TargetStats->Armor;
-                        float DamageAfterDefense = FMath::Max(0.0f, BaseDamage - Defense);
-                    	
-                        float RemainingDamage = DamageAfterDefense;
-                        if (TargetStats->Shield > 0)
+                        if (HealthDamage > 0)
                         {
-                        	float ShieldDamage = FMath::Min(TargetStats->Shield, RemainingDamage);
-                        	TargetStats->Shield -= ShieldDamage;
-                        	StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
-                        	RemainingDamage -= ShieldDamage;
-                        }
-                        if (RemainingDamage > 0)
-                        {
-                        	float HealthDamage = FMath::Min(TargetStats->Health, RemainingDamage);
-                        	TargetStats->Health -= HealthDamage;
-                        	StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
-                        }
-                        TargetStats->Health = FMath::Max(0.0f, TargetStats->Health);
-
-                        // Notify the target that it has been attacked (Blueprint event)
-                        if (IsValid(StrongTarget))
-                        {
-                            StrongTarget->Attacked(StrongAttacker);
+                            StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
                         }
 
-                        // --- Rest of the Actor logic (RPCs, Abilities, State Changes etc.) ---
-                        StrongAttacker->LevelData.Experience++;
-
-                        if(StrongTarget->HealthWidgetComp) // Update Target's health bar
+                        // UI Update
+                        if(StrongTarget->HealthWidgetComp)
                         {
                             if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(StrongTarget->HealthWidgetComp->GetUserWidgetObject()))
                             {
-                            	HealthBarWidget->UpdateWidget();
+                                HealthBarWidget->UpdateWidget();
                             }
                         }
 
-                    	// --- Perform Core Actor Actions ---
-							 StrongAttacker->ServerStartAttackEvent_Implementation();
-                    	
-							 bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->AttackAbilityID, StrongAttacker->AttackAbilities);
-                    	
-                    		StrongAttacker->ServerMeeleImpactEvent();
-							StrongTarget->ActivateAbilityByInputID(StrongTarget->DefensiveAbilityID, StrongTarget->DefensiveAbilities);
-							StrongTarget->FireEffects(StrongAttacker->MeleeImpactVFX, StrongAttacker->MeleeImpactSound, StrongAttacker->ScaleImpactVFX, StrongAttacker->ScaleImpactSound, StrongAttacker->MeeleImpactVFXDelay, StrongAttacker->MeleeImpactSoundDelay);
-                    	
-							if (TargetAIStateFragment->CanAttack && TargetAIStateFragment->IsInitialized) GTEntityManager.Defer().AddTag<FMassStateDetectTag>(TargetEntity);
+                        // Notify Blueprint
+                        StrongTarget->Attacked(StrongAttacker);
 
-                    		if(StrongTarget->GetUnitState() == UnitData::Casting)
-							{
-								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceCastTime;
-								StrongTarget->UnitControlTimer -= StrongTarget->ReduceCastTime;
-							}
-							else if(StrongTarget->GetUnitState() == UnitData::Rooted)
-							{
-								TargetAIStateFragment->StateTimer -= StrongTarget->ReduceRootedTime;
-								StrongTarget->UnitControlTimer -= StrongTarget->ReduceRootedTime;
-							}
-                    	
+                        // GAS / Abilities
+                        StrongAttacker->ServerStartAttackEvent_Implementation();
+
+                        // --- THIS LINE SHOULD NOW BE SAFE ---
+                        // Because we didn't corrupt memory with invalid fragment pointers earlier
+                        if (StrongAttacker->AttackAbilityID != EGASAbilityInputID::None && StrongAttacker->AttackAbilities.Num() > 0)
+                        {
+                            StrongAttacker->ActivateAbilityByInputID(StrongAttacker->AttackAbilityID, StrongAttacker->AttackAbilities);
+                        }
+                        
+                        StrongAttacker->ServerMeeleImpactEvent();
+                        
+                        // ... Rest of visual logic ...
                     }
-                }); // End AsyncTask Lambda
-             } // End check for valid UnitBase, Target, etc.
-          } // End IsValid(Actor)
-       } // End ActorFragPtr check
-    } // End loop through Entities
+                });
+             }
+        }
+    }
 }
 
 void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-    if (!EntitySubsystem)
+    if (!EntitySubsystem) return;
+
+    // Use Mutable immediately as we might change State tags/fragments
+    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager(); 
+
+    for (FMassEntityHandle& Entity : Entities)
     {
-       return;
-    }
+        if (!EntityManager.IsEntityValid(Entity)) continue;
 
-    const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager(); // Const is fine for initial checks
+        // 1. Access Fragments Needed for Logic
+        FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+        FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
+        const FTransformFragment* AttackerTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+        const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+        FMassAIStateFragment* AttackerStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 
-    for (const FMassEntityHandle& Entity : Entities)
-    {
-       if (!EntityManager.IsEntityValid(Entity)) continue;
+        // 2. Validate Prereqs
+        if (ActorFragPtr && TargetFrag && TargetFrag->bHasValidTarget && TargetFrag->TargetEntity.IsSet() &&
+            AttackerTransformFrag && CharFrag && AttackerStateFrag)
+        {
+             AUnitBase* AttackerUnitBase = Cast<AUnitBase>(ActorFragPtr->GetMutable());
+             FMassEntityHandle TargetEntity = TargetFrag->TargetEntity;
 
-       const FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-       if (ActorFragPtr)
-       {
-          const AActor* Actor = ActorFragPtr->Get();
-          if (IsValid(Actor))
-          {
-             const AUnitBase* AttackerUnitBase = Cast<AUnitBase>(Actor);
-             AUnitBase* TargetUnitBase = AttackerUnitBase ? AttackerUnitBase->UnitToChase : nullptr;
-             // Need Attacker's TargetFragment to get the TargetEntity Handle *before* the lambda
-             const FMassAITargetFragment* AttackerTargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
- 
-             // --- Prerequisites Check ---
-             if (AttackerUnitBase && IsValid(TargetUnitBase) && AttackerUnitBase->UseProjectile &&
-                 AttackerTargetFrag && AttackerTargetFrag->bHasValidTarget && AttackerTargetFrag->TargetEntity.IsSet())
+             if (AttackerUnitBase && IsValid(AttackerUnitBase->UnitToChase) && AttackerUnitBase->UseProjectile && EntityManager.IsEntityValid(TargetEntity))
              {
-                // Get Entity Handles
-                FMassEntityHandle AttackerEntity = Entity;
-                FMassEntityHandle TargetEntity = AttackerTargetFrag->TargetEntity;
-             	
-                // Check target entity validity *before* dispatching
-                if (!EntityManager.IsEntityValid(TargetEntity))
+                // 3. CHECK RANGE HERE (In Mass Thread)
+                // Checking range inside the Async task is risky and inefficient. Do it now.
+                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
+                const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
+
+                if (!TargetTransformFrag || !TargetCharFrag) continue;
+
+                float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
+                float RangeWithCapsule = AttackerRange + CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
+                float AttackRangeSquared = FMath::Square(RangeWithCapsule);
+
+                FVector AttackerLoc = AttackerTransformFrag->GetTransform().GetLocation();
+                FVector TargetLoc = TargetTransformFrag->GetTransform().GetLocation();
+                float DistSquared = FVector::DistSquared2D(AttackerLoc, TargetLoc);
+
+                // If out of range, cancel attack and stop here
+                if (DistSquared > AttackRangeSquared)
                 {
-                    //UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack: Target entity %d:%d is invalid for attacker %s."), TargetEntity.Index, TargetEntity.SerialNumber, *AttackerUnitBase->GetName());
+                    AttackerStateFrag->SwitchingState = false;
                     continue;
                 }
 
-                // --- Capture necessary data ---
-                TWeakObjectPtr<AUnitBase> WeakAttacker(const_cast<AUnitBase*>(AttackerUnitBase));
-                TWeakObjectPtr<AUnitBase> WeakTarget(TargetUnitBase);
-                // Capture Ability info/range by value
+                // 4. CAPTURE DATA FOR ASYNC
+                // We know we are in range and valid. Capture what we need for the Visuals/Gameplay.
+                TWeakObjectPtr<AUnitBase> WeakAttacker(AttackerUnitBase);
+                TWeakObjectPtr<AUnitBase> WeakTarget(AttackerUnitBase->UnitToChase); // Explicitly use the Actor we verified
+                
+                // Capture IDs by value (safer than checking StrongTarget->ID inside the lambda)
                 EGASAbilityInputID AttackAbilityID = AttackerUnitBase->AttackAbilityID;
                 EGASAbilityInputID ThrowAbilityID = AttackerUnitBase->ThrowAbilityID;
                 EGASAbilityInputID OffensiveAbilityID = AttackerUnitBase->OffensiveAbilityID;
+                
+                // Copy arrays (Heavy operation, but required if accessing on another thread safely)
                 TArray<TSubclassOf<UGameplayAbilityBase>> AttackAbilities = AttackerUnitBase->AttackAbilities;
                 TArray<TSubclassOf<UGameplayAbilityBase>> ThrowAbilities = AttackerUnitBase->ThrowAbilities;
                 TArray<TSubclassOf<UGameplayAbilityBase>> OffensiveAbilities = AttackerUnitBase->OffensiveAbilities;
-                float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
 
-
-                // --- Dispatch AsyncTask ---
-                AsyncTask(ENamedThreads::GameThread,
-                   [this, AttackerEntity, TargetEntity, // Capture entity handles
-                    WeakAttacker, WeakTarget,
+                // 5. HANDLE MASS STATE CHANGE
+                // Ideally, you switch state here in the processor, not in the async task.
+                // However, based on your flow, we will signal the state change in the lambda context 
+                // ONLY because we need to pass the entity handle safely. 
+                
+                // 6. DISPATCH VISUAL/GAMEPLAY TASK
+                AsyncTask(ENamedThreads::GameThread, [this, Entity, TargetEntity, WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
-                    AttackAbilities, ThrowAbilities, OffensiveAbilities, AttackerRange]() mutable // AttackerRange
+                    AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable
                 {
-                    // --- Get Strong Pointers ---
+                    if (!EntitySubsystem) return; // Safety Check
+
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
                     AUnitBase* StrongTarget = WeakTarget.Get();
-
-                    if (!EntitySubsystem) { return; }
-                    FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager(); // Need mutable for fragments
-                   	
-                    // --- Check validity ON Game Thread ---
-                    if (StrongAttacker && StrongTarget && GTEntityManager.IsEntityValid(AttackerEntity) && GTEntityManager.IsEntityValid(TargetEntity))
+                    
+                    if (StrongAttacker && StrongTarget)
                     {
-                       const FTransformFragment* AttackerTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(AttackerEntity);
-                    	const FMassAgentCharacteristicsFragment* CharFrag = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(AttackerEntity);
-					   const FTransformFragment* TargetTransformFrag = GTEntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
-                    	FMassAgentCharacteristicsFragment* TargetCharFrag = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
-					   if (AttackerTransformFrag && TargetTransformFrag && TargetCharFrag && CharFrag)
-					   {
-						   const FVector CurrentAttackerLocation = AttackerTransformFrag->GetTransform().GetLocation();
-						   const FVector CurrentTargetLocation = TargetTransformFrag->GetTransform().GetLocation();
-						   const float DistanceSquared = FVector::DistSquared2D(CurrentAttackerLocation, CurrentTargetLocation);
-
-					   		float RangeWithCapsule = AttackerRange+CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
-							const float AttackRangeSquared = FMath::Square(RangeWithCapsule); // AttackerRange was captured
-		   				
-
-							if (DistanceSquared > AttackRangeSquared)
-							{
-	      
-								FMassAIStateFragment* AttackerStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
-								if(AttackerStateFrag)
-								{
-									 AttackerStateFrag->SwitchingState = false;
-								}
-								return; // Abort the attack as target is out of range
-							}
-					   }
-                    	
-                        UWorld* World = StrongAttacker->GetWorld();
-                        if (!World) { return; }
-                        //UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>(); // Get once
-
-
-                        // --- Perform Core Actor Actions ---
+                        // --- Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
                         
-                        // Notify the target that it has been attacked (Blueprint event)
                         if (IsValid(StrongTarget))
                         {
                             StrongTarget->Attacked(StrongAttacker);
                         }
-                    	
-						bool bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
 
-                    
-						if (!bIsActivated)
-						{
-							bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
-						}
-                    	if (!bIsActivated)
-                    	{
-							//if (AttackerRange >= 600.f)
-							{
-							   bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
-							}
-                    	}
-                    	
-                    	if (bIsActivated)
-                    	{
-                    		FMassAIStateFragment* AttackerStats = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(AttackerEntity);
-                    		AttackerStats->SwitchingState = false;
-                    		return;
-                    	}
+                        bool bIsActivated = false;
 
-       
-                        StrongAttacker->SpawnProjectile(StrongTarget, StrongAttacker);
-                    	
-                        const FMassCombatStatsFragment* TargetStats = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
-                        FMassAIStateFragment* TargetAIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity);
- 
-                    	if (TargetStats)
+                        // --- FIX: Use Captured IDs, don't check StrongTarget for Attacker's ID ---
+                        if(AttackAbilityID != EGASAbilityInputID::None && AttackAbilities.Num() > 0)
                         {
-     
-                                 // Check fragment needed for state timer changes
-                                 if (!TargetAIStateFragment)
-                                 {
-                                     // UE_LOG(LogTemp, Warning, TEXT("UnitRangedAttack (GameThread): Missing Target AIStateFragment for timer updates. Target Entity %d:%d"), TargetEntity.Index, TargetEntity.SerialNumber);
-                                 }
-                    		
-                             // --- End Actual Post-Attack Logic ---
-                    		SwitchState(UnitSignals::Attack, AttackerEntity, GTEntityManager);
-                        } // End else block (TargetStats was valid)
-                    } // End check Actors/Entities valid
-                }); // End AsyncTask Lambda
-             } // End prerequisite check
-          } // End IsValid(Actor)
-       } // End ActorFragPtr check
-    } // End loop through Entities
+                           bIsActivated = StrongAttacker->ActivateAbilityByInputID(AttackAbilityID, AttackAbilities);
+                        }
+                    
+                        if (!bIsActivated && ThrowAbilityID != EGASAbilityInputID::None && ThrowAbilities.Num() > 0)
+                        {
+                           bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
+                        }
+                        
+                        if (!bIsActivated && OffensiveAbilityID != EGASAbilityInputID::None && OffensiveAbilities.Num() > 0)
+                        {
+                            // Range check already passed in Processor
+                            bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
+                        }
+
+                        // Access Entity Manager on GameThread safely
+                        FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
+                        if (!GTEntityManager.IsEntityValid(Entity)) return;
+
+                        if (bIsActivated)
+                        {
+                           FMassAIStateFragment* AsyncStateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+                           if (AsyncStateFrag) AsyncStateFrag->SwitchingState = false;
+                           return;
+                        }
+
+                        // Fallback: Spawn Projectile manually if no ability activated
+                        StrongAttacker->SpawnProjectile(StrongTarget, StrongAttacker);
+                        
+                        // Switch State (assuming UnitSignals::Attack moves to Cooldown or similar)
+                        SwitchState(UnitSignals::Attack, Entity, GTEntityManager);
+                    }
+                });
+             }
+        }
+    }
 }
 
 void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHandle>& Entities)
