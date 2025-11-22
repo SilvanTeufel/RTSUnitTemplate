@@ -34,6 +34,18 @@ public:
 	// If reconciliation error exceeds this distance (cm), perform a one-time full replication (snap) on that tick
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float FullReplicationDistance = 2000.f; // cm
+
+	// Rotation reconciliation (Yaw-only by default)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool bEnableRotationReconciliation = true; // enable gentle rotation correction
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float MinYawErrorForCorrectionDeg = 3.0f; // deg, threshold to start correcting
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float MaxRotationCorrectionDegPerSec = 30.0f; // deg/sec, weak by default
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float KpRot = 0.5f; // proportional gain for yaw correction
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool bRotationYawOnly = true; // correct yaw only by default
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;

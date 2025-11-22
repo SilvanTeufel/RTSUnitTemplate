@@ -1175,6 +1175,61 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								NetIDList[EntityIdx].NetID.GetValue(), Err, Corrective.X, Corrective.Y, Corrective.Z, Kp, MaxCorrectionAccel);
 						}
 					}
+
+					// Gentle rotation reconciliation (primarily yaw)
+					if (bEnableRotationReconciliation)
+					{
+						const float Dt = Context.GetDeltaTimeSeconds();
+						// Extract current and target rotations
+						const FRotator CurrRot = ClientXf.GetRotation().Rotator();
+						const FRotator TgtRot = FinalXf.GetRotation().Rotator();
+						float DeltaPitch = FMath::FindDeltaAngleDegrees(CurrRot.Pitch, TgtRot.Pitch);
+						float DeltaYaw   = FMath::FindDeltaAngleDegrees(CurrRot.Yaw,   TgtRot.Yaw);
+						float DeltaRoll  = FMath::FindDeltaAngleDegrees(CurrRot.Roll,  TgtRot.Roll);
+						bool bApply = false;
+						FRotator NewRot = CurrRot;
+						if (bRotationYawOnly)
+						{
+							if (FMath::Abs(DeltaYaw) > MinYawErrorForCorrectionDeg)
+							{
+								const float MaxStep = MaxRotationCorrectionDegPerSec * Dt;
+								const float Step = FMath::Clamp(KpRot * DeltaYaw, -MaxStep, MaxStep);
+								NewRot.Yaw = CurrRot.Yaw + Step;
+								bApply = true;
+							}
+						}
+						else
+						{
+							// Apply to all axes with same limits
+							const float MaxStep = MaxRotationCorrectionDegPerSec * Dt;
+							bool bAny = false;
+							if (FMath::Abs(DeltaYaw) > MinYawErrorForCorrectionDeg)
+							{
+								NewRot.Yaw = CurrRot.Yaw + FMath::Clamp(KpRot * DeltaYaw, -MaxStep, MaxStep);
+								bAny = true;
+							}
+							if (FMath::Abs(DeltaPitch) > MinYawErrorForCorrectionDeg)
+							{
+								NewRot.Pitch = CurrRot.Pitch + FMath::Clamp(KpRot * DeltaPitch, -MaxStep, MaxStep);
+								bAny = true;
+							}
+							if (FMath::Abs(DeltaRoll) > MinYawErrorForCorrectionDeg)
+							{
+								NewRot.Roll = CurrRot.Roll + FMath::Clamp(KpRot * DeltaRoll, -MaxStep, MaxStep);
+								bAny = true;
+							}
+							bApply = bAny;
+						}
+						if (bApply)
+						{
+							ClientXf.SetRotation(NewRot.Quaternion());
+							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+							{
+								UE_LOG(LogTemp, Verbose, TEXT("ClientReconcileRot: NetID=%u CurrYaw=%.1f TgtYaw=%.1f AppliedYaw=%.1f (d=%.1f, Kp=%.2f, MaxDeg/s=%.1f)"),
+									NetIDList[EntityIdx].NetID.GetValue(), CurrRot.Yaw, TgtRot.Yaw, NewRot.Yaw, DeltaYaw, KpRot, MaxRotationCorrectionDegPerSec);
+							}
+						}
+					}
 				}
 
     // Detailed client log: what transform we compared and source (disabled by default)

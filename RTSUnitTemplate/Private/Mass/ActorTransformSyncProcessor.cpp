@@ -48,6 +48,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 
+        EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
+    
         EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
 
@@ -78,6 +80,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
 
+        ClientEntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
+    
         ClientEntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
 
