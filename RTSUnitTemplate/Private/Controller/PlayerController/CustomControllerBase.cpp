@@ -166,7 +166,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 	Unit->bHoldPosition = false;
 	// Bridge race: mark owner-name skip immediately to cover NetID==0 or pending
-
+	
     UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
     if (!World)
     {
@@ -209,7 +209,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	
 	AiStatePtr->StoredLocation = NewTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-
+	
 	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
 	
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
@@ -237,6 +237,24 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+	// Inform every client to predict locally for this single unit
+	if (UWorld* PCWorld = GetWorld())
+	{
+		TArray<AUnitBase*> UnitsArr;
+		TArray<FVector> LocationsArr;
+		TArray<float> SpeedsArr;
+		UnitsArr.Add(Unit);
+		LocationsArr.Add(NewTargetLocation);
+		SpeedsArr.Add(DesiredSpeed);
+		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+			{
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, AcceptanceRadius, AttackT);
+			}
+		}
+	}
 }
 
 void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContextObject,
@@ -616,6 +634,24 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
    	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+	// Inform every client to predict locally for this single unit (ability path)
+	if (UWorld* PCWorld = GetWorld())
+	{
+		TArray<AUnitBase*> UnitsArr;
+		TArray<FVector> LocationsArr;
+		TArray<float> SpeedsArr;
+		UnitsArr.Add(Unit);
+		LocationsArr.Add(NewTargetLocation);
+		SpeedsArr.Add(DesiredSpeed);
+		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+			{
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, AcceptanceRadius, AttackT);
+			}
+		}
+	}
 	
 }
 
