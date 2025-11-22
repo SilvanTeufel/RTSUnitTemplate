@@ -14,6 +14,7 @@
 // For updating FMassMoveTargetFragment and prediction helpers
 #include "Mass/UnitMassTag.h"
 #include "MassNavigationFragments.h"
+#include "TimerManager.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -882,6 +883,9 @@ void AMassUnitBase::BeginPlay()
 
 void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// Stop any pending rotation timer
+	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+
 	// Remove our specific instance from the component when the actor is destroyed
 	if (InstanceIndex != INDEX_NONE && ISMComponent)
 	{
@@ -1225,4 +1229,125 @@ bool AMassUnitBase::StopMassMovement()
 	}
 
 	return false;
+}
+
+void AMassUnitBase::MulticastTransformSync_Implementation(const FVector& Location)
+{
+	//SetActorLocation(Location);
+	SetTranslationLocation(Location);
+	UpdatePredictionFragment(Location, Attributes->GetBaseRunSpeed());
+	StopMassMovement();
+	SwitchEntityTagByState(UnitData::Idle, UnitStatePlaceholder);
+}
+
+void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent)
+{
+	// Assign incoming parameters to the global variables so all machines share identical tween settings
+	RotateDuration = InRotateDuration;
+	// Clamp ease exponent to a small positive value to avoid degenerate alpha mapping
+	RotationEaseExponent = FMath::Max(InRotationEaseExponent, 0.001f);
+
+	// Start a smooth rotation on both server and clients using a local timer per machine.
+	if (!ISMComponent && !GetMesh())
+	{
+		return;
+	}
+
+	// Desired target (component/local or world for ISM instance). Apply mesh offset so visuals align with logical forward.
+	const FQuat DesiredLocal = (NewRotation.Quaternion() * MeshRotationOffset).GetNormalized();
+
+	// If duration is not positive, snap immediately.
+	if (RotateDuration <= 0.f)
+	{
+		ApplyLocalVisualRotation(DesiredLocal);
+		return;
+	}
+
+	// Initialize interpolation state and start/update the timer on this machine.
+	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+	RotateStart = GetCurrentLocalVisualRotation();
+	RotateTarget = DesiredLocal;
+	RotateElapsed = 0.f;
+
+	// Use a small, non-zero rate so the timer actually loops on all platforms/versions.
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+
+	// Kick the first step immediately for responsiveness
+	RotateISM_Step();
+
+	GetWorldTimerManager().SetTimer(RotateTimerHandle, this, &AMassUnitBase::RotateISM_Step, TimerRate, true);
+}
+
+FQuat AMassUnitBase::GetCurrentLocalVisualRotation() const
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true);
+			return InstanceXf.GetRotation();
+		}
+		// Fallback to component's relative rotation if no valid instance
+		return ISMComponent->GetRelativeRotation().Quaternion();
+	}
+
+	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		return SkelMesh->GetRelativeRotation().Quaternion();
+	}
+
+	return GetActorQuat();
+}
+
+void AMassUnitBase::ApplyLocalVisualRotation(const FQuat& NewLocalRotation)
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true);
+			InstanceXf.SetRotation(NewLocalRotation);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+			return;
+		}
+
+		// Fallback: rotate the whole ISM component
+		ISMComponent->SetRelativeRotation(NewLocalRotation.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->SetRelativeRotation(NewLocalRotation.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+void AMassUnitBase::RotateISM_Step()
+{
+	// If we lost visual components, bail out and stop the timer
+	if (!ISMComponent && !GetMesh())
+	{
+		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	RotateElapsed += Dt;
+
+	float Alpha = (RotateDuration > 0.f) ? FMath::Clamp(RotateElapsed / RotateDuration, 0.f, 1.f) : 1.f;
+	if (!FMath::IsNearlyEqual(RotationEaseExponent, 1.f))
+	{
+		Alpha = FMath::Pow(Alpha, RotationEaseExponent);
+	}
+
+	const FQuat NewLocal = FQuat::Slerp(RotateStart, RotateTarget, Alpha).GetNormalized();
+	ApplyLocalVisualRotation(NewLocal);
+
+	if (Alpha >= 1.f)
+	{
+		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+	}
 }

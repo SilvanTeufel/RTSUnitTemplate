@@ -7,6 +7,8 @@
 #include "NiagaraComponent.h"
 #include "Actors/AreaDecalComponent.h"
 #include "Actors/SelectionDecalComponent.h"
+#include "TimerManager.h"
+
 #include "MassUnitBase.generated.h"
 
 /**
@@ -154,12 +156,36 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeUnitMode();
-	
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastTransformSync(const FVector& Location);
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
-	//void InitializeUnitMode();
+	// Smooth rotation controls (duration-based)
+	
+	float RotateDuration = 0.25f; // seconds to reach target; <=0 to snap
+	float RotationEaseExponent = 1.0f; // 1 = linear; >1 to ease-in/out feel
 
+	// Runtime state for smooth rotation (not replicated)
+	FTimerHandle RotateTimerHandle;
+	float RotateElapsed = 0.f;
+	FQuat RotateStart;
+	FQuat RotateTarget;
+
+	// Per-frame rotation step while timer active
+	void RotateISM_Step();
+
+	// Helpers to read/apply current visual rotation
+	FQuat GetCurrentLocalVisualRotation() const;
+	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation);
+	
+	//void InitializeUnitMode();
+	
 };
