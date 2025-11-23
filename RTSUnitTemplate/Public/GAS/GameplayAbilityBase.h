@@ -89,7 +89,12 @@ public:
 	// Enable/Disable abilities by AbilityKey for the owner team (uses Owner from ActorInfo)
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAbilitiesEnabledForTeamByKey(const FString& Key, bool bEnable);
-	
+
+	// Enable/Disable only this owner's ability by key (call from within an ability instance)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAbilityEnabledByKey(const FString& Key, bool bEnable);
+
+		
 	// Static helpers to toggle/query by key/team id
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static void SetAbilitiesEnabledForTeamByKey_Static(const FString& Key, int32 TeamId, bool bEnable);
@@ -106,6 +111,17 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static bool IsAbilityKeyForceEnabledForTeam(const FString& Key, int32 TeamId);
+
+	// Owner-level queries (per AbilitySystemComponent)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool IsAbilityKeyDisabledForOwner(class UAbilitySystemComponent* OwnerASC, const FString& Key);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool IsAbilityKeyForceEnabledForOwner(class UAbilitySystemComponent* OwnerASC, const FString& Key);
+
+	// Apply owner-scoped ability key toggle on the local machine (client/UI side)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystemComponent* OwnerASC, const FString& Key, bool bEnable);
 		
 	// Debug: dump disabled/force-enabled keys per team to log
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

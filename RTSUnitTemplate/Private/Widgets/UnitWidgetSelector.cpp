@@ -5,6 +5,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Containers/Set.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "AbilitySystemComponent.h"
 
 
 
@@ -623,6 +624,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 	if (!Unit) return;
 
 	const int32 TeamId = Unit->TeamId;
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
 	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
 
 	for (int32 i = 0; i < AbilityButtons.Num(); ++i)
@@ -636,24 +638,42 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 			UGameplayAbilityBase* AbilityCDO = AbilityArray[i]->GetDefaultObject<UGameplayAbilityBase>();
 			if (AbilityCDO)
 			{
-				bool bIsDisabled = AbilityCDO->bDisabled;
+				bool bCDO_Disabled = AbilityCDO->bDisabled;
 				const FString RawKey = AbilityCDO->AbilityKey;
 				FString NormalizedKey = RawKey;
 				NormalizedKey.TrimStartAndEndInline();
 				NormalizedKey = NormalizedKey.ToLower();
-				const bool bKeyDisabled = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none")) ? UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(RawKey, TeamId) : false;
-				const bool bForceEnabled = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none")) ? UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(RawKey, TeamId) : false;
-				bIsDisabled = bIsDisabled || bKeyDisabled;
-				bEnable = bForceEnabled || !bIsDisabled;
 
-				UE_LOG(LogTemp, VeryVerbose, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bKeyDisabled=%s bForceEnabled=%s -> SetEnabled=%s"),
+				bool bTeamKeyDisabled = false;
+				bool bTeamForceEnabled = false;
+				bool bOwnerKeyDisabled = false;
+				bool bOwnerForceEnabled = false;
+				const bool bHasKey = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none"));
+				if (bHasKey)
+				{
+					bTeamKeyDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(RawKey, TeamId);
+					bTeamForceEnabled = UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(RawKey, TeamId);
+					if (ASC)
+					{
+						bOwnerKeyDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForOwner(ASC, RawKey);
+						bOwnerForceEnabled = UGameplayAbilityBase::IsAbilityKeyForceEnabledForOwner(ASC, RawKey);
+					}
+				}
+
+				const bool bAnyForceEnabled = bTeamForceEnabled || bOwnerForceEnabled;
+				const bool bAnyDisabled = bCDO_Disabled || bTeamKeyDisabled || bOwnerKeyDisabled;
+				bEnable = bAnyForceEnabled || !bAnyDisabled;
+
+				UE_LOG(LogTemp, VeryVerbose, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s -> SetEnabled=%s"),
 					i,
 					TeamId,
 					*RawKey,
 					*NormalizedKey,
-					AbilityCDO->bDisabled ? TEXT("true") : TEXT("false"),
-					bKeyDisabled ? TEXT("true") : TEXT("false"),
-					bForceEnabled ? TEXT("true") : TEXT("false"),
+					bCDO_Disabled ? TEXT("true") : TEXT("false"),
+					bTeamKeyDisabled ? TEXT("true") : TEXT("false"),
+					bOwnerKeyDisabled ? TEXT("true") : TEXT("false"),
+					bTeamForceEnabled ? TEXT("true") : TEXT("false"),
+					bOwnerForceEnabled ? TEXT("true") : TEXT("false"),
 					bEnable ? TEXT("true") : TEXT("false"));
 			}
 		}

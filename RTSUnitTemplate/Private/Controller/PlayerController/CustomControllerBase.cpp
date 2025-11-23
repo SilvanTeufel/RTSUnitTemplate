@@ -31,6 +31,9 @@
 #include "System/PlayerTeamSubsystem.h"
 #include "TimerManager.h"
 #include "Templates/Function.h"
+#include "GAS/GameplayAbilityBase.h"
+#include "AbilitySystemComponent.h"
+#include "Characters\Unit\UnitBase.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -1547,6 +1550,31 @@ void ACustomControllerBase::Client_ReceiveCooldown_Implementation(int32 AbilityI
 	if (ExtendedCameraBase && ExtendedCameraBase->UnitSelectorWidget)
 	{
 		ExtendedCameraBase->UnitSelectorWidget->SetWidgetCooldown(AbilityIndex, RemainingTime);
+	}
+}
+
+void ACustomControllerBase::Client_ApplyOwnerAbilityKeyToggle_Implementation(AUnitBase* Unit, const FString& Key, bool bEnable)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	UAbilitySystemComponent* ASC = Unit ? Unit->GetAbilitySystemComponent() : nullptr;
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Missing ASC. Unit=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *Key, bEnable ? TEXT("true") : TEXT("false"));
+		return;
+	}
+	UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(ASC, Key, bEnable);
+	UE_LOG(LogTemp, Log, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Applied on client. Unit=%s ASC=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *GetNameSafe(ASC), *Key, bEnable ? TEXT("true") : TEXT("false"));
+
+	// Refresh the unit selector UI immediately
+	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))
+	{
+		if (ExtendedCameraBase->UnitSelectorWidget)
+		{
+			ExtendedCameraBase->UnitSelectorWidget->UpdateSelectedUnits();
+		}
 	}
 }
 
