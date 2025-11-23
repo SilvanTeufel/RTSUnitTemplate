@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -16,13 +16,21 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 {
 	GENERATED_BODY()
 
-
+	
 	
 public:
 	UGameplayAbilityBase();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AbilityCanBeCanceled = true;
+	
+	// New: Ability can be globally disabled via this flag (per ability asset)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bDisabled = false;
+
+	// New: Unique key to group abilities, default "None"
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FString AbilityKey = "None";
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* AbilityIcon;
@@ -38,6 +46,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClass(FVector Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f);
+
+	// Override to prevent activation when disabled by flag or by team/key
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const override;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool UseAbilityQue = true;
@@ -74,7 +85,32 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Range = 0.f;
+
+	// Enable/Disable abilities by AbilityKey for the owner team (uses Owner from ActorInfo)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAbilitiesEnabledForTeamByKey(const FString& Key, bool bEnable);
 	
+	// Static helpers to toggle/query by key/team id
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void SetAbilitiesEnabledForTeamByKey_Static(const FString& Key, int32 TeamId, bool bEnable);
+		
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool IsAbilityKeyDisabledForTeam(const FString& Key, int32 TeamId);
+
+	// Force-enable abilities by AbilityKey for the owner team (overrides bDisabled and disabled-by-key)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAbilitiesForceEnabledForTeamByKey(const FString& Key, bool bForceEnable);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void SetAbilitiesForceEnabledForTeamByKey_Static(const FString& Key, int32 TeamId, bool bForceEnable);
+	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool IsAbilityKeyForceEnabledForTeam(const FString& Key, int32 TeamId);
+		
+	// Debug: dump disabled/force-enabled keys per team to log
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void Debug_DumpDisabledAbilityKeys();
+	 
 private:
 	FText CreateTooltipText() const;
 };

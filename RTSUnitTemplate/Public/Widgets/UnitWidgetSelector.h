@@ -57,6 +57,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateAbilityCooldowns();
 
+	// Update enabled/disabled state of ability buttons based on ability flags and team key
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateAbilityButtonsState();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateCurrentAbility();
 	

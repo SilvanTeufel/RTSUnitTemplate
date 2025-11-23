@@ -1092,11 +1092,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
    				const bool bTagGoToRes = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct());
    				const bool bTagGoToBase = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateGoToBaseTag::StaticStruct());
    				const FString BuildAreaName = (StrongUnitActor->BuildArea) ? StrongUnitActor->BuildArea->GetName() : TEXT("None");
-   				UE_LOG(LogTemp, Log, TEXT("SynchronizeUnitState: Unit=%s State=%d Tags[Idle=%d, GoToBuild=%d, ResourceExtraction=%d, Build=%d, GoToRes=%d, GoToBase=%d] BuildArea=%s"),
-   					*StrongUnitActor->GetName(),
-   					static_cast<int32>(StrongUnitActor->GetUnitState()),
-   					(int32)bTagIdle, (int32)bTagGoToBuild, (int32)bTagResourceExtraction, (int32)bTagBuild, (int32)bTagGoToRes, (int32)bTagGoToBase,
-   					*BuildAreaName);
+   		
    				UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
     }); // Ende AsyncTask Lambda
 }
@@ -2831,25 +2827,20 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				
 		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToResourceExtraction: %s"), *WorkerStatsFrag->ResourcePosition.ToString());
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBase)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToBase: %s"), *WorkerStatsFrag->BasePosition.ToString());
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BasePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BasePosition, StatsFrag.RunSpeed, World);
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBuild)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToBuild: %s"), *WorkerStatsFrag->BuildAreaPosition.ToString());
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition, StatsFrag.RunSpeed, World);
 		}else if (UnitBase->UnitState == UnitData::Idle)
 		{
-			UE_LOG(LogTemp, Log, TEXT("GoToBuild: %s"), *WorkerStatsFrag->BuildAreaPosition.ToString());
-			//StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
 			StopMovement(MoveTarget, World);
 		}
 	}

@@ -4,6 +4,7 @@
 #include "Widgets/UnitWidgetSelector.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Containers/Set.h"
+#include "GAS/GameplayAbilityBase.h"
 
 
 
@@ -82,6 +83,7 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 				ChangeAbilityButtonCount(0);
 		}
 
+		UpdateAbilityButtonsState();
 		UpdateAbilityCooldowns();
 		UpdateCurrentAbility();
 		UpdateQueuedAbilityIcons();
@@ -609,5 +611,53 @@ void UUnitWidgetSelector::SetUnitIcons(TArray<AUnitBase*>& Units)
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("Could not set icon for unit index %d"), i);
 		}
+	}
+}
+
+void UUnitWidgetSelector::UpdateAbilityButtonsState()
+{
+	if (!ControllerBase) return;
+	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
+
+	AUnitBase* Unit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
+	if (!Unit) return;
+
+	const int32 TeamId = Unit->TeamId;
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
+
+	for (int32 i = 0; i < AbilityButtons.Num(); ++i)
+	{
+		UButton* Btn = AbilityButtons[i];
+		if (!Btn) continue;
+
+		bool bEnable = false;
+		if (AbilityArray.IsValidIndex(i) && AbilityArray[i])
+		{
+			UGameplayAbilityBase* AbilityCDO = AbilityArray[i]->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO)
+			{
+				bool bIsDisabled = AbilityCDO->bDisabled;
+				const FString RawKey = AbilityCDO->AbilityKey;
+				FString NormalizedKey = RawKey;
+				NormalizedKey.TrimStartAndEndInline();
+				NormalizedKey = NormalizedKey.ToLower();
+				const bool bKeyDisabled = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none")) ? UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(RawKey, TeamId) : false;
+				const bool bForceEnabled = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none")) ? UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(RawKey, TeamId) : false;
+				bIsDisabled = bIsDisabled || bKeyDisabled;
+				bEnable = bForceEnabled || !bIsDisabled;
+
+				UE_LOG(LogTemp, VeryVerbose, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bKeyDisabled=%s bForceEnabled=%s -> SetEnabled=%s"),
+					i,
+					TeamId,
+					*RawKey,
+					*NormalizedKey,
+					AbilityCDO->bDisabled ? TEXT("true") : TEXT("false"),
+					bKeyDisabled ? TEXT("true") : TEXT("false"),
+					bForceEnabled ? TEXT("true") : TEXT("false"),
+					bEnable ? TEXT("true") : TEXT("false"));
+			}
+		}
+
+		Btn->SetIsEnabled(bEnable);
 	}
 }
