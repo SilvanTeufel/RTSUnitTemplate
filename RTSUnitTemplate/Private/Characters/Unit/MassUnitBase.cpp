@@ -940,13 +940,13 @@ void AMassUnitBase::InitializeUnitMode()
 		{
 			// Add a new instance at the component's local origin.
 			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, false);
-			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion();
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
 		}
 		else
 		{
 			// Update the existing instance to be at the component's local origin.
 			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, true);
-			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion();
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
 		}
 	}
 	
@@ -1296,36 +1296,39 @@ FQuat AMassUnitBase::GetCurrentLocalVisualRotation() const
 		if (ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
-			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true);
-			return InstanceXf.GetRotation();
+			// Read instance LOCAL transform (not world) to avoid pulling in actor/world rotation
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			return InstanceXf.GetRotation().GetNormalized();
 		}
 		// Fallback to component's relative rotation if no valid instance
-		return ISMComponent->GetRelativeRotation().Quaternion();
+		return ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
 	}
 
 	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
 	{
-		return SkelMesh->GetRelativeRotation().Quaternion();
+		return SkelMesh->GetRelativeRotation().Quaternion().GetNormalized();
 	}
 
-	return GetActorQuat();
+	return GetActorQuat().GetNormalized();
 }
 
 void AMassUnitBase::ApplyLocalVisualRotation(const FQuat& NewLocalRotation)
 {
 	if (!bUseSkeletalMovement && ISMComponent)
 	{
+		const FQuat Visual = NewLocalRotation.GetNormalized();
 		if (ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
-			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true);
-			InstanceXf.SetRotation(NewLocalRotation);
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ true, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+			// Write instance LOCAL transform so we don't blend in world/actor rotation
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			InstanceXf.SetRotation(Visual);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
 			return;
 		}
 
 		// Fallback: rotate the whole ISM component
-		ISMComponent->SetRelativeRotation(NewLocalRotation.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		ISMComponent->SetRelativeRotation(Visual.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
 		return;
 	}
 
