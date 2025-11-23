@@ -477,18 +477,24 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 		GForceEnabledAbilityKeysByOwner.Remove(ASC);
 	}
 
-	// Mirror the toggle to the owning client so their UI can update immediately
+	// Mirror the toggle to all relevant owning clients (same team) so their UI can update immediately
 	if (Unit && Unit->HasAuthority())
 	{
-		AController* PC = Unit->GetController();
-		if (PC)
+		UWorld* World = Unit->GetWorld();
+		if (World)
 		{
-			// Avoid extra includes by forward declaring in header; include in cpp
-			class ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
-			if (CustomPC)
+			int32 SentCount = 0;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 			{
-				CustomPC->Client_ApplyOwnerAbilityKeyToggle(Unit, NormalizedKey, bEnable);
+				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+				if (!CustomPC) continue;
+				if (CustomPC->SelectableTeamId == Unit->TeamId)
+				{
+					CustomPC->Client_ApplyOwnerAbilityKeyToggle(Unit, NormalizedKey, bEnable);
+					++SentCount;
+				}
 			}
+			UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilityEnabledByKey: Mirrored to %d client(s) for TeamId=%d Key='%s'"), SentCount, Unit->TeamId, *NormalizedKey);
 		}
 	}
 }
