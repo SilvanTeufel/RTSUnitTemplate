@@ -1257,8 +1257,9 @@ void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewR
 		return;
 	}
 
-	// Desired target (component/local or world for ISM instance). Apply mesh offset so visuals align with logical forward.
-	const FQuat DesiredLocal = (NewRotation.Quaternion() * MeshRotationOffset).GetNormalized();
+	// Desired target (component/local or world for ISM instance). Interpret NewRotation as the exact end orientation for the visual.
+	// Do NOT bake in MeshRotationOffset here, otherwise yaw-only inputs may introduce pitch/roll during the tween.
+	const FQuat DesiredLocal = NewRotation.Quaternion().GetNormalized();
 
 	// If duration is not positive, snap immediately.
 	if (RotateDuration <= 0.f)
@@ -1269,8 +1270,13 @@ void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewR
 
 	// Initialize interpolation state and start/update the timer on this machine.
 	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
-	RotateStart = GetCurrentLocalVisualRotation();
+	RotateStart = GetCurrentLocalVisualRotation().GetNormalized();
 	RotateTarget = DesiredLocal;
+	// Ensure shortest-arc interpolation by flipping target if needed (q and -q represent same rotation)
+	if ((RotateStart | RotateTarget) < 0.f)
+	{
+		RotateTarget = (-RotateTarget);
+	}
 	RotateElapsed = 0.f;
 
 	// Use a small, non-zero rate so the timer actually loops on all platforms/versions.
@@ -1352,6 +1358,8 @@ void AMassUnitBase::RotateISM_Step()
 
 	if (Alpha >= 1.f)
 	{
+		// Snap exactly to the desired final orientation to avoid accumulated numeric error
+		ApplyLocalVisualRotation(RotateTarget);
 		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
 	}
 }
@@ -1375,8 +1383,13 @@ void AMassUnitBase::MulticastRotateActorLinear_Implementation(UStaticMeshCompone
 	Tween.Duration = InRotateDuration;
 	Tween.Elapsed = 0.f;
 	Tween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
-	Tween.Start = MeshToRotate->GetRelativeRotation().Quaternion();
-	Tween.Target = NewRotation.Quaternion();
+	Tween.Start = MeshToRotate->GetRelativeRotation().Quaternion().GetNormalized();
+	Tween.Target = NewRotation.Quaternion().GetNormalized();
+	// Enforce shortest-arc interpolation: if start and target are on opposite hemispheres, flip target
+	if ((Tween.Start | Tween.Target) < 0.f)
+	{
+		Tween.Target = (-Tween.Target);
+	}
 
 	// Ensure timer is running with a safe non-zero rate
 	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
@@ -1426,6 +1439,8 @@ void AMassUnitBase::StaticMeshRotations_Step()
 
 		if (Alpha >= 1.f)
 		{
+			// Snap to exact final target orientation to avoid drift
+			Comp->SetRelativeRotation(Tween.Target.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
 			ToRemove.Add(WeakComp);
 		}
 	}
