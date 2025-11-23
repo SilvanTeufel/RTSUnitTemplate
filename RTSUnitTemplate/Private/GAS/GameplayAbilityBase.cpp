@@ -56,18 +56,10 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 	}
 	const FString NormalizedKey = NormalizeAbilityKey(AbilityKey);
 
-	// If this key is force-enabled for the team, allow regardless of asset flag or disabled-by-key
-	if (TeamId != INDEX_NONE && !NormalizedKey.IsEmpty())
-	{
-		if (UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(NormalizedKey, TeamId))
-		{
-			UE_LOG(LogAbilityKeyGate, VeryVerbose, TEXT("CanActivateAbility FORCE-ALLOWED: Key='%s' TeamId=%d Ability=%s"), *NormalizedKey, TeamId, *GetNameSafe(this));
-			return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
-		}
-	}
-
-	// Owner-level (per ASC) force-enable overrides asset flag and team/owner disables
+	// Resolve owner ASC once
 	const UAbilitySystemComponent* OwnerASC = (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()) ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	// 1) Owner-level FORCE enable overrides everything
 	if (OwnerASC && !NormalizedKey.IsEmpty())
 	{
 		if (const TSet<FString>* ForceSet = GForceEnabledAbilityKeysByOwner.Find(OwnerASC))
@@ -80,14 +72,37 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 		}
 	}
 
-	// Disallow if the ability asset is flagged disabled
+	// 2) Owner-level DISABLE should block even if the team force-enabled this key
+	if (OwnerASC && !NormalizedKey.IsEmpty())
+	{
+		if (const TSet<FString>* DisabledSet = GDisabledAbilityKeysByOwner.Find(OwnerASC))
+		{
+			if (DisabledSet->Contains(NormalizedKey))
+			{
+				UE_LOG(LogAbilityKeyGate, Verbose, TEXT("CanActivateAbility blocked by owner-key: Key='%s' OwnerASC=%s Ability=%s (owner disable overrides team force)"), *NormalizedKey, *GetNameSafe(OwnerASC), *GetNameSafe(this));
+				return false;
+			}
+		}
+	}
+
+	// 3) If this key is force-enabled for the team, allow regardless of asset flag or team/owner disabled-by-key
+	if (TeamId != INDEX_NONE && !NormalizedKey.IsEmpty())
+	{
+		if (UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(NormalizedKey, TeamId))
+		{
+			UE_LOG(LogAbilityKeyGate, VeryVerbose, TEXT("CanActivateAbility FORCE-ALLOWED (Team): Key='%s' TeamId=%d Ability=%s"), *NormalizedKey, TeamId, *GetNameSafe(this));
+			return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+		}
+	}
+
+	// 4) Disallow if the ability asset is flagged disabled
 	if (bDisabled)
 	{
 		UE_LOG(LogAbilityKeyGate, Verbose, TEXT("CanActivateAbility blocked: bDisabled=true on %s (no force-enable)"), *GetNameSafe(this));
 		return false;
 	}
 
-	// Check team-based disable by key
+	// 5) Check team-based disable by key
 	if (TeamId != INDEX_NONE && !NormalizedKey.IsEmpty())
 	{
 		const bool bIsDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(NormalizedKey, TeamId);
@@ -104,19 +119,6 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 	else
 	{
 		UE_LOG(LogAbilityKeyGate, VeryVerbose, TEXT("CanActivateAbility (no key/team gate): TeamId=%d Key='%s' Ability=%s"), TeamId, *NormalizedKey, *GetNameSafe(this));
-	}
-
-	// Check owner-level (per ASC) disable by key
-	if (OwnerASC && !NormalizedKey.IsEmpty())
-	{
-		if (const TSet<FString>* DisabledSet = GDisabledAbilityKeysByOwner.Find(OwnerASC))
-		{
-			if (DisabledSet->Contains(NormalizedKey))
-			{
-				UE_LOG(LogAbilityKeyGate, Verbose, TEXT("CanActivateAbility blocked by owner-key: Key='%s' OwnerASC=%s Ability=%s (no owner/ team force-enable)"), *NormalizedKey, *GetNameSafe(OwnerASC), *GetNameSafe(this));
-				return false;
-			}
-		}
 	}
 
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);

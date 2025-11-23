@@ -37,7 +37,8 @@ void UAbilityButton::SetAbility(int AbilityIndex)
 		return;
 	}
 
-	// Reject if the selected ability is disabled by flag or team key
+	// Reject if the selected ability is disabled by flag or team/owner key with precedence:
+	// OwnerForce > OwnerDisable > TeamForce > (AssetDisabled or TeamDisable)
 	if (!Unit->SelectableAbilities.IsValidIndex(AbilityIndex))
 	{
 		return;
@@ -65,18 +66,28 @@ void UAbilityButton::SetAbility(int AbilityIndex)
 					bOwnerForceEnabled = UGameplayAbilityBase::IsAbilityKeyForceEnabledForOwner(ASC, RawKey);
 				}
 			}
-			const bool bAnyForceEnabled = bTeamForceEnabled || bOwnerForceEnabled;
-			const bool bAnyDisabled = bCDO_Disabled || bTeamKeyDisabled || bOwnerKeyDisabled;
-			if (bAnyDisabled && !bAnyForceEnabled)
+			// Apply precedence
+			if (bOwnerForceEnabled)
 			{
-				UE_LOG(LogTemp, Verbose, TEXT("[AbilityButton] Blocked selection: Ability='%s' Key='%s' TeamId=%d bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s"),
+				// allow
+			}
+			else if (bOwnerKeyDisabled)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[AbilityButton] Blocked by owner disable: Ability='%s' Key='%s' TeamId=%d"), *GetNameSafe(AbilityCDO), *RawKey, Unit->TeamId);
+				return;
+			}
+			else if (bTeamForceEnabled)
+			{
+				// allow
+			}
+			else if (bCDO_Disabled || bTeamKeyDisabled)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[AbilityButton] Blocked selection: Ability='%s' Key='%s' TeamId=%d bCDO_Disabled=%s bTeamKeyDisabled=%s bTeamForce=%s"),
 					*GetNameSafe(AbilityCDO), *RawKey, Unit->TeamId,
 					bCDO_Disabled ? TEXT("true") : TEXT("false"),
 					bTeamKeyDisabled ? TEXT("true") : TEXT("false"),
-					bOwnerKeyDisabled ? TEXT("true") : TEXT("false"),
-					bTeamForceEnabled ? TEXT("true") : TEXT("false"),
-					bOwnerForceEnabled ? TEXT("true") : TEXT("false"));
-				return; // do not add/activate when disabled without force
+					bTeamForceEnabled ? TEXT("true") : TEXT("false"));
+				return;
 			}
 		}
 	}

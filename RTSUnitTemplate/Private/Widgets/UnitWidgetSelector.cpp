@@ -660,9 +660,27 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 					}
 				}
 
-				const bool bAnyForceEnabled = bTeamForceEnabled || bOwnerForceEnabled;
-				const bool bAnyDisabled = bCDO_Disabled || bTeamKeyDisabled || bOwnerKeyDisabled;
-				bEnable = bAnyForceEnabled || !bAnyDisabled;
+				// Apply precedence: OwnerForce > OwnerDisable > TeamForce > (AssetDisabled or TeamDisable)
+				if (bOwnerForceEnabled)
+				{
+					bEnable = true;
+				}
+				else if (bOwnerKeyDisabled)
+				{
+					bEnable = false;
+				}
+				else if (bTeamForceEnabled)
+				{
+					bEnable = true;
+				}
+				else if (bCDO_Disabled || bTeamKeyDisabled)
+				{
+					bEnable = false;
+				}
+				else
+				{
+					bEnable = true;
+				}
 
 				UE_LOG(LogTemp, VeryVerbose, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s -> SetEnabled=%s"),
 					i,
