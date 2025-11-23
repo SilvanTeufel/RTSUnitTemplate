@@ -8,6 +8,14 @@
 #include "Actors/AreaDecalComponent.h"
 #include "Actors/SelectionDecalComponent.h"
 #include "TimerManager.h"
+#include "UObject/WeakObjectPtr.h"
+
+class UStaticMeshComponent;
+class AStaticMeshActor;
+class UMassActorBindingComponent;
+class UInstancedStaticMeshComponent;
+class USelectionDecalComponent;
+class UNiagaraComponent;
 
 #include "MassUnitBase.generated.h"
 
@@ -163,6 +171,10 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
 
+	// Rotate an arbitrary static mesh component smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateActorLinear(UStaticMeshComponent* MeshToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -185,7 +197,24 @@ protected:
 	// Helpers to read/apply current visual rotation
 	FQuat GetCurrentLocalVisualRotation() const;
 	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation);
+
+	// Lightweight tween state for rotating arbitrary static mesh components
+	struct FStaticMeshRotateTween
+	{
+		float Duration = 0.f;
+		float Elapsed = 0.f;
+		float EaseExp = 1.f;
+		FQuat Start = FQuat::Identity;
+		FQuat Target = FQuat::Identity;
+	};
+
+	// Timer step for rotating arbitrary static mesh components (state stored internally in cpp)
+	void StaticMeshRotations_Step();
+	FTimerHandle StaticMeshRotateTimerHandle;
+	
+	// Active tweens indexed by component; allows rotating multiple static meshes in parallel
+	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshRotateTween> ActiveStaticMeshTweens;
 	
 	//void InitializeUnitMode();
-	
+		
 };

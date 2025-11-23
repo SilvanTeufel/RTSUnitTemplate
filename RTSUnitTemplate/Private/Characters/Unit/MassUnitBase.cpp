@@ -15,6 +15,8 @@
 #include "Mass/UnitMassTag.h"
 #include "MassNavigationFragments.h"
 #include "TimerManager.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMeshActor.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -885,6 +887,8 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// Stop any pending rotation timer
 	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+	GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
+	ActiveStaticMeshTweens.Empty();
 
 	// Remove our specific instance from the component when the actor is destroyed
 	if (InstanceIndex != INDEX_NONE && ISMComponent)
@@ -1349,5 +1353,90 @@ void AMassUnitBase::RotateISM_Step()
 	if (Alpha >= 1.f)
 	{
 		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastRotateActorLinear_Implementation(UStaticMeshComponent* MeshToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent)
+{
+	if (!MeshToRotate)
+	{
+		return;
+	}
+
+	// Instant snap if duration <= 0
+	if (InRotateDuration <= 0.f)
+	{
+		MeshToRotate->SetRelativeRotation(NewRotation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	// Setup or update tween for this component
+ AMassUnitBase::FStaticMeshRotateTween& Tween = ActiveStaticMeshTweens.FindOrAdd(MeshToRotate);
+	Tween.Duration = InRotateDuration;
+	Tween.Elapsed = 0.f;
+	Tween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+	Tween.Start = MeshToRotate->GetRelativeRotation().Quaternion();
+	Tween.Target = NewRotation.Quaternion();
+
+	// Ensure timer is running with a safe non-zero rate
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+
+	// Kick an immediate step for responsiveness
+	StaticMeshRotations_Step();
+
+	if (!GetWorldTimerManager().IsTimerActive(StaticMeshRotateTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(StaticMeshRotateTimerHandle, this, &AMassUnitBase::StaticMeshRotations_Step, TimerRate, true);
+	}
+}
+
+void AMassUnitBase::StaticMeshRotations_Step()
+{
+	if (ActiveStaticMeshTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	TArray<TWeakObjectPtr<UStaticMeshComponent>> ToRemove;
+	for (auto& Pair : ActiveStaticMeshTweens)
+	{
+		TWeakObjectPtr<UStaticMeshComponent> WeakComp = Pair.Key;
+		FStaticMeshRotateTween& Tween = Pair.Value;
+
+		UStaticMeshComponent* Comp = WeakComp.Get();
+		if (!Comp)
+		{
+			ToRemove.Add(WeakComp);
+			continue;
+		}
+
+		Tween.Elapsed += Dt;
+		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
+		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
+		{
+			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
+		}
+
+		const FQuat NewLocal = FQuat::Slerp(Tween.Start, Tween.Target, Alpha).GetNormalized();
+		Comp->SetRelativeRotation(NewLocal.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+
+		if (Alpha >= 1.f)
+		{
+			ToRemove.Add(WeakComp);
+		}
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveStaticMeshTweens.Remove(Key);
+	}
+
+	if (ActiveStaticMeshTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
 	}
 }
