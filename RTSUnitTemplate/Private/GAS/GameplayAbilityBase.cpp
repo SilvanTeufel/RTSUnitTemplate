@@ -13,6 +13,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "Engine/EngineTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAbilityKeyGate, Log, All);
 
@@ -24,6 +25,59 @@ static TMap<int32, TSet<FString>> GForceEnabledAbilityKeysByTeam;
 // Per-owner (per ASC) registries to enable/disable by key without relying on instancing
 static TMap<TWeakObjectPtr<UAbilitySystemComponent>, TSet<FString>> GDisabledAbilityKeysByOwner;
 static TMap<TWeakObjectPtr<UAbilitySystemComponent>, TSet<FString>> GForceEnabledAbilityKeysByOwner;
+
+// Ensure static registries are cleared between play sessions (PIE/Standalone)
+namespace
+{
+	struct FAbilityKeyGateSessionReset
+	{
+		FDelegateHandle PostWorldInitHandle;
+		FDelegateHandle CleanupHandle;
+
+		FAbilityKeyGateSessionReset()
+		{
+			PostWorldInitHandle = FWorldDelegates::OnPostWorldInitialization.AddStatic(&FAbilityKeyGateSessionReset::HandlePostWorldInit);
+			CleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic(&FAbilityKeyGateSessionReset::HandleWorldCleanup);
+		}
+
+		~FAbilityKeyGateSessionReset()
+		{
+			FWorldDelegates::OnPostWorldInitialization.Remove(PostWorldInitHandle);
+			FWorldDelegates::OnWorldCleanup.Remove(CleanupHandle);
+		}
+
+		static void ResetAll(const UWorld* World, const TCHAR* Reason)
+		{
+			GDisabledAbilityKeysByTeam.Reset();
+			GForceEnabledAbilityKeysByTeam.Reset();
+			GDisabledAbilityKeysByOwner.Reset();
+			GForceEnabledAbilityKeysByOwner.Reset();
+			UE_LOG(LogAbilityKeyGate, Log, TEXT("[AbilityKeyGate] Reset registries (%s). World=%s Type=%d"), Reason ? Reason : TEXT(""), *GetNameSafe(World), World ? (int32)World->WorldType : -1);
+		}
+
+		static void HandlePostWorldInit(UWorld* World, const UWorld::InitializationValues IVS)
+		{
+			if (!World) return;
+			const EWorldType::Type WT = World->WorldType;
+			if (WT == EWorldType::PIE || WT == EWorldType::Game)
+			{
+				ResetAll(World, TEXT("PostWorldInitialization"));
+			}
+		}
+
+		static void HandleWorldCleanup(UWorld* World, bool bSessionEnded, bool bCleanupResources)
+		{
+			if (!World) return;
+			const EWorldType::Type WT = World->WorldType;
+			if (WT == EWorldType::PIE || WT == EWorldType::Game)
+			{
+				ResetAll(World, TEXT("WorldCleanup"));
+			}
+		}
+	};
+
+	static FAbilityKeyGateSessionReset GAbilityKeyGateSessionReset;
+}
 
 // Helper: normalize keys for consistent matching/logging
 static FString NormalizeAbilityKey(const FString& InKey)
