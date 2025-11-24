@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 #include "Mass/MassFragmentTraitsOverrides.h"
+#include "MassEntityQuery.h"
 
 class FRTSUnitTemplateModule : public IModuleInterface
 {

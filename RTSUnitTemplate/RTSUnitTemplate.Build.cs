@@ -7,6 +7,7 @@ public class RTSUnitTemplate : ModuleRules
     public RTSUnitTemplate(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        PrivatePCHHeaderFile = "Public/RTSUnitTemplate.h";
 
         // Public: only what our public headers require
         PublicDependencyModuleNames.AddRange(new string[]
