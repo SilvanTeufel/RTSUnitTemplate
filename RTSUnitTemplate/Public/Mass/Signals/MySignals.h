@@ -126,34 +126,35 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
 
         // --- Check all relevant tags using the Composition's Tag Bitset ---
         // Primary States
-        if (Composition.Tags.Contains<FMassStateIdleTag>())      { PresentTags += TEXT(" Idle"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateChaseTag>())     { PresentTags += TEXT(" Chase"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateAttackTag>())    { PresentTags += TEXT(" Attack"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePauseTag>())     { PresentTags += TEXT(" Pause"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateDeadTag>())      { PresentTags += TEXT(" Dead"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateRunTag>())       { PresentTags += TEXT(" Run"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateDetectTag>())    { PresentTags += TEXT(" Detect"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateCastingTag>())   { PresentTags += TEXT(" Casting"); bFoundTags = true; }
+        const auto& Tags = Composition.GetTags();
+        if (Tags.Contains<FMassStateIdleTag>())      { PresentTags += TEXT(" Idle"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateChaseTag>())     { PresentTags += TEXT(" Chase"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateAttackTag>())    { PresentTags += TEXT(" Attack"); bFoundTags = true; }
+        if (Tags.Contains<FMassStatePauseTag>())     { PresentTags += TEXT(" Pause"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateDeadTag>())      { PresentTags += TEXT(" Dead"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateRunTag>())       { PresentTags += TEXT(" Run"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateDetectTag>())    { PresentTags += TEXT(" Detect"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateCastingTag>())   { PresentTags += TEXT(" Casting"); bFoundTags = true; }
 
         // Patrol States
-        if (Composition.Tags.Contains<FMassStatePatrolTag>())       { PresentTags += TEXT(" Patrol"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePatrolRandomTag>()) { PresentTags += TEXT(" PatrolRandom"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStatePatrolIdleTag>())   { PresentTags += TEXT(" PatrolIdle"); bFoundTags = true; }
+        if (Tags.Contains<FMassStatePatrolTag>())       { PresentTags += TEXT(" Patrol"); bFoundTags = true; }
+        if (Tags.Contains<FMassStatePatrolRandomTag>()) { PresentTags += TEXT(" PatrolRandom"); bFoundTags = true; }
+        if (Tags.Contains<FMassStatePatrolIdleTag>())   { PresentTags += TEXT(" PatrolIdle"); bFoundTags = true; }
 
         // Other States
-        if (Composition.Tags.Contains<FMassStateEvasionTag>())    { PresentTags += TEXT(" Evasion"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateRootedTag>())     { PresentTags += TEXT(" Rooted"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassStateIsAttackedTag>()) { PresentTags += TEXT(" IsAttacked"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateEvasionTag>())    { PresentTags += TEXT(" Evasion"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateRootedTag>())     { PresentTags += TEXT(" Rooted"); bFoundTags = true; }
+        if (Tags.Contains<FMassStateIsAttackedTag>()) { PresentTags += TEXT(" IsAttacked"); bFoundTags = true; }
 
         // Helper Tags
-        if (Composition.Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
-        if (Composition.Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
+        if (Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
+        if (Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
 
-    	if (Composition.Tags.Contains<FMassStateGoToBaseTag>())         { PresentTags += TEXT(" GoToBase"); bFoundTags = true; }
-    	if (Composition.Tags.Contains<FMassStateGoToBuildTag>()){ PresentTags += TEXT(" GoToBuild"); bFoundTags = true; }
-    	if (Composition.Tags.Contains<FMassStateGoToResourceExtractionTag>())         { PresentTags += TEXT(" GoToResourceExtraction"); bFoundTags = true; }
-    	if (Composition.Tags.Contains<FMassStateBuildTag>()){ PresentTags += TEXT(" Build"); bFoundTags = true; }
-    	if (Composition.Tags.Contains<FMassStateResourceExtractionTag>()){ PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
+    	if (Tags.Contains<FMassStateGoToBaseTag>())         { PresentTags += TEXT(" GoToBase"); bFoundTags = true; }
+    	if (Tags.Contains<FMassStateGoToBuildTag>()){ PresentTags += TEXT(" GoToBuild"); bFoundTags = true; }
+    	if (Tags.Contains<FMassStateGoToResourceExtractionTag>())         { PresentTags += TEXT(" GoToResourceExtraction"); bFoundTags = true; }
+    	if (Tags.Contains<FMassStateBuildTag>()){ PresentTags += TEXT(" Build"); bFoundTags = true; }
+    	if (Tags.Contains<FMassStateResourceExtractionTag>()){ PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
 
     	//if (Composition.Tags.Contains<FNeedsActorBindingInitTag>()){ PresentTags += TEXT(" ActorBindingInit"); bFoundTags = true; }
     	

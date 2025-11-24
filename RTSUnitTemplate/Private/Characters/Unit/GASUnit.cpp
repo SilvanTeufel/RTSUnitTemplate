@@ -148,7 +148,7 @@ void AGASUnit::OnRep_PlayerState()
 		const FGameplayAbilityInputBinds Binds(
 			"Confirm", 
 			"Cancel", 
-			FTopLevelAssetPath(GetPathNameSafe(UClass::TryFindTypeSlow<UEnum>("EGASAbilityInputID"))),
+   FTopLevelAssetPath(GetPathNameSafe(UClass::TryFindTypeSlow<UEnum>(TEXT("EGASAbilityInputID")))), 
 			static_cast<int32>(EGASAbilityInputID::Confirm),
 			static_cast<int32>(EGASAbilityInputID::Cancel));
 

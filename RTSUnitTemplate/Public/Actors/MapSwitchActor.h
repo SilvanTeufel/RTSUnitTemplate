@@ -35,7 +35,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "UI")
     TSubclassOf<UMapSwitchWidget> MapSwitchWidgetClass;
 
-    UPROPERTY(EditAnywhere, Category = RTSUnitTemplate, meta = (AllowedClasses = "World"))
+    UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
     TSoftObjectPtr<UWorld> TargetMap;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

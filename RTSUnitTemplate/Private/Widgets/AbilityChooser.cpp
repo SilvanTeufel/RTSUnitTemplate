@@ -101,7 +101,7 @@ void UAbilityChooser::UpdateAbilityDisplay()
 
 FString UAbilityChooser::GetEnumValueAsString(const FString& EnumName, int32 EnumValue)
 {
-    UEnum* Enum = FindObject<UEnum>(nullptr, *EnumName, true);
+    UEnum* Enum = FindObject<UEnum>(nullptr, *EnumName, EFindObjectFlags::ExactClass);
     if (!Enum)
     {
         return FString("Invalid");

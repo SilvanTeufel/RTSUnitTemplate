@@ -1,15 +1,18 @@
 ﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
+#include "CoreMinimal.h"
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"
 #include "MassEntityManager.h"
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "MassNavigationTypes.h"
-#include "NavigationSystem.h" // Für GetRandomReachablePointInRadius
+#include "NavigationSystem.h"
 #include "MassCommandBuffer.h"
 #include "Core/UnitData.h"
+#include "MassExternalSubsystemTraits.h"
+#include "Mass/MassFragmentTraitsOverrides.h"
 #include "UnitMassTag.generated.h"
 
 USTRUCT()
@@ -624,7 +627,7 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
 
 	// 3. Check if the tag is present in the composition's tag bitset
-	return Composition.Tags.Contains(*TagType);
+	return Composition.GetTags().Contains(*TagType);
 }
 
 template<typename FragmentType>
@@ -654,7 +657,7 @@ bool DoesEntityHaveFragment(
 	if (FragmentStruct)
 	{
 		// Dereference the pointer to pass a reference to Contains
-		return Composition.Fragments.Contains(*FragmentStruct);
+		return Composition.GetFragments().Contains(*FragmentStruct);
 	}
 
 	// If StaticStruct() somehow returned nullptr, the fragment isn't valid or found.
@@ -678,7 +681,7 @@ const FragmentType* TryGetFragmentDataPtr(const FMassEntityManager& EntityManage
 	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
 	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
 
-	if (!FragmentStruct || !Composition.Fragments.Contains(*FragmentStruct))
+	if (!FragmentStruct || !Composition.GetFragments().Contains(*FragmentStruct))
 	{
 		return nullptr;
 	}

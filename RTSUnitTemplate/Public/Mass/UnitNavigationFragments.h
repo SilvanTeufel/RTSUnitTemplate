@@ -3,6 +3,7 @@
 
 #include "MassEntityTypes.h"
 #include "NavigationPath.h" // Required for FNavPathSharedPtr
+#include "Mass/MassFragmentTraitsOverrides.h"
 #include "UnitNavigationFragments.generated.h" // Needs USTRUCT for reflection
 
 USTRUCT()
