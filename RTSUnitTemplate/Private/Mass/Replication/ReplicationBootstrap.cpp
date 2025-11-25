@@ -5,11 +5,36 @@
 #include "MassClientBubbleInfoBase.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "TimerManager.h"
+#include "Engine/Engine.h" // FWorldDelegates
 
 namespace
 {
 	static TMap<const UWorld*, FMassBubbleInfoClassHandle> GWorldToUnitBubbleHandle;
 	static TMap<const UWorld*, FTimerHandle> GRetryTimers;
+
+	static void OnWorldCleanup(UWorld* World, bool bSessionEnded, bool bCleanupResources)
+	{
+		if (!World)
+		{
+			return;
+		}
+		// Remove any retry timers/bookkeeping associated with this world
+		if (FTimerHandle* Handle = GRetryTimers.Find(World))
+		{
+			// Don't call into the timer manager of a world that's being cleaned up; just forget the handle
+			GRetryTimers.Remove(World);
+		}
+		GWorldToUnitBubbleHandle.Remove(World);
+	}
+
+	struct FRTSReplicationBootstrap_Init
+	{
+		FRTSReplicationBootstrap_Init()
+		{
+			FWorldDelegates::OnWorldCleanup.AddStatic(&OnWorldCleanup);
+		}
+	};
+	static FRTSReplicationBootstrap_Init GRTSReplicationBootstrap_Init;
 }
 
 	namespace RTSReplicationBootstrap
@@ -22,7 +47,7 @@ namespace
 
 		static void RetryRegister(UWorld* World)
 		{
-			if (!World)
+			if (!World || !IsValid(World))
 			{
 				return;
 			}
@@ -31,7 +56,10 @@ namespace
 			{
 				if (FTimerHandle* Handle = GRetryTimers.Find(World))
 				{
-					World->GetTimerManager().ClearTimer(*Handle);
+					if (IsValid(World))
+					{
+						World->GetTimerManager().ClearTimer(*Handle);
+					}
 					GRetryTimers.Remove(World);
 				}
 				return;
@@ -48,7 +76,10 @@ namespace
 				// Clear retry timer once registered
 				if (FTimerHandle* HandlePtr = GRetryTimers.Find(World))
 				{
-					World->GetTimerManager().ClearTimer(*HandlePtr);
+					if (IsValid(World))
+					{
+						World->GetTimerManager().ClearTimer(*HandlePtr);
+					}
 					GRetryTimers.Remove(World);
 				}
 			}

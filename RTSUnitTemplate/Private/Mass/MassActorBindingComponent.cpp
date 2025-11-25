@@ -395,53 +395,76 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	SharedValues.Add(StandingAvoidanceParamSharedFragment);
 
 	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
+	// NOTE: Temporarily disabled to avoid engine assertion until valid client bubbles exist reliably in UE5.7 P2P.
+	#if 0
+	// NOTE: Only inject on server/authority worlds. On clients, skip to avoid triggering
+	// UMassReplicationProcessor paths that expect valid client handles/bubbles.
+	if (UWorld* NetWorld = GetWorld())
 	{
-		FMassReplicationSharedFragment RepShared;
-		// Share a single replicator instance per world so entities can batch into the same chunk
+		if (NetWorld->GetNetMode() != NM_Client)
 		{
-			static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
-			UWorld* W = GetWorld();
-			UMassUnitReplicatorBase* SharedReplicator = nullptr;
-			if (W)
+			FMassReplicationSharedFragment RepShared;
+			// Share a single replicator instance per world so entities can batch into the same chunk
 			{
-				if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
+				static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
+				UWorld* W = GetWorld();
+				UMassUnitReplicatorBase* SharedReplicator = nullptr;
+				if (W)
 				{
-					SharedReplicator = Found->Get();
-				}
-				if (!SharedReplicator)
-				{
-					SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
-					GReplicatorPerWorld.Add(W, SharedReplicator);
-				}
-			}
-			RepShared.CachedReplicator = SharedReplicator;
-		}
-
-		// Resolve BubbleInfo class handle as early as possible
-		if (UWorld* WorldPtr = GetWorld())
-		{
-			// First, try our bootstrap-registered handle
-			FMassBubbleInfoClassHandle Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
-			// If still invalid on server, ask the replication subsystem for the handle (avoid late registration on clients)
-			if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
-			{
-				if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
-				{
-					const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
-					Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
-					if (!RepSub->IsBubbleClassHandleValid(Handle))
+					if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
 					{
-						// As a last resort (early in world start), register it here on the server
-						Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
+						SharedReplicator = Found->Get();
+					}
+					if (!SharedReplicator)
+					{
+						SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+						GReplicatorPerWorld.Add(W, SharedReplicator);
 					}
 				}
+				RepShared.CachedReplicator = SharedReplicator;
 			}
-			RepShared.BubbleInfoClassHandle = Handle;
-		}
 
-		FSharedStruct SharedRep = EntityManager.GetOrCreateSharedFragment(RepShared);
-		SharedValues.Add(SharedRep);
+			// Resolve BubbleInfo class handle as early as possible, but only if there is at least one valid client handle
+			if (UWorld* WorldPtr = GetWorld())
+			{
+				FMassBubbleInfoClassHandle Handle; // leave invalid by default to opt-out safely
+				if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
+				{
+					const TArray<FMassClientHandle>& Handles = RepSub->GetClientReplicationHandles();
+					bool bHasValidClient = false;
+					for (const FMassClientHandle& H : Handles)
+					{
+						if (RepSub->IsValidClientHandle(H)) { bHasValidClient = true; break; }
+					}
+					if (bHasValidClient)
+					{
+						// First, try our bootstrap-registered handle
+						Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
+						// If still invalid on server, ask the replication subsystem for the handle
+						if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
+						{
+							const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
+							Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
+							if (!RepSub->IsBubbleClassHandleValid(Handle))
+							{
+								// As a last resort (early in world start), register it here on the server
+								Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
+							}
+						}
+					}
+				}
+				RepShared.BubbleInfoClassHandle = Handle; // remains invalid when no valid clients -> engine will skip safely
+			}
+
+			FSharedStruct SharedRep = EntityManager.GetOrCreateSharedFragment(RepShared);
+			// Only add the replication shared fragment when we have at least one valid client and a valid bubble handle
+			if (RepShared.BubbleInfoClassHandle.IsValid())
+			{
+				SharedValues.Add(SharedRep);
+			}
+		}
 	}
+	#endif
 
 	SharedValues.Sort();
 	
