@@ -340,6 +340,24 @@ void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey(const FString& K
 	}
 	UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilitiesForceEnabledForTeamByKey: TeamId=%d Key='%s' ForceEnable=%s (CallerAbility=%s)"), Unit->TeamId, *NormalizedKey, bForceEnable ? TEXT("true") : TEXT("false"), *GetNameSafe(this));
 	UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey_Static(NormalizedKey, Unit->TeamId, bForceEnable);
+
+	// If this call happens from within an ability that uses the same key and we're removing the force-enable,
+	// also disable this key for the team (and owner) so the ability can self-disable after finishing its execution.
+	if (!bForceEnable)
+	{
+		const FString ThisAbilityKey = NormalizeAbilityKey(AbilityKey);
+		if (!ThisAbilityKey.IsEmpty() && ThisAbilityKey == NormalizedKey)
+		{
+			UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilitiesForceEnabledForTeamByKey: self-disable triggered for Ability=%s Key='%s'"), *GetNameSafe(this), *NormalizedKey);
+			// Team-wide disable for this key
+			UGameplayAbilityBase::SetAbilitiesEnabledForTeamByKey_Static(NormalizedKey, Unit->TeamId, /*bEnable=*/false);
+			// Additionally apply owner-scoped disable locally to immediately reflect in UI and prediction flows
+			if (Info->AbilitySystemComponent.IsValid())
+			{
+				UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(Info->AbilitySystemComponent.Get(), NormalizedKey, /*bEnable=*/false);
+			}
+		}
+	}
 }
 
 void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey_Static(const FString& Key, int32 TeamId, bool bForceEnable)
