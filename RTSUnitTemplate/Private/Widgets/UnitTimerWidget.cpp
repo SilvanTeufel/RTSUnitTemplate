@@ -5,6 +5,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include <Components/ProgressBar.h>
+#include "Components/Widget.h"
 
 void UUnitTimerWidget::NativeConstruct()
 {
@@ -49,7 +50,7 @@ void UUnitTimerWidget::TimerTick()
 			TimerBar->SetFillColorAndOpacity(ExtractionColor);
 		}
 		break;
-	case UnitData::Casting:
+		case UnitData::Casting:
 		{
 			// Compute percent safely and auto-hide when casting complete on client
 			float Denom = UnitBase->CastTime;
@@ -57,8 +58,8 @@ void UUnitTimerWidget::TimerTick()
 			Percent = FMath::Clamp(Percent, 0.f, 1.f);
 			TimerBar->SetPercent(Percent);
 			TimerBar->SetFillColorAndOpacity(CastingColor);
-			// Visible only while cast is in progress
-			MyWidgetIsVisible = (Percent < 1.f);
+			// Visible only while cast is in progress and has actually started
+			MyWidgetIsVisible = (Percent > 0.f && Percent < 1.f);
 		}
 		break;
 	case UnitData::Pause:
@@ -95,7 +96,8 @@ void UUnitTimerWidget::TimerTick()
 	if(!MyWidgetIsVisible)
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Collapsed);
-	}else
+	}
+	else
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Visible);
 	}

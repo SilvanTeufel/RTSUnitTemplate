@@ -101,12 +101,22 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
 	if (UnitBase->GetUnitState() != UnitData::Casting)
 	{
 		CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Hidden);
-	
-	}else
+	}
+	else
 	{
-		CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Visible);
-		CurrentAbilityTimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
+		const float Denom = (UnitBase->CastTime > KINDA_SMALL_NUMBER) ? UnitBase->CastTime : 1.f;
+		float Percent = FMath::Clamp(UnitBase->UnitControlTimer / Denom, 0.f, 1.f);
+		CurrentAbilityTimerBar->SetPercent(Percent);
 		CurrentAbilityTimerBar->SetFillColorAndOpacity(CurrentAbilityTimerBarColor);
+		// Hide the bar if casting hasn't started yet or has completed
+		if (Percent <= 0.f || Percent >= 1.f)
+		{
+			CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Hidden);
+		}
+		else
+		{
+			CurrentAbilityTimerBar->SetVisibility(ESlateVisibility::Visible);
+		}
 	}
 
 	FQueuedAbility CurrentSnapshot = UnitBase->GetCurrentSnapshot();
