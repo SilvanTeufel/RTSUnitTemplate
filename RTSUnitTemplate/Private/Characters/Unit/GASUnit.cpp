@@ -413,20 +413,7 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 
 		FVector ALocation = GetMassActorLocation();
 		
-		FVector Direction = InHitResult.Location - ALocation;
 		float Distance = FVector::Dist(InHitResult.Location, ALocation);
-		Direction.Z = 0;
-
-		if (!Direction.IsNearlyZero() && (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range) && ActivatedAbilityInstance->ClickCount >= 1 && ActivatedAbilityInstance->RotateToMouseWithMouseEvent)
-		{
-			FRotator NewRotation = Direction.Rotation();
-		
-			ABuildingBase* BuildingBase = Cast<ABuildingBase>(this);
-			if (!BuildingBase || BuildingBase->CanMove)
-			{
-				SetActorRotation(NewRotation);
-			}
-		}
 
 		if (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range || ActivatedAbilityInstance->ClickCount == 0)
 		{
