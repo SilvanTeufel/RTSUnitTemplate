@@ -51,9 +51,14 @@ void UUnitTimerWidget::TimerTick()
 		break;
 	case UnitData::Casting:
 		{
-			MyWidgetIsVisible = true;
-			TimerBar->SetPercent(UnitBase->UnitControlTimer / UnitBase->CastTime);
+			// Compute percent safely and auto-hide when casting complete on client
+			float Denom = UnitBase->CastTime;
+			float Percent = (Denom > KINDA_SMALL_NUMBER) ? (UnitBase->UnitControlTimer / Denom) : 1.f;
+			Percent = FMath::Clamp(Percent, 0.f, 1.f);
+			TimerBar->SetPercent(Percent);
 			TimerBar->SetFillColorAndOpacity(CastingColor);
+			// Visible only while cast is in progress
+			MyWidgetIsVisible = (Percent < 1.f);
 		}
 		break;
 	case UnitData::Pause:
@@ -70,9 +75,14 @@ void UUnitTimerWidget::TimerTick()
 		{
 			if (UnitBase && UnitBase->IsATransporter)
 			{
-				TimerBar->SetPercent(static_cast<float>(UnitBase->CurrentUnitsLoaded) / static_cast<float>(UnitBase->MaxTransportUnits));
+				// Show transport load progress on clients too, independent of server toggles
+				const float Denom = (UnitBase->MaxTransportUnits > 0) ? static_cast<float>(UnitBase->MaxTransportUnits) : 1.f;
+				const float Percent = FMath::Clamp(static_cast<float>(UnitBase->CurrentUnitsLoaded) / Denom, 0.f, 1.f);
+				TimerBar->SetPercent(Percent);
 				TimerBar->SetFillColorAndOpacity(TransportColor);
-			}else
+				MyWidgetIsVisible = (UnitBase->CurrentUnitsLoaded > 0);
+			}
+			else
 			{
 				MyWidgetIsVisible = false;
 			}
