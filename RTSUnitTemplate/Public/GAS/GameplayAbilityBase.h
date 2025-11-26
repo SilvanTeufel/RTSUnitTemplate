@@ -53,9 +53,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool UseAbilityQue = true;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool RotateToAbilityClick = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString AbilityName = "Ability X: \n\n";
 	

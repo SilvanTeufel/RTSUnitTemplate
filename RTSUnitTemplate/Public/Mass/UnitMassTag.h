@@ -346,6 +346,9 @@ struct FMassAITargetFragment : public FMassFragment
     bool bHasValidTarget = false;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bRotateTowardsAbility = false;
+	
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool IsFocusedOnTarget = false;
 	/** The set of entities this detector currently believes it can see. */
 	TSet<FMassEntityHandle> PreviouslySeen;

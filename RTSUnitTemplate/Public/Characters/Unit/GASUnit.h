@@ -157,7 +157,4 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const FQueuedAbility GetCurrentSnapshot();
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Ability")
-	bool ShouldRotateToAbilityClick() const;
 };

@@ -494,16 +494,3 @@ void AGASUnit::CancelCurrentAbility()
 		}
 	}
 }
-
-// Add the implementation in GASUnit.cpp
-bool AGASUnit::ShouldRotateToAbilityClick() const
-{
-	if (ActivatedAbilityInstance!= nullptr)
-	{
-		return ActivatedAbilityInstance->RotateToAbilityClick;
-	}
-	else
-	{
-		return false;
-	}
-}

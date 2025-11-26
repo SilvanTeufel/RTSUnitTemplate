@@ -528,8 +528,9 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
 
-            if (UnitBase->ShouldRotateToAbilityClick())
+            if (TargetList[i].bRotateTowardsAbility)
             {
+                UE_LOG(LogTemp, Warning, TEXT("Client Rotate to AbilityTarget!"));
                 RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
             else if (!bIsAttackingOrPaused)
@@ -657,7 +658,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
 
-            if (UnitBase->ShouldRotateToAbilityClick())
+            if (TargetList[i].bRotateTowardsAbility)
             {
                 // Pass the consolidated AI Target fragment.
                 RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
