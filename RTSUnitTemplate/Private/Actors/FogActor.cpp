@@ -5,12 +5,15 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 
 // Sets default values
 AFogActor::AFogActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
+	bAlwaysRelevant = true;
 
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent")));
 
@@ -32,16 +35,25 @@ AFogActor::AFogActor()
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 
-	bReplicates = false;
-	SetNetUpdateFrequency(1);
-	SetMinNetUpdateFrequency(1);
-	SetReplicates(false);
 }
 
 void AFogActor::BeginPlay()
 {
 	Super::BeginPlay();
 	InitFogMaskTexture();
+	// Try immediately; if TeamId isn’t replicated yet, we’ll retry via timer below.
+	InitializeFogPostProcess();
+
+	if (PostProcessComponent && !PostProcessComponent->bEnabled)
+	{
+		GetWorldTimerManager().SetTimer(
+			FogUpdateTimerHandle,
+			this,
+			&AFogActor::RetryInitializeFogPostProcess,
+			0.25f,
+			true,
+			0.25f);
+	}
 }
 
 void AFogActor::Tick(float DeltaTime)
@@ -59,25 +71,53 @@ void AFogActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 
 void AFogActor::InitFogMaskTexture()
 {
-
-	//FogMesh->SetRelativeScale3D(FVector(FogSize, FogSize, 1.f));
+	// Ensure bounds
 	FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 	FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 	
-	FogMaskTexture = UTexture2D::CreateTransient(FogTexSize, FogTexSize, PF_B8G8R8A8);
-	check(FogMaskTexture);
+	// Create transient texture if needed
+	if (!FogMaskTexture)
+	{
+		FogMaskTexture = UTexture2D::CreateTransient(FogTexSize, FogTexSize, PF_B8G8R8A8);
+		check(FogMaskTexture);
+		FogMaskTexture->SRGB = false;
+		FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
+		FogMaskTexture->AddToRoot();
+		FogMaskTexture->UpdateResource();
+	}
 
-	FogMaskTexture->SRGB = false;
-	FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
+	// Allocate and clear pixel buffer once
+	FogPixels.SetNum(FogTexSize * FogTexSize);
+	for (FColor& Pixel : FogPixels)
+	{
+		Pixel = FColor::Black;
+	}
 
-	FogMaskTexture->AddToRoot();
-	FogMaskTexture->UpdateResource();
+	// Upload an initial black mask so the material has valid data immediately
+	if (FogMaskTexture)
+	{
+		FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, FogTexSize, FogTexSize);
+		FogMaskTexture->UpdateTextureRegions(
+			0, 1, Region,
+			FogTexSize * sizeof(FColor),
+			sizeof(FColor),
+			reinterpret_cast<uint8*>(FogPixels.GetData())
+		);
+	}
+}
 
-	FogPixels.SetNumUninitialized(FogTexSize * FogTexSize);
+void AFogActor::RetryInitializeFogPostProcess()
+{
+	InitPPAttempts++;
+	InitializeFogPostProcess();
 }
 
 void AFogActor::InitializeFogPostProcess()
 {
+	if (!FogMaskTexture)
+	{
+		InitFogMaskTexture();
+	}
 
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 
@@ -86,26 +126,30 @@ void AFogActor::InitializeFogPostProcess()
 		// Check if this fog actor belongs to the local player's team
 		if (CustomPC->SelectableTeamId == TeamId)
 		{
-			if (FogMaterial && FogMaskTexture)
+			if (FogMaterial && FogMaskTexture && PostProcessComponent)
 			{
-				if (FogMaterial && FogMaskTexture && PostProcessComponent)
+				if (!PostProcessComponent->bEnabled)
 				{
 					// Create the Dynamic Material Instance
 					UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(FogMaterial, this);
 					MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
-
+					
 					FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
 					MID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
-
-					// --- 3. APPLY THE MATERIAL DIRECTLY TO OUR COMPONENT ---
-					// This is much cleaner than finding the camera manager.
+					
+					// Apply the material directly to our component
 					PostProcessComponent->Settings.AddBlendable(MID, 1.0f);
 					PostProcessComponent->bEnabled = true; // Enable the effect!
+					// Clear retry timer if running
+					if (GetWorld())
+					{
+						GetWorldTimerManager().ClearTimer(FogUpdateTimerHandle);
+					}
 				}
-				else
-				{
-					UE_LOG(LogTemp, Error, TEXT("FogMaterial, Texture, or PPComponent is missing!"));
-				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Fog post-process init failed: Missing material, texture, or component."));
 			}
 		}
 	}

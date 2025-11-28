@@ -41,6 +41,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitializeFogPostProcess();
+
+	UFUNCTION()
+	void RetryInitializeFogPostProcess();
 	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	//void ApplyFogMaskToMesh(UStaticMeshComponent* MeshComponent, UMaterialInterface* BaseMaterial, int32 MaterialIndex);
 
@@ -89,5 +92,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	TArray<FColor> FogPixels;
+
+	int32 InitPPAttempts = 0; // retry counter for PP init on clients
 	
 };
