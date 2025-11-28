@@ -82,7 +82,7 @@ private:
 	
 	void DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates);
 
-	void RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const;
+	bool RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const;
 
 
 };

@@ -328,6 +328,7 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 	}
 }
 
+
 // Called every frame
 void AProjectile::Tick(float DeltaTime)
 {
@@ -670,6 +671,8 @@ void AProjectile::FlyInArc(float DeltaTime)
     // Impact happens when the arc is complete (Alpha is 1.0)
     if (Alpha >= 1.0f)
     {
+        // Play impact FX even if we didn't hit a unit (e.g., ground impact)
+        ImpactEvent();
     	DestroyProjectileWithDelay();
     }
 }
@@ -677,6 +680,9 @@ void AProjectile::FlyInArc(float DeltaTime)
 void AProjectile::Impact(AActor* ImpactTarget)
 {
 	if (!HasAuthority()) return;
+
+	// Trigger Blueprint impact visuals
+	ImpactEvent();
 
 	if (PiercedActors.Contains(ImpactTarget))
 	{
@@ -783,9 +789,11 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		return;
 	}
 	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
-	if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
-	{
-		float NewDamage = Damage;
+ if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
+ {
+ 	// Trigger Blueprint impact visuals
+ 	ImpactEvent();
+ 	float NewDamage = Damage;
 		
 		if (UseAttributeDamage)
 			NewDamage = ShootingUnit->Attributes->GetAttackDamage();
@@ -888,7 +896,6 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && IsHealing)
 		{
-			ImpactEvent();
 			ImpactHeal(UnitToHit);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && !IsHealing)
 		{
@@ -897,12 +904,10 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
 		{
-			ImpactEvent();
 			Impact(UnitToHit);
 			SetIsAttacked(UnitToHit);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
-			ImpactEvent();
 			ImpactHeal(UnitToHit);
 		}
 			

@@ -63,6 +63,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactSound);
 	DOREPLIFETIME(APerformanceUnit, ScaleImpactSound);
 	DOREPLIFETIME(APerformanceUnit, ScaleImpactVFX);
+	DOREPLIFETIME(APerformanceUnit, RotateImpactVFX);
 	DOREPLIFETIME(APerformanceUnit, DeadSound);
 	DOREPLIFETIME(APerformanceUnit, DeadVFX);
 	DOREPLIFETIME(APerformanceUnit, ScaleDeadSound);

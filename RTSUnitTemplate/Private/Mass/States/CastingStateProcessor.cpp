@@ -93,7 +93,7 @@ void UCastingStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             FMassAITargetFragment& TargetFrag = TargetList[i];
 
             // Set rotation flag at cast start
-            if (StateFrag.StateTimer <= 0.2f)
+            //if (StateFrag.StateTimer < ExecutionInterval)
             {
                 TargetFrag.bRotateTowardsAbility = true;
             }
@@ -104,7 +104,7 @@ void UCastingStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             // End of cast on client: clear rotation flag
             if (StateFrag.StateTimer >= StatsFrag.CastTime)
             {
-                TargetFrag.bRotateTowardsAbility = false;
+                //TargetFrag.bRotateTowardsAbility = false;
                 // No signals on client; server will drive authoritative transitions
                 continue;
             }
@@ -140,7 +140,7 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             FMassAITargetFragment& TargetFrag = TargetList[i];
 
             // At cast start, set rotate towards ability flag
-            if (StateFrag.StateTimer <= 0.2f)
+            //if (StateFrag.StateTimer < ExecutionInterval)
             {
                 TargetFrag.bRotateTowardsAbility = true;
             }
@@ -157,7 +157,7 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
                 // Clear rotate flag at end of cast
-                TargetFrag.bRotateTowardsAbility = false;
+                //TargetFrag.bRotateTowardsAbility = false;
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::EndCast, Entity);

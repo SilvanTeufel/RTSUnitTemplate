@@ -16,6 +16,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Sound\SoundCue.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -28,6 +30,20 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	GetAbilitiesArrays();
+
+	// Defer activation of start abilities by configurable delay to ensure ASC and specs are ready (server only)
+	if (HasAuthority())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Scheduling activation in %.2fs for %s (PossessedBy path)"), StartAbilitiesActivationDelay, *GetName());
+			bStartAbilitiesActivationScheduled = true;
+			FTimerDelegate Delegate;
+			Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
+			World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, FMath::Max(0.0f, StartAbilitiesActivationDelay), false);
+		}
+	}
+
 	AutoAbility();
 }
 
@@ -43,6 +59,33 @@ void AAbilityUnit::LevelUp_Implementation()
 		// Trigger any additional level-up effects or logic here
 		if(HasAuthority())
 			AddAbilityPoint();
+	}
+}
+
+void AAbilityUnit::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Server-side fallback: in case PossessedBy isn't called for some units, ensure grant + activation is scheduled
+	if (HasAuthority())
+	{
+		if (!bAbilitiesGranted)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: abilities not yet granted, calling GetAbilitiesArrays for %s"), *GetName());
+			GetAbilitiesArrays();
+		}
+
+		if (!bStartAbilitiesActivationScheduled)
+		{
+			if (UWorld* World = GetWorld())
+			{
+				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: scheduling activation in %.2fs for %s"), StartAbilitiesActivationDelay, *GetName());
+				bStartAbilitiesActivationScheduled = true;
+				FTimerDelegate Delegate;
+				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
+				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, FMath::Max(0.0f, StartAbilitiesActivationDelay), false);
+			}
+		}
 	}
 }
 
@@ -216,44 +259,67 @@ void AAbilityUnit::GetSelectedAbilitiesArray(TSubclassOf<UGameplayAbilityBase>& 
 
 void AAbilityUnit::GetAbilitiesArrays()
 {
-	
-	if(HasAuthority() && AbilitySystemComponent)
+	if (!HasAuthority() || !AbilitySystemComponent)
 	{
-		if(SelectableAbilities.Num())
-			for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : SelectableAbilities)
+		return;
+	}
+
+	if (bAbilitiesGranted)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] GetAbilitiesArrays skipped; abilities already granted for %s"), *GetName());
+		return;
+	}
+
+	// Give Start Abilities
+	if (StartAbilities.Num())
+	{
+		UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Granting %d start abilities to %s"), StartAbilities.Num(), *GetName());
+		for (TSubclassOf<UGameplayAbilityBase>& StartupAbility : StartAbilities)
+		{
+			if (StartupAbility)
 			{
-				if(StartupAbility)
-					AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 			}
-		
-		if(OffensiveAbilities.Num())
-		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : OffensiveAbilities)
-		{
-			if(StartupAbility)
-			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
-		}
-
-		if(DefensiveAbilities.Num())
-		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : DefensiveAbilities)
-		{
-			if(StartupAbility)
-			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
-		}
-
-		if(AttackAbilities.Num())
-		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : AttackAbilities)
-		{
-			if(StartupAbility)
-			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
-		}
-
-		if(ThrowAbilities.Num())
-		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : ThrowAbilities)
-		{
-			if(StartupAbility)
-			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
 		}
 	}
+
+	// Give other predefined abilities
+	if(SelectableAbilities.Num())
+		for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : SelectableAbilities)
+		{
+			if(StartupAbility)
+				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+		}
+	
+	if(OffensiveAbilities.Num())
+	for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : OffensiveAbilities)
+	{
+		if(StartupAbility)
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+	}
+
+	if(DefensiveAbilities.Num())
+	for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : DefensiveAbilities)
+	{
+		if(StartupAbility)
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+	}
+
+	if(AttackAbilities.Num())
+	for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : AttackAbilities)
+	{
+		if(StartupAbility)
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+	}
+
+	if(ThrowAbilities.Num())
+	for(TSubclassOf<UGameplayAbilityBase>& StartupAbility : ThrowAbilities)
+	{
+		if(StartupAbility)
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+	}
+
+	bAbilitiesGranted = true;
 }
 
 
@@ -501,4 +567,65 @@ void AAbilityUnit::RollRandomAbilitys()
 	DefensiveAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
 	AttackAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
 	ThrowAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
+}
+
+void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
+{
+	// Server only
+	if (!HasAuthority())
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] Skipping activation on client for %s"), *GetName());
+		return;
+	}
+
+	if (!AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[StartAbilities] AbilitySystemComponent is null on %s"), *GetName());
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Attempting to activate %d start abilities for %s"), StartAbilities.Num(), *GetName());
+
+	int32 Attempts = 0;
+	int32 Success = 0;
+
+	for (TSubclassOf<UGameplayAbilityBase>& AbilityClass : StartAbilities)
+	{
+		if (!AbilityClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[StartAbilities] Null ability class in StartAbilities on %s"), *GetName());
+			continue;
+		}
+
+		Attempts++;
+		const bool bActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
+		UE_LOG(LogTemp, Log, TEXT("[StartAbilities] TryActivateAbilityByClass(%s) -> %s on %s"),
+			*AbilityClass->GetName(),
+			bActivated ? TEXT("Success") : TEXT("Failed"),
+			*GetName());
+
+		if (bActivated)
+		{
+			Success++;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Activation summary for %s: Attempted=%d, Succeeded=%d"), *GetName(), Attempts, Success);
+
+	// If nothing activated, it may be because specs are not yet granted; try once more after the configured delay.
+	if (Success == 0 && StartAbilities.Num() > 0)
+	{
+		if (!bStartAbilitiesRetryScheduled)
+		{
+			bStartAbilitiesRetryScheduled = true;
+			if (UWorld* World = GetWorld())
+			{
+				const float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] No abilities activated; scheduling one retry in %.2fs for %s"), RetryDelay, *GetName());
+				FTimerDelegate Delegate;
+				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
+				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, RetryDelay, false);
+			}
+		}
+	}
 }

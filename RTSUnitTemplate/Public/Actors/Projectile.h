@@ -110,11 +110,11 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RotationSpeed = FVector(0.5f);
 	
-	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void Multicast_UpdateISMTransform(const FTransform& NewTransform);
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UNiagaraComponent* Niagara_A;
+ UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
+ void Multicast_UpdateISMTransform(const FTransform& NewTransform);
+ 
+ UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+ UNiagaraComponent* Niagara_A;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_A_Start_Transform;

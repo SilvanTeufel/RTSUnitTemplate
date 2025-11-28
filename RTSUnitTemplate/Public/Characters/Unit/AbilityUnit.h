@@ -15,6 +15,10 @@ class RTSUNITTEMPLATE_API AAbilityUnit : public ALevelUnit
 
 private:
 	FTimerHandle AccelerationTimerHandle;
+	FTimerHandle StartAbilitiesActivationTimer;
+	bool bStartAbilitiesRetryScheduled = false;
+	bool bStartAbilitiesActivationScheduled = false;
+	bool bAbilitiesGranted = false;
 	FVector TargetVelocity;
 	FVector CurrentVelocity;
 	float AccelerationRate;
@@ -31,8 +35,12 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void BeginPlay() override;
 
 	virtual void LevelUp_Implementation() override;
+
+	UFUNCTION(BlueprintCallable, Category=Ability)
+	void ActivateStartAbilitiesOnSpawn();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool IsWorker = false;
@@ -91,7 +99,9 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> StoredUnitState = UnitData::Idle;
 	///////////////////////////////////////////////////////////////////
-
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
+	TArray<TSubclassOf<class UGameplayAbilityBase>>StartAbilities;
+	
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>SelectableAbilities;
 	
@@ -130,6 +140,10 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	bool AutoApplyAbility = true;
+
+	// Delay before attempting to activate StartAbilities on spawn (server-only). Adjustable in Details panel.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta=(ClampMin="0.0"))
+	float StartAbilitiesActivationDelay = 0.1f;
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability);

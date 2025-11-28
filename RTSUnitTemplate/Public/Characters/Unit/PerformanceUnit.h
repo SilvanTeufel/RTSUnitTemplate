@@ -41,6 +41,10 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector ScaleImpactVFX = FVector(1.f, 1.f,1.f);
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FRotator RotateImpactVFX = FRotator::ZeroRotator;
+	
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* MeleeImpactSound;

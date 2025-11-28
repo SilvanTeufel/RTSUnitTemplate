@@ -33,7 +33,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
         EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
         EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-        EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+        EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
         EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
     
         EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
@@ -66,7 +66,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 		ClientEntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
-		ClientEntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+		ClientEntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 
         ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
@@ -361,7 +361,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     InOutMassTransform.SetRotation(NewQuat);
 }
 
-void UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
     // Calculate direction from the unit to the ability's target location
     FVector Dir = AbilityTarget.AbilityTargetLocation - CurrentActorLocation;
@@ -369,23 +369,34 @@ void UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
 
     if (!Dir.Normalize())
     {
-        return; // Avoid issues if the direction is zero
+        return true; // No direction to rotate => treat as reached to prevent stuck state
     }
 
     FQuat DesiredQuat = Dir.ToOrientationQuat();
 
     if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+    {
         DesiredQuat *= UnitBase->MeshRotationOffset;
+    }
+
     // --- Interpolate rotation ---
     const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
     const FQuat CurrentQuat = InOutMassTransform.GetRotation();
-    
+
     // Interpolate towards the desired rotation or set it instantly if speed is negligible
     const FQuat NewQuat = (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
         ? FMath::QInterpConstantTo(CurrentQuat, DesiredQuat, ActualDeltaTime, FMath::DegreesToRadians(RotationSpeedDeg))
         : DesiredQuat;
 
     InOutMassTransform.SetRotation(NewQuat);
+
+    // Determine if we reached the desired facing (yaw only)
+    const float DesiredYaw = DesiredQuat.Rotator().Yaw;
+    const float NewYaw = NewQuat.Rotator().Yaw;
+    const float YawDelta = FMath::Abs(FMath::FindDeltaAngleDegrees(NewYaw, DesiredYaw));
+    const float ReachedToleranceDeg = 2.0f; // tolerance for considering rotation reached
+
+    return YawDelta <= ReachedToleranceDeg;
 }
 
 void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates)
@@ -501,7 +512,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
         TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
-        const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -531,7 +542,11 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             if (TargetList[i].bRotateTowardsAbility)
             {
                 UE_LOG(LogTemp, Warning, TEXT("Client Rotate to AbilityTarget!"));
-                RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                if (bReached)
+                {
+                    TargetList[i].bRotateTowardsAbility = false;
+                }
             }
             else if (!bIsAttackingOrPaused)
             {
@@ -635,7 +650,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
         TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
-        const TConstArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -661,7 +676,11 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             if (TargetList[i].bRotateTowardsAbility)
             {
                 // Pass the consolidated AI Target fragment.
-                RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                if (bReached)
+                {
+                    TargetList[i].bRotateTowardsAbility = false;
+                }
             }
             else if (!bIsAttackingOrPaused)
             {

@@ -54,7 +54,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);   
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
-    EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
+    //EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::Any);
     
     EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
@@ -90,7 +90,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     
     ClientEntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);   
     ClientEntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
-    ClientEntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
+    //ClientEntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::Any);
     
     ClientEntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);

@@ -34,6 +34,7 @@
 #include "MassReplicationFragments.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
+#include "Characters/Unit/PerformanceUnit.h"
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
@@ -1280,7 +1281,24 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         
                         StrongAttacker->ServerMeeleImpactEvent();
                         
-                        // ... Rest of visual logic ...
+                        // Fire melee impact VFX/SFX at the target's location via multicast RPC
+                        if (APerformanceUnit* PerfAttacker = Cast<APerformanceUnit>(StrongAttacker))
+                        {
+                            if (PerfAttacker->HasAuthority())
+                            {
+                                const FVector ImpactLocation = StrongTarget->GetMassActorLocation();
+
+                                const float KillDelay = 2.0f; // Reasonable lifetime for spawned components
+                                PerfAttacker->FireEffectsAtLocation(
+                                    PerfAttacker->MeleeImpactVFX,
+                                    PerfAttacker->MeleeImpactSound,
+                                    PerfAttacker->ScaleImpactVFX,
+                                    PerfAttacker->ScaleImpactSound,
+                                    ImpactLocation,
+                                    KillDelay,
+                                    PerfAttacker->RotateImpactVFX);
+                            }
+                        }
                     }
                 });
              }
