@@ -5,6 +5,8 @@
 #include "Widgets/StoryWidgetBase.h"
 #include "TimerManager.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Engine/GameInstance.h"
 
 AStoryTriggerActor::AStoryTriggerActor()
 {
@@ -70,41 +72,22 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
         TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
 
-    // Play sound at trigger location (server or client fine for one-shot non-replicated FX)
-    if (TriggerSound)
+    // Instead of playing immediately, enqueue into the StoryTriggerQueueSubsystem to ensure sequential display
+    if (UWorld* World = GetWorld())
     {
-        UGameplayStatics::PlaySoundAtLocation(this, TriggerSound, GetActorLocation());
-    }
-
-    // Create widget locally for the player's screen
-    if (StoryWidgetClass)
-    {
-        APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-        if (PC)
+        if (UGameInstance* GI = World->GetGameInstance())
         {
-            UStoryWidgetBase* Widget = CreateWidget<UStoryWidgetBase>(PC, StoryWidgetClass);
-            if (Widget)
+            if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
             {
-                // Center + offset positioning
-                int32 SizeX = 0, SizeY = 0;
-                PC->GetViewportSize(SizeX, SizeY);
-                const FVector2D CenterPos(0.5f * SizeX + ScreenOffsetX, 0.5f * SizeY + ScreenOffsetY);
-
-                Widget->AddToViewport();
-                Widget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
-                Widget->SetPositionInViewport(CenterPos, false);
-
-                Widget->StartStory(StoryText, StoryImage.Get());
-
-                // Store and start removal timer if requested
-                ActiveWidget = Widget;
-                if (WidgetLifetimeSeconds > 0.f)
-                {
-                    if (UWorld* World = GetWorld())
-                    {
-                        World->GetTimerManager().SetTimer(RemoveWidgetTimer, this, &AStoryTriggerActor::RemoveActiveWidget, WidgetLifetimeSeconds, false);
-                    }
-                }
+                FStoryQueueItem Item;
+                Item.WidgetClass = StoryWidgetClass;
+                Item.Text = StoryText;
+                Item.Image = StoryImage.Get();
+                Item.OffsetX = ScreenOffsetX;
+                Item.OffsetY = ScreenOffsetY;
+                Item.LifetimeSeconds = WidgetLifetimeSeconds;
+                Item.Sound = TriggerSound;
+                Queue->EnqueueStory(Item);
             }
         }
     }
