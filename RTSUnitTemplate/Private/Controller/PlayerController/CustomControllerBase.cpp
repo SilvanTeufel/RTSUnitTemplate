@@ -1195,19 +1195,33 @@ void ACustomControllerBase::LeftClickPressedMass()
     }
     else
     {
-        DropWorkArea();
-
-        // handle any ability under the cursor on the server; continue selection on client only if server didn't early return
         FHitResult HitPawn;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-        Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn);
+
+        // Only call the server if we previously activated an ability via keyboard
+        if (bUsedKeyboardAbilityBeforeClick)
+        {
+            bUsedKeyboardAbilityBeforeClick = false; // consume the flag
+            Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn, WorkAreaIsSnapped, DropWorkAreaFailedSound);
+        }
+        else
+        {
+            // Skip server and just continue with selection locally
+            Client_ContinueSelectionAfterAbility_Implementation(HitPawn);
+        }
         return;
     }
 	
 }
 
-void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn)
+void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
 {
+    // Try to drop any active work area for the first unit using the new parameterized variant
+    if (Units.Num() > 0 && Units[0])
+    {
+        DropWorkAreaForUnit(Units[0], bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
+    }
+
     bool AbilityFired = false;
     bool AbilityUnSynced = false;
 

@@ -437,11 +437,13 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		UGameplayStatics::PlaySound2D(this, AbilitySound);
 	}
 	
+	bool bActivatedAny = false;
 	if (SelectedUnits.Num() > 0)
 	{
 		if (SelectedUnits[CurrentUnitWidgetIndex]->IsWorker && SelectedUnits[CurrentUnitWidgetIndex]->CanActivateAbilities)
 		{
 			ActivateAbilitiesByIndex_Implementation(SelectedUnits[CurrentUnitWidgetIndex], InputID, Hit);
+			bActivatedAny = true;
 			HUDBase->SetUnitSelected(SelectedUnits[CurrentUnitWidgetIndex]);
 			CurrentUnitWidgetIndex = 0;
 			SelectedUnits = HUDBase->SelectedUnits;
@@ -455,6 +457,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				{
 					bAnyHasTag = true;
 					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+					bActivatedAny = true;
 				}
 			}
 
@@ -465,22 +468,31 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 					if (SelectedUnit && SelectedUnit->CanActivateAbilities && !SelectedUnit->IsWorker)
 					{
 						ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+						bActivatedAny = true;
 					}
 				}
 			}
 			
 		}
-	}else if (CameraUnitWithTag && CameraUnitWithTag->CanActivateAbilities)
+	}
+	else if (CameraUnitWithTag && CameraUnitWithTag->CanActivateAbilities)
 	{
 		CameraUnitWithTag->SetSelected();
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag);
 		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
+		bActivatedAny = true;
 	}
 	else if(HUDBase)
 	{
 		FVector CameraLocation = GetPawn()->GetActorLocation();
 		ActivateKeyboardAbilitiesOnCloseUnits(InputID, CameraLocation, SelectableTeamId, HUDBase);
+		// Activation may happen asynchronously via server response; leave flag unchanged here
+	}
+
+	if (bActivatedAny)
+	{
+		bUsedKeyboardAbilityBeforeClick = true;
 	}
 }
 
@@ -1762,7 +1774,68 @@ bool AExtendedControllerBase::DropWorkArea()
 				return true;
 		}
 	}
-	//SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
+ //SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
+	return false;
+}
+
+bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
+{
+	if (!UnitBase) return false;
+
+	if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->PlannedBuilding == false)
+	{
+		UnitBase->ShowWorkAreaIfNoFog(UnitBase->CurrentDraggedWorkArea);
+
+		TArray<AActor*> OverlappingActors;
+		UnitBase->CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
+
+		bool bIsOverlappingWithValidArea = false;
+		bool bIsNoBuildZone = false;
+		for (AActor* OverlappedActor : OverlappingActors)
+		{
+			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
+			{
+				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
+				if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
+				{
+					bIsNoBuildZone = true;
+				}
+				bIsOverlappingWithValidArea = true;
+				break;
+			}
+		}
+
+		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone)
+		{
+			if (InDropWorkAreaFailedSound)
+			{
+				UGameplayStatics::PlaySound2D(this, InDropWorkAreaFailedSound);
+			}
+
+			UnitBase->CurrentDraggedWorkArea->Destroy();
+			UnitBase->BuildArea = nullptr;
+			UnitBase->CurrentDraggedWorkArea = nullptr;
+			CancelCurrentAbility(UnitBase);
+			SendWorkerToBase(UnitBase);
+			return true;
+		}
+
+		if (UnitBase->IsWorker)
+		{
+			if (DropWorkAreaSound)
+			{
+				UGameplayStatics::PlaySound2D(this, DropWorkAreaSound);
+			}
+
+			if (UnitBase->CurrentDraggedWorkArea)
+			{
+				Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
+					UnitBase->CurrentDraggedWorkArea->GetActorLocation());
+			}
+			SendWorkerToWork(UnitBase);
+			return true;
+		}
+	}
 	return false;
 }
 

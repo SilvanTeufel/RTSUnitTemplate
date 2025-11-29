@@ -6,6 +6,7 @@ class AWorkArea;
 class AActor;
 class UStaticMeshComponent;
 class USoundBase;
+class AUnitBase;
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
@@ -24,6 +25,9 @@ private:
 	FTimerHandle LogTagsTimerHandle;
 	
 public:
+	// Set to true when a keyboard ability was just executed; consumed on next left click
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bUsedKeyboardAbilityBeforeClick = false;
 
 	virtual void BeginPlay() override;
 	
@@ -57,6 +61,9 @@ public:
 		USoundBase* InAttackSound,
 		USoundBase* InDropWorkAreaFailedSound,
 		USoundBase* InDropWorkAreaSound);
+
+	// New variant that operates on a specific unit (no UFUNCTION to avoid UHT overloading conflicts)
+	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagF1;

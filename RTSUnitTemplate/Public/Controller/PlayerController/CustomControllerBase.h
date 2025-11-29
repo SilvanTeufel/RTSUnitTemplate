@@ -16,6 +16,7 @@
 #include "Engine/Engine.h"       // Include for GEngine
 #include "Engine/EngineTypes.h"   // For FHitResult in UFUNCTION params
 
+class USoundBase;
 class AUnitBase;
 
 #include "CustomControllerBase.generated.h"
@@ -180,7 +181,7 @@ public:
 	// Server will process dragged abilities under cursor for selected units. If it does not early return,
 	// it will notify the owning client to continue with selection logic.
 	UFUNCTION(Server, Reliable)
-	void Server_HandleAbilityUnderCursor(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn);
+	void Server_HandleAbilityUnderCursor(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
 
 	// Owning client continues with selection under cursor when server indicates no early return.
 	UFUNCTION(Client, Reliable)
