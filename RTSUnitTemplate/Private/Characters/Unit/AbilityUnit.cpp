@@ -18,6 +18,7 @@
 #include "Characters/Unit/MassUnitBase.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "GameModes/RTSGameModeBase.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -36,11 +37,26 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 	{
 		if (UWorld* World = GetWorld())
 		{
-			UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Scheduling activation in %.2fs for %s (PossessedBy path)"), StartAbilitiesActivationDelay, *GetName());
+			float EffectiveDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+			if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+			{
+				const float WorldSeconds = World->GetTimeSeconds();
+				if (WorldSeconds < 1.0f)
+				{
+					EffectiveDelay += static_cast<float>(GM->GatherControllerTimer);
+					UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Game start detected (t=%.2f). Adding GatherControllerTimer=%d to delay. EffectiveDelay=%.2f for %s (PossessedBy path)"),
+						WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] No RTSGameModeBase found; using default delay %.2f for %s (PossessedBy path)"), EffectiveDelay, *GetName());
+			}
+
 			bStartAbilitiesActivationScheduled = true;
 			FTimerDelegate Delegate;
 			Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
-			World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, FMath::Max(0.0f, StartAbilitiesActivationDelay), false);
+			World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, EffectiveDelay, false);
 		}
 	}
 
@@ -79,11 +95,26 @@ void AAbilityUnit::BeginPlay()
 		{
 			if (UWorld* World = GetWorld())
 			{
-				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: scheduling activation in %.2fs for %s"), StartAbilitiesActivationDelay, *GetName());
+				float EffectiveDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+				if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+				{
+					const float WorldSeconds = World->GetTimeSeconds();
+					if (WorldSeconds < 1.0f)
+					{
+						EffectiveDelay += static_cast<float>(GM->GatherControllerTimer);
+						UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: game start detected (t=%.2f). Adding GatherControllerTimer=%d to delay. EffectiveDelay=%.2f for %s"),
+							WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using default delay %.2f for %s"), EffectiveDelay, *GetName());
+				}
+
 				bStartAbilitiesActivationScheduled = true;
 				FTimerDelegate Delegate;
 				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
-				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, FMath::Max(0.0f, StartAbilitiesActivationDelay), false);
+				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, EffectiveDelay, false);
 			}
 		}
 	}
