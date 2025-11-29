@@ -4,6 +4,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Widgets/StoryWidgetBase.h"
 #include "TimerManager.h"
+#include "Controller/PlayerController/ControllerBase.h"
 
 AStoryTriggerActor::AStoryTriggerActor()
 {
@@ -48,6 +49,15 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
     // Team gate: only trigger for units with matching team id
     if (Unit->TeamId != TeamId)
     {
+        return;
+    }
+
+    // Local player team gate: only show for players whose controller team matches
+    APlayerController* LocalPC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    AControllerBase* LocalRTSController = LocalPC ? Cast<AControllerBase>(LocalPC) : nullptr;
+    if (!LocalRTSController || LocalRTSController->SelectableTeamId != TeamId)
+    {
+        // Do not show UI/sound for other teams' players
         return;
     }
 
