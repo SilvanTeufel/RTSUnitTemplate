@@ -14,6 +14,7 @@
 #include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
+#include "Engine/EngineTypes.h"   // For FHitResult in UFUNCTION params
 
 class AUnitBase;
 
@@ -175,6 +176,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickPressedMass();
+
+	// Server will process dragged abilities under cursor for selected units. If it does not early return,
+	// it will notify the owning client to continue with selection logic.
+	UFUNCTION(Server, Reliable)
+	void Server_HandleAbilityUnderCursor(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn);
+
+	// Owning client continues with selection under cursor when server indicates no early return.
+	UFUNCTION(Client, Reliable)
+	void Client_ContinueSelectionAfterAbility(const FHitResult& HitPawn);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void LeftClickAttackMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor = nullptr);

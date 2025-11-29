@@ -175,6 +175,8 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 	{
 		return;
 	}
+
+
 	
 	switch (AbilityArrayIndex)
 	{

@@ -34,6 +34,8 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "AbilitySystemComponent.h"
 #include "Characters\Unit\UnitBase.h"
+#include "Characters/Unit/SpeakingUnit.h"
+#include "GameplayTagContainer.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -1195,65 +1197,85 @@ void ACustomControllerBase::LeftClickPressedMass()
     {
         DropWorkArea();
 
-        // handle any ability under the cursor
+        // handle any ability under the cursor on the server; continue selection on client only if server didn't early return
         FHitResult HitPawn;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-
-        bool AbilityFired   = false;
-        bool AbilityUnSynced = false;
-        for (AUnitBase* U : SelectedUnits)
-        {
-            if (U && U->CurrentSnapshot.AbilityClass && U->CurrentDraggedAbilityIndicator)
-            {
-                FireAbilityMouseHit(U, HitPawn);
-                AbilityFired = true;
-            }
-            else
-            {
-                AbilityUnSynced = true;
-            }
-        }
-        if (AbilityFired && !AbilityUnSynced)
-        {
-            return;
-        }
-
-        // if we hit a pawn, try to select it
-        if (HitPawn.bBlockingHit && HUDBase)
-        {
-            AActor* HitActor = HitPawn.GetActor();
-            if (!HitActor->IsA(ALandscape::StaticClass()))
-                ClickedActor = HitActor;
-            else
-                ClickedActor = nullptr;
-
-            AUnitBase* HitUnit = Cast<AUnitBase>(HitActor);
-            ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
-
-            if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
-            {
-            	if (IsCtrlPressed)
-            	{
-            		FGameplayTag Tag = HitUnit->UnitTags.First();
-            		SelectUnitsWithTag(Tag, SelectableTeamId);
-            	}else
-            	{
-            		HUDBase->DeselectAllUnits();
-            		HUDBase->SetUnitSelected(HitUnit);
-            		DragUnitBase(HitUnit);
-
-            		if (CameraBase->AutoLockOnSelect)
-            			LockCameraToUnit = true;	
-            	}
-            }
-            else
-            {
-                HUDBase->InitialPoint = HUDBase->GetMousePos2D();
-                HUDBase->bSelectFriendly = true;
-            }
-        }
+        Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn);
+        return;
     }
 	
+}
+
+void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn)
+{
+    bool AbilityFired = false;
+    bool AbilityUnSynced = false;
+
+    for (AUnitBase* U : Units)
+    {
+        if (U && U->CurrentSnapshot.AbilityClass && U->CurrentDraggedAbilityIndicator)
+        {
+            FireAbilityMouseHit(U, HitPawn);
+            AbilityFired = true;
+        }
+        else
+        {
+            AbilityUnSynced = true;
+        }
+    }
+
+    if (AbilityFired && !AbilityUnSynced)
+    {
+        // Early exit: abilities were processed server-side for all units; no client-side selection follow-up
+        return;
+    }
+
+    // Ask owning client to continue with selection handling
+    Client_ContinueSelectionAfterAbility(HitPawn);
+}
+
+void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(const FHitResult& HitPawn)
+{
+    // if we hit a pawn, try to select it (client-side UI and input state)
+    if (HitPawn.bBlockingHit && HUDBase)
+    {
+        AActor* HitActor = HitPawn.GetActor();
+        if (!HitActor->IsA(ALandscape::StaticClass()))
+            ClickedActor = HitActor;
+        else
+            ClickedActor = nullptr;
+
+        AUnitBase* HitUnit = Cast<AUnitBase>(HitActor);
+        ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
+
+        if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
+        {
+            if (IsCtrlPressed)
+            {
+                FGameplayTag Tag = HitUnit->UnitTags.First();
+                SelectUnitsWithTag(Tag, SelectableTeamId);
+            }
+            else
+            {
+                HUDBase->DeselectAllUnits();
+                HUDBase->SetUnitSelected(HitUnit);
+                DragUnitBase(HitUnit);
+
+                if (CameraBase)
+                {
+                    if (CameraBase->AutoLockOnSelect)
+                    {
+                        LockCameraToUnit = true;
+                    }
+                }
+            }
+        }
+        else
+        {
+            HUDBase->InitialPoint = HUDBase->GetMousePos2D();
+            HUDBase->bSelectFriendly = true;
+        }
+    }
 }
 
 void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
@@ -1269,6 +1291,15 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 		{
 			AUnitBase* Unit = Units[i];
 			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
+
+			// Validate whether this unit can attack the target based on capabilities and target traits
+			if (!Unit->CanAttack) continue;
+			// Invisible targets require detection capability
+			if (TargetUnitBase->bIsInvisible && !Unit->CanDetectInvisible) continue;
+			// Respect ground/flying attack restrictions
+			if (Unit->CanOnlyAttackGround && TargetUnitBase->IsFlying) continue;
+			if (Unit->CanOnlyAttackFlying && !TargetUnitBase->IsFlying) continue;
+
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
 			SetUnitState_Replication(Unit, 3);
