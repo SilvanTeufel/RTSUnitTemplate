@@ -174,7 +174,7 @@ public:
 
 	// Cooldown between initiating new snap targets to prevent flicker
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float SnapCooldownSeconds = 0.5f;
+	float SnapCooldownSeconds = 1.0f;
 
 	// Internal time when next snap is allowed (not replicated)
 	UPROPERTY(Transient)
