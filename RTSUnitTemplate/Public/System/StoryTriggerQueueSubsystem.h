@@ -16,29 +16,29 @@ struct FStoryQueueItem
 	GENERATED_BODY()
 
 	// Widget class to instantiate
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TSubclassOf<UStoryWidgetBase> WidgetClass = nullptr;
 
 	// Text to show
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	FText Text;
 
 	// Optional image
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<UTexture2D> Image = nullptr;
 
 	// Center offsets in pixels
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	float OffsetX = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	float OffsetY = 0.f;
 
 	// Lifetime in seconds; <= 0 means persist indefinitely
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	float LifetimeSeconds = 0.f;
 
 	// Sound to play when this item becomes active
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<USoundBase> Sound = nullptr;
 };
 
