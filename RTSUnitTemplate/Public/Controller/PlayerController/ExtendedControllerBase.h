@@ -166,7 +166,7 @@ public:
 	
 	// Distance threshold between mouse and snapped actor to release the snap
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float SnapReleaseDistance = 800.f;
+	float SnapReleaseDistance = 400.f;
 	
 	// The actor we are currently snapped to (if any)
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
@@ -174,7 +174,7 @@ public:
 
 	// Cooldown between initiating new snap targets to prevent flicker
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float SnapCooldownSeconds = 1.0f;
+	float SnapCooldownSeconds = 0.5f;
 
 	// Internal time when next snap is allowed (not replicated)
 	UPROPERTY(Transient)
