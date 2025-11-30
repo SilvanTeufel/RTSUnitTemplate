@@ -438,6 +438,38 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	StateFragment->DeathTime  = World->GetTimeSeconds();
 	                        EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity);
 
+                            // If a ConstructionUnit dies: destroy its WorkArea and send its Worker back to placeholder
+                            if (AConstructionUnit* CU = Cast<AConstructionUnit>(UnitBase))
+                            {
+                            	if (World && World->GetNetMode() != NM_Client)
+                            	{
+                            		if (CU->WorkArea)
+                            		{
+                            			// Clear back-reference and destroy the area
+                            			if (CU->WorkArea->ConstructionUnit == CU)
+                            			{
+                            				CU->WorkArea->ConstructionUnit = nullptr;
+                            			}
+                            			CU->WorkArea->Destroy(false, true);
+                            			CU->WorkArea = nullptr;
+                            		}
+                            		if (CU->Worker)
+                            		{
+                            			// Optionally clear the worker's BuildArea to avoid dangling refs
+                            			CU->Worker->BuildArea = nullptr;
+                            			FMassEntityManager* WorkerMgr = nullptr;
+                            			FMassEntityHandle WorkerEntity;
+                            			if (CU->Worker->GetMassEntityData(WorkerMgr, WorkerEntity))
+                            			{
+                            				if (SignalSubsystem && WorkerMgr && WorkerMgr->IsEntityValid(WorkerEntity))
+                            				{
+                            					SignalSubsystem->SignalEntity(UnitSignals::SetUnitStatePlaceholder, WorkerEntity);
+                            				}
+                            			}
+                            		}
+                            	}
+                            }
+
                             // Unregister from Mass replication when the unit dies (server only)
                             if (World && World->GetNetMode() != NM_Client)
                             {
