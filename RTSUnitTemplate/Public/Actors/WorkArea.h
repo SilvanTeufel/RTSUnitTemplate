@@ -12,6 +12,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "WorkArea.generated.h"
 
+class AUnitBase;
 
 USTRUCT(BlueprintType)
 struct FBuildingCost
@@ -76,6 +77,14 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	
+	// Optional: if provided, a construction site will be spawned and tracked during build
+ UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
+	TSubclassOf<class AUnitBase> ConstructionUnitClass;
+	
+	// Pointer to the active construction site actor (if any)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
+	class AUnitBase* ConstructionUnit = nullptr;
 	
 	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveAreaFromGroup();

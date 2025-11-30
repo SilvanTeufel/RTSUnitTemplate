@@ -15,6 +15,8 @@
 #include "MassExecutionContext.h" 
 #include "MassNavigationFragments.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Engine/CanvasRenderTarget2D.h"
@@ -1970,9 +1972,15 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
     					if (UnitBase && UnitBase->BuildArea)
     					{
-    						if(!UnitBase->BuildArea->Building)
-    						{
-								FUnitSpawnParameter SpawnParameter;
+   							if(!UnitBase->BuildArea->Building)
+   							{
+   								// If a construction site exists, remove it now
+   								if (UnitBase->BuildArea->ConstructionUnit)
+   								{
+   									UnitBase->BuildArea->ConstructionUnit->Destroy(false, true);
+   									UnitBase->BuildArea->ConstructionUnit = nullptr;
+   								}
+   								FUnitSpawnParameter SpawnParameter;
 								SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
 								SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
 								SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
@@ -2338,15 +2346,92 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 						
 						if (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct())) return;
 
-						if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
-						{
-							StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
-							UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
-						}
-						else
-						{
-							UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
-						}
+							if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
+							{
+								StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
+								UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
+							}
+							else
+							{
+								UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
+							}
+
+							// Construction site handling (optional)
+							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)
+							{
+								const float TotalDuration = (UnitBase->CastTime > 0.f) ? UnitBase->CastTime : FMath::Max(0.01f, UnitBase->BuildArea->BuildTime);
+								const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / TotalDuration, 0.f, 1.f);
+								// spawn at 5%
+								if (!UnitBase->BuildArea->ConstructionUnit && Progress >= 0.05f)
+								{
+									FActorSpawnParameters SpawnParams;
+									SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+									// location from work area, adjusted later to ground
+									const FVector BaseLoc = UnitBase->BuildArea->GetActorLocation();
+									AUnitBase* NewConstruction = GetWorld()->SpawnActor<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, BaseLoc, FRotator::ZeroRotator, SpawnParams);
+									if (NewConstruction)
+									{
+										NewConstruction->TeamId = UnitBase->TeamId;
+										// assign pointers if it is a AConstructionUnit
+										if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+										{
+											CU->Worker = UnitBase;
+											CU->WorkArea = UnitBase->BuildArea;
+										}
+
+									
+										// ground align: trace from above
+										{
+											FHitResult Hit;
+											FVector Start = BaseLoc + FVector(0,0, 10000.f);
+											FVector End   = BaseLoc - FVector(0,0, 10000.f);
+											FCollisionQueryParams Params;
+											Params.AddIgnoredActor(UnitBase->BuildArea);
+											Params.AddIgnoredActor(NewConstruction);
+											if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+											{
+												FVector NewLoc = NewConstruction->GetActorLocation();
+												NewLoc.Z = Hit.Location.Z+NewConstruction->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+												NewConstruction->SetActorLocation(NewLoc);
+											}
+										}
+
+										// scale to fit WorkArea mesh bounds (xy)
+										/*
+										if (UnitBase->BuildArea->Mesh)
+										{
+											const FVector AreaExtent = UnitBase->BuildArea->Mesh->Bounds.BoxExtent; // half-size
+											FBox ActorBox = NewConstruction->GetComponentsBoundingBox(true);
+											FVector UnitExtent = ActorBox.GetExtent();
+											if (!UnitExtent.IsNearlyZero())
+											{
+												float ScaleX = (AreaExtent.X > 0.f) ? (AreaExtent.X / UnitExtent.X) : 1.f;
+												float ScaleY = (AreaExtent.Y > 0.f) ? (AreaExtent.Y / UnitExtent.Y) : 1.f;
+												float Uniform = FMath::Clamp(FMath::Min(ScaleX, ScaleY), 0.1f, 10.f);
+												NewConstruction->SetActorScale3D(FVector(Uniform));
+											}
+										}*/
+										
+
+										// store pointer on area
+										UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+
+										// set initial health (>=5%)
+										if (NewConstruction->Attributes)
+										{
+											const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
+											NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+										}
+									}
+								}
+
+								// Update health over time
+								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
+								{
+									const float MaxHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxHealth();
+									UnitBase->BuildArea->ConstructionUnit->SetHealth(MaxHP * Progress);
+								}
+							}
 					}
 				}
 			}

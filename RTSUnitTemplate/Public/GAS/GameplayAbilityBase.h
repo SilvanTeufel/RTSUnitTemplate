@@ -50,6 +50,9 @@ public:
 	// Override to prevent activation when disabled by flag or by team/key
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const override;
 
+	// Track execution to know if an ability class has ever been executed this session
+	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool UseAbilityQue = true;
 
@@ -116,6 +119,14 @@ public:
 	// Apply owner-scoped ability key toggle on the local machine (client/UI side)
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static void ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystemComponent* OwnerASC, const FString& Key, bool bEnable);
+
+	// Returns true if this exact ability BP class was ever executed in this play session
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool WasThisAbilityClassExecuted() const;
+
+	// Returns true if the given ability BP class was ever executed in this play session
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool WasAbilityClassExecuted(TSubclassOf<UGameplayAbilityBase> AbilityClass);
 		
 	// Debug: dump disabled/force-enabled keys per team to log
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

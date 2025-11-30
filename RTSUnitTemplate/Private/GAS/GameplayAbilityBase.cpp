@@ -26,6 +26,9 @@ static TMap<int32, TSet<FString>> GForceEnabledAbilityKeysByTeam;
 static TMap<TWeakObjectPtr<UAbilitySystemComponent>, TSet<FString>> GDisabledAbilityKeysByOwner;
 static TMap<TWeakObjectPtr<UAbilitySystemComponent>, TSet<FString>> GForceEnabledAbilityKeysByOwner;
 
+// Registry of executed ability classes within the current play session
+static TSet<TWeakObjectPtr<UClass>> GExecutedAbilityClasses;
+
 // Ensure static registries are cleared between play sessions (PIE/Standalone)
 namespace
 {
@@ -52,6 +55,7 @@ namespace
 			GForceEnabledAbilityKeysByTeam.Reset();
 			GDisabledAbilityKeysByOwner.Reset();
 			GForceEnabledAbilityKeysByOwner.Reset();
+			GExecutedAbilityClasses.Reset();
 			UE_LOG(LogAbilityKeyGate, Log, TEXT("[AbilityKeyGate] Reset registries (%s). World=%s Type=%d"), Reason ? Reason : TEXT(""), *GetNameSafe(World), World ? (int32)World->WorldType : -1);
 		}
 
@@ -95,6 +99,16 @@ static FString NormalizeAbilityKey(const FString& InKey)
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
 	UpdateTooltipText();
+}
+
+void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+{
+	// Mark this ability class as executed in this play session (exact class type)
+	if (UClass* ThisClass = GetClass())
+	{
+		GExecutedAbilityClasses.Add(ThisClass);
+	}
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
 
 bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -656,4 +670,20 @@ void UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystem
 	{
 		GForceEnabledAbilityKeysByOwner.Remove(OwnerASC);
 	}
+}
+
+
+bool UGameplayAbilityBase::WasAbilityClassExecuted(TSubclassOf<UGameplayAbilityBase> AbilityClass)
+{
+	UClass* Cls = AbilityClass.Get();
+	if (!Cls)
+	{
+		return false;
+	}
+	return GExecutedAbilityClasses.Contains(TWeakObjectPtr<UClass>(Cls));
+}
+
+bool UGameplayAbilityBase::WasThisAbilityClassExecuted() const
+{
+	return UGameplayAbilityBase::WasAbilityClassExecuted(GetClass());
 }
