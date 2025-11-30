@@ -4,6 +4,7 @@
 #include "Actors/WorkArea.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
+#include "Core/UnitData.h"
 
 AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -151,4 +152,28 @@ void AConstructionUnit::OscillateVisual_Step()
 	{
 		World->GetTimerManager().ClearTimer(OscillateTimerHandle);
 	}
+}
+
+
+void AConstructionUnit::KillConstructionUnit()
+{
+	if (HasAuthority())
+	{
+		// Perform immediately on the server
+		SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
+		SetHealth(0.f);
+		SetHidden(true);
+	}
+	else
+	{
+		// Request the server to execute authoritative changes
+		Server_KillConstructionUnit();
+	}
+}
+
+void AConstructionUnit::Server_KillConstructionUnit_Implementation()
+{
+	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
+	SetHealth(0.f);
+	SetHidden(true);
 }

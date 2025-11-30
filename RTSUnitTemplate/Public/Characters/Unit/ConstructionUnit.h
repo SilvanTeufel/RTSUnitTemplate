@@ -60,6 +60,14 @@ public:
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = Construction)
 	void MulticastStartOscillateVisual(const FVector& LocalOffsetA, const FVector& LocalOffsetB, float CyclesPerSecond, float Duration);
 
+	// Utility: immediately mark this construction site as dead, zero its health, and hide it
+	UFUNCTION(BlueprintCallable, Category = Construction)
+	void KillConstructionUnit();
+
+	// Server RPC backing for KillConstructionUnit
+	UFUNCTION(Server, Reliable)
+	void Server_KillConstructionUnit();
+
 protected:
 	// Resolve which component we will animate
 	UPrimitiveComponent* ResolveVisualComponent() const;
