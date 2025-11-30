@@ -1202,7 +1202,15 @@ void ACustomControllerBase::LeftClickPressedMass()
         if (bUsedKeyboardAbilityBeforeClick)
         {
             bUsedKeyboardAbilityBeforeClick = false; // consume the flag
-            Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn, WorkAreaIsSnapped, DropWorkAreaFailedSound);
+            // Send client work area transform (if any) to ensure server has the same placement
+            bool bHasClientWorkAreaTransform = false;
+            FTransform ClientWorkAreaTransform;
+            if (SelectedUnits.Num() > 0 && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
+            {
+                bHasClientWorkAreaTransform = true;
+                ClientWorkAreaTransform = SelectedUnits[0]->CurrentDraggedWorkArea->GetActorTransform();
+            }
+            Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn, WorkAreaIsSnapped, DropWorkAreaFailedSound, bHasClientWorkAreaTransform, ClientWorkAreaTransform);
         }
         else
         {
@@ -1214,8 +1222,13 @@ void ACustomControllerBase::LeftClickPressedMass()
 	
 }
 
-void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
+void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform)
 {
+    // Ensure server has the same transform for the dragged work area as the client
+    if (bHasClientWorkAreaTransform && Units.Num() > 0 && Units[0] && Units[0]->CurrentDraggedWorkArea)
+    {
+        Units[0]->CurrentDraggedWorkArea->SetActorTransform(ClientWorkAreaTransform);
+    }
     // Try to drop any active work area for the first unit using the new parameterized variant
     if (Units.Num() > 0 && Units[0])
     {

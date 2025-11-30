@@ -2359,8 +2359,8 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 							// Construction site handling (optional)
 							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)
 							{
-								const float TotalDuration = (UnitBase->CastTime > 0.f) ? UnitBase->CastTime : FMath::Max(0.01f, UnitBase->BuildArea->BuildTime);
-								const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / TotalDuration, 0.f, 1.f);
+								//const float TotalDuration = (UnitBase->CastTime > 0.f) ? UnitBase->CastTime : FMath::Max(0.01f, UnitBase->BuildArea->BuildTime);
+								const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / UnitBase->BuildArea->BuildTime, 0.f, 1.f);
 								// spawn at 5%
 								if (!UnitBase->BuildArea->ConstructionUnit && Progress >= 0.05f)
 								{
@@ -2380,50 +2380,80 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 										}
 
 									
-										// ground align: trace from above
-										{
-											FHitResult Hit;
-											FVector Start = BaseLoc + FVector(0,0, 10000.f);
-											FVector End   = BaseLoc - FVector(0,0, 10000.f);
-											FCollisionQueryParams Params;
-											Params.AddIgnoredActor(UnitBase->BuildArea);
-											Params.AddIgnoredActor(NewConstruction);
-											if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
-											{
-												FVector NewLoc = NewConstruction->GetActorLocation();
-												NewLoc.Z = Hit.Location.Z+NewConstruction->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-												NewConstruction->SetActorLocation(NewLoc);
+
+												// Fit, center, and ground-align construction unit to WorkArea footprint
+												{
+													// Determine target area bounds and center
+													FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
+													const FVector AreaCenter = AreaBox.GetCenter();
+													const FVector AreaSize = AreaBox.GetSize();
+													
+													// Ground trace at the area center to find floor Z
+													FHitResult Hit;
+													FVector Start = AreaCenter + FVector(0, 0, 10000.f);
+													FVector End   = AreaCenter - FVector(0, 0, 10000.f);
+													FCollisionQueryParams Params;
+													Params.AddIgnoredActor(UnitBase->BuildArea);
+													Params.AddIgnoredActor(NewConstruction);
+													bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+													float GroundZ = bHit ? Hit.Location.Z : NewConstruction->GetActorLocation().Z;
+													
+													// Compute uniform scale to fit XY footprint (use full sizes)
+													FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
+													FVector UnitSize = PreBox.GetSize();
+													if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+													{
+														// Slight margin keeps it visually inside
+     													const float Margin = 0.98f;
+     													const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;
+     													const float ScaleY = (AreaSize.Y * Margin) / UnitSize.Y;
+														const float ScaleZ = (AreaSize.Z * Margin) / UnitSize.Z;
+     													const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+     													// Apply XY scaling; optionally scale Z if ConstructionUnit.ScaleZ is true
+     													FVector NewScale = NewConstruction->GetActorScale3D();
+     													NewScale.X = Uniform;
+     													NewScale.Y = Uniform;
+														NewScale.Z = Uniform;
+     													if (const AConstructionUnit* CU_ScaleCheck = Cast<AConstructionUnit>(NewConstruction))
+     													{
+     														if (CU_ScaleCheck->ScaleZ)
+     														{
+     															NewScale.Z = ScaleZ;
+     														}
+     													}
+     													NewConstruction->SetActorScale3D(NewScale);
+													}
+													
+    									// Recompute bounds after scale and compute single final location
+    									FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
+    									const FVector UnitCenter = ScaledBox.GetCenter();
+    									const float BottomZ = ScaledBox.Min.Z;
+    									FVector FinalLoc = NewConstruction->GetActorLocation();
+    									FinalLoc.X += (AreaCenter.X - UnitCenter.X);
+    									FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
+    									FinalLoc.Z += (GroundZ - BottomZ);
+    									NewConstruction->SetActorLocation(FinalLoc);
+												}
+
+														// store pointer on area
+														UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+
+													// start construction animations (rotate + oscillate) for remaining build time (95%)
+													if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
+													{
+														const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
+														CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+														CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+													}
+
+													// set initial health (>=5%)
+													if (NewConstruction->Attributes)
+													{
+														const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
+														NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+													}
+												}
 											}
-										}
-
-										// scale to fit WorkArea mesh bounds (xy)
-										/*
-										if (UnitBase->BuildArea->Mesh)
-										{
-											const FVector AreaExtent = UnitBase->BuildArea->Mesh->Bounds.BoxExtent; // half-size
-											FBox ActorBox = NewConstruction->GetComponentsBoundingBox(true);
-											FVector UnitExtent = ActorBox.GetExtent();
-											if (!UnitExtent.IsNearlyZero())
-											{
-												float ScaleX = (AreaExtent.X > 0.f) ? (AreaExtent.X / UnitExtent.X) : 1.f;
-												float ScaleY = (AreaExtent.Y > 0.f) ? (AreaExtent.Y / UnitExtent.Y) : 1.f;
-												float Uniform = FMath::Clamp(FMath::Min(ScaleX, ScaleY), 0.1f, 10.f);
-												NewConstruction->SetActorScale3D(FVector(Uniform));
-											}
-										}*/
-										
-
-										// store pointer on area
-										UnitBase->BuildArea->ConstructionUnit = NewConstruction;
-
-										// set initial health (>=5%)
-										if (NewConstruction->Attributes)
-										{
-											const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
-											NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
-										}
-									}
-								}
 
 								// Update health over time
 								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
