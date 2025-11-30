@@ -2407,20 +2407,22 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 								// spawn at 5-10% only once
 								if (!UnitBase->BuildArea->ConstructionUnit && !UnitBase->BuildArea->bConstructionUnitSpawned && Progress >= 0.05f && Progress <= 0.10f)
 								{
-									FActorSpawnParameters SpawnParams;
-									SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-									// location from work area, adjusted later to ground
-									const FVector BaseLoc = UnitBase->BuildArea->GetActorLocation();
-									AUnitBase* NewConstruction = GetWorld()->SpawnActor<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, BaseLoc, FRotator::ZeroRotator, SpawnParams);
-									if (NewConstruction)
-									{
-										NewConstruction->TeamId = UnitBase->TeamId;
-										// assign pointers if it is a AConstructionUnit
-										if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
-										{
-											CU->Worker = UnitBase;
-											CU->WorkArea = UnitBase->BuildArea;
-										}
+ 								// location from work area, adjusted later to ground
+ 								const FVector BaseLoc = UnitBase->BuildArea->GetActorLocation();
+ 								const FTransform SpawnTM(FRotator::ZeroRotator, BaseLoc);
+ 								AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+ 								if (NewConstruction)
+ 								{
+ 									// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
+ 									NewConstruction->TeamId = UnitBase->TeamId;
+ 									// assign pointers if it is a AConstructionUnit
+ 									if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+ 									{
+ 										CU->Worker = UnitBase;
+ 										CU->WorkArea = UnitBase->BuildArea;
+ 									}
+ 									// Finish spawning after initializing properties
+ 									NewConstruction->FinishSpawning(SpawnTM);
 
 									
 
@@ -2467,15 +2469,15 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
      													NewConstruction->SetActorScale3D(NewScale*2.f);
 													}
 													
-    									// Recompute bounds after scale and compute single final location
-    									FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
-    									const FVector UnitCenter = ScaledBox.GetCenter();
-    									const float BottomZ = ScaledBox.Min.Z;
-    									FVector FinalLoc = NewConstruction->GetActorLocation();
-    									FinalLoc.X += (AreaCenter.X - UnitCenter.X);
-    									FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-    									FinalLoc.Z += (GroundZ - BottomZ);
-    									NewConstruction->SetActorLocation(FinalLoc);
+    												// Recompute bounds after scale and compute single final location
+    												FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
+    												const FVector UnitCenter = ScaledBox.GetCenter();
+    												const float BottomZ = ScaledBox.Min.Z;
+    												FVector FinalLoc = NewConstruction->GetActorLocation();
+    												FinalLoc.X += (AreaCenter.X - UnitCenter.X);
+    												FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
+    												FinalLoc.Z += (GroundZ - BottomZ);
+    												NewConstruction->SetActorLocation(FinalLoc);
 												}
 
 															// store pointer on area
@@ -2493,27 +2495,31 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 													// set initial health (>=5%)
 													if (NewConstruction->Attributes)
 													{
-    										const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
-    										NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
-    										UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
+    													const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
+														const float MaxShield = NewConstruction->Attributes->GetMaxShield();
+    													NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+														NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+    													UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
 													}
 												}
 											}
 
-								// Update health over time additively based on progress delta
+								// Update health and shield over time additively based on progress delta
 								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
 								{
 									const float MaxHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxHealth();
+									const float MaxShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxShield();
 									float PreviousProgress = UnitBase->BuildArea->LastAppliedBuildProgress;
 									const float CurrentHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+									const float CurrentShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetShield();
 									// If we resume mid-build and have non-zero health but no tracked progress yet, infer it from current health
-										if (CurrentHealth <= 0.f)
-										{
-											UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
-											UnitBase->BuildArea->bConstructionUnitSpawned = true;
-											continue;
-										}
-					
+									if (CurrentHealth <= 0.f)
+									{
+										UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
+										UnitBase->BuildArea->bConstructionUnitSpawned = true;
+										continue;
+									}
+									
 									if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
 									{
 										PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
@@ -2521,9 +2527,16 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 									const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
 									if (StepProgress > 0.f)
 									{
+										// Health
 										const float StepHealth = MaxHP * StepProgress;
 										const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
 										UnitBase->BuildArea->ConstructionUnit->SetHealth(NewHealth);
+										
+										// Shield
+										const float StepShield = MaxShield * StepProgress;
+										const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
+										UnitBase->BuildArea->ConstructionUnit->SetShield(NewShield);
+										
 										UnitBase->BuildArea->LastAppliedBuildProgress = Progress;
 									}
 								}
