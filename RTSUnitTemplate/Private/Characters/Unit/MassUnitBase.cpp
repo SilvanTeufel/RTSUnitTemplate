@@ -868,7 +868,15 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 	OutEntityHandle = MassActorBindingComponent->GetEntityHandle();
 	if (!OutEntityHandle.IsSet())
 	{
-		// This might be expected if the entity hasn't been registered yet, so using Warning.
+		// This is expected during early initialization or while Mass is scheduling creation.
+		const UWorld* W = GetWorld();
+		const float Now = W ? W->GetTimeSeconds() : 0.f;
+		const bool bSettingUp = MassActorBindingComponent->bNeedsMassUnitSetup || MassActorBindingComponent->bNeedsMassBuildingSetup;
+		if (bSettingUp || Now < 2.2f)
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("AMassUnitBase (%s): Mass Entity Handle not set yet (initializing)."), *GetName());
+			return false;
+		}
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - Entity Handle is not set in Binding Component."), *GetName());
 		return false;
 	}

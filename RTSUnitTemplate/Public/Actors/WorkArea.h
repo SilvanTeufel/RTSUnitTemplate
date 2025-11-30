@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-//#include "Characters/Unit/UnitBase.h"3
+//#include "Characters/Unit/UnitBase.h"
 #include "Components/SceneComponent.h"
 #include "GameplayEffect.h"
 #include "TimerManager.h"
@@ -166,6 +166,15 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildZOffset = 200.f;
+
+	// Tracks how much build progress has already been converted into health for the ConstructionUnit
+ // Not replicated/persisted intentionally -- used only to compute additive health gains during build syncing
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = Worker)
+	float LastAppliedBuildProgress = 0.f;
+
+ // Ensures the ConstructionUnit spawns only once per build session (5-10% window)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	bool bConstructionUnitSpawned = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool PlannedBuilding = false;

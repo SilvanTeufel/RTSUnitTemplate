@@ -2393,8 +2393,19 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 							{
 								//const float TotalDuration = (UnitBase->CastTime > 0.f) ? UnitBase->CastTime : FMath::Max(0.01f, UnitBase->BuildArea->BuildTime);
 								const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / UnitBase->BuildArea->BuildTime, 0.f, 1.f);
-								// spawn at 5%
-								if (!UnitBase->BuildArea->ConstructionUnit && Progress >= 0.05f)
+								// Early safeguard: if a construction unit exists but is dead, hide and prevent any respawn
+								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
+								{
+									const float CurrHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+									if (CurrHP <= 0.f)
+									{
+										UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
+										UnitBase->BuildArea->bConstructionUnitSpawned = true; // lock out respawn
+										continue;
+									}
+								}
+								// spawn at 5-10% only once
+								if (!UnitBase->BuildArea->ConstructionUnit && !UnitBase->BuildArea->bConstructionUnitSpawned && Progress >= 0.05f && Progress <= 0.10f)
 								{
 									FActorSpawnParameters SpawnParams;
 									SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -2467,8 +2478,9 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
     									NewConstruction->SetActorLocation(FinalLoc);
 												}
 
-														// store pointer on area
-														UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+															// store pointer on area
+															UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+															UnitBase->BuildArea->bConstructionUnitSpawned = true;
 
 													// start construction animations (rotate + oscillate) for remaining build time (95%)
 													if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
@@ -2481,17 +2493,39 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 													// set initial health (>=5%)
 													if (NewConstruction->Attributes)
 													{
-														const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
-														NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+    										const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
+    										NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+    										UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
 													}
 												}
 											}
 
-								// Update health over time
+								// Update health over time additively based on progress delta
 								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
 								{
 									const float MaxHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxHealth();
-									UnitBase->BuildArea->ConstructionUnit->SetHealth(MaxHP * Progress);
+									float PreviousProgress = UnitBase->BuildArea->LastAppliedBuildProgress;
+									const float CurrentHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+									// If we resume mid-build and have non-zero health but no tracked progress yet, infer it from current health
+										if (CurrentHealth <= 0.f)
+										{
+											UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
+											UnitBase->BuildArea->bConstructionUnitSpawned = true;
+											continue;
+										}
+					
+									if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
+									{
+										PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
+									}
+									const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
+									if (StepProgress > 0.f)
+									{
+										const float StepHealth = MaxHP * StepProgress;
+										const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
+										UnitBase->BuildArea->ConstructionUnit->SetHealth(NewHealth);
+										UnitBase->BuildArea->LastAppliedBuildProgress = Progress;
+									}
 								}
 							}
 					}

@@ -214,7 +214,6 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 		CancelCurrentAbility(Unit);
 	}
 	
-	//DrawDebugSphere(GetWorld(), Location, 15, 5, FColor::Green, false, 1.5, 0, 1);
 	SetUnitState_Replication(Unit,1);
 	Unit->RunLocationArray.Empty();
 	Unit->RunLocationArrayIterator = 0;

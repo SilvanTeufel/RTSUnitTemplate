@@ -537,25 +537,38 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 		return; // World might not be valid yet
 	}
 	
+	// Clients never create Mass entities directly; they will request a safe link later
 	if (World->GetNetMode() == NM_Client)
 	{
-		return; // We are a client, do not create a Mass entity. Wait for replication.
+		return;
 	}
 	
+	// Cache subsystem if needed
 	if(!MassEntitySubsystemCache)
 	{
-		if(World)
-		{
-			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
-		}
+		MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
 	}
 
-	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache) // Only create if not already set/created
+	// Try to create immediately on the server to avoid early access with an unset handle
+	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache)
 	{
+		FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+		const bool bSafeNow = (EM.IsProcessing() == false) && (World->GetTimeSeconds() > 0.01f);
+		if (bSafeNow)
+		{
+			// Synchronous creation for buildings
+			FMassEntityHandle NewHandle = CreateAndLinkBuildingToMassEntity();
+			if (NewHandle.IsValid())
+			{
+				MassEntityHandle = NewHandle;
+				bNeedsMassBuildingSetup = false;
+				return; // Done
+			}
+		}
+		// If we couldn't create now (e.g., during Mass processing), defer via spawner
 		bNeedsMassBuildingSetup = true;
 	}
 	
-
 	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 	{
 		SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
