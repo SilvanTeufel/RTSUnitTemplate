@@ -1308,44 +1308,82 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
 void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
 {
 	const int32 Count = FMath::Min(Units.Num(), Locations.Num());
-	if (Count <= 0) return;
+	UE_LOG(LogTemp, Log, TEXT("[LeftClickAttackMass] Units=%d Locations=%d Count=%d AttackT=%s CursorHitActor=%s"), Units.Num(), Locations.Num(), Count, AttackT ? TEXT("true") : TEXT("false"), CursorHitActor ? *CursorHitActor->GetName() : TEXT("nullptr"));
+	if (Count <= 0)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Nothing to process (Count<=0)"));
+		return;
+	}
 
 	// If we clicked an enemy unit, set chase on all provided units
 	AUnitBase* TargetUnitBase = CursorHitActor ? Cast<AUnitBase>(CursorHitActor) : nullptr;
 	if (TargetUnitBase)
 	{
+		UE_LOG(LogTemp, Log, TEXT("[LeftClickAttackMass] Target under cursor: %s (IsFlying=%s Invisible=%s)"), *TargetUnitBase->GetName(), TargetUnitBase->IsFlying ? TEXT("true") : TEXT("false"), TargetUnitBase->bIsInvisible ? TEXT("true") : TEXT("false"));
 		for (int32 i = 0; i < Count; ++i)
 		{
 			AUnitBase* Unit = Units[i];
-			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
+			if (!Unit)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d]: nullptr"), i);
+				continue;
+			}
+			if (Unit->UnitState == UnitData::Dead)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d] %s: Dead"), i, *Unit->GetName());
+				continue;
+			}
 
 			// Validate whether this unit can attack the target based on capabilities and target traits
-			if (!Unit->CanAttack) continue;
+			if (!Unit->CanAttack)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d] %s: Cannot attack"), i, *Unit->GetName());
+				continue;
+			}
 			// Invisible targets require detection capability
-			if (TargetUnitBase->bIsInvisible && !Unit->CanDetectInvisible) continue;
+			if (TargetUnitBase->bIsInvisible)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d] %s: Target is invisible"), i, *Unit->GetName());
+				continue;
+			}
 			// Respect ground/flying attack restrictions
-			if (Unit->CanOnlyAttackGround && TargetUnitBase->IsFlying) continue;
-			if (Unit->CanOnlyAttackFlying && !TargetUnitBase->IsFlying) continue;
+			if (Unit->CanOnlyAttackGround && TargetUnitBase->IsFlying)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d] %s: Can only attack ground, target is flying"), i, *Unit->GetName());
+				continue;
+			}
+			if (Unit->CanOnlyAttackFlying && !TargetUnitBase->IsFlying)
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("[LeftClickAttackMass] Skip unit[%d] %s: Can only attack flying, target is ground"), i, *Unit->GetName());
+				continue;
+			}
 
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
 			SetUnitState_Replication(Unit, 3);
 			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
+			UE_LOG(LogTemp, Log, TEXT("[LeftClickAttackMass] Unit[%d] %s: Set to Chase %s"), i, *Unit->GetName(), *TargetUnitBase->GetName());
 		}
 		return;
 	}
 
 	if (UseUnrealEnginePathFinding)
 	{
+		UE_LOG(LogTemp, Log, TEXT("[LeftClickAttackMass] No target. Using UE PathFinding for %d units"), Count);
 		// Delegate to UE pathfinding batched move
 		LeftClickAMoveUEPFMass(Units, Locations, AttackT);
 		for (int32 i = 0; i < Count; ++i)
 		{
-			if (Units[i]) Units[i]->RemoveFocusEntityTarget();
+			if (Units[i])
+			{
+				Units[i]->RemoveFocusEntityTarget();
+				UE_LOG(LogTemp, VeryVerbose, TEXT("[LeftClickAttackMass] Cleared focus for unit[%d] %s (UE PF)"), i, *Units[i]->GetName());
+			}
 		}
 	}
 	else
 	{
+		UE_LOG(LogTemp, Log, TEXT("[LeftClickAttackMass] No target. Using custom pathfinding for %d units"), Count);
 		// Fallback: custom pathfinding per unit
 		for (int32 i = 0; i < Count; ++i)
 		{
@@ -1353,6 +1391,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 			if (!Unit || Unit->UnitState == UnitData::Dead) continue;
 			LeftClickAMove(Unit, Locations[i]);
 			Unit->RemoveFocusEntityTarget();
+			UE_LOG(LogTemp, VeryVerbose, TEXT("[LeftClickAttackMass] Issued custom move and cleared focus for unit[%d] %s"), i, *Unit->GetName());
 		}
 	}
 }

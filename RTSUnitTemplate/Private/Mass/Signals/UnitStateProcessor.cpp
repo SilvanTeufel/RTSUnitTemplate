@@ -2453,7 +2453,7 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
      															NewScale.Z = ScaleZ;
      														}
      													}
-     													NewConstruction->SetActorScale3D(NewScale);
+     													NewConstruction->SetActorScale3D(NewScale*2.f);
 													}
 													
     									// Recompute bounds after scale and compute single final location
