@@ -294,6 +294,7 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool HoldPosition = false;
+	
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
 };
@@ -467,6 +468,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanDetectInvisible = false;
 
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool CanManipulateNavMesh = true;
+	
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float DespawnTime = 5.f;
 

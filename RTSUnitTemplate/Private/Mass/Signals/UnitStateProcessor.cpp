@@ -911,7 +911,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
         	}
         	
-        	if (StrongUnitActor && AIStateFragment)
+        	if (StrongUnitActor && AIStateFragment && CharFragment)
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
         		bool bHasDeadTag = DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDeadTag::StaticStruct());
@@ -920,7 +920,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
         			UnregisterObstacle(StrongUnitActor);
-        		}else if(!AIStateFragment->CanMove && !bHasDeadTag)
+        		}else if(!AIStateFragment->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
         			RegisterBuildingAsObstacle(StrongUnitActor);

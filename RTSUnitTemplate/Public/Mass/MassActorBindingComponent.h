@@ -122,6 +122,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool RotatesToMovement = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool CanManipulateNavMesh = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool RotatesToEnemy = true;

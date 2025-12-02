@@ -914,6 +914,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             CharFrag->bIsInvisible = UnitOwner->bIsInvisible;
         	CharFrag->bCanBeInvisible = UnitOwner->bCanBeInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
+        	CharFrag->CanManipulateNavMesh = CanManipulateNavMesh;
         	CharFrag->DespawnTime = DespawnTime;
 			CharFrag->RotatesToMovement = RotatesToMovement;
         	CharFrag->RotatesToEnemy = RotatesToEnemy;
