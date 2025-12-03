@@ -37,6 +37,7 @@
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/BuildingBase.h"
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
@@ -2413,16 +2414,31 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
  								AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
  								if (NewConstruction)
  								{
- 									// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
- 									NewConstruction->TeamId = UnitBase->TeamId;
- 									// assign pointers if it is a AConstructionUnit
- 									if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
- 									{
- 										CU->Worker = UnitBase;
- 										CU->WorkArea = UnitBase->BuildArea;
- 									}
- 									// Finish spawning after initializing properties
- 									NewConstruction->FinishSpawning(SpawnTM);
+												// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
+												NewConstruction->TeamId = UnitBase->TeamId;
+
+												// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
+												if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
+												{
+													if (ABuildingBase* BuildingCDO = UnitBase->BuildArea->BuildingClass->GetDefaultObject<ABuildingBase>())
+													{
+														NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
+													}
+												}
+
+												// assign pointers if it is a AConstructionUnit
+												if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+												{
+													CU->Worker = UnitBase;
+													CU->WorkArea = UnitBase->BuildArea;
+												}
+												// Finish spawning after initializing properties
+												NewConstruction->FinishSpawning(SpawnTM);
+												if (NewConstruction->AbilitySystemComponent)
+												{
+													NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
+													NewConstruction->InitializeAttributes();
+												}
 
 									
 
