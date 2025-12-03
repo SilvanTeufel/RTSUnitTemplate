@@ -1577,7 +1577,14 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
                     	UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-                    	
+
+                    	if (UnitBase->WorkResource)
+                    	{
+                    		UnitBase->WorkResource->Destroy(true,true);
+                    		UnitBase->WorkResource = nullptr;
+                    	}
+
+
                     	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 						
 
@@ -1764,6 +1771,11 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
 							StateFrag->SwitchingState = false;
 							return;
+						}
+
+						if (UnitBase->WorkResource)
+						{
+							UnitBase->WorkResource = nullptr;
 						}
 						
 						UpdateUnitMovement(Entity , UnitBase);
