@@ -2008,8 +2008,17 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    							if(!UnitBase->BuildArea->Building)
    							{
    								// If a construction site exists, remove it now
+   								float SavedHealth = 0.f;
+   								float SavedShield = 0.f;
+   								bool bHasSavedStats = false;
    								if (UnitBase->BuildArea->ConstructionUnit)
    								{
+   									if (UnitBase->BuildArea->ConstructionUnit->Attributes)
+   									{
+   										SavedHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+   										SavedShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetShield();
+   										bHasSavedStats = true;
+   									}
    									UnitBase->BuildArea->ConstructionUnit->Destroy(false, true);
    									UnitBase->BuildArea->ConstructionUnit = nullptr;
    								}
@@ -2038,6 +2047,19 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								}
 
 								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
+
+								// After InitializeAttributes() inside SpawnSingleUnit, apply preserved stats to the spawned building
+								if (bHasSavedStats && NewUnit)
+								{
+									if (ABuildingBase* SpawnedBuilding = Cast<ABuildingBase>(NewUnit))
+									{
+										if (SpawnedBuilding->Attributes)
+										{
+											SpawnedBuilding->SetHealth_Implementation(SavedHealth);
+											SpawnedBuilding->SetShield_Implementation(SavedShield);
+										}
+									}
+								}
 
 								if (NewUnit && ControllerBase)
 								{
