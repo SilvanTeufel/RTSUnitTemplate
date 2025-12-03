@@ -342,10 +342,10 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 		// If we are on the server, run the logic directly.
 		for (AActor* UnitActor  : RTSGameMode->AllUnits)
 		{
-			// Cast to AGASUnit to make sure it's of the correct type
+ 			// Cast to AGASUnit to make sure it's of the correct type
 			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
-			// Check if the unit is valid and has the same TeamId as the camera
-			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea) // && !Unit->BuildArea
+			// Check if the unit is valid and has the same TeamId as the camera and is eligible for selection
+			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
 			{
 				float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
 				// Check if this unit is closer than the currently tracked closest unit
@@ -379,8 +379,8 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 	{
 		// Cast to AUnitBase to make sure it's of the correct type
 		AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
-		// Check if the unit is valid and has the same TeamId as the player
-		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea) // && !Unit->BuildArea
+		// Check if the unit is valid, belongs to the player, is a worker, not building, and is selectable
+		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
 		{
 			float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
 			// Check if this unit is closer than the currently tracked closest unit
