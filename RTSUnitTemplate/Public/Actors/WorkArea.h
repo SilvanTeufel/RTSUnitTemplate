@@ -189,10 +189,14 @@ public:
 	bool StartedBuilding = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool DestroyAfterBuild = true;
+    bool DestroyAfterBuild = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TArray<AWorkingUnitBase*> Workers;
+    // Guard to ensure the final building is spawned only once per build session
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+    bool bFinalBuildingSpawned = false;
+ 	
+ 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+ 	TArray<AWorkingUnitBase*> Workers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxWorkerCount = 1;

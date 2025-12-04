@@ -2549,13 +2549,17 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 				}
 			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea)
 			{
-				if(SelectedUnits.Num() && SelectedUnits[0])
-				{
-					AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
-					if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
+				int NumberSended = 0;
+				for (int32 i = 0; i < SelectedUnits.Num() && WorkArea->MaxWorkerCount > NumberSended; i++) {
+					if (SelectedUnits[i]->IsWorker)
 					{
-						Worker->RemoveFocusEntityTarget();
-						SendWorkerToWorkArea(Worker, WorkArea);
+						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
+						if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
+						{
+							Worker->RemoveFocusEntityTarget();
+							SendWorkerToWorkArea(Worker, WorkArea);
+							NumberSended++;
+						}
 					}
 				}
 			}

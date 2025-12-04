@@ -95,7 +95,8 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
             const float PreviousStateTimer = AIState.StateTimer;
             AIState.StateTimer += ExecutionInterval;
-
+            AIState.DeltaTime = ExecutionInterval;
+            
             if (SignalSubsystem)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);

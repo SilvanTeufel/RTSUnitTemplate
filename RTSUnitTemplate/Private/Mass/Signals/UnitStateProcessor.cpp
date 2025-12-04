@@ -2062,11 +2062,14 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     				if (IsValid(Actor))
     				{
     					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-    					if (UnitBase && UnitBase->BuildArea)
-    					{
-   							if(!UnitBase->BuildArea->Building)
-   							{
-   								// If a construction site exists, remove it now
+   						if (UnitBase && UnitBase->BuildArea)
+   						{
+   							// Ensure the WorkArea is valid and not already finalized for spawning
+   							if (IsValid(UnitBase->BuildArea) && !UnitBase->BuildArea->bFinalBuildingSpawned && !UnitBase->BuildArea->Building)
+   			   				{
+   			   							// Mark as spawned to prevent duplicate spawns from multiple workers
+   								UnitBase->BuildArea->bFinalBuildingSpawned = true;
+   			   							// If a construction site exists, remove it now
    								float SavedHealth = 0.f;
    								float SavedShield = 0.f;
    								bool bHasSavedStats = false;
@@ -2107,6 +2110,15 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
 
+								// If spawn failed, allow future attempts (keep single-spawn guarantee only on success)
+								if (!NewUnit)
+								{
+									if (UnitBase->BuildArea)
+									{
+										UnitBase->BuildArea->bFinalBuildingSpawned = false;
+									}
+								}
+
 								// After InitializeAttributes() inside SpawnSingleUnit, apply preserved stats to the spawned building
 								if (bHasSavedStats && NewUnit)
 								{
@@ -2145,7 +2157,8 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								}
 							}
     					}
-    					SwitchState(StateFragment->PlaceholderSignal, Entity, EntityManager);
+    					// StateFragment->PlaceholderSignal
+    					SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
     				}
     			}
     		}
@@ -2463,20 +2476,32 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 						// Ensure worker is registered in the WorkArea while building
 						if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
 						{
-							if (Worker->BuildArea)
-							{
-								Worker->BuildArea->AddWorkerToArray(Worker);
-							}
-						}
-							if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
-							{
-								StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
-								UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
-							}
-							else
-							{
-								UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
-							}
+ 						if (Worker->BuildArea)
+ 						{
+ 							Worker->BuildArea->AddWorkerToArray(Worker);
+ 						}
+ 					}
+ 						// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
+ 						// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
+ 						if (UnitBase->BuildArea)
+ 						{
+ 							const int32 MaxAllowed = UnitBase->BuildArea->MaxWorkerCount > 0 ? UnitBase->BuildArea->MaxWorkerCount : UnitBase->BuildArea->Workers.Num();
+ 							const int32 EffectiveWorkers = FMath::Min(UnitBase->BuildArea->Workers.Num(), MaxAllowed);
+ 							if (EffectiveWorkers > 1)
+ 							{
+ 								StateFrag->StateTimer += 0.5f * StateFrag->DeltaTime*(EffectiveWorkers-1.f);
+ 								UnitBase->UnitControlTimer = StateFrag->StateTimer;
+ 							}
+ 						}
+ 							if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
+ 							{
+ 								StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
+ 								UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
+ 							}
+ 							else
+ 							{
+ 								UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
+ 							}
 
 							// Construction site handling (optional)
 							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)

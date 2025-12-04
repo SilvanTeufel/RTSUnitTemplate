@@ -264,6 +264,9 @@ struct FMassAIStateFragment : public FMassFragment
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     float StateTimer = 0.f;
 
+    // Stores the delta time used by the state processor tick; used by SyncCastTime adjustments
+    float DeltaTime = 0.f;
+
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool HasAttacked = false;
 
