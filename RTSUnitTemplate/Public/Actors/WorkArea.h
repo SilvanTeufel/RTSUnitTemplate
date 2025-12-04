@@ -13,6 +13,7 @@
 #include "WorkArea.generated.h"
 
 class AUnitBase;
+class AWorkingUnitBase;
 
 USTRUCT(BlueprintType)
 struct FBuildingCost
@@ -71,6 +72,8 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	// Clear timers only on EndPlay
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:	
 	// Called every frame
@@ -91,6 +94,9 @@ public:
 	
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void AddAreaToGroup();
+
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
+	void InitWorkerOverflowTimer();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString Tag;
@@ -185,6 +191,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DestroyAfterBuild = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<AWorkingUnitBase*> Workers;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxWorkerCount = 1;
+	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void StartedBuild();
 
@@ -204,7 +216,7 @@ public:
 	bool IsPaid = false;
 	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	//bool CanAffordConstruction(int32 TeamId, int32 NumberOfTeams, TArray<FResourceArray> TeamResources);
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class AWaypoint* NextWaypoint;
 
@@ -225,10 +237,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TemporarilyChangeMaterial();
 	
+public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddWorkerToArray(class AWorkingUnitBase* Worker);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveWorkerFromArray(class AWorkingUnitBase* Worker);
+
+	/** Duration after which a worker added to this WorkArea should be sent back to base and removed (defaults to BuildTime if <= 0). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float WorkerReturnDelay = 1.f;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* OriginalMaterial;
     
 	/** Called by a timer to revert the material back to its original state. */
 	void RevertMaterial();
+
+	// Internal: timer callback to process overflow workers and shrink the array to MaxWorkerCount
+	void OnOverflowTimer();
+
+	// Single timer handle used to process overflow workers
+	FTimerHandle OverflowWorkersTimerHandle;
 };

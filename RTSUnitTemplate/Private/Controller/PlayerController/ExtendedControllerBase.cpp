@@ -2137,6 +2137,7 @@ void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 	{
 		Worker->BuildArea->StartedBuilding = false;
 		Worker->BuildArea->PlannedBuilding = false;
+		Worker->BuildArea->RemoveWorkerFromArray(Worker);
 		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 		if(ResourceGameMode)

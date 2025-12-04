@@ -8,6 +8,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
+#include "Characters\Unit\WorkingUnitBase.h"
 
 
 // Sets default values
@@ -69,8 +70,23 @@ void AWorkArea::BeginPlay()
 	Super::BeginPlay();
 	MaxAvailableResourceAmount = AvailableResourceAmount;
 	SetReplicateMovement(false);
+	InitWorkerOverflowTimer();
+
 }
 
+void AWorkArea::InitWorkerOverflowTimer_Implementation()
+{
+	if (Type == WorkAreaData::BuildArea && WorkerReturnDelay > 0.f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			OverflowWorkersTimerHandle,
+			this,
+			&AWorkArea::OnOverflowTimer,
+			WorkerReturnDelay,
+			true // loop
+		);
+	}
+}
 
 void AWorkArea::AddAreaToGroup_Implementation()
 {
@@ -494,4 +510,64 @@ void AWorkArea::RevertMaterial()
 
     // It's good practice to clear the handle after the timer has finished its job.
     GetWorld()->GetTimerManager().ClearTimer(ChangeMaterialTimerHandle);
+}
+
+void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(OverflowWorkersTimerHandle);
+	}
+}
+
+// --- Worker array management and return timer ---
+void AWorkArea::AddWorkerToArray(AWorkingUnitBase* Worker)
+{
+	if (!Worker) return;
+
+	// Avoid duplicates only; capacity is handled by overflow control
+	if (Workers.Contains(Worker))
+	{
+		return; // already tracked
+	}
+
+	Workers.Add(Worker);
+	// Timer runs independently (looping). No immediate action needed here.
+}
+
+void AWorkArea::RemoveWorkerFromArray(AWorkingUnitBase* Worker)
+{
+	if (!Worker) return;
+	Workers.Remove(Worker);
+	// Timer runs independently (looping). No immediate action needed here.
+}
+
+void AWorkArea::OnOverflowTimer()
+{
+	// Process overflow: send extra workers back until within capacity
+	const int32 Allowed = MaxWorkerCount;
+	if (Allowed <= 0)
+	{
+		// Unlimited capacity, nothing to do
+		return;
+	}
+
+	// While more workers than allowed, remove from the end
+	while (Workers.Num() > Allowed)
+	{
+		AWorkingUnitBase* Worker = Workers.Last();
+		if (!Worker)
+		{
+			Workers.Pop();
+			continue;
+		}
+
+		if (AUnitBase* Unit = Cast<AUnitBase>(Worker))
+		{
+			Unit->SwitchEntityTagByState(UnitData::GoToBase, Unit->UnitStatePlaceholder);
+		}
+		// Remove worker from array via helper (ensures consistent behavior)
+		RemoveWorkerFromArray(Worker);
+	}
 }

@@ -17,6 +17,8 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Components/StaticMeshComponent.h"
+#include "Actors/WorkArea.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Engine/CanvasRenderTarget2D.h"
@@ -550,11 +552,39 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	UnitBase->UnitStatePlaceholder = UnitData::GoToBase;
                         }else if (SignalName == UnitSignals::GoToBuild)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
+                        	// Add worker to BuildArea worker list when starting to go build
+                        	bool SetTag = false;
+                        	if (UnitBase && UnitBase->IsWorker)
+                        	{
+                        		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+                        		{
+                        			if (Worker->BuildArea && Worker->BuildArea->Workers.Num() > Worker->BuildArea->MaxWorkerCount)
+                        			{
+                        				EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
+                        				Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                        				SetTag = true;
+                        			}
+                        		}
+                        	}
+
+                        	if (!SetTag)EntityManager.Defer().AddTag<FMassStateGoToBuildTag>(Entity);
+                        	
                         }else if (SignalName == UnitSignals::Build)
                         {
                         	UnitBase->StartBuild();
                         	EntityManager.Defer().AddTag<FMassStateBuildTag>(Entity);
+                        	// Ensure worker is registered with the BuildArea while building
+                        	
+                        	if (UnitBase && UnitBase->IsWorker)
+                        	{
+                        		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+                        		{
+                        			if (Worker->BuildArea)
+                        			{
+                        				Worker->BuildArea->AddWorkerToArray(Worker);
+                        			}
+                        		}
+                        	}
                         }else if (SignalName == UnitSignals::GoToResourceExtraction)
                         {
                         	EntityManager.Defer().AddTag<FMassStateGoToResourceExtractionTag>(Entity);
@@ -597,8 +627,25 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                     	else if (SignalName == UnitSignals::GoToBuild )
                     	{
-                    		UnitBase->SetUnitState(UnitData::GoToBuild);
-                    		UpdateUnitMovement(Entity , UnitBase);
+                    		bool SetTag = false;
+                    		if (UnitBase && UnitBase->IsWorker)
+                    		{
+                    			if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+                    			{
+                    				if (Worker->BuildArea && Worker->BuildArea->Workers.Num() > Worker->BuildArea->MaxWorkerCount)
+                    				{
+                    					UnitBase->SetUnitState(UnitData::GoToBase);
+                    					UpdateUnitMovement(Entity , UnitBase);
+                    					SetTag = true;
+                    				}
+                    			}
+                    		}
+
+                    		if (!SetTag)
+                    		{
+                    			UnitBase->SetUnitState(UnitData::GoToBuild);
+                    			UpdateUnitMovement(Entity , UnitBase);
+                    		}
                     	}
                     	else if (SignalName == UnitSignals::Build)
                     	{
@@ -2412,7 +2459,15 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 						if (!UnitBase->IsWorker) return;
 						
 						if (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct())) return;
-
+						
+						// Ensure worker is registered in the WorkArea while building
+						if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+						{
+							if (Worker->BuildArea)
+							{
+								Worker->BuildArea->AddWorkerToArray(Worker);
+							}
+						}
 							if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
 							{
 								StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
