@@ -28,6 +28,7 @@ void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(RotateTimerHandle);
 		GetWorld()->GetTimerManager().ClearTimer(OscillateTimerHandle);
+		GetWorld()->GetTimerManager().ClearTimer(PulsateTimerHandle);
 	}
 }
 
@@ -176,4 +177,87 @@ void AConstructionUnit::Server_KillConstructionUnit_Implementation()
 	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
 	SetHealth(0.f);
 	SetHidden(true);
+}
+
+
+// --- Pulsating scale (multiplicative on top of base scale) ---
+void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinMultiplier, const FVector& MaxMultiplier, float TimeMinToMax, bool bEnable)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (!bEnable)
+	{
+		bPulsateActive = false;
+		World->GetTimerManager().ClearTimer(PulsateTimerHandle);
+
+		// Restore to captured base scale if we had one
+		if (Pulsate_UseActor)
+		{
+			SetActorScale3D(Pulsate_BaseScale);
+		}
+		else if (USceneComponent* Comp = Pulsate_TargetComp.Get())
+		{
+			Comp->SetRelativeScale3D(Pulsate_BaseScale);
+		}
+		return;
+	}
+
+	// Enable and configure
+	Pulsate_TargetComp = ResolveVisualComponent();
+	Pulsate_UseActor = !Pulsate_TargetComp.IsValid();
+
+	// Capture base scale (already includes WorkArea fit). We multiply our pulsation around this value.
+	Pulsate_BaseScale = Pulsate_UseActor
+		? GetActorScale3D()
+		: (Pulsate_TargetComp.IsValid() ? Pulsate_TargetComp->GetRelativeScale3D() : GetActorScale3D());
+
+	Pulsate_Min = MinMultiplier;
+	Pulsate_Max = MaxMultiplier;
+	Pulsate_HalfPeriod = FMath::Max(TimeMinToMax, 0.0001f);
+	Pulsate_Elapsed = 0.f;
+	bPulsateActive = true;
+
+	// Start/update timer at 60 Hz and kick an immediate step
+	World->GetTimerManager().ClearTimer(PulsateTimerHandle);
+	PulsateScale_Step();
+	World->GetTimerManager().SetTimer(PulsateTimerHandle, this, &AConstructionUnit::PulsateScale_Step, 1.f/60.f, true);
+}
+
+void AConstructionUnit::PulsateScale_Step()
+{
+	UWorld* World = GetWorld();
+	if (!World || !bPulsateActive)
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(PulsateTimerHandle);
+		}
+		return;
+	}
+
+	// Fixed step to match timer rate
+	const float Step = 1.f/60.f;
+	Pulsate_Elapsed += Step;
+
+	// Ping-pong alpha 0->1->0 with half-period Pulsate_HalfPeriod
+	const float Cycle = (Pulsate_Elapsed / Pulsate_HalfPeriod);
+	float Mod = FMath::Fmod(Cycle, 2.f);
+	if (Mod < 0.f) Mod += 2.f;
+	const float Alpha = (Mod <= 1.f) ? Mod : (2.f - Mod);
+
+	const FVector Mult = FMath::Lerp(Pulsate_Min, Pulsate_Max, Alpha);
+	const FVector NewScale = Pulsate_BaseScale * Mult; // component-wise multiply
+
+	if (Pulsate_UseActor)
+	{
+		SetActorScale3D(NewScale);
+	}
+	else if (USceneComponent* Comp = Pulsate_TargetComp.Get())
+	{
+		Comp->SetRelativeScale3D(NewScale);
+	}
 }

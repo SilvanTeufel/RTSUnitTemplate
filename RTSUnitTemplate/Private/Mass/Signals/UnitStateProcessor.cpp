@@ -2615,12 +2615,17 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 															UnitBase->BuildArea->bConstructionUnitSpawned = true;
 
 													// start construction animations (rotate + oscillate) for remaining build time (95%)
-													if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
-													{
-														const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
-														CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
-														CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
-													}
+    									if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
+    									{
+    										const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
+    										CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+    										CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+    										// Start multiplicative pulsating scale around base (configured on construction unit)
+    										if (CU_Anim->bPulsateScaleDuringBuild)
+    										{
+    											CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+    										}
+    									}
 
 													// set initial health (>=5%)
 													if (NewConstruction->Attributes)
@@ -2723,10 +2728,19 @@ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& E
 						{
 							UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
 						}
-						StateFrag->StateTimer = 0.f;
-						UnitBase->UnitControlTimer = 0.f;
+							StateFrag->StateTimer = 0.f;
+							UnitBase->UnitControlTimer = 0.f;
 
-						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
+							// Stop ConstructionUnit pulsation when casting ends
+							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnit)
+							{
+								if (AConstructionUnit* CU_Stop = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
+								{
+									CU_Stop->MulticastPulsateScale(CU_Stop->PulsateMinMultiplier, CU_Stop->PulsateMaxMultiplier, CU_Stop->PulsateTimeMinToMax, false);
+								}
+							}
+
+							SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
 			}

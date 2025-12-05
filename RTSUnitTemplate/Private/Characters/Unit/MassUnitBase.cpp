@@ -905,6 +905,8 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// Stop any pending scaling timers
 	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
+	GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
+	bPulsateScaleEnabled = false;
 	ActiveStaticMeshScaleTweens.Empty();
 
 	// Remove our specific instance from the component when the actor is destroyed
@@ -1844,4 +1846,68 @@ void AMassUnitBase::StaticMeshScales_Step()
 	{
 		GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
 	}
+}
+
+
+void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable)
+{
+	// Only proceed if we have a visual to manipulate
+	if (!ISMComponent && !GetMesh())
+	{
+		return;
+	}
+
+	// Disable pulsating on request
+	if (!bEnable)
+	{
+		bPulsateScaleEnabled = false;
+		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
+		return;
+	}
+
+	// Enable and configure pulsation
+	bPulsateScaleEnabled = true;
+	PulsateMinScale = InMinScale;
+	PulsateMaxScale = InMaxScale;
+	PulsateHalfPeriod = FMath::Max(TimeMinToMax, 0.0001f); // avoid division by zero
+	PulsateElapsed = 0.f;
+
+	// Ensure one-shot scale tween is not fighting with the pulsation
+	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
+
+	// Immediate step for responsiveness
+	PulsateISMScale_Step();
+
+	// Start/update timer with a safe rate
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	GetWorldTimerManager().SetTimer(PulsateScaleTimerHandle, this, &AMassUnitBase::PulsateISMScale_Step, TimerRate, true);
+}
+
+void AMassUnitBase::PulsateISMScale_Step()
+{
+	if (!bPulsateScaleEnabled)
+	{
+		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
+		return;
+	}
+
+	if (!ISMComponent && !GetMesh())
+	{
+		bPulsateScaleEnabled = false;
+		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	PulsateElapsed += Dt;
+
+	// Compute a ping-pong alpha in [0,1] with a half-period of PulsateHalfPeriod
+	const float Cycle = (PulsateElapsed / PulsateHalfPeriod);
+	float Mod = FMath::Fmod(Cycle, 2.f);
+	if (Mod < 0.f) Mod += 2.f;
+	const float Alpha = (Mod <= 1.f) ? Mod : (2.f - Mod); // 0->1 then 1->0
+
+	const FVector NewScale = FMath::Lerp(PulsateMinScale, PulsateMaxScale, Alpha);
+	ApplyLocalVisualScale(NewScale);
 }

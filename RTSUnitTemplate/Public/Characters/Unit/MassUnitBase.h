@@ -187,9 +187,13 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
 
-	// Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
+ // Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastScaleActorLinear(UStaticMeshComponent* MeshToScale, const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
+
+	// Continuously pulsate the ISM/skeletal visual scale between Min and Max (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable);
 
 protected:
 	virtual void BeginPlay() override;
@@ -235,6 +239,15 @@ protected:
 	void ScaleISM_Step();
 	FVector GetCurrentLocalVisualScale() const;
 	void ApplyLocalVisualScale(const FVector& NewLocalScale);
+
+	// Continuous pulsating scale state (not replicated)
+	bool bPulsateScaleEnabled = false;
+	FTimerHandle PulsateScaleTimerHandle;
+	FVector PulsateMinScale = FVector(1.f, 1.f, 1.f);
+	FVector PulsateMaxScale = FVector(1.f, 1.f, 1.f);
+	float PulsateHalfPeriod = 1.0f; // seconds from Min to Max
+	float PulsateElapsed = 0.f;
+	void PulsateISMScale_Step();
 	
 	// Lightweight tween state for rotating arbitrary static mesh components
 	struct FStaticMeshRotateTween
