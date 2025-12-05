@@ -82,6 +82,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SetUnitAvoidanceEnabled(bool bEnable);
+
+	// Enable or disable nav mesh manipulation for this unit by adding/removing FMassStateDisableNavManipulationTag
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetNavManipulationEnabled(bool bEnable);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveStopGameplayEffectTagToEntity();
@@ -195,6 +199,11 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable);
 
+	// Continuously rotate a static mesh component's Yaw to face UnitToChase (runs on server and clients)
+	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateActorYawToChase(UStaticMeshComponent* MeshToRotate, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -265,6 +274,17 @@ protected:
 	
 	// Active tweens indexed by component; allows rotating multiple static meshes in parallel
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshRotateTween> ActiveStaticMeshTweens;
+
+	// Continuous yaw-follow state per static mesh
+	struct FYawFollowData
+	{
+		float Duration = 0.f;
+		float EaseExp = 1.f;
+		float OffsetDegrees = 0.f;
+	};
+	TMap<TWeakObjectPtr<UStaticMeshComponent>, FYawFollowData> ActiveYawFollows;
+	FTimerHandle StaticMeshYawFollowTimerHandle;
+	void StaticMeshYawFollow_Step();
 
 	// Lightweight tween state for moving arbitrary static mesh components
 	struct FStaticMeshMoveTween

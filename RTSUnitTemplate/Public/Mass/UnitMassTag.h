@@ -32,6 +32,7 @@ USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Gen
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableObstacleTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateDisableNavManipulationTag : public FMassTag { GENERATED_BODY() };
 
 // --- Worker-Zustände ---
 USTRUCT() struct FMassStateGoToBaseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff

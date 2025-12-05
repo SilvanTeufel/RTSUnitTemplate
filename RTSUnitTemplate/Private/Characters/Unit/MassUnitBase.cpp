@@ -196,6 +196,33 @@ bool AMassUnitBase::SetUnitAvoidanceEnabled(bool bEnable)
 	return true;
 }
 
+bool AMassUnitBase::SetNavManipulationEnabled(bool bEnable)
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle) || !EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SetNavManipulationEnabled failed - invalid entity or manager."), *GetName());
+		return false;
+	}
+
+	auto& Defer = EntityManager->Defer();
+
+	if (bEnable)
+	{
+		// Enable nav manipulation: remove the disabling tag if present
+		Defer.RemoveTag<FMassStateDisableNavManipulationTag>(EntityHandle);
+	}
+	else
+	{
+		// Disable nav manipulation: add the disabling tag
+		Defer.AddTag<FMassStateDisableNavManipulationTag>(EntityHandle);
+	}
+
+	return true;
+}
+
 bool AMassUnitBase::RemoveStopGameplayEffectTagToEntity()
 {
 	FMassEntityManager* EntityManager;
@@ -896,7 +923,9 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// Stop any pending rotation/movement timers
 	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
+	GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
 	ActiveStaticMeshTweens.Empty();
+	ActiveYawFollows.Empty();
 
 	GetWorldTimerManager().ClearTimer(MoveTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
@@ -1475,6 +1504,130 @@ void AMassUnitBase::StaticMeshRotations_Step()
 	if (ActiveStaticMeshTweens.Num() == 0)
 	{
 		GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastRotateActorYawToChase_Implementation(UStaticMeshComponent* MeshToRotate, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees)
+{
+	if (!MeshToRotate)
+	{
+		return;
+	}
+
+	if (bEnable)
+	{
+		FYawFollowData& Data = ActiveYawFollows.FindOrAdd(MeshToRotate);
+		Data.Duration = InRotateDuration;
+		Data.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+		Data.OffsetDegrees = YawOffsetDegrees;
+
+		// Start/update the follow timer
+		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+
+		// Kick immediate step then ensure looping
+		StaticMeshYawFollow_Step();
+		if (!GetWorldTimerManager().IsTimerActive(StaticMeshYawFollowTimerHandle))
+		{
+			GetWorldTimerManager().SetTimer(StaticMeshYawFollowTimerHandle, this, &AMassUnitBase::StaticMeshYawFollow_Step, TimerRate, true);
+		}
+	}
+	else
+	{
+		ActiveYawFollows.Remove(MeshToRotate);
+		if (ActiveYawFollows.Num() == 0)
+		{
+			GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
+		}
+	}
+}
+
+void AMassUnitBase::StaticMeshYawFollow_Step()
+{
+	if (ActiveYawFollows.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
+		return;
+	}
+
+	TArray<TWeakObjectPtr<UStaticMeshComponent>> ToRemove;
+	for (auto& Pair : ActiveYawFollows)
+	{
+		TWeakObjectPtr<UStaticMeshComponent> WeakComp = Pair.Key;
+		FYawFollowData& Data = Pair.Value;
+
+		UStaticMeshComponent* Comp = WeakComp.Get();
+		if (!Comp)
+		{
+			ToRemove.Add(WeakComp);
+			continue;
+		}
+
+		// Use UnitToChase from AUnitBase if available
+		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
+		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
+		if (!IsValid(TargetUnit))
+		{
+			// No target; skip but keep following state for when a target appears
+			continue;
+		}
+
+		const FVector CompWorldLoc = Comp->GetComponentLocation();
+		FVector TargetLoc = TargetUnit->GetActorLocation();
+
+		// 2D direction on the XY plane
+		FVector ToTarget = TargetLoc - CompWorldLoc;
+		ToTarget.Z = 0.f;
+		if (ToTarget.IsNearlyZero(1e-3f))
+		{
+			continue;
+		}
+
+		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+		float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
+		DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+
+		// Convert desired world yaw to relative yaw under parent if any
+		float ParentYaw = 0.f;
+		if (const USceneComponent* Parent = Comp->GetAttachParent())
+		{
+			ParentYaw = Parent->GetComponentRotation().Yaw;
+		}
+		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
+
+		FRotator NewRelative = Comp->GetRelativeRotation();
+		NewRelative.Yaw = DesiredRelativeYaw;
+
+		// Drive/refresh the tween for this component toward the newly computed yaw-only rotation
+		FStaticMeshRotateTween& Tween = ActiveStaticMeshTweens.FindOrAdd(Comp);
+		Tween.Duration = Data.Duration;
+		Tween.EaseExp = FMath::Max(Data.EaseExp, 0.001f);
+		Tween.Elapsed = 0.f;
+		Tween.Start = Comp->GetRelativeRotation().Quaternion().GetNormalized();
+		Tween.Target = NewRelative.Quaternion().GetNormalized();
+		if ((Tween.Start | Tween.Target) < 0.f)
+		{
+			Tween.Target = (-Tween.Target);
+		}
+	}
+
+	// Ensure rotation tween timer is running
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float RotateTimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	StaticMeshRotations_Step();
+	if (!GetWorldTimerManager().IsTimerActive(StaticMeshRotateTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(StaticMeshRotateTimerHandle, this, &AMassUnitBase::StaticMeshRotations_Step, RotateTimerRate, true);
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveYawFollows.Remove(Key);
+	}
+
+	if (ActiveYawFollows.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
 	}
 }
 

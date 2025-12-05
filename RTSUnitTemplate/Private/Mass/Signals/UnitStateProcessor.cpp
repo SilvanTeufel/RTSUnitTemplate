@@ -963,8 +963,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	{
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
         		bool bHasDeadTag = DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDeadTag::StaticStruct());
-        			
-        		if (AIStateFragment->CanMove && !bHasDeadTag)
+        		
+        		if (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDisableNavManipulationTag::StaticStruct()))
+        		{
+        			UnregisterObstacle(StrongUnitActor);
+        		}else if (AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
         			UnregisterObstacle(StrongUnitActor);
