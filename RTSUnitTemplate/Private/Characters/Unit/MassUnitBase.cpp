@@ -902,6 +902,11 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
 	ActiveStaticMeshMoveTweens.Empty();
 
+	// Stop any pending scaling timers
+	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
+	GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
+	ActiveStaticMeshScaleTweens.Empty();
+
 	// Remove our specific instance from the component when the actor is destroyed
 	if (InstanceIndex != INDEX_NONE && ISMComponent)
 	{
@@ -1653,5 +1658,190 @@ void AMassUnitBase::StaticMeshMoves_Step()
 	if (ActiveStaticMeshMoveTweens.Num() == 0)
 	{
 		GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastScaleISMLinear_Implementation(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent)
+{
+	// Cache parameters
+	ScaleDuration = InScaleDuration;
+	ScaleEaseExponent = FMath::Max(InScaleEaseExponent, 0.001f);
+
+	if (!ISMComponent && !GetMesh())
+	{
+		return;
+	}
+
+	// Snap if no duration
+	if (ScaleDuration <= 0.f)
+	{
+		ApplyLocalVisualScale(NewScale);
+		return;
+	}
+
+	// Initialize interpolation state
+	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
+	ScaleStart = GetCurrentLocalVisualScale();
+	ScaleTarget = NewScale;
+	ScaleElapsed = 0.f;
+
+	// Immediate step then start timer
+	ScaleISM_Step();
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	GetWorldTimerManager().SetTimer(ScaleTimerHandle, this, &AMassUnitBase::ScaleISM_Step, TimerRate, true);
+}
+
+FVector AMassUnitBase::GetCurrentLocalVisualScale() const
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			return InstanceXf.GetScale3D();
+		}
+		return ISMComponent->GetRelativeScale3D();
+	}
+
+	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		return SkelMesh->GetRelativeScale3D();
+	}
+
+	return GetActorScale3D();
+}
+
+void AMassUnitBase::ApplyLocalVisualScale(const FVector& NewLocalScale)
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			InstanceXf.SetScale3D(NewLocalScale);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+			return;
+		}
+
+		ISMComponent->SetRelativeScale3D(NewLocalScale);
+		return;
+	}
+
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->SetRelativeScale3D(NewLocalScale);
+	}
+}
+
+void AMassUnitBase::ScaleISM_Step()
+{
+	if (!ISMComponent && !GetMesh())
+	{
+		GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	ScaleElapsed += Dt;
+
+	float Alpha = (ScaleDuration > 0.f) ? FMath::Clamp(ScaleElapsed / ScaleDuration, 0.f, 1.f) : 1.f;
+	if (!FMath::IsNearlyEqual(ScaleEaseExponent, 1.f))
+	{
+		Alpha = FMath::Pow(Alpha, ScaleEaseExponent);
+	}
+
+	const FVector NewLocal = FMath::Lerp(ScaleStart, ScaleTarget, Alpha);
+	ApplyLocalVisualScale(NewLocal);
+
+	if (Alpha >= 1.f)
+	{
+		ApplyLocalVisualScale(ScaleTarget);
+		GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastScaleActorLinear_Implementation(UStaticMeshComponent* MeshToScale, const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent)
+{
+	if (!MeshToScale)
+	{
+		return;
+	}
+
+	if (InScaleDuration <= 0.f)
+	{
+		MeshToScale->SetRelativeScale3D(NewScale);
+		return;
+	}
+
+	AMassUnitBase::FStaticMeshScaleTween& Tween = ActiveStaticMeshScaleTweens.FindOrAdd(MeshToScale);
+	Tween.Duration = InScaleDuration;
+	Tween.Elapsed = 0.f;
+	Tween.EaseExp = FMath::Max(InScaleEaseExponent, 0.001f);
+	Tween.Start = MeshToScale->GetRelativeScale3D();
+	Tween.Target = NewScale;
+
+	// Immediate step and ensure timer running
+	StaticMeshScales_Step();
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	if (!GetWorldTimerManager().IsTimerActive(StaticMeshScaleTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(StaticMeshScaleTimerHandle, this, &AMassUnitBase::StaticMeshScales_Step, TimerRate, true);
+	}
+}
+
+void AMassUnitBase::StaticMeshScales_Step()
+{
+	if (ActiveStaticMeshScaleTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	TArray<TWeakObjectPtr<UStaticMeshComponent>> ToRemove;
+	for (auto& Pair : ActiveStaticMeshScaleTweens)
+	{
+		TWeakObjectPtr<UStaticMeshComponent> WeakComp = Pair.Key;
+		FStaticMeshScaleTween& Tween = Pair.Value;
+
+		UStaticMeshComponent* Comp = WeakComp.Get();
+		if (!Comp)
+		{
+			ToRemove.Add(WeakComp);
+			continue;
+		}
+
+		Tween.Elapsed += Dt;
+		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
+		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
+		{
+			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
+		}
+
+		const FVector NewLocal = FMath::Lerp(Tween.Start, Tween.Target, Alpha);
+		Comp->SetRelativeScale3D(NewLocal);
+
+		if (Alpha >= 1.f)
+		{
+			Comp->SetRelativeScale3D(Tween.Target);
+			ToRemove.Add(WeakComp);
+		}
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveStaticMeshScaleTweens.Remove(Key);
+	}
+
+	if (ActiveStaticMeshScaleTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
 	}
 }

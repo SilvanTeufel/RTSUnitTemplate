@@ -183,6 +183,14 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastMoveActorLinear(UStaticMeshComponent* MeshToMove, const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent);
 
+	// Scale the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
+
+	// Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastScaleActorLinear(UStaticMeshComponent* MeshToScale, const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -216,6 +224,17 @@ protected:
 	void MoveISM_Step();
 	FVector GetCurrentLocalVisualLocation() const;
 	void ApplyLocalVisualLocation(const FVector& NewLocalLocation);
+
+	// Smooth scaling controls (duration-based)
+	float ScaleDuration = 0.25f; // seconds to reach target; <=0 to snap
+	float ScaleEaseExponent = 1.0f; // 1 = linear
+	FTimerHandle ScaleTimerHandle;
+	float ScaleElapsed = 0.f;
+	FVector ScaleStart = FVector(1.f, 1.f, 1.f);
+	FVector ScaleTarget = FVector(1.f, 1.f, 1.f);
+	void ScaleISM_Step();
+	FVector GetCurrentLocalVisualScale() const;
+	void ApplyLocalVisualScale(const FVector& NewLocalScale);
 	
 	// Lightweight tween state for rotating arbitrary static mesh components
 	struct FStaticMeshRotateTween
@@ -246,6 +265,19 @@ protected:
 	void StaticMeshMoves_Step();
 	FTimerHandle StaticMeshMoveTimerHandle;
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshMoveTween> ActiveStaticMeshMoveTweens;
+
+	// Lightweight tween state for scaling arbitrary static mesh components
+	struct FStaticMeshScaleTween
+	{
+		float Duration = 0.f;
+		float Elapsed = 0.f;
+		float EaseExp = 1.f;
+		FVector Start = FVector(1.f, 1.f, 1.f);
+		FVector Target = FVector(1.f, 1.f, 1.f);
+	};
+	void StaticMeshScales_Step();
+	FTimerHandle StaticMeshScaleTimerHandle;
+	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshScaleTween> ActiveStaticMeshScaleTweens;
 	
 	//void InitializeUnitMode();
 		
