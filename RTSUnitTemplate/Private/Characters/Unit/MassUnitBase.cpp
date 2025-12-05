@@ -465,9 +465,9 @@ bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
 				}
 
 				// Update the movement target
-				if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+				if (FMassMoveTargetFragment* MoveTargetFrag = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
 				{
-					MoveTarget->Center = UnloadLocation;
+					MoveTargetFrag->Center = UnloadLocation;
 				}
                 
 				// Allow the entity to move again by removing the stop tag
@@ -893,10 +893,14 @@ void AMassUnitBase::BeginPlay()
 
 void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// Stop any pending rotation timer
+	// Stop any pending rotation/movement timers
 	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
 	ActiveStaticMeshTweens.Empty();
+
+	GetWorldTimerManager().ClearTimer(MoveTimerHandle);
+	GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
+	ActiveStaticMeshMoveTweens.Empty();
 
 	// Remove our specific instance from the component when the actor is destroyed
 	if (InstanceIndex != INDEX_NONE && ISMComponent)
@@ -1182,15 +1186,15 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
     }
 	
     // --- 2. Update FMassMoveTargetFragment ---
-    FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
-    if (!MoveTarget)
+    FMassMoveTargetFragment* MoveTargetFrag = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
+    if (!MoveTargetFrag)
     {
         UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): StartCharge failed - FMassMoveTargetFragment not found on entity %s."), *GetName(), *EntityHandle.DebugGetDescription());
         EntityManager->RemoveFragmentFromEntity(EntityHandle, FMassChargeTimerFragment::StaticStruct()); // Clean up
         return;
     }
 	
-	UpdateMoveTarget(*MoveTarget, NewDestination, ChargeSpeed, GetWorld());
+	UpdateMoveTarget(*MoveTargetFrag, NewDestination, ChargeSpeed, GetWorld());
 	
     // --- 3. Set Charge Timer and Tag ---
     ChargeTimer->ChargeEndTime = ChargeDuration;
@@ -1234,9 +1238,9 @@ bool AMassUnitBase::StopMassMovement()
 		return false;
 	}
 
-	if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+	if (FMassMoveTargetFragment* MoveTargetFrag = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
 	{
-		StopMovement(*MoveTarget, GetWorld());
+		StopMovement(*MoveTargetFrag, GetWorld());
 		return true;
 	}
 
@@ -1464,5 +1468,190 @@ void AMassUnitBase::StaticMeshRotations_Step()
 	if (ActiveStaticMeshTweens.Num() == 0)
 	{
 		GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent)
+{
+	// Cache parameters
+	MoveDuration = InMoveDuration;
+	MoveEaseExponent = FMath::Max(InMoveEaseExponent, 0.001f);
+
+	if (!ISMComponent && !GetMesh())
+	{
+		return;
+	}
+
+	// Snap if no duration
+	if (MoveDuration <= 0.f)
+	{
+		ApplyLocalVisualLocation(NewLocation);
+		return;
+	}
+
+	// Initialize interpolation state
+	GetWorldTimerManager().ClearTimer(MoveTimerHandle);
+	MoveStart = GetCurrentLocalVisualLocation();
+	MoveTarget = NewLocation;
+	MoveElapsed = 0.f;
+
+	// Immediate step then start timer
+	MoveISM_Step();
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	GetWorldTimerManager().SetTimer(MoveTimerHandle, this, &AMassUnitBase::MoveISM_Step, TimerRate, true);
+}
+
+FVector AMassUnitBase::GetCurrentLocalVisualLocation() const
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			return InstanceXf.GetLocation();
+		}
+		return ISMComponent->GetRelativeLocation();
+	}
+
+	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		return SkelMesh->GetRelativeLocation();
+	}
+
+	return GetActorLocation();
+}
+
+void AMassUnitBase::ApplyLocalVisualLocation(const FVector& NewLocalLocation)
+{
+	if (!bUseSkeletalMovement && ISMComponent)
+	{
+		if (ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			FTransform InstanceXf;
+			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
+			InstanceXf.SetLocation(NewLocalLocation);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+			return;
+		}
+
+		ISMComponent->SetRelativeLocation(NewLocalLocation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->SetRelativeLocation(NewLocalLocation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+void AMassUnitBase::MoveISM_Step()
+{
+	if (!ISMComponent && !GetMesh())
+	{
+		GetWorldTimerManager().ClearTimer(MoveTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	MoveElapsed += Dt;
+
+	float Alpha = (MoveDuration > 0.f) ? FMath::Clamp(MoveElapsed / MoveDuration, 0.f, 1.f) : 1.f;
+	if (!FMath::IsNearlyEqual(MoveEaseExponent, 1.f))
+	{
+		Alpha = FMath::Pow(Alpha, MoveEaseExponent);
+	}
+
+	const FVector NewLocal = FMath::Lerp(MoveStart, MoveTarget, Alpha);
+	ApplyLocalVisualLocation(NewLocal);
+
+	if (Alpha >= 1.f)
+	{
+		ApplyLocalVisualLocation(MoveTarget);
+		GetWorldTimerManager().ClearTimer(MoveTimerHandle);
+	}
+}
+
+void AMassUnitBase::MulticastMoveActorLinear_Implementation(UStaticMeshComponent* MeshToMove, const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent)
+{
+	if (!MeshToMove)
+	{
+		return;
+	}
+
+	if (InMoveDuration <= 0.f)
+	{
+		MeshToMove->SetRelativeLocation(NewLocation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	AMassUnitBase::FStaticMeshMoveTween& Tween = ActiveStaticMeshMoveTweens.FindOrAdd(MeshToMove);
+	Tween.Duration = InMoveDuration;
+	Tween.Elapsed = 0.f;
+	Tween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
+	Tween.Start = MeshToMove->GetRelativeLocation();
+	Tween.Target = NewLocation;
+
+	// Immediate step and ensure timer running
+	StaticMeshMoves_Step();
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	if (!GetWorldTimerManager().IsTimerActive(StaticMeshMoveTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(StaticMeshMoveTimerHandle, this, &AMassUnitBase::StaticMeshMoves_Step, TimerRate, true);
+	}
+}
+
+void AMassUnitBase::StaticMeshMoves_Step()
+{
+	if (ActiveStaticMeshMoveTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	TArray<TWeakObjectPtr<UStaticMeshComponent>> ToRemove;
+	for (auto& Pair : ActiveStaticMeshMoveTweens)
+	{
+		TWeakObjectPtr<UStaticMeshComponent> WeakComp = Pair.Key;
+		FStaticMeshMoveTween& Tween = Pair.Value;
+
+		UStaticMeshComponent* Comp = WeakComp.Get();
+		if (!Comp)
+		{
+			ToRemove.Add(WeakComp);
+			continue;
+		}
+
+		Tween.Elapsed += Dt;
+		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
+		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
+		{
+			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
+		}
+
+		const FVector NewLocal = FMath::Lerp(Tween.Start, Tween.Target, Alpha);
+		Comp->SetRelativeLocation(NewLocal, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+
+		if (Alpha >= 1.f)
+		{
+			Comp->SetRelativeLocation(Tween.Target, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+			ToRemove.Add(WeakComp);
+		}
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveStaticMeshMoveTweens.Remove(Key);
+	}
+
+	if (ActiveStaticMeshMoveTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
 	}
 }

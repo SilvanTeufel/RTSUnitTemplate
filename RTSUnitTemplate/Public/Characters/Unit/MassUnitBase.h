@@ -170,10 +170,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
-
+	
 	// Rotate an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateActorLinear(UStaticMeshComponent* MeshToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
+
+	// Move the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent);
+
+	// Move an arbitrary static mesh component smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastMoveActorLinear(UStaticMeshComponent* MeshToMove, const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent);
 
 protected:
 	virtual void BeginPlay() override;
@@ -184,20 +192,31 @@ protected:
 	
 	float RotateDuration = 0.25f; // seconds to reach target; <=0 to snap
 	float RotationEaseExponent = 1.0f; // 1 = linear; >1 to ease-in/out feel
-
+	
 	// Runtime state for smooth rotation (not replicated)
 	FTimerHandle RotateTimerHandle;
 	float RotateElapsed = 0.f;
 	FQuat RotateStart;
 	FQuat RotateTarget;
-
+	
 	// Per-frame rotation step while timer active
 	void RotateISM_Step();
-
+	
 	// Helpers to read/apply current visual rotation
 	FQuat GetCurrentLocalVisualRotation() const;
 	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation);
 
+	// Smooth movement controls (duration-based)
+	float MoveDuration = 0.25f; // seconds to reach target; <=0 to snap
+	float MoveEaseExponent = 1.0f; // 1 = linear
+	FTimerHandle MoveTimerHandle;
+	float MoveElapsed = 0.f;
+	FVector MoveStart = FVector::ZeroVector;
+	FVector MoveTarget = FVector::ZeroVector;
+	void MoveISM_Step();
+	FVector GetCurrentLocalVisualLocation() const;
+	void ApplyLocalVisualLocation(const FVector& NewLocalLocation);
+	
 	// Lightweight tween state for rotating arbitrary static mesh components
 	struct FStaticMeshRotateTween
 	{
@@ -207,13 +226,26 @@ protected:
 		FQuat Start = FQuat::Identity;
 		FQuat Target = FQuat::Identity;
 	};
-
+	
 	// Timer step for rotating arbitrary static mesh components (state stored internally in cpp)
 	void StaticMeshRotations_Step();
 	FTimerHandle StaticMeshRotateTimerHandle;
 	
 	// Active tweens indexed by component; allows rotating multiple static meshes in parallel
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshRotateTween> ActiveStaticMeshTweens;
+
+	// Lightweight tween state for moving arbitrary static mesh components
+	struct FStaticMeshMoveTween
+	{
+		float Duration = 0.f;
+		float Elapsed = 0.f;
+		float EaseExp = 1.f;
+		FVector Start = FVector::ZeroVector;
+		FVector Target = FVector::ZeroVector;
+	};
+	void StaticMeshMoves_Step();
+	FTimerHandle StaticMeshMoveTimerHandle;
+	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshMoveTween> ActiveStaticMeshMoveTweens;
 	
 	//void InitializeUnitMode();
 		
