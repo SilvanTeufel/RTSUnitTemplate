@@ -29,6 +29,37 @@ void AStoryTriggerActor::BeginPlay()
 {
     Super::BeginPlay();
 
+    // Load row from DataTable: either a random row (if UseRandomRow) or by StoryRowId
+    if (StoryDataTable)
+    {
+        static const FString ContextString(TEXT("StoryTriggerActor_Load"));
+        const FStoryWidgetTable* Row = nullptr;
+        if (UseRandomRow)
+        {
+            const TArray<FName> RowNames = StoryDataTable->GetRowNames();
+            if (RowNames.Num() > 0)
+            {
+                const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
+                Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowNames[Index], ContextString, true);
+            }
+        }
+        else if (!StoryRowId.IsNone())
+        {
+            Row = StoryDataTable->FindRow<FStoryWidgetTable>(StoryRowId, ContextString, true);
+        }
+
+        if (Row)
+        {
+            StoryWidgetClass = Row->StoryWidgetClass;
+            TriggerSound = Row->TriggerSound;
+            StoryText = Row->StoryText;
+            StoryImage = Row->StoryImage;
+            ScreenOffsetX = Row->ScreenOffsetX;
+            ScreenOffsetY = Row->ScreenOffsetY;
+            WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
+        }
+    }
+
     if (TriggerCapsule)
     {
         TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AStoryTriggerActor::OnOverlapBegin);
