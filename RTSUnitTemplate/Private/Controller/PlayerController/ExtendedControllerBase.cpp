@@ -1766,38 +1766,72 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
 
                 const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) /*|| (bAnyBld && OverlappedBuildings.Num() > 0)*/;
 
-                // NavMesh check: treat as not allowed if off-NavMesh OR inside a modified (non-default) NavArea
+                // NavMesh check: treat as not allowed if ANY sample of the indicator's footprint is off-NavMesh
+                // OR inside a modified (non-default) NavArea. We sample the mesh BoxExtent corners/edges so it reacts
+                // before the actor center actually reaches the orange area.
                 bool bOffNavMesh = false;
                 if (UWorld* World = GetWorld())
                 {
                     if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
                     {
-                        // Use indicator mesh size as the query extent so projection sensitivity matches the visual footprint
-                        FVector QueryExtent(500.f, 500.f, 2000.f);
+                        // Build sample offsets based on the mesh footprint
+                        TArray<FVector> SampleOffsets; SampleOffsets.Reserve(9);
+                        FVector2D Extent2D(150.f, 150.f);
+                        float VerticalExtentZ = 200.f;
                         if (CurrentIndicator->IndicatorMesh)
                         {
                             const FBoxSphereBounds MeshBoundsNM = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X);
-                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y);
-                            QueryExtent.Z = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z*2.f);
+                            Extent2D.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X);
+                            Extent2D.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y);
+                            VerticalExtentZ = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z * 2.f);
                         }
-                        FNavLocation NavLoc;
-                        if (!NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, QueryExtent))
+                        const float S = 0.95f; // slightly inside to avoid overreaching beyond the visible area
+                        const FVector2D E = Extent2D * S;
+                        // Base (unrotated) footprint samples (center, edges, corners)
+                        TArray<FVector2D> Base2D; Base2D.Reserve(9);
+                        Base2D.Add(FVector2D(0.f, 0.f));
+                        Base2D.Add(FVector2D( E.X, 0.f));
+                        Base2D.Add(FVector2D(-E.X, 0.f));
+                        Base2D.Add(FVector2D(0.f,  E.Y));
+                        Base2D.Add(FVector2D(0.f, -E.Y));
+                        Base2D.Add(FVector2D( E.X,  E.Y));
+                        Base2D.Add(FVector2D( E.X, -E.Y));
+                        Base2D.Add(FVector2D(-E.X,  E.Y));
+                        Base2D.Add(FVector2D(-E.X, -E.Y));
+                        const float YawRad = FMath::DegreesToRadians(CurrentIndicator->GetActorRotation().Yaw);
+                        const float CosY = FMath::Cos(YawRad); const float SinY = FMath::Sin(YawRad);
+                        for (const FVector2D& P : Base2D)
                         {
-                            bOffNavMesh = true;
+                            const float RX =  P.X * CosY - P.Y * SinY;
+                            const float RY =  P.X * SinY + P.Y * CosY;
+                            SampleOffsets.Add(FVector(RX, RY, 0.f));
                         }
-                        else
+
+                        // Query extent for nav projection at each sample (small XY since we already spread samples)
+                        const FVector QueryExtent(FMath::Max(10.f, Extent2D.X*0.25f), FMath::Max(10.f, Extent2D.Y*0.25f), VerticalExtentZ);
+
+                        const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate);
+                        const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData);
+                        const int32 DefaultAreaId = Recast ? Recast->GetAreaID(UNavArea_Default::StaticClass()) : INDEX_NONE;
+
+                        // Test all samples; if any is off-nav or on non-default area, flag as not allowed
+                        for (const FVector& Off : SampleOffsets)
                         {
-                            // If projected to navmesh, check the poly area. If it's not the default area, we treat it as manipulated (orange) and not allowed
-                            const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate);
-                            const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData);
+                            if (bOffNavMesh) break;
+                            const FVector SampleLoc = HitResult.Location + Off;
+                            FNavLocation NavLoc;
+                            if (!NavSys->ProjectPointToNavigation(SampleLoc, NavLoc, QueryExtent))
+                            {
+                                bOffNavMesh = true; // part of footprint off navmesh
+                                break;
+                            }
                             if (Recast && NavLoc.NodeRef != 0)
                             {
                                 const uint32 PolyAreaId = Recast->GetPolyAreaID(NavLoc.NodeRef);
-                                const int32 DefaultAreaId = Recast->GetAreaID(UNavArea_Default::StaticClass());
-                                if (static_cast<int32>(PolyAreaId) != DefaultAreaId)
+                                if (DefaultAreaId != INDEX_NONE && static_cast<int32>(PolyAreaId) != DefaultAreaId)
                                 {
-                                    bOffNavMesh = true; // inside manipulated (non-default) area
+                                    bOffNavMesh = true; // part of footprint inside manipulated (non-default) area
+                                    break;
                                 }
                             }
                         }
