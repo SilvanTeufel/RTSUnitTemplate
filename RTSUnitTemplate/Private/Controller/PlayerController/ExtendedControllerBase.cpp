@@ -1735,7 +1735,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
             {
                 // Determine an overlap radius based on the indicator mesh bounds
                 const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius);
+                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius/2.f);
 
                 // Check overlap against WorkAreas
                 TArray<AActor*> OverlappedWorkAreas;
@@ -1769,8 +1769,17 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 {
                     if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
                     {
+                        // Use indicator mesh size as the query extent so projection sensitivity matches the visual footprint
+                        FVector QueryExtent(10.f, 10.f, 1000.f);
+                        if (CurrentIndicator->IndicatorMesh)
+                        {
+                            const FBoxSphereBounds MeshBoundsNM = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X/2.f);
+                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y/2.f);
+                            //QueryExtent.Z = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z);
+                        }
                         FNavLocation NavLoc;
-                        if (!NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f,100.f,300.f)))
+                        if (!NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, QueryExtent))
                         {
                             bOffNavMesh = true;
                         }
