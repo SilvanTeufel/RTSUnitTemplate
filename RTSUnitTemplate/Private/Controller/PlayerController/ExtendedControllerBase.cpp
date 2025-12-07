@@ -22,6 +22,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavAreas/NavArea_Default.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -1749,6 +1751,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                     OverlappedWorkAreas
                 );
 
+            	/*
                 // Check overlap against Buildings
                 TArray<AActor*> OverlappedBuildings;
                 const bool bAnyBld = UKismetSystemLibrary::SphereOverlapActors(
@@ -1759,29 +1762,44 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                     ABuildingBase::StaticClass(),
                     TArray<AActor*>(),
                     OverlappedBuildings
-                );
+                );*/
 
-                const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) || (bAnyBld && OverlappedBuildings.Num() > 0);
+                const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) /*|| (bAnyBld && OverlappedBuildings.Num() > 0)*/;
 
-                // NavMesh check: if cursor location is not on NavMesh, treat as not allowed
+                // NavMesh check: treat as not allowed if off-NavMesh OR inside a modified (non-default) NavArea
                 bool bOffNavMesh = false;
                 if (UWorld* World = GetWorld())
                 {
                     if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
                     {
                         // Use indicator mesh size as the query extent so projection sensitivity matches the visual footprint
-                        FVector QueryExtent(10.f, 10.f, 1000.f);
+                        FVector QueryExtent(100.f, 100.f, 1000.f);
                         if (CurrentIndicator->IndicatorMesh)
                         {
                             const FBoxSphereBounds MeshBoundsNM = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X/2.f);
-                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y/2.f);
-                            //QueryExtent.Z = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z);
+                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X*2.f);
+                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y*2.f);
+                            QueryExtent.Z = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z*2.f);
                         }
                         FNavLocation NavLoc;
                         if (!NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, QueryExtent))
                         {
                             bOffNavMesh = true;
+                        }
+                        else
+                        {
+                            // If projected to navmesh, check the poly area. If it's not the default area, we treat it as manipulated (orange) and not allowed
+                            const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate);
+                            const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData);
+                            if (Recast && NavLoc.NodeRef != 0)
+                            {
+                                const uint32 PolyAreaId = Recast->GetPolyAreaID(NavLoc.NodeRef);
+                                const int32 DefaultAreaId = Recast->GetAreaID(UNavArea_Default::StaticClass());
+                                if (static_cast<int32>(PolyAreaId) != DefaultAreaId)
+                                {
+                                    bOffNavMesh = true; // inside manipulated (non-default) area
+                                }
+                            }
                         }
                     }
                 }
