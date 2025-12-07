@@ -20,6 +20,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "NavigationSystem.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -810,6 +811,23 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         }
     }
 
+    // Constrain reference to NavMesh; if not on nav, do not move (freeze)
+    if (UWorld* World = GetWorld())
+    {
+        if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+        {
+            FNavLocation NavLoc;
+            if (NavSys->ProjectPointToNavigation(Ref, NavLoc, FVector(100.f,100.f,300.f)))
+            {
+                Ref = NavLoc.Location;
+            }
+            else
+            {
+                return; // cursor not over navmesh; stop snapping/moving
+            }
+        }
+    }
+
     // 4) Dynamic release: based on MOUSE to TARGET center
     const float DragXY = FMath::Max(DraggedExtent.X, DraggedExtent.Y);
     const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
@@ -909,6 +927,25 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
             }
             SnappedActorLocation.X = DesiredCenter.X - CenterToActorOffset.X;
             SnappedActorLocation.Y = DesiredCenter.Y - CenterToActorOffset.Y;
+        }
+    }
+
+    // Ensure snapped position lies on NavMesh; if not, do not move (freeze)
+    if (UWorld* World = GetWorld())
+    {
+        if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+        {
+            FNavLocation NavLoc;
+            if (NavSys->ProjectPointToNavigation(SnappedActorLocation, NavLoc, FVector(100.f,100.f,300.f)))
+            {
+                // Use projected XY from navmesh
+                SnappedActorLocation.X = NavLoc.Location.X;
+                SnappedActorLocation.Y = NavLoc.Location.Y;
+            }
+            else
+            {
+                return; // final snapped spot not on navmesh
+            }
         }
     }
 
@@ -1016,8 +1053,19 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 		CollisionParams
 	);
 
-	// Compute distance from the drag’s current location to the raycast hit
-	const FVector MouseGround = HitResult.Location;
+	// Compute distance from the drag’s current location to the raycast hit, constrained to NavMesh
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (!bHit || !NavSys)
+	{
+		return; // no valid ground hit or nav system; freeze movement
+	}
+	FNavLocation NavLoc;
+	const bool bOnNav = NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f,100.f,300.f));
+	if (!bOnNav)
+	{
+		return; // Mouse not over NavMesh: stop moving until it is
+	}
+	const FVector MouseGround = NavLoc.Location;
 	float Distance = FVector::Dist(
 		MouseGround,
 		DraggedWorkArea->GetActorLocation()
@@ -1275,7 +1323,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
     {
         CurrentDraggedGround = HitResult.GetActor();
 
-        FVector NewActorPosition = HitResult.Location;
+        FVector NewActorPosition = MouseGround;
         // Adjust Z if needed
         NewActorPosition.Z += DraggedAreaZOffset; 
         // Client-only preview move during drag with grounded Z
@@ -1320,8 +1368,19 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
         CollisionParams
     );
 
-    // Compute distance from the drag’s current location to the raycast hit
-    const FVector MouseGround = HitResult.Location;
+    // Compute distance from the drag’s current location to the raycast hit, constrained to NavMesh
+    UNavigationSystemV1* NavSys2 = UNavigationSystemV1::GetCurrent(GetWorld());
+    if (!bHit || !NavSys2)
+    {
+        return; // freeze when no valid ground hit or nav system not available
+    }
+    FNavLocation NavLoc2;
+    const bool bOnNav2 = NavSys2->ProjectPointToNavigation(HitResult.Location, NavLoc2, FVector(100.f,100.f,300.f));
+    if (!bOnNav2)
+    {
+        return; // mouse not over NavMesh: stop moving until it is
+    }
+    const FVector MouseGround = NavLoc2.Location;
     float Distance = FVector::Dist(
         MouseGround,
         DraggedWorkArea->GetActorLocation()
@@ -1570,7 +1629,7 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
     {
         CurrentDraggedGround = HitResult.GetActor();
 
-        FVector NewActorPosition = HitResult.Location;
+        FVector NewActorPosition = MouseGround;
         // Adjust Z if needed
         NewActorPosition.Z += DraggedAreaZOffset; 
         // Client-only preview move during drag with grounded Z
