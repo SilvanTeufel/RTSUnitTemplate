@@ -7,6 +7,7 @@ class AActor;
 class UStaticMeshComponent;
 class USoundBase;
 class AUnitBase;
+class AAbilityIndicator;
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
@@ -257,6 +258,10 @@ public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveAbilityIndicator(float DeltaSeconds);
+
+	// Client informs server about indicator overlap state so server can use it for authoritative logic
+	UFUNCTION(Server, Reliable)
+	void Server_SetIndicatorOverlap(class AAbilityIndicator* Indicator, bool bOverlapping);
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float AbilityIndicatorBlinkTimer = 0.f;

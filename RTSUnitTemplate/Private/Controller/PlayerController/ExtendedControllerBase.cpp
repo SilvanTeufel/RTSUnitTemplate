@@ -11,6 +11,7 @@
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Actors/WorkArea.h"
+#include "Actors/AbilityIndicator.h"
 #include "Kismet/KismetSystemLibrary.h"  
 #include "GameModes/ResourceGameMode.h"
 #include "Mass/Signals/MySignals.h"
@@ -1728,7 +1729,65 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 FRotator NewRotation = Direction.Rotation();
                 CurrentIndicator->SetActorRotation(NewRotation);
             }
-        	
+            
+            // Overlap detection and material swap for ability indicator
+            if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->IndicatorMesh)
+            {
+                // Determine an overlap radius based on the indicator mesh bounds
+                const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius);
+
+                // Check overlap against WorkAreas
+                TArray<AActor*> OverlappedWorkAreas;
+                const bool bAnyWA = UKismetSystemLibrary::SphereOverlapActors(
+                    this,
+                    HitResult.Location,
+                    OverlapRadius,
+                    TArray<TEnumAsByte<EObjectTypeQuery>>(),
+                    AWorkArea::StaticClass(),
+                    TArray<AActor*>(),
+                    OverlappedWorkAreas
+                );
+
+                // Check overlap against Buildings
+                TArray<AActor*> OverlappedBuildings;
+                const bool bAnyBld = UKismetSystemLibrary::SphereOverlapActors(
+                    this,
+                    HitResult.Location,
+                    OverlapRadius,
+                    TArray<TEnumAsByte<EObjectTypeQuery>>(),
+                    ABuildingBase::StaticClass(),
+                    TArray<AActor*>(),
+                    OverlappedBuildings
+                );
+
+                const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) || (bAnyBld && OverlappedBuildings.Num() > 0);
+                if (bOverlapsRelevant != CurrentIndicator->IsOverlappedWithWorkArea)
+                {
+                    CurrentIndicator->IsOverlappedWithWorkArea = bOverlapsRelevant;
+                    if (bOverlapsRelevant)
+                    {
+                        if (CurrentIndicator->TemporaryHighlightMaterial)
+                        {
+                            CurrentIndicator->IndicatorMesh->SetMaterial(0, CurrentIndicator->TemporaryHighlightMaterial);
+                        }
+                    }
+                    else
+                    {
+                        if (CurrentIndicator->OriginalMaterial)
+                        {
+                            CurrentIndicator->IndicatorMesh->SetMaterial(0, CurrentIndicator->OriginalMaterial);
+                        }
+                    }
+
+                    // Inform server about the overlap state so authoritative logic can use it
+                    if (!HasAuthority())
+                    {
+                        Server_SetIndicatorOverlap(CurrentIndicator, bOverlapsRelevant);
+                    }
+                }
+            }
+            
             CurrentIndicator->SetActorLocation(HitResult.Location);
         }
     }
@@ -2747,4 +2806,15 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 		HUD->SelectedUnits.AddUnique(Unit);
 		UE_LOG(LogTemp, Verbose, TEXT("[PC][Client_SelectUnitsFromSameSquad] Selected %s (Team=%d Squad=%d)"), *Unit->GetName(), Unit->TeamId, Unit->SquadId);
 	}
+}
+
+
+// Server RPC to mirror ability indicator overlap state from client to server
+void AExtendedControllerBase::Server_SetIndicatorOverlap_Implementation(AAbilityIndicator* Indicator, bool bOverlapping)
+{
+	if (!Indicator)
+	{
+		return;
+	}
+	Indicator->IsOverlappedWithWorkArea = bOverlapping;
 }

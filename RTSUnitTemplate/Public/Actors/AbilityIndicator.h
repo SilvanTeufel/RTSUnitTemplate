@@ -5,6 +5,12 @@
 #include "CoreMinimal.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
+
+// Forward declarations for properties used below
+class UMaterialInterface;
+class UStaticMeshComponent;
+
+// NOTE: generated.h must remain the last include in this header
 #include "AbilityIndicator.generated.h"
 
 UCLASS()
@@ -34,6 +40,22 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UStaticMeshComponent* IndicatorMesh;
+
+	// If true, the controller will detect overlaps with WorkAreas and highlight this indicator
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool DetectOverlapWithWorkArea = false;
+
+	// Cached original material of the indicator; set at BeginPlay if not assigned
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInterface* OriginalMaterial = nullptr;
+
+	// Temporary highlight material used while overlapping a WorkArea
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInterface* TemporaryHighlightMaterial = nullptr;
+
+	// True while the indicator is overlapping any WorkArea (for UI/logic)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsOverlappedWithWorkArea = false;
 
 private:
 	// Root Scene Component

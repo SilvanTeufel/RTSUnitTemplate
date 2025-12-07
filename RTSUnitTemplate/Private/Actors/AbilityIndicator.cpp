@@ -33,6 +33,12 @@ AAbilityIndicator::AAbilityIndicator()
 void AAbilityIndicator::BeginPlay()
 {
 	Super::BeginPlay();
+	// Cache original material from the mesh if not explicitly assigned
+	if (IndicatorMesh && OriginalMaterial == nullptr)
+	{
+		OriginalMaterial = IndicatorMesh->GetMaterial(0);
+	}
+	IsOverlappedWithWorkArea = false;
 }
 
 // Called every frame
