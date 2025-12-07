@@ -766,6 +766,20 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         }
     }
 
+    // Prevent vertical/on-top stacking: compute a "too close" threshold based on target footprint
+    float TooCloseThreshold = 0.f;
+    {
+        float CandidateRadius = FMath::Max(OtherExtent.X, OtherExtent.Y);
+        if (TargetBuilding)
+        {
+            if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
+            {
+                CandidateRadius = Capsule->GetScaledCapsuleRadius();
+            }
+        }
+        TooCloseThreshold = CandidateRadius * (2.f / 3.f);
+    }
+
     // 3) Mouse reference on ground
     FVector Ref = DraggedActor->GetActorLocation();
     {
@@ -871,6 +885,32 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
     // Convert desired center to actor location
     SnappedActorLocation.X = DesiredCenter.X - CenterToActorOffset.X;
     SnappedActorLocation.Y = DesiredCenter.Y - CenterToActorOffset.Y;
+
+    // Safety: if the resulting center is still too close to the target center, push out along the dominant axis
+    {
+        const FVector ResultingCenter = FVector(
+            SnappedActorLocation.X + CenterToActorOffset.X,
+            SnappedActorLocation.Y + CenterToActorOffset.Y,
+            0.f);
+        const float CenterDist2D = FVector::Dist2D(ResultingCenter, FVector(OtherCenter.X, OtherCenter.Y, 0.f));
+        if (CenterDist2D < TooCloseThreshold)
+        {
+            if (dx < dy)
+            {
+                // We aligned X to target; push along Y further
+                const float SignY = (Ref.Y >= OtherCenter.Y) ? 1.f : -1.f;
+                DesiredCenter.Y = OtherCenter.Y + SignY * (YOffset + (TooCloseThreshold - CenterDist2D));
+            }
+            else
+            {
+                // We aligned Y to target; push along X further
+                const float SignX = (Ref.X >= OtherCenter.X) ? 1.f : -1.f;
+                DesiredCenter.X = OtherCenter.X + SignX * (XOffset + (TooCloseThreshold - CenterDist2D));
+            }
+            SnappedActorLocation.X = DesiredCenter.X - CenterToActorOffset.X;
+            SnappedActorLocation.Y = DesiredCenter.Y - CenterToActorOffset.Y;
+        }
+    }
 
     const FVector GroundedSnap = ComputeGroundedLocation(DraggedActor, SnappedActorLocation);
     DraggedActor->SetActorLocation(GroundedSnap);
