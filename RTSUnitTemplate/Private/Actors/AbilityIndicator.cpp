@@ -38,7 +38,7 @@ void AAbilityIndicator::BeginPlay()
 	{
 		OriginalMaterial = IndicatorMesh->GetMaterial(0);
 	}
-	IsOverlappedWithWorkArea = false;
+	IsOverlappedWithNoBuildZone = false;
 }
 
 // Called every frame

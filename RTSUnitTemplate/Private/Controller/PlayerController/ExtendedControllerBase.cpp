@@ -2008,10 +2008,10 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 }
 
                 // Update material highlighting: only highlight when in a NoBuildZone (do not highlight for off-NavMesh)
-                const bool bNotAllowed = bIsNoBuildZone; // reuse IsOverlappedWithWorkArea as IsNotAllowed flag
-                if (bNotAllowed != CurrentIndicator->IsOverlappedWithWorkArea)
+                const bool bNotAllowed = bIsNoBuildZone; // reuse overlap flag as IsNotAllowed
+                if (bNotAllowed != CurrentIndicator->IsOverlappedWithNoBuildZone)
                 {
-                    CurrentIndicator->IsOverlappedWithWorkArea = bNotAllowed;
+                    CurrentIndicator->IsOverlappedWithNoBuildZone = bNotAllowed;
                     if (bNotAllowed)
                     {
                         if (CurrentIndicator->TemporaryHighlightMaterial)
@@ -3135,5 +3135,5 @@ void AExtendedControllerBase::Server_SetIndicatorOverlap_Implementation(AAbility
 	{
 		return;
 	}
-	Indicator->IsOverlappedWithWorkArea = bOverlapping;
+	Indicator->IsOverlappedWithNoBuildZone = bOverlapping;
 }

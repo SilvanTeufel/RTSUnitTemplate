@@ -53,9 +53,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* TemporaryHighlightMaterial = nullptr;
 
-	// True while the indicator is overlapping any WorkArea (for UI/logic)
+	// True while the indicator is overlapping a NoBuildZone (controls highlight/validation)
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsOverlappedWithWorkArea = false;
+	bool IsOverlappedWithNoBuildZone = false;
 
 private:
 	// Root Scene Component
