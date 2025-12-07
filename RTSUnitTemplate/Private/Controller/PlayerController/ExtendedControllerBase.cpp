@@ -1990,8 +1990,25 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                     }
                 }
 
-                // Update material highlighting based on relevance and nav validity
-                const bool bNotAllowed = bOverlapsRelevant || bOffNavMesh; // reuse IsOverlappedWithWorkArea as IsNotAllowed
+                // Determine if we are inside a NoBuildZone (like MoveWorkArea)
+                bool bIsNoBuildZone = false;
+                if (bAnyWA)
+                {
+                    for (AActor* OverlappedActor : OverlappedWorkAreas)
+                    {
+                        if (AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor))
+                        {
+                            if (OverlappedWorkArea->IsNoBuildZone)
+                            {
+                                bIsNoBuildZone = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Update material highlighting: only highlight when in a NoBuildZone (do not highlight for off-NavMesh)
+                const bool bNotAllowed = bIsNoBuildZone; // reuse IsOverlappedWithWorkArea as IsNotAllowed flag
                 if (bNotAllowed != CurrentIndicator->IsOverlappedWithWorkArea)
                 {
                     CurrentIndicator->IsOverlappedWithWorkArea = bNotAllowed;
@@ -2026,7 +2043,26 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
 
             // Ensure the indicator's mesh bottom sits on the ground at the cursor XY
             {
-                const FVector DesiredXY(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z);
+                // Constrain to NavMesh like MoveWorkArea: if mouse point cannot be projected, do not move
+                FVector MouseGround = HitResult.Location;
+                bool bHasNav = false;
+                if (UWorld* World = GetWorld())
+                {
+                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+                    {
+                        FNavLocation NavLoc;
+                        if (NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f,100.f,300.f)))
+                        {
+                            MouseGround = NavLoc.Location;
+                            bHasNav = true;
+                        }
+                    }
+                }
+                if (!bHasNav)
+                {
+                    continue; // don't move indicator off NavMesh
+                }
+                const FVector DesiredXY(MouseGround.X, MouseGround.Y, MouseGround.Z);
 
                 // Compute how far below the actor location the mesh bottom currently is
                 float OffsetActorToBottom = 0.f;
