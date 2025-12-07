@@ -1737,7 +1737,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
             {
                 // Determine an overlap radius based on the indicator mesh bounds
                 const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius/2.f);
+                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius);
 
                 // Check overlap against WorkAreas
                 TArray<AActor*> OverlappedWorkAreas;
@@ -1773,12 +1773,12 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                     if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
                     {
                         // Use indicator mesh size as the query extent so projection sensitivity matches the visual footprint
-                        FVector QueryExtent(100.f, 100.f, 1000.f);
+                        FVector QueryExtent(500.f, 500.f, 2000.f);
                         if (CurrentIndicator->IndicatorMesh)
                         {
                             const FBoxSphereBounds MeshBoundsNM = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X*2.f);
-                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y*2.f);
+                            QueryExtent.X = FMath::Max(10.f, MeshBoundsNM.BoxExtent.X);
+                            QueryExtent.Y = FMath::Max(10.f, MeshBoundsNM.BoxExtent.Y);
                             QueryExtent.Z = FMath::Max(50.f, MeshBoundsNM.BoxExtent.Z*2.f);
                         }
                         FNavLocation NavLoc;
@@ -1855,6 +1855,18 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                     if (UnitIgnore && UnitIgnore->CurrentDraggedAbilityIndicator)
                     {
                         Params.AddIgnoredActor(UnitIgnore->CurrentDraggedAbilityIndicator);
+                    }
+                }
+                // Additionally, when overlap-detection is active, ignore WorkAreas and Buildings so we always stick to the landscape
+                if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->IndicatorMesh)
+                {
+                    for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+                    {
+                        Params.AddIgnoredActor(*It);
+                    }
+                    for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
+                    {
+                        Params.AddIgnoredActor(*ItB);
                     }
                 }
 
