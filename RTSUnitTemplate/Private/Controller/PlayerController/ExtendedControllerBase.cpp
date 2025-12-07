@@ -1730,7 +1730,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 CurrentIndicator->SetActorRotation(NewRotation);
             }
             
-            // Overlap detection and material swap for ability indicator
+            // Overlap detection and material swap for ability indicator + NavMesh validity check
             if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->IndicatorMesh)
             {
                 // Determine an overlap radius based on the indicator mesh bounds
@@ -1762,10 +1762,26 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                 );
 
                 const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) || (bAnyBld && OverlappedBuildings.Num() > 0);
-                if (bOverlapsRelevant != CurrentIndicator->IsOverlappedWithWorkArea)
+
+                // NavMesh check: if cursor location is not on NavMesh, treat as not allowed
+                bool bOffNavMesh = false;
+                if (UWorld* World = GetWorld())
                 {
-                    CurrentIndicator->IsOverlappedWithWorkArea = bOverlapsRelevant;
-                    if (bOverlapsRelevant)
+                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+                    {
+                        FNavLocation NavLoc;
+                        if (!NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f,100.f,300.f)))
+                        {
+                            bOffNavMesh = true;
+                        }
+                    }
+                }
+
+                const bool bNotAllowed = bOverlapsRelevant || bOffNavMesh; // reuse IsOverlappedWithWorkArea as IsNotAllowed
+                if (bNotAllowed != CurrentIndicator->IsOverlappedWithWorkArea)
+                {
+                    CurrentIndicator->IsOverlappedWithWorkArea = bNotAllowed;
+                    if (bNotAllowed)
                     {
                         if (CurrentIndicator->TemporaryHighlightMaterial)
                         {
@@ -1780,15 +1796,50 @@ void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSec
                         }
                     }
 
-                    // Inform server about the overlap state so authoritative logic can use it
+                    // Inform server about the not-allowed state so authoritative logic can use it
                     if (!HasAuthority())
                     {
-                        Server_SetIndicatorOverlap(CurrentIndicator, bOverlapsRelevant);
+                        Server_SetIndicatorOverlap(CurrentIndicator, bNotAllowed);
                     }
                 }
             }
-            
-            CurrentIndicator->SetActorLocation(HitResult.Location);
+
+            // Ensure the indicator's mesh bottom sits on the ground at the cursor XY
+            {
+                const FVector DesiredXY(HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z);
+
+                // Compute how far below the actor location the mesh bottom currently is
+                float OffsetActorToBottom = 0.f;
+                if (CurrentIndicator->IndicatorMesh)
+                {
+                    const FBoxSphereBounds MeshBoundsNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+                    const float HalfHeightNow = MeshBoundsNow.BoxExtent.Z;
+                    const float CurrentBottomZ = MeshBoundsNow.Origin.Z - HalfHeightNow;
+                    OffsetActorToBottom = CurrentBottomZ - CurrentIndicator->GetActorLocation().Z;
+                }
+
+                // Trace down to find ground at the desired XY
+                FHitResult GroundHit;
+                FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_GroundTrace")), true, CurrentIndicator);
+                Params.AddIgnoredActor(CurrentIndicator);
+                // Ignore all indicators from selected units as well
+                for (auto UnitIgnore : SelectedUnits)
+                {
+                    if (UnitIgnore && UnitIgnore->CurrentDraggedAbilityIndicator)
+                    {
+                        Params.AddIgnoredActor(UnitIgnore->CurrentDraggedAbilityIndicator);
+                    }
+                }
+
+                const FVector TraceStart = DesiredXY + FVector(0,0,2000.f);
+                const FVector TraceEnd   = DesiredXY - FVector(0,0,10000.f);
+                FVector FinalLoc = DesiredXY;
+                if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+                {
+                    FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
+                }
+                CurrentIndicator->SetActorLocation(FinalLoc);
+            }
         }
     }
 }
