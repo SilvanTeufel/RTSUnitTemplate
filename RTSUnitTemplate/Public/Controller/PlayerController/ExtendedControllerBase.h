@@ -246,9 +246,17 @@ public:
 	// Helper to compute a grounded location so the mesh bottom rests on the ground
 	FVector ComputeGroundedLocation(AWorkArea* DraggedArea, const FVector& DesiredLocation) const;
 
+	// Internal helpers to simplify MoveWorkArea_Local logic (non-UFUNCTION)
+	bool TraceMouseToGround(FVector& OutMouseGround, FHitResult& OutHit) const;
+	bool MaintainOrReleaseCurrentSnap(AWorkArea* DraggedWorkArea, const FVector& MouseGround, bool bHit);
+	bool TrySnapViaOverlap(AWorkArea* DraggedWorkArea, const FVector& MouseGround, const FHitResult& HitResult);
+	bool TrySnapViaProximity(AWorkArea* DraggedWorkArea, const FVector& MouseGround);
+	void MoveDraggedAreaFreely(AWorkArea* DraggedWorkArea, const FVector& MouseGround, const FHitResult& HitResult);
+	bool MoveWorkArea_Local_Simplified(float DeltaSeconds);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AActor* CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation);
-	
+		
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SnapToActor(AWorkArea* DraggedActor, AActor* OtherActor, UStaticMeshComponent* OtherMesh);
 	
