@@ -264,8 +264,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWorkArea(FVector AreaLocation);
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void MoveAbilityIndicator(float DeltaSeconds);
+	// Local, client-side variant used by Tick; mirrors WorkArea distance/pushback behavior for AbilityIndicator
+	void MoveAbilityIndicator_Local(float DeltaSeconds);
 
 	// Client informs server about indicator overlap state so server can use it for authoritative logic
 	UFUNCTION(Server, Reliable)

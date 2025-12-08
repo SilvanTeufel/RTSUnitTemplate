@@ -90,7 +90,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Local(DeltaSeconds);
-	MoveAbilityIndicator_Implementation(DeltaSeconds);
+	MoveAbilityIndicator_Local(DeltaSeconds);
 }
 
 void AExtendedControllerBase::LogSelectedUnitsTags()
@@ -2318,470 +2318,274 @@ void AExtendedControllerBase::SetWorkArea(FVector AreaLocation)
     }
 }
 
-void AExtendedControllerBase::MoveAbilityIndicator_Implementation(float DeltaSeconds)
+void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
 {
-    // Sanity check that we have at least one "SelectedUnit"
+    // Follow-mouse and snap/pushback like WorkArea, but only when DetectOverlapWithWorkArea is enabled
     if (SelectedUnits.Num() == 0)
     {
         return;
     }
-    
-    // Build the collision query params and ignore all ability indicators from the selected units
-    FCollisionQueryParams CollisionParams;
-    CollisionParams.bTraceComplex = true;
-    for (auto Unit : SelectedUnits)
+
+    FVector MouseGround; FHitResult HitResult;
+    const bool bHit = TraceMouseToGround(MouseGround, HitResult);
+    if (!bHit)
     {
-        if (Unit && Unit->CurrentDraggedAbilityIndicator)
-        {
-            CollisionParams.AddIgnoredActor(Unit->CurrentDraggedAbilityIndicator);
-        }
+        return;
     }
-    
-    FVector MousePosition, MouseDirection;
-    DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-	
-    FVector Start = MousePosition;
-    FVector End   = Start + MouseDirection * 5000.f;
 
-    FHitResult HitResult;
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        Start,
-        End,
-        ECC_Visibility,
-        CollisionParams
-    );
-
-    if (bHit)
+    UWorld* World = GetWorld();
+    if (!World)
     {
-        for (auto Unit : SelectedUnits)
+        return;
+    }
+
+    for (AUnitBase* Unit : SelectedUnits)
+    {
+        if (!Unit) continue;
+        AAbilityIndicator* CurrentIndicator = Unit->CurrentDraggedAbilityIndicator;
+        if (!CurrentIndicator) continue;
+
+        // Handle range blinking regardless of placement mode
         {
-            if (!Unit)
+            const FVector ALocation = Unit->GetMassActorLocation();
+            const float Distance = FVector::Dist(MouseGround, ALocation);
+            if (Unit->CurrentSnapshot.AbilityClass)
             {
+                if (UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+                {
+                    if (AbilityCDO->Range != 0.f && Distance > AbilityCDO->Range)
+                    {
+                        AbilityIndicatorBlinkTimer += DeltaSeconds;
+                        if (AbilityIndicatorBlinkTimer > 0.25f)
+                        {
+                            AbilityIndicatorBlinkTimer = 0.0f;
+                            if (Unit->AbilityIndicatorVisibility) { Unit->HideAbilityIndicator(CurrentIndicator); }
+                            else { Unit->ShowAbilityIndicator(CurrentIndicator); }
+                        }
+                    }
+                    else
+                    {
+                        Unit->ShowAbilityIndicator(CurrentIndicator);
+                    }
+                }
+            }
+        }
+
+        // If DetectOverlapWithWorkArea is disabled OR mesh is missing, just follow mouse (grounded)
+        if (!CurrentIndicator->DetectOverlapWithWorkArea || !CurrentIndicator->IndicatorMesh)
+        {
+            // Ground to landscape keeping mesh bottom on ground
+            const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh ? CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform()) : FBoxSphereBounds(CurrentIndicator->GetActorLocation(), FVector::ZeroVector, 0.f);
+            const float HalfH = MeshBounds.BoxExtent.Z;
+            const float BottomZ = MeshBounds.Origin.Z - HalfH;
+            const float OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
+            FHitResult GroundHit;
+            FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_MouseFollowGround")), true, CurrentIndicator);
+            Params.AddIgnoredActor(CurrentIndicator);
+            for (AUnitBase* U : SelectedUnits) { if (U && U->CurrentDraggedAbilityIndicator) { Params.AddIgnoredActor(U->CurrentDraggedAbilityIndicator); } }
+            const FVector TraceStart(MouseGround.X, MouseGround.Y, MouseGround.Z + 2000.f);
+            const FVector TraceEnd  (MouseGround.X, MouseGround.Y, MouseGround.Z - 10000.f);
+            FVector FinalLoc = MouseGround;
+            if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+            {
+                FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
+            }
+            CurrentIndicator->SetActorLocation(FinalLoc);
+            continue;
+        }
+
+        // Distance-only logic with recursive pushback (including SnapGap), same as WorkArea
+        auto GroundToLandscape = [&](const FVector& InLoc)
+        {
+            FVector Grounded = InLoc;
+            const FBoxSphereBounds MeshBoundsNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+            const float HalfH = MeshBoundsNow.BoxExtent.Z;
+            const float BottomZ = MeshBoundsNow.Origin.Z - HalfH;
+            const float OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
+            FHitResult GroundHit;
+            FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_GroundTrace")), true, CurrentIndicator);
+            Params.AddIgnoredActor(CurrentIndicator);
+            for (AUnitBase* U : SelectedUnits) { if (U && U->CurrentDraggedAbilityIndicator) { Params.AddIgnoredActor(U->CurrentDraggedAbilityIndicator); } }
+            const FVector TraceStart(InLoc.X, InLoc.Y, InLoc.Z + 2000.f);
+            const FVector TraceEnd  (InLoc.X, InLoc.Y, InLoc.Z - 10000.f);
+            if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+            {
+                Grounded.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
+            }
+            return Grounded;
+        };
+
+        FVector DesiredGrounded = GroundToLandscape(MouseGround);
+
+        // Last safe position per-indicator
+        static TWeakObjectPtr<AAbilityIndicator> LastIndRef = nullptr;
+        static FVector LastSafeLoc = FVector::ZeroVector;
+        static bool bHasLastSafe = false;
+        if (LastIndRef.Get() != CurrentIndicator)
+        {
+            LastIndRef = CurrentIndicator;
+            bHasLastSafe = false;
+        }
+
+        // Drag extents
+        const FBoxSphereBounds DragBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+        const FVector DragExtent = DragBounds.BoxExtent;
+        const float DragXY = FMath::Max(DragExtent.X, DragExtent.Y);
+
+        // Pick best candidate
+        AActor* BestCandidate = nullptr;
+        float BestDist = TNumericLimits<float>::Max();
+        auto ConsiderActor = [&](AActor* Candidate)
+        {
+            if (!Candidate || Candidate == CurrentIndicator) return;
+            FVector OtherCenter, OtherExtent;
+            if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent)) return;
+            const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
+            const float Threshold = DragXY + OtherXY;
+            const float D = FVector::Dist2D(DesiredGrounded, OtherCenter);
+            if (D < Threshold && D < BestDist)
+            {
+                BestDist = D; BestCandidate = Candidate;
+            }
+        };
+        for (TActorIterator<AWorkArea> ItWA(World); ItWA; ++ItWA) { ConsiderActor(*ItWA); }
+        for (TActorIterator<ABuildingBase> ItBD(World); ItBD; ++ItBD) { ConsiderActor(*ItBD); }
+
+        auto ComputeSnapForIndicator = [&](AActor* OtherActor, FVector& OutLoc)
+        {
+            if (!OtherActor) return false;
+            const FBoxSphereBounds DragNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+            const FVector DragCenter = DragNow.Origin;
+            const FVector DragExt = DragNow.BoxExtent;
+            const FVector CenterToActorOffset = DragCenter - CurrentIndicator->GetActorLocation();
+            FVector OtherCenter, OtherExt;
+            if (!GetActorBoundsForSnap(OtherActor, OtherCenter, OtherExt)) return false;
+            float EffectiveGap = SnapGap;
+            if (ABuildingBase* TargetBuilding = Cast<ABuildingBase>(OtherActor))
+            {
+                EffectiveGap = FMath::Max(0.f, SnapGap + TargetBuilding->SnapGapAdjustment);
+                if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
+                {
+                    const float R = Capsule->GetScaledCapsuleRadius();
+                    OtherExt.X = R; OtherExt.Y = R;
+                    OtherCenter = TargetBuilding->GetActorLocation();
+                }
+            }
+            const FVector2D ToTarget(MouseGround.X - OtherCenter.X, MouseGround.Y - OtherCenter.Y);
+            FVector NewCenter = DragCenter;
+            if (FMath::Abs(ToTarget.X) >= FMath::Abs(ToTarget.Y))
+            {
+                const float Sign = (ToTarget.X >= 0.f) ? 1.f : -1.f;
+                NewCenter.X = OtherCenter.X + Sign * (OtherExt.X + DragExt.X + EffectiveGap);
+                NewCenter.Y = OtherCenter.Y;
+            }
+            else
+            {
+                const float Sign = (ToTarget.Y >= 0.f) ? 1.f : -1.f;
+                NewCenter.Y = OtherCenter.Y + Sign * (OtherExt.Y + DragExt.Y + EffectiveGap);
+                NewCenter.X = OtherCenter.X;
+            }
+            OutLoc = GroundToLandscape(NewCenter - CenterToActorOffset);
+            return true;
+        };
+
+        auto ResolveDistances = [&](FVector& InOutLoc, bool& bOutAllGood)
+        {
+            const int32 MaxIterations = 12;
+            const float Padding = 1.0f;
+            const float MinStep = 0.1f;
+            bOutAllGood = false;
+            TArray<AActor*> Neighbors;
+            for (TActorIterator<AWorkArea> ItWA2(World); ItWA2; ++ItWA2) { if (*ItWA2) Neighbors.Add(*ItWA2); }
+            for (TActorIterator<ABuildingBase> ItBD2(World); ItBD2; ++ItBD2) { if (*ItBD2) Neighbors.Add(*ItBD2); }
+            FVector Working = InOutLoc;
+            bool bSolved = false;
+            for (int32 Iter=0; Iter<MaxIterations; ++Iter)
+            {
+                CurrentIndicator->SetActorLocation(Working);
+                const FBoxSphereBounds DragNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+                const FVector DragExtNow = DragNow.BoxExtent;
+                const float DragR = FMath::Max(DragExtNow.X, DragExtNow.Y);
+                bool bAnyViolation = false;
+                FVector Accum = FVector::ZeroVector;
+                for (AActor* N : Neighbors)
+                {
+                    if (!N) continue;
+                    FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
+                    const float NR = FMath::Max(NE.X, NE.Y);
+                    const float Required = DragR + NR + SnapGap;
+                    const float D = FVector::Dist2D(DragNow.Origin, NC);
+                    if (D < Required)
+                    {
+                        bAnyViolation = true;
+                        FVector Dir = (DragNow.Origin - NC); Dir.Z = 0.f;
+                        if (Dir.IsNearlyZero(1e-3f)) Dir = FVector(1,0,0);
+                        Dir.Normalize();
+                        const float Push = (Required - D) + Padding;
+                        Accum += Dir * Push;
+                    }
+                }
+                if (!bAnyViolation) { bSolved = true; break; }
+                if (Accum.Size2D() < MinStep) break;
+                Working += FVector(Accum.X, Accum.Y, 0.f);
+            }
+            CurrentIndicator->SetActorLocation(Working);
+            if (!bSolved)
+            {
+                const FBoxSphereBounds DragNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
+                const FVector DragExtNow = DragNow.BoxExtent;
+                const float DragR = FMath::Max(DragExtNow.X, DragExtNow.Y);
+                bool bStillBad = false;
+                for (AActor* N : Neighbors)
+                {
+                    if (!N) continue;
+                    FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
+                    const float NR = FMath::Max(NE.X, NE.Y);
+                    const float Required = DragR + NR + SnapGap;
+                    const float D = FVector::Dist2D(DragNow.Origin, NC);
+                    if (D < Required) { bStillBad = true; break; }
+                }
+                if (!bStillBad) bSolved = true;
+            }
+            bOutAllGood = bSolved;
+            InOutLoc = Working;
+        };
+
+        if (BestCandidate)
+        {
+            FVector SnapLoc;
+            if (ComputeSnapForIndicator(BestCandidate, SnapLoc))
+            {
+                CurrentIndicator->SetActorLocation(SnapLoc);
+                bool bAllGood = false; FVector Corrected = SnapLoc; ResolveDistances(Corrected, bAllGood);
+                if (!bAllGood)
+                {
+                    if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); }
+                    WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
+                }
+                else
+                {
+                    CurrentIndicator->SetActorLocation(Corrected);
+                    LastSafeLoc = Corrected; bHasLastSafe = true; WorkAreaIsSnapped = true; CurrentSnapActor = BestCandidate;
+                }
                 continue;
             }
-            
-            AAbilityIndicator* CurrentIndicator = Unit->CurrentDraggedAbilityIndicator;
-            if (!CurrentIndicator)
+        }
+
+        // No snap -> free move then resolve
+        {
+            FVector Proposed = DesiredGrounded;
+            CurrentIndicator->SetActorLocation(Proposed);
+            bool bAllGood = false; ResolveDistances(Proposed, bAllGood);
+            if (!bAllGood)
             {
-                continue;
+                if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); }
+                WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
             }
-
-        	FVector ALocation = Unit->GetMassActorLocation();
-
-            FVector Direction = HitResult.Location - ALocation;
-
-        	float Distance = FVector::Dist(HitResult.Location, ALocation);
-        	if (Unit)
-        	{
-        		if (Unit->CurrentSnapshot.AbilityClass)
-        		{
-        			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-        			if (AbilityCDO && Distance > AbilityCDO->Range && AbilityCDO->Range != 0.f)
-        			{
-        				AbilityIndicatorBlinkTimer = AbilityIndicatorBlinkTimer + DeltaSeconds;
-        				if (AbilityIndicatorBlinkTimer > 0.25f)
-        				{
-        					AbilityIndicatorBlinkTimer = 0.0f; // Reset timer
-        					if (Unit->AbilityIndicatorVisibility)
-        					{
-        						Unit->HideAbilityIndicator(CurrentIndicator);
-        					}
-					        else
-					        {
-					        	Unit->ShowAbilityIndicator(CurrentIndicator);
-					        }
-        				}
-        			}else
-        			{
-        				Unit->ShowAbilityIndicator(CurrentIndicator);
-        			}
-        		}
-        	}
-        	
-            Direction.Z = 0;
-
-            if (!Direction.IsNearlyZero())
+            else
             {
-                FRotator NewRotation = Direction.Rotation();
-                CurrentIndicator->SetActorRotation(NewRotation);
-            }
-            
-            // Overlap detection, snap like MoveWorkArea, material swap + NavMesh validity check
-            if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->IndicatorMesh)
-            {
-                // Determine an overlap radius based on the indicator mesh bounds
-                const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                const float OverlapRadius = FMath::Max(50.f, MeshBounds.SphereRadius);
-
-                // Check overlap against WorkAreas
-                TArray<AActor*> OverlappedWorkAreas;
-                const bool bAnyWA = UKismetSystemLibrary::SphereOverlapActors(
-                    this,
-                    HitResult.Location,
-                    OverlapRadius,
-                    TArray<TEnumAsByte<EObjectTypeQuery>>(),
-                    AWorkArea::StaticClass(),
-                    TArray<AActor*>(),
-                    OverlappedWorkAreas
-                );
-
-                // Check overlap against Buildings (used for snapping acquisition)
-                TArray<AActor*> OverlappedBuildings;
-                const bool bAnyBld = UKismetSystemLibrary::SphereOverlapActors(
-                    this,
-                    HitResult.Location,
-                    OverlapRadius,
-                    TArray<TEnumAsByte<EObjectTypeQuery>>(),
-                    ABuildingBase::StaticClass(),
-                    TArray<AActor*>(),
-                    OverlappedBuildings
-                );
-
-                const bool bOverlapsRelevant = (bAnyWA && OverlappedWorkAreas.Num() > 0) || (bAnyBld && OverlappedBuildings.Num() > 0);
-
-                // Simplified NavMesh check (same approach as MoveWorkArea):
-                // Consider location invalid if the mouse hit cannot be projected onto the NavMesh.
-                bool bOffNavMesh = true;
-                FVector MouseGround = HitResult.Location;
-                if (UWorld* World = GetWorld())
-                {
-                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
-                    {
-                        FNavLocation NavLoc;
-                        if (NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f, 100.f, 300.f)))
-                        {
-                            bOffNavMesh = false;
-                            MouseGround = NavLoc.Location;
-                        }
-                    }
-                }
-
-                // Indicator snap logic (like MoveWorkArea) for Building and WorkArea overlaps
-                auto ComputeSnappedLocation = [&](AActor* OtherActor, FVector& OutLocation)
-                {
-                    if (!OtherActor) return false;
-
-                    // Dragged (indicator) bounds
-                    const FBoxSphereBounds DraggedBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                    const FVector DraggedCenter = DraggedBounds.Origin;
-                    const FVector DraggedExtent = DraggedBounds.BoxExtent;
-                    const FVector CenterToActorOffset = DraggedCenter - CurrentIndicator->GetActorLocation();
-
-                    // Other actor bounds
-                    FVector OtherCenter, OtherExtent;
-                    if (!GetActorBoundsForSnap(OtherActor, OtherCenter, OtherExtent))
-                    {
-                        return false;
-                    }
-
-                    // Building special handling
-                    float EffectiveGap = SnapGap;
-                    if (ABuildingBase* TargetBuilding = Cast<ABuildingBase>(OtherActor))
-                    {
-                        EffectiveGap = FMath::Max(0.f, SnapGap + TargetBuilding->SnapGapAdjustment);
-                        if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
-                        {
-                            const float R = Capsule->GetScaledCapsuleRadius();
-                            OtherExtent.X = R; OtherExtent.Y = R;
-                            OtherCenter = TargetBuilding->GetActorLocation();
-                        }
-                    }
-
-                    // Choose side based on mouse-to-target vector
-                    const FVector2D ToTarget(MouseGround.X - OtherCenter.X, MouseGround.Y - OtherCenter.Y);
-                    FVector NewCenter = DraggedCenter;
-                    if (FMath::Abs(ToTarget.X) >= FMath::Abs(ToTarget.Y))
-                    {
-                        const float Sign = (ToTarget.X >= 0.f) ? 1.f : -1.f;
-                        NewCenter.X = OtherCenter.X + Sign * (OtherExtent.X + DraggedExtent.X + EffectiveGap);
-                        NewCenter.Y = OtherCenter.Y;
-                    }
-                    else
-                    {
-                        const float Sign = (ToTarget.Y >= 0.f) ? 1.f : -1.f;
-                        NewCenter.Y = OtherCenter.Y + Sign * (OtherExtent.Y + DraggedExtent.Y + EffectiveGap);
-                        NewCenter.X = OtherCenter.X;
-                    }
-
-                    // Convert mesh center back to actor location
-                    OutLocation = NewCenter - CenterToActorOffset;
-                    return true;
-                };
-
-                // Maintain existing snap with release hysteresis
-                bool bSnappedHandled = false;
-                if (CurrentSnapActor && IsValid(CurrentSnapActor) && !bOffNavMesh)
-                {
-                    // Compute release threshold based on extents
-                    const FBoxSphereBounds DraggedBounds = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                    const FVector DraggedExtent = DraggedBounds.BoxExtent;
-                    FVector OtherCenter, OtherExtent;
-                    if (GetActorBoundsForSnap(CurrentSnapActor, OtherCenter, OtherExtent))
-                    {
-                        const float DragXY = FMath::Max(DraggedExtent.X, DraggedExtent.Y);
-                        const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
-                        const float ReleaseThreshold = DragXY + OtherXY + 150.f;
-                        const float MouseToSnapTarget = FVector::Dist2D(MouseGround, OtherCenter);
-                        const float NowTime = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
-                        if (MouseToSnapTarget > ReleaseThreshold)
-                        {
-                            if (LastBeyondReleaseTime < 0.f) LastBeyondReleaseTime = NowTime;
-                            if ((NowTime - LastBeyondReleaseTime) >= UnsnapGraceSeconds)
-                            {
-                                CurrentSnapActor = nullptr;
-                                WorkAreaIsSnapped = false;
-                                LastBeyondReleaseTime = -1.f;
-                            }
-                        }
-                        else
-                        {
-                            LastBeyondReleaseTime = -1.f;
-                            FVector SnapLoc;
-                            if (ComputeSnappedLocation(CurrentSnapActor, SnapLoc))
-                            {
-                                // Ground the Z by tracing down
-                                FVector Grounded = SnapLoc;
-                                // Place bottom on ground similar to below
-                                float OffsetActorToBottom = 0.f;
-                                const FBoxSphereBounds MeshNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                                const float HalfH = MeshNow.BoxExtent.Z;
-                                const float BottomZ = MeshNow.Origin.Z - HalfH;
-                                OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
-                                FHitResult GroundHit;
-                                FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_SnapGround")), true, CurrentIndicator);
-                                Params.AddIgnoredActor(CurrentIndicator);
-                                for (auto UnitIgnore : SelectedUnits)
-                                {
-                                    if (UnitIgnore && UnitIgnore->CurrentDraggedAbilityIndicator)
-                                    {
-                                        Params.AddIgnoredActor(UnitIgnore->CurrentDraggedAbilityIndicator);
-                                    }
-                                }
-                                const FVector TraceStart = FVector(SnapLoc.X, SnapLoc.Y, SnapLoc.Z + 2000.f);
-                                const FVector TraceEnd   = FVector(SnapLoc.X, SnapLoc.Y, SnapLoc.Z - 10000.f);
-                                if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
-                                {
-                                    Grounded.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
-                                }
-                                CurrentIndicator->SetActorLocation(Grounded);
-                                WorkAreaIsSnapped = true;
-                                bSnappedHandled = true;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        CurrentSnapActor = nullptr;
-                        WorkAreaIsSnapped = false;
-                    }
-                }
-
-                // If not snapped, try to acquire a snap target by box-overlap
-                if (!bSnappedHandled && !bOffNavMesh)
-                {
-                    // Prefer buildings/workareas at the current location
-                    TArray<AActor*> Overlapped;
-                    TArray<AActor*> Ignore;
-                    Ignore.Add(CurrentIndicator);
-                    const FVector DragExtent = MeshBounds.BoxExtent;
-                    bool bAnyOverlap = UKismetSystemLibrary::BoxOverlapActors(
-                        this,
-                        MouseGround,
-                        DragExtent,
-                        TArray<TEnumAsByte<EObjectTypeQuery>>(),
-                        AActor::StaticClass(),
-                        Ignore,
-                        Overlapped
-                    );
-
-                    AActor* Candidate = nullptr;
-                    float BestDist = TNumericLimits<float>::Max();
-                    if (bAnyOverlap)
-                    {
-                        for (AActor* A : Overlapped)
-                        {
-                            if (!A || A == CurrentIndicator) continue;
-                            if (!(Cast<AWorkArea>(A) || Cast<ABuildingBase>(A))) continue;
-                            const float D = FVector::Dist2D(MouseGround, A->GetActorLocation());
-                            if (D < BestDist)
-                            {
-                                BestDist = D;
-                                Candidate = A;
-                            }
-                        }
-                    }
-
-                    if (Candidate)
-                    {
-                        // Hysteresis acquire distance smaller than release
-                        FVector OtherCenter, OtherExtent;
-                        if (GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent))
-                        {
-                            const float DragXY = FMath::Max(DragExtent.X, DragExtent.Y);
-                            const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
-                            const float ReleaseThreshold = DragXY + OtherXY + 150.f;
-                            const float AcquireThreshold = ReleaseThreshold * AcquireHysteresisFactor;
-                            const float MouseToCandidate = FVector::Dist2D(MouseGround, OtherCenter);
-                            const float NowLocal = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
-                            const bool bTryingNewTarget = (CurrentSnapActor != Candidate);
-                            if ((!bTryingNewTarget || NowLocal >= NextAllowedSnapTime) && MouseToCandidate <= AcquireThreshold)
-                            {
-                                CurrentSnapActor = Candidate;
-                                NextAllowedSnapTime = NowLocal + FMath::Max(0.f, SnapCooldownSeconds);
-
-                                FVector SnapLoc;
-                                if (ComputeSnappedLocation(Candidate, SnapLoc))
-                                {
-                                    // Ground the Z
-                                    FVector Grounded = SnapLoc;
-                                    float OffsetActorToBottom = 0.f;
-                                    const FBoxSphereBounds MeshNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                                    const float HalfH = MeshNow.BoxExtent.Z;
-                                    const float BottomZ = MeshNow.Origin.Z - HalfH;
-                                    OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
-                                    FHitResult GroundHit;
-                                    FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_AcquireGround")), true, CurrentIndicator);
-                                    Params.AddIgnoredActor(CurrentIndicator);
-                                    for (auto UnitIgnore : SelectedUnits)
-                                    {
-                                        if (UnitIgnore && UnitIgnore->CurrentDraggedAbilityIndicator)
-                                        {
-                                            Params.AddIgnoredActor(UnitIgnore->CurrentDraggedAbilityIndicator);
-                                        }
-                                    }
-                                    const FVector TraceStart = FVector(SnapLoc.X, SnapLoc.Y, SnapLoc.Z + 2000.f);
-                                    const FVector TraceEnd   = FVector(SnapLoc.X, SnapLoc.Y, SnapLoc.Z - 10000.f);
-                                    if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
-                                    {
-                                        Grounded.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
-                                    }
-                                    CurrentIndicator->SetActorLocation(Grounded);
-                                    WorkAreaIsSnapped = true;
-                                    bSnappedHandled = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Determine if we are inside a NoBuildZone (like MoveWorkArea)
-                bool bIsNoBuildZone = false;
-                if (bAnyWA)
-                {
-                    for (AActor* OverlappedActor : OverlappedWorkAreas)
-                    {
-                        if (AWorkArea* OverlappedWorkArea = Cast<AWorkArea>(OverlappedActor))
-                        {
-                            if (OverlappedWorkArea->IsNoBuildZone)
-                            {
-                                bIsNoBuildZone = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Update material highlighting: only highlight when in a NoBuildZone (do not highlight for off-NavMesh)
-                const bool bNotAllowed = bIsNoBuildZone; // reuse overlap flag as IsNotAllowed
-                if (bNotAllowed != CurrentIndicator->IsOverlappedWithNoBuildZone)
-                {
-                    CurrentIndicator->IsOverlappedWithNoBuildZone = bNotAllowed;
-                    if (bNotAllowed)
-                    {
-                        if (CurrentIndicator->TemporaryHighlightMaterial)
-                        {
-                            CurrentIndicator->IndicatorMesh->SetMaterial(0, CurrentIndicator->TemporaryHighlightMaterial);
-                        }
-                    }
-                    else
-                    {
-                        if (CurrentIndicator->OriginalMaterial)
-                        {
-                            CurrentIndicator->IndicatorMesh->SetMaterial(0, CurrentIndicator->OriginalMaterial);
-                        }
-                    }
-
-                    // Inform server about the not-allowed state so authoritative logic can use it
-                    if (!HasAuthority())
-                    {
-                        Server_SetIndicatorOverlap(CurrentIndicator, bNotAllowed);
-                    }
-                }
-
-                // If we handled snapping, skip normal placement for this indicator
-                if (bSnappedHandled)
-                {
-                    continue;
-                }
-            }
-
-            // Ensure the indicator's mesh bottom sits on the ground at the cursor XY
-            {
-                // Constrain to NavMesh like MoveWorkArea: if mouse point cannot be projected, do not move
-                FVector MouseGround = HitResult.Location;
-                bool bHasNav = false;
-                if (UWorld* World = GetWorld())
-                {
-                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
-                    {
-                        FNavLocation NavLoc;
-                        if (NavSys->ProjectPointToNavigation(HitResult.Location, NavLoc, FVector(100.f,100.f,300.f)))
-                        {
-                            MouseGround = NavLoc.Location;
-                            bHasNav = true;
-                        }
-                    }
-                }
-                if (!bHasNav)
-                {
-                    continue; // don't move indicator off NavMesh
-                }
-                const FVector DesiredXY(MouseGround.X, MouseGround.Y, MouseGround.Z);
-
-                // Compute how far below the actor location the mesh bottom currently is
-                float OffsetActorToBottom = 0.f;
-                if (CurrentIndicator->IndicatorMesh)
-                {
-                    const FBoxSphereBounds MeshBoundsNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
-                    const float HalfHeightNow = MeshBoundsNow.BoxExtent.Z;
-                    const float CurrentBottomZ = MeshBoundsNow.Origin.Z - HalfHeightNow;
-                    OffsetActorToBottom = CurrentBottomZ - CurrentIndicator->GetActorLocation().Z;
-                }
-
-                // Trace down to find ground at the desired XY
-                FHitResult GroundHit;
-                FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_GroundTrace")), true, CurrentIndicator);
-                Params.AddIgnoredActor(CurrentIndicator);
-                // Ignore all indicators from selected units as well
-                for (auto UnitIgnore : SelectedUnits)
-                {
-                    if (UnitIgnore && UnitIgnore->CurrentDraggedAbilityIndicator)
-                    {
-                        Params.AddIgnoredActor(UnitIgnore->CurrentDraggedAbilityIndicator);
-                    }
-                }
-                // Additionally, when overlap-detection is active, ignore WorkAreas and Buildings so we always stick to the landscape
-                if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->IndicatorMesh)
-                {
-                    for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
-                    {
-                        Params.AddIgnoredActor(*It);
-                    }
-                    for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
-                    {
-                        Params.AddIgnoredActor(*ItB);
-                    }
-                }
-
-                const FVector TraceStart = DesiredXY + FVector(0,0,2000.f);
-                const FVector TraceEnd   = DesiredXY - FVector(0,0,10000.f);
-                FVector FinalLoc = DesiredXY;
-                if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
-                {
-                    FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
-                }
-                CurrentIndicator->SetActorLocation(FinalLoc);
+                CurrentIndicator->SetActorLocation(Proposed);
+                LastSafeLoc = Proposed; bHasLastSafe = true; WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
             }
         }
     }
