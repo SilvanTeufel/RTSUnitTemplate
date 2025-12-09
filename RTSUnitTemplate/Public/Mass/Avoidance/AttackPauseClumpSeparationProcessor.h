@@ -58,6 +58,7 @@ private:
 	// We keep two queries since Mass tag queries do not support OR within a single requirement.
 	FMassEntityQuery AttackQuery;
 	FMassEntityQuery PauseQuery;
-
+	FMassEntityQuery BuildQuery;
+	
 	float TimeSinceLastRun = 0.f;
 };

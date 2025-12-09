@@ -61,6 +61,18 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	PauseQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	PauseQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
 	PauseQuery.RegisterWithProcessor(*this);
+
+	BuildQuery.Initialize(EntityManager);
+	BuildQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::All);
+	BuildQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	BuildQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	BuildQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+	BuildQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+	BuildQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	BuildQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	BuildQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	BuildQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	BuildQuery.RegisterWithProcessor(*this);
 }
 
 void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -98,7 +110,8 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 
 	AttackQuery.ForEachEntityChunk(Context, GatherFromQuery);
 	PauseQuery.ForEachEntityChunk(Context, GatherFromQuery);
-
+	BuildQuery.ForEachEntityChunk(Context, GatherFromQuery);
+	
 	if (Units.Num() <= 1)
 	{
 		return;
@@ -178,4 +191,5 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 
 	AttackQuery.ForEachEntityChunk(Context, ApplyToQuery);
 	PauseQuery.ForEachEntityChunk(Context, ApplyToQuery);
+	BuildQuery.ForEachEntityChunk(Context, ApplyToQuery);
 }

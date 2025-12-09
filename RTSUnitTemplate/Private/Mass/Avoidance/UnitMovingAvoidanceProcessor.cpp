@@ -57,6 +57,10 @@ namespace UE::UnitMassAvoidance
 			{
 				return;
 			}
+			if (SearchRadius <= 0.)
+			{
+				return;
+			}
 			if (AvoidanceObstacleGrid.NumLevels <= 0)
 			{
 				return;
@@ -78,6 +82,11 @@ namespace UE::UnitMassAvoidance
 			{
 				const FVector::FReal CellSize = AvoidanceObstacleGrid.GetCellSize(Level);
 				const FNavigationObstacleHashGrid2D::FCellRect Rect = AvoidanceObstacleGrid.CalcQueryBounds(QueryBox, Level);
+				// Defensive: skip degenerate rects
+				if (Rect.MinX > Rect.MaxX || Rect.MinY > Rect.MaxY)
+				{
+					continue;
+				}
 				for (int32 Y = Rect.MinY; Y <= Rect.MaxY; Y++)
 				{
 					for (int32 X = Rect.MinX; X <= Rect.MaxX; X++)
@@ -101,6 +110,7 @@ namespace UE::UnitMassAvoidance
 
 			// Defensive: cache reference to items once
 			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
+			const int32 MaxIdx = Items.GetMaxIndex();
 			for (const FSortingCell& SortedCell : Cells)
 			{
 				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
@@ -112,9 +122,15 @@ namespace UE::UnitMassAvoidance
 					constexpr int32 MaxSafetyIterations = 1024;
 					while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
 					{
+						// Hard range check first to avoid TSparseArray assert inside IsValidIndex
+						if (Idx < 0 || Idx >= MaxIdx)
+						{
+							break; // Out-of-range index, stop scanning this cell
+						}
+						// Within range: now check allocation flag in the sparse array
 						if (!Items.IsValidIndex(Idx))
 						{
-							break; // Corrupt index, stop scanning this cell
+							break; // Unallocated or stale slot
 						}
 						const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
 						OutCloseEntities.Add(It.ID);
