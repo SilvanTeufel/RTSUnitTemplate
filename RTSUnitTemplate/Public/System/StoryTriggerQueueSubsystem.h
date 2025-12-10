@@ -4,11 +4,15 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Templates/SubclassOf.h"
 #include "TimerManager.h"
+#include "UObject/SoftObjectPtr.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
 #include "StoryTriggerQueueSubsystem.generated.h"
 
 class UStoryWidgetBase;
 class USoundBase;
 class UTexture2D;
+class UMaterialInterface;
 
 USTRUCT(BlueprintType)
 struct FStoryQueueItem
@@ -23,9 +27,19 @@ struct FStoryQueueItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	FText Text;
 
-	// Optional image
+	// Optional image (hard reference)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<UTexture2D> Image = nullptr;
+
+	// Optional material (hard reference; takes precedence over Image if set)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	TObjectPtr<UMaterialInterface> Material = nullptr;
+
+	// Optional soft references to reduce cook size. If set, they take precedence over hard refs.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	TSoftObjectPtr<UTexture2D> ImageSoft;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	TSoftObjectPtr<UMaterialInterface> MaterialSoft;
 
 	// Center offsets in pixels
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")

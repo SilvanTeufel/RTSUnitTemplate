@@ -47,6 +47,9 @@ bool UStoryTriggerComponent::BuildQueueItemFromRandomRow(FStoryQueueItem& OutIte
 		OutItem.WidgetClass = Row->StoryWidgetClass;
 		OutItem.Text = Row->StoryText;
 		OutItem.Image = Row->StoryImage;
+		OutItem.Material = Row->StoryMaterial;
+		OutItem.ImageSoft = Row->StoryImageSoft;
+		OutItem.MaterialSoft = Row->StoryMaterialSoft;
 		OutItem.OffsetX = Row->ScreenOffsetX;
 		OutItem.OffsetY = Row->ScreenOffsetY;
 		OutItem.LifetimeSeconds = Row->WidgetLifetimeSeconds;

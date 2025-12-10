@@ -7,6 +7,8 @@
 #include "Components/TextBlock.h"
 #include "StoryWidgetBase.generated.h"
 
+class UMaterialInterface;
+
 /**
  * Simple storytelling widget base that can reveal text letter-by-letter and show an image.
  *
@@ -22,9 +24,9 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	// Start revealing the provided text and optional image.
+	// Start revealing the provided text and optional image or material.
 	UFUNCTION(BlueprintCallable, Category = "Story")
-	void StartStory(const FText& InFullText, UTexture2D* InImage = nullptr);
+	void StartStory(const FText& InFullText, UTexture2D* InImage = nullptr, UMaterialInterface* InMaterial = nullptr);
 
 	// Reset the widget to initial state and stop timers
 	UFUNCTION(BlueprintCallable, Category = "Story")
@@ -38,7 +40,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story", meta=(ClampMin="1.0", ClampMax="200.0"))
 	float CharactersPerSecond = 15.f;
 
-	// Optional: auto start with DefaultText and DefaultImage in NativeConstruct
+	// Optional: auto start with DefaultText and DefaultImage/DefaultMaterial in NativeConstruct
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
 	bool bAutoStart = false;
 
@@ -47,6 +49,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
 	TObjectPtr<UTexture2D> DefaultImage = nullptr;
+
+	// Optional default material for the image widget (takes precedence over DefaultImage if set)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
+	TObjectPtr<UMaterialInterface> DefaultMaterial = nullptr;
 
 protected:
 	// Optional bindings from BP

@@ -54,6 +54,9 @@ void AStoryTriggerActor::BeginPlay()
             TriggerSound = Row->TriggerSound;
             StoryText = Row->StoryText;
             StoryImage = Row->StoryImage;
+            StoryMaterial = Row->StoryMaterial;
+            StoryImageSoft = Row->StoryImageSoft;
+            StoryMaterialSoft = Row->StoryMaterialSoft;
             ScreenOffsetX = Row->ScreenOffsetX;
             ScreenOffsetY = Row->ScreenOffsetY;
             WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
@@ -114,6 +117,9 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
                 Item.WidgetClass = StoryWidgetClass;
                 Item.Text = StoryText;
                 Item.Image = StoryImage.Get();
+                Item.Material = StoryMaterial.Get();
+                Item.ImageSoft = StoryImageSoft;
+                Item.MaterialSoft = StoryMaterialSoft;
                 Item.OffsetX = ScreenOffsetX;
                 Item.OffsetY = ScreenOffsetY;
                 Item.LifetimeSeconds = WidgetLifetimeSeconds;

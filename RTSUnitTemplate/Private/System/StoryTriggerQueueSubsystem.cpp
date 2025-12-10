@@ -3,6 +3,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+#include "Engine/StreamableManager.h"
+#include "Engine/AssetManager.h"
 
 UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 {
@@ -48,11 +50,10 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	FStoryQueueItem Item = Pending[0];
 	Pending.RemoveAt(0);
 
+	// Fallback: if no widget class provided, default to base class
 	if (!Item.WidgetClass)
 	{
-		// Skip invalid entries
-		TryPlayNext();
-		return;
+		Item.WidgetClass = UStoryWidgetBase::StaticClass();
 	}
 
 	UWorld* World = GetWorld();
@@ -74,6 +75,18 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		return;
 	}
 
+	// Resolve soft references (prefer soft over hard)
+	UTexture2D* ResolvedTexture = Item.Image;
+	UMaterialInterface* ResolvedMaterial = Item.Material;
+	if (Item.MaterialSoft.IsValid() || Item.MaterialSoft.ToSoftObjectPath().IsValid())
+	{
+		ResolvedMaterial = Item.MaterialSoft.LoadSynchronous();
+	}
+	if (!ResolvedMaterial && (Item.ImageSoft.IsValid() || Item.ImageSoft.ToSoftObjectPath().IsValid()))
+	{
+		ResolvedTexture = Item.ImageSoft.LoadSynchronous();
+	}
+
 	int32 SizeX = 0, SizeY = 0;
 	PC->GetViewportSize(SizeX, SizeY);
 	const FVector2D CenterPos(0.5f * SizeX + Item.OffsetX, 0.5f * SizeY + Item.OffsetY);
@@ -81,7 +94,7 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	Widget->AddToViewport();
 	Widget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
 	Widget->SetPositionInViewport(CenterPos, false);
-	Widget->StartStory(Item.Text, Item.Image);
+	Widget->StartStory(Item.Text, ResolvedTexture, ResolvedMaterial);
 
 	if (Item.Sound)
 	{

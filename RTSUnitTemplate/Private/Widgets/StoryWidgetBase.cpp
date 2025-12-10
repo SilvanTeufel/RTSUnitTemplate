@@ -1,6 +1,10 @@
 ﻿#include "Widgets/StoryWidgetBase.h"
 #include "TimerManager.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 
 void UStoryWidgetBase::NativeConstruct()
 {
@@ -8,18 +12,62 @@ void UStoryWidgetBase::NativeConstruct()
 
 	// Initialize UI state
 	RevealedCount = 0;
+
+	// Dynamic fallback UI: if bindings are missing, create a basic layout
+	if (!StoryText || !StoryImage)
+	{
+		if (WidgetTree && !WidgetTree->RootWidget)
+		{
+			UVerticalBox* RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+			WidgetTree->RootWidget = RootBox;
+		}
+		if (WidgetTree)
+		{
+			UVerticalBox* RootBox = Cast<UVerticalBox>(WidgetTree->RootWidget);
+			if (!RootBox)
+			{
+				RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+				WidgetTree->RootWidget = RootBox;
+			}
+			if (!StoryImage)
+			{
+				StoryImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("StoryImage"));
+				if (UVerticalBoxSlot* ImgSlot = RootBox->AddChildToVerticalBox(StoryImage))
+				{
+					ImgSlot->SetHorizontalAlignment(HAlign_Center);
+				}
+			}
+			if (!StoryText)
+			{
+				StoryText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StoryText"));
+				StoryText->SetAutoWrapText(true);
+				if (UVerticalBoxSlot* TxtSlot = RootBox->AddChildToVerticalBox(StoryText))
+				{
+					TxtSlot->SetHorizontalAlignment(HAlign_Fill);
+				}
+			}
+		}
+	}
+
 	if (StoryText)
 	{
 		StoryText->SetText(FText::GetEmpty());
 	}
 	if (StoryImage)
 	{
-		StoryImage->SetBrushFromTexture(DefaultImage.Get());
+		if (DefaultMaterial)
+		{
+			StoryImage->SetBrushFromMaterial(DefaultMaterial.Get());
+		}
+		else
+		{
+			StoryImage->SetBrushFromTexture(DefaultImage.Get());
+		}
 	}
 
 	if (bAutoStart && (!DefaultText.IsEmpty()))
 	{
-		StartStory(DefaultText, DefaultImage);
+		StartStory(DefaultText, DefaultImage, DefaultMaterial);
 	}
 }
 
@@ -32,12 +80,20 @@ void UStoryWidgetBase::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UStoryWidgetBase::StartStory(const FText& InFullText, UTexture2D* InImage)
+void UStoryWidgetBase::StartStory(const FText& InFullText, UTexture2D* InImage, UMaterialInterface* InMaterial)
 {
 	if (StoryImage)
 	{
-		UTexture2D* UseTex = InImage ? InImage : DefaultImage.Get();
-		StoryImage->SetBrushFromTexture(UseTex);
+		UMaterialInterface* UseMat = InMaterial ? InMaterial : DefaultMaterial.Get();
+		if (UseMat)
+		{
+			StoryImage->SetBrushFromMaterial(UseMat);
+		}
+		else
+		{
+			UTexture2D* UseTex = InImage ? InImage : DefaultImage.Get();
+			StoryImage->SetBrushFromTexture(UseTex);
+		}
 	}
 
 	FullString = InFullText.ToString();
@@ -68,6 +124,8 @@ void UStoryWidgetBase::ResetStory()
 	}
 	if (StoryImage)
 	{
+		// Clear both material and texture bindings
+		StoryImage->SetBrushFromMaterial(nullptr);
 		StoryImage->SetBrushFromTexture(nullptr);
 	}
 }

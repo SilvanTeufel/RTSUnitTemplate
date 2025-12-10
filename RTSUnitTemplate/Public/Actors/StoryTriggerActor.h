@@ -4,6 +4,9 @@
 #include "GameFramework/Actor.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/DataTable.h"
+#include "UObject/SoftObjectPtr.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
 #include "StoryTriggerActor.generated.h"
 
 class UCapsuleComponent;
@@ -11,6 +14,7 @@ class UPrimitiveComponent;
 class UStoryWidgetBase;
 class USoundBase;
 class UTexture2D;
+class UMaterialInterface;
 class AUnitBase;
 
 USTRUCT(BlueprintType)
@@ -30,9 +34,20 @@ struct FStoryWidgetTable : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story, meta=(MultiLine=true))
 	FText StoryText;
 
-	// Optional image shown in the story widget
+	// Optional image shown in the story widget (hard reference)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
 	TObjectPtr<UTexture2D> StoryImage = nullptr;
+
+	// Optional material shown in the story widget (hard reference; takes precedence over StoryImage if set)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	TObjectPtr<UMaterialInterface> StoryMaterial = nullptr;
+
+ // Soft reference variants to reduce cook size; if set, they take precedence over hard refs
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	TSoftObjectPtr<UTexture2D> StoryImageSoft;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	TSoftObjectPtr<UMaterialInterface> StoryMaterialSoft;
 
 	// Screen-space offset from center (X=right, Y=down)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
@@ -86,9 +101,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story, meta=(MultiLine=true))
 	FText StoryText;
 
-	// Optional image shown in the story widget
+	// Optional image shown in the story widget (hard reference)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
 	TObjectPtr<UTexture2D> StoryImage = nullptr;
+
+	// Optional material shown in the story widget (hard reference; takes precedence over StoryImage if set)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	TObjectPtr<UMaterialInterface> StoryMaterial = nullptr;
+
+ // Soft reference variants for actor overrides as well
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	TSoftObjectPtr<UTexture2D> StoryImageSoft;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	TSoftObjectPtr<UMaterialInterface> StoryMaterialSoft;
 
 	// If true, the trigger will only fire once and then disable itself
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
