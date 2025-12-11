@@ -45,9 +45,10 @@ namespace
 			return true;
 		}
 
-		static void RetryRegister(UWorld* World)
+		static void RetryRegister(TWeakObjectPtr<UWorld> WeakWorld)
 		{
-			if (!World || !IsValid(World))
+			UWorld* World = WeakWorld.Get();
+			if (World == nullptr)
 			{
 				return;
 			}
@@ -56,10 +57,7 @@ namespace
 			{
 				if (FTimerHandle* Handle = GRetryTimers.Find(World))
 				{
-					if (IsValid(World))
-					{
-						World->GetTimerManager().ClearTimer(*Handle);
-					}
+					World->GetTimerManager().ClearTimer(*Handle);
 					GRetryTimers.Remove(World);
 				}
 				return;
@@ -76,10 +74,7 @@ namespace
 				// Clear retry timer once registered
 				if (FTimerHandle* HandlePtr = GRetryTimers.Find(World))
 				{
-					if (IsValid(World))
-					{
-						World->GetTimerManager().ClearTimer(*HandlePtr);
-					}
+					World->GetTimerManager().ClearTimer(*HandlePtr);
 					GRetryTimers.Remove(World);
 				}
 			}
@@ -111,7 +106,8 @@ namespace
 				if (!GRetryTimers.Contains(&World))
 				{
 					FTimerDelegate Del;
-					Del.BindStatic(&RetryRegister, &World);
+					TWeakObjectPtr<UWorld> WeakWorld = &World;
+					Del.BindStatic(&RetryRegister, WeakWorld);
 					FTimerHandle Handle;
 					World.GetTimerManager().SetTimer(Handle, Del, 0.1f, true);
 					GRetryTimers.Add(&World, Handle);
