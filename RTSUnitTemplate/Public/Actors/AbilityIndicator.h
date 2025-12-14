@@ -57,6 +57,14 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsOverlappedWithNoBuildZone = false;
 
+	// Placement constraint: when true, this indicator cannot be placed closer than ResourcePlacementDistance to any resource WorkArea
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool PlacementCloseToResources = false;
+
+	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ResourcePlacementDistance = 1000.f;
+
 private:
 	// Root Scene Component
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)

@@ -264,4 +264,13 @@ protected:
 
 	// Single timer handle used to process overflow workers
 	FTimerHandle OverflowWorkersTimerHandle;
+
+public:
+	// Placement constraint: when true, this WorkArea cannot be placed closer than ResourcePlacementDistance to any resource WorkArea (Primary..Legendary)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool PlacementCloseToResources = false;
+
+	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ResourcePlacementDistance = 1000.f;
 };

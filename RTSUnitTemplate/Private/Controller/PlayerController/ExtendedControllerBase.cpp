@@ -1504,7 +1504,20 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                 FVector NC, NE;
                 if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                 const float NR = FMath::Max(NE.X, NE.Y);
-                const float Required = DragR + NR + SnapGap;
+                float Required = DragR + NR + SnapGap;
+                // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
+                if (DraggedWorkArea->PlacementCloseToResources)
+                {
+                    if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
+                    {
+                        const WorkAreaData::WorkAreaType T = NeighborWA->Type;
+                        const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+                        if (bIsResourceType)
+                        {
+                            Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
+                        }
+                    }
+                }
                 const float D = FVector::Dist2D(DragC, NC);
                 if (D < Required)
                 {
@@ -1553,7 +1566,19 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                     FVector NC, NE;
                     if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
-                    const float Required = DragR2 + NR + SnapGap;
+                    float Required = DragR2 + NR + SnapGap;
+                    if (DraggedWorkArea->PlacementCloseToResources)
+                    {
+                        if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
+                        {
+                            const WorkAreaData::WorkAreaType T = NeighborWA->Type;
+                            const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+                            if (bIsResourceType)
+                            {
+                                Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
+                            }
+                        }
+                    }
                     const float D = FVector::Dist2D(DragC2, NC);
                     if (D < Required)
                     {
@@ -2513,7 +2538,19 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                     if (!N) continue;
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
-                    const float Required = DragR + NR + SnapGap;
+                    float Required = DragR + NR + SnapGap;
+                    if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->PlacementCloseToResources)
+                    {
+                        if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
+                        {
+                            const WorkAreaData::WorkAreaType T = NeighborWA->Type;
+                            const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+                            if (bIsResourceType)
+                            {
+                                Required = FMath::Max(Required, CurrentIndicator->ResourcePlacementDistance);
+                            }
+                        }
+                    }
                     const float D = FVector::Dist2D(DragNow.Origin, NC);
                     if (D < Required)
                     {
