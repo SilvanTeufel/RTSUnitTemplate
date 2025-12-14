@@ -22,7 +22,11 @@ class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
 	GENERATED_BODY()
 	
 public:
-
+	
+	// Unit this unit will follow when assigned via PlayerController right-click on a friendly unit.
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AUnitBase* FollowUnit = nullptr;
+	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 

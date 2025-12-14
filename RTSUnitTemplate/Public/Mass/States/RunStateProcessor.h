@@ -35,6 +35,11 @@ private:
 
 	float TimeSinceLastRun = 0.0f;
 	
+	// Follow movement signal throttling (once per second)
+	float FollowExecutionInterval = 1.0f;
+	float FollowTimeSinceLastRun = 0.0f;
+	bool bFollowTickThisFrame = false;
+	
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };

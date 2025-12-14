@@ -807,31 +807,76 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 	return false;
 }
 
+void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem) return;
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit) continue;
+		Unit->FollowUnit = FollowTarget;
+
+		if (!Unit->MassActorBindingComponent) continue;
+		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (!EntityManager.IsEntityValid(MassEntityHandle)) continue;
+
+		if (FMassAIStateFragment* AIFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+		{
+			AIFrag->bFollowUnitAssigned = (FollowTarget != nullptr);
+		}
+	}
+}
+
 void ACustomControllerBase::RightClickPressedMass()
 {
-	
 	AttackToggled = false;
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
-	
-	if (!CheckClickOnTransportUnitMass(Hit))
+
+	FHitResult HitPawn;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+
+	// If we clicked on a friendly unit while having a selection, assign follow and early return
+	if (SelectedUnits.Num() > 0 && HitPawn.bBlockingHit)
 	{
-		if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
+		if (AUnitBase* HitUnit = Cast<AUnitBase>(HitPawn.GetActor()))
 		{
-			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-			if(!CheckClickOnWorkArea(Hit))
+			const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
+			if (bFriendly)
 			{
-					RunUnitsAndSetWaypointsMass(Hit);
+				Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
+				return;
 			}
 		}
 	}
 
+	// Otherwise clear any existing follow assignment when right-clicking elsewhere
+	if (SelectedUnits.Num() > 0)
+	{
+		Server_SetUnitsFollowTarget(SelectedUnits, nullptr);
+	}
+
+	// Existing transporter/work area/move logic
+	FHitResult Hit;
+	if (!CheckClickOnTransportUnitMass(HitPawn))
+	{
+		if (!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
+		{
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+			if (!CheckClickOnWorkArea(Hit))
+			{
+				RunUnitsAndSetWaypointsMass(Hit);
+			}
+		}
+	}
 
 	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
 	{
 		DestroyDraggedArea(SelectedUnits[0]);
 	}
-	
 }
 
 // Helper to get a unit's world location (actor or ISM)

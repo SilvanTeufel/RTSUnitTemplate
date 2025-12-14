@@ -60,6 +60,14 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     }
     TimeSinceLastRun -= ExecutionInterval;
 
+    // Throttle follow assignment checks to once per second
+    static float FollowAccum = 0.0f;
+    FollowAccum += ExecutionInterval;
+    const bool bFollowTickThisFrame = (FollowAccum >= 1.0f);
+    if (bFollowTickThisFrame)
+    {
+        FollowAccum = 0.0f;
+    }
     
     const UWorld* World = EntityManager.GetWorld(); // Use EntityManager consistently
     if (!World) return;
@@ -68,7 +76,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     
     EntityQuery.ForEachEntityChunk(Context,
 
-        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager, bFollowTickThisFrame](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
@@ -85,6 +93,12 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+
+            // Periodic follow assignment check
+            if (bFollowTickThisFrame && StateFrag.bFollowUnitAssigned && SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::CheckFollowAssigned, Entity);
+            }
 
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)
             {

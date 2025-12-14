@@ -127,6 +127,10 @@ private:
 	FDelegateHandle FogParametersDelegateHandle;
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
+
+	// Follow feature
+	FDelegateHandle UpdateFollowMovementDelegateHandle;
+	FDelegateHandle CheckFollowAssignedDelegateHandle;
 	
 	// Cached subsystem pointers
 	UPROPERTY(Transient)
@@ -253,7 +257,7 @@ private:
 	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
-
+	
 	FDelegateHandle UpdateWorkerMovementDelegateHandle;
 		
 	UFUNCTION()
@@ -264,5 +268,11 @@ private:
 	
 	UFUNCTION()
 	void UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUnitBase* UnitBase);
-	
+
+	// Follow feature handlers
+	UFUNCTION()
+	void HandleUpdateFollowMovement(FName SignalName, TArray<FMassEntityHandle>& Entities);
+	UFUNCTION()
+	void HandleCheckFollowAssigned(FName SignalName, TArray<FMassEntityHandle>& Entities);
+		
 };

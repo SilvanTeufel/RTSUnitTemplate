@@ -11,7 +11,11 @@
 #include "MassNavigationSubsystem.h"
 #include "Characters/Unit/UnitBase.h" // Include your AUnitBase header
 #include "Mass/Signals/MySignals.h" // Include your signal definition header
+#include "Characters/Unit/MassUnitBase.h"
 #include "Widgets/UnitBaseHealthBar.h"
+#include "MassMovementFragments.h"
+#include "MassCommonFragments.h"
+#include "Mass/UnitMassTag.h"
 #include "MassExecutionContext.h" 
 #include "MassNavigationFragments.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -142,10 +146,16 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     	SpawnSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUnitSpawnedSignal));
 
-    	UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
+   		UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
-    	
-    }
+
+		// Follow feature delegates
+		UpdateFollowMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFollowMovement)
+			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFollowMovement));
+		CheckFollowAssignedDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CheckFollowAssigned)
+			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleCheckFollowAssigned));
+			
+		}
 }
 
 
@@ -310,6 +320,19 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 			.Remove(UpdateWorkerMovementDelegateHandle);
 		UpdateWorkerMovementDelegateHandle.Reset();
 	}
+	// Follow feature unbinding
+	if (SignalSubsystem && UpdateFollowMovementDelegateHandle.IsValid())
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFollowMovement)
+			.Remove(UpdateFollowMovementDelegateHandle);
+		UpdateFollowMovementDelegateHandle.Reset();
+	}
+	if (SignalSubsystem && CheckFollowAssignedDelegateHandle.IsValid())
+	{
+		SignalSubsystem->GetSignalDelegateByName(UnitSignals::CheckFollowAssigned)
+			.Remove(CheckFollowAssignedDelegateHandle);
+		CheckFollowAssignedDelegateHandle.Reset();
+	}
 
 	SignalSubsystem = nullptr;
 	EntitySubsystem = nullptr;
@@ -362,6 +385,63 @@ void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
   
+}
+
+void UUnitStateProcessor::HandleUpdateFollowMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem || !World) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	const bool bIsClient = (World->GetNetMode() == NM_Client);
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) continue;
+		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+		FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+		const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+		if (!ActorFragPtr || !StateFrag || !Stats) continue;
+		AUnitBase* Unit = Cast<AUnitBase>(ActorFragPtr->GetMutable());
+		if (!Unit || !StateFrag->bFollowUnitAssigned || !IsValid(Unit->FollowUnit)) continue;
+
+		const FVector FollowLocation = Unit->FollowUnit->GetMassActorLocation();
+		if (bIsClient)
+		{
+			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+			{
+				MassUnit->UpdatePredictionFragment(FollowLocation, Stats->RunSpeed);
+			}
+		}
+		else
+		{
+			if (MoveTarget)
+			{
+				UpdateMoveTarget(*MoveTarget, FollowLocation, Stats->RunSpeed, World);
+			}
+		}
+	}
+}
+
+void UUnitStateProcessor::HandleCheckFollowAssigned(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem || !SignalSubsystem) return;
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) continue;
+		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+		if (!ActorFragPtr || !StateFrag) continue;
+
+		AUnitBase* Unit = Cast<AUnitBase>(ActorFragPtr->GetMutable());
+		if (!Unit) continue;
+
+		if (StateFrag->bFollowUnitAssigned && IsValid(Unit->FollowUnit))
+		{
+			SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
+		}
+	}
 }
 
 void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager)

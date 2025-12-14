@@ -51,6 +51,17 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
+
+    // Throttle follow updates to max once per second (local static accumulator)
+    static float FollowAccum = 0.0f;
+    FollowAccum += ExecutionInterval;
+    const bool bFollowTickThisFrameLocal = (FollowAccum >= 1.0f);
+    if (bFollowTickThisFrameLocal)
+    {
+        FollowAccum = 0.0f;
+    }
+    // propagate to member so ExecuteClient/Server can read it
+    this->bFollowTickThisFrame = bFollowTickThisFrameLocal;
     // Get World and Signal Subsystem once
     if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
     {
@@ -115,8 +126,17 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const FVector FinalDestination = MoveTarget.Center;
             const float AcceptanceRadius = MoveTarget.SlackRadius;
 
-            // Only arrival check on client
-            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            // Periodic follow update on client for prediction
+            if (this->bFollowTickThisFrame && StateFrag.bFollowUnitAssigned)
+            {
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UpdateFollowMovement, Entity);
+                }
+            }
+
+            // Only arrival check on client (skip if following a unit)
+            if (!StateFrag.bFollowUnitAssigned && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
 
@@ -137,7 +157,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
                 Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
 
-                Defer.AddTag<FMassStateIdleTag>(Entity);
+            	Defer.AddTag<FMassStateIdleTag>(Entity);
                 continue;
             }
         }
@@ -175,6 +195,12 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const float AcceptanceRadius = MoveTarget.SlackRadius; //150.f;
 
             StateFrag.StateTimer += ExecutionInterval;
+
+            // Periodic follow update on client for prediction
+            if (this->bFollowTickThisFrame && StateFrag.bFollowUnitAssigned && SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UpdateFollowMovement, Entity);
+            }
             
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
                 TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
@@ -184,7 +210,9 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
                 }
-            }else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            }
+            // Arrival check on server (skip if following a unit)
+            else if (!StateFrag.bFollowUnitAssigned && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

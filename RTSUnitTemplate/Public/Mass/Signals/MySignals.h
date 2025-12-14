@@ -66,6 +66,9 @@ namespace UnitSignals
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 
 	const FName InitUnit(TEXT("InitUnit"));
+	// Follow feature signals
+	const FName UpdateFollowMovement(TEXT("UpdateFollowMovement"));
+	const FName CheckFollowAssigned(TEXT("CheckFollowAssigned"));
 	// Client-side navigation mirror signals
 }
 

@@ -66,6 +66,10 @@ public:
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
 
+	// Assign or clear a follow target for a set of units on the server.
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_SetUnitsFollowTarget(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget);
+
 	// Batched version to reduce per-unit RPC spamming when issuing group move orders
 	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

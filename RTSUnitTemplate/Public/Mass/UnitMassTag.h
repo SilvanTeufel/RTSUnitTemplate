@@ -298,6 +298,10 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool HoldPosition = false;
+
+	// Whether this unit currently has a FollowUnit assigned (used to early-opt out of follow signals)
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bFollowUnitAssigned = false;
 	
 	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	//TSet<FMassEntityHandle> LastSeenTargets; 
