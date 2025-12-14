@@ -970,7 +970,7 @@ TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad)
+int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet)
 {
 	FUnitSpawnParameter SpawnParameter;
 	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
@@ -1054,21 +1054,19 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 
 			UnitBase->ScheduleDelayedNavigationUpdate();
 			
-			if(SummonedUnitIndexes.Num() < i+1 || SummonContinuously)
 			{
 				int UIndex = GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
-			
-				FUnitSpawnData UnitSpawnDataSet;
-				UnitSpawnDataSet.Id = SpawnParameter.Id;
-				UnitSpawnDataSet.UnitBase = UnitBase;
-				UnitSpawnDataSet.SpawnParameter = SpawnParameter;
-				SummonedUnitsDataSet.Add(UnitSpawnDataSet);
-				SummonedUnitIndexes.Add(UIndex);
-			}
-			else if(IsSpawnedUnitDead(SummonedUnitIndexes[i]))
-			{
-				UnitBase->UnitIndex = SummonedUnitIndexes[i];
-				SetUnitBase(SummonedUnitIndexes[i], UnitBase);
+				// Only use SummonedUnitsDataSet when explicitly requested and not summoning continuously
+				if (UseSummonDataSet && !SummonContinuously)
+				{
+					FUnitSpawnData UnitSpawnDataSet;
+					UnitSpawnDataSet.Id = SpawnParameter.Id;
+					UnitSpawnDataSet.UnitBase = UnitBase;
+					UnitSpawnDataSet.SpawnParameter = SpawnParameter;
+					SummonedUnitsDataSet.Add(UnitSpawnDataSet);
+					// Remove dead entries after each spawn
+					GetAliveUnitsInDataSet();
+				}
 			}
 			
 		}
@@ -1241,4 +1239,27 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
             }
         }
     }
+}
+
+int32 AUnitBase::GetAliveUnitsInDataSet()
+{
+	int32 AliveCount = 0;
+	// Remove invalid or dead units
+	for (int32 i = SummonedUnitsDataSet.Num() - 1; i >= 0; --i)
+	{
+		FUnitSpawnData& Data = SummonedUnitsDataSet[i];
+		if (!IsValid(Data.UnitBase) || Data.UnitBase->GetUnitState() == UnitData::Dead)
+		{
+			SummonedUnitsDataSet.RemoveAt(i);
+		}
+	}
+	// Count alive
+	for (const FUnitSpawnData& Data : SummonedUnitsDataSet)
+	{
+		if (IsValid(Data.UnitBase) && Data.UnitBase->GetUnitState() != UnitData::Dead)
+		{
+			++AliveCount;
+		}
+	}
+	return AliveCount;
 }

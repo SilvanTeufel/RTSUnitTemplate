@@ -350,9 +350,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	TArray<FUnitSpawnData> SummonedUnitsDataSet;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
-	TArray<int> SummonedUnitIndexes;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SpawnUnitsFromParameters(
@@ -360,10 +357,13 @@ public:
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true);
+		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true, bool UseSummonDataSet = false);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);
+	
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	int32 GetAliveUnitsInDataSet();
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitBase(int UIndex, AUnitBase* NewUnit);
