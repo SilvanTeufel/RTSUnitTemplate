@@ -729,7 +729,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 		FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation(); 
 		
 		FTransform Transform;
-		Transform.SetLocation(ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset()*GetActorForwardVector() + ProjectileSpawnOffset);
+		const FVector RotatedProjectileSpawnOffset = ShootingUnit->GetActorRotation().RotateVector(ProjectileSpawnOffset);
+		Transform.SetLocation(ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset()*ShootingUnit->GetActorForwardVector() + RotatedProjectileSpawnOffset);
 
 
 		// 2) Figure out the exact world‐space "aim" point
@@ -774,8 +775,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     bool DisableAutoZOffset,
     float ZOffset,
     float Scale,
-    FVector SpawnOffset
-)
+    FVector SpawnOffset)
 {
     if (!Aim || !Attacker || !ProjectileClass) return;
 
@@ -812,10 +812,11 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
         if (ShootingUnit)
         {
             FTransform SpawnXf;
+            const FVector RotatedProjectileSpawnOffset = ShootingUnit->GetActorRotation().RotateVector(ProjectileSpawnOffset);
             SpawnXf.SetLocation(
             ShootingUnitLocation
-                + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
-                + ProjectileSpawnOffset + SpawnOffset
+                + Attributes->GetProjectileScaleActorDirectionOffset() * ShootingUnit->GetActorForwardVector()
+                + RotatedProjectileSpawnOffset + SpawnOffset
             );
 
             const FVector Dir          = (LocationToShoot - ShootingUnitLocation).GetSafeNormal();
@@ -872,9 +873,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
 
     // Base spawn‐origin offset
+    const FVector RotatedProjectileSpawnOffset = GetActorRotation().RotateVector(ProjectileSpawnOffset);
     const FVector SpawnOrigin = SpawnerLocationForAimDir
         + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
-        + ProjectileSpawnOffset;
+        + RotatedProjectileSpawnOffset;
 
     for (int32 i = 0; i < ProjectileCount; ++i)
     {
