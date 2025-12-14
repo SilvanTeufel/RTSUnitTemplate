@@ -1506,7 +1506,7 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                 const float NR = FMath::Max(NE.X, NE.Y);
                 float Required = DragR + NR + SnapGap;
                 // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
-                if (DraggedWorkArea->PlacementCloseToResources)
+                if (DraggedWorkArea->DenyPlacementCloseToResources)
                 {
                     if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
                     {
@@ -1567,7 +1567,7 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                     if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
                     float Required = DragR2 + NR + SnapGap;
-                    if (DraggedWorkArea->PlacementCloseToResources)
+                    if (DraggedWorkArea->DenyPlacementCloseToResources)
                     {
                         if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
                         {
@@ -2370,6 +2370,21 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         AAbilityIndicator* CurrentIndicator = Unit->CurrentDraggedAbilityIndicator;
         if (!CurrentIndicator) continue;
 
+        // Helper: apply optional rotation to face from owner unit to indicator location (yaw only)
+        auto ApplyRotationIfNeeded = [&](AAbilityIndicator* Indicator)
+        {
+            if (!Indicator || !Indicator->RotatesToDirection) return;
+            const FVector From = Unit->GetActorLocation();
+            FVector To = Indicator->GetActorLocation();
+            FVector Dir = To - From; Dir.Z = 0.f;
+            if (!Dir.IsNearlyZero(1e-3f))
+            {
+                FRotator Rot = Dir.Rotation();
+                Rot.Pitch = 0.f; Rot.Roll = 0.f;
+                Indicator->SetActorRotation(Rot);
+            }
+        };
+
         // Handle range blinking regardless of placement mode
         {
             const FVector ALocation = Unit->GetMassActorLocation();
@@ -2416,6 +2431,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
             }
             CurrentIndicator->SetActorLocation(FinalLoc);
+            ApplyRotationIfNeeded(CurrentIndicator);
             continue;
         }
 
@@ -2463,6 +2479,8 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         auto ConsiderActor = [&](AActor* Candidate)
         {
             if (!Candidate || Candidate == CurrentIndicator) return;
+            // Do not consider the owner unit/building as a blocking/snap target
+            if (Candidate == Unit) return;
             FVector OtherCenter, OtherExtent;
             if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent)) return;
             const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
@@ -2536,10 +2554,13 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 for (AActor* N : Neighbors)
                 {
                     if (!N) continue;
+                    // Do not be blocked by the owning unit/building
+                    if (N == Unit) continue;
+                    if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
                     float Required = DragR + NR + SnapGap;
-                    if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->PlacementCloseToResources)
+                    if (CurrentIndicator->DetectOverlapWithWorkArea && CurrentIndicator->DenyPlacementCloseToResources)
                     {
                         if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
                         {
@@ -2597,12 +2618,13 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 bool bAllGood = false; FVector Corrected = SnapLoc; ResolveDistances(Corrected, bAllGood);
                 if (!bAllGood)
                 {
-                    if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); }
+                    if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); ApplyRotationIfNeeded(CurrentIndicator); }
                     WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
                 }
                 else
                 {
                     CurrentIndicator->SetActorLocation(Corrected);
+                    ApplyRotationIfNeeded(CurrentIndicator);
                     LastSafeLoc = Corrected; bHasLastSafe = true; WorkAreaIsSnapped = true; CurrentSnapActor = BestCandidate;
                 }
                 continue;
@@ -2616,12 +2638,13 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             bool bAllGood = false; ResolveDistances(Proposed, bAllGood);
             if (!bAllGood)
             {
-                if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); }
+                if (bHasLastSafe) { CurrentIndicator->SetActorLocation(LastSafeLoc); ApplyRotationIfNeeded(CurrentIndicator); }
                 WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
             }
             else
             {
                 CurrentIndicator->SetActorLocation(Proposed);
+                ApplyRotationIfNeeded(CurrentIndicator);
                 LastSafeLoc = Proposed; bHasLastSafe = true; WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
             }
         }

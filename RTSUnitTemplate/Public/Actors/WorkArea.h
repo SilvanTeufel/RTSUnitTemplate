@@ -268,7 +268,7 @@ protected:
 public:
 	// Placement constraint: when true, this WorkArea cannot be placed closer than ResourcePlacementDistance to any resource WorkArea (Primary..Legendary)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool PlacementCloseToResources = false;
+	bool DenyPlacementCloseToResources = false;
 
 	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

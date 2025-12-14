@@ -59,11 +59,15 @@ public:
 
 	// Placement constraint: when true, this indicator cannot be placed closer than ResourcePlacementDistance to any resource WorkArea
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool PlacementCloseToResources = false;
+	bool DenyPlacementCloseToResources = false;
 
 	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResourcePlacementDistance = 1000.f;
+
+	// If true, the indicator rotates to face from its owning unit/building toward the indicator location
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool RotatesToDirection = false;
 
 private:
 	// Root Scene Component
