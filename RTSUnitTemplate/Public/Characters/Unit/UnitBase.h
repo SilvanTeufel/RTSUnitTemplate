@@ -26,6 +26,25 @@ public:
 	// Unit this unit will follow when assigned via PlayerController right-click on a friendly unit.
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* FollowUnit = nullptr;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector2D FollowOffset = FVector2D::ZeroVector;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float FollowMinRange = 500.f;
+
+	// Transient cache to avoid regenerating random follow offsets if the leader hasn't moved
+	UPROPERTY(Transient)
+	AUnitBase* LastFollowLeader = nullptr;
+	
+	UPROPERTY(Transient)
+	FVector LastFollowLeaderLocation = FVector::ZeroVector;
+	
+	UPROPERTY(Transient)
+	FVector LastComputedFollowTarget = FVector::ZeroVector;
+	
+	UPROPERTY(Transient)
+	bool bFollowCachedValid = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
@@ -356,12 +375,16 @@ public:
 	TArray<FUnitSpawnData> SummonedUnitsDataSet;
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	void SpawnUnitsFromParameters(
+	TArray<AUnitBase*> SpawnUnitsFromParameters(
 		TSubclassOf<class AAIController> AIControllerBaseClass,
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true, bool UseSummonDataSet = false);
+		int NewTeamId, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true, bool UseSummonDataSet = false, bool bFollow = false, bool bSelectable = true);
+
+	// Applies/clears a follow target for this single unit on the server and updates the Mass AI fragment flag.
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ApplyFollowTarget(AUnitBase* NewFollowTarget);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsSpawnedUnitDead(int UIndex);

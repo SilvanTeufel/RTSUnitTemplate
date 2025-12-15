@@ -58,6 +58,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool AutoMining = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	bool CanRepair = true;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	bool CanBeRepaired = true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;

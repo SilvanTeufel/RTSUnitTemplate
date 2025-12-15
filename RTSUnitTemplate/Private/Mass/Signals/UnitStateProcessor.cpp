@@ -16,6 +16,7 @@
 #include "MassMovementFragments.h"
 #include "MassCommonFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "Math/Vector2D.h"
 #include "MassExecutionContext.h" 
 #include "MassNavigationFragments.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -404,19 +405,73 @@ void UUnitStateProcessor::HandleUpdateFollowMovement(FName SignalName, TArray<FM
 		AUnitBase* Unit = Cast<AUnitBase>(ActorFragPtr->GetMutable());
 		if (!Unit || !StateFrag->bFollowUnitAssigned || !IsValid(Unit->FollowUnit)) continue;
 
-		const FVector FollowLocation = Unit->FollowUnit->GetMassActorLocation();
+		// Cache-aware follow target computation: reuse random offset until leader moves
+		const FVector CurrentLeaderLocation = Unit->FollowUnit->GetMassActorLocation();
+		const bool bLeaderChanged = !Unit->bFollowCachedValid
+			|| Unit->LastFollowLeader != Unit->FollowUnit
+			|| FVector::DistSquared2D(Unit->LastFollowLeaderLocation, CurrentLeaderLocation) > 25.f; // ~5 units tolerance
+		FVector TargetLocation;
+		if (bLeaderChanged)
+		{
+			TargetLocation = CurrentLeaderLocation;
+			// If FollowOffset is set (greater than zero), add a random 2D offset in range [-FollowOffset, +FollowOffset]
+			if (Unit->FollowOffset.SizeSquared() > 0.f)
+			{
+				const FVector2D AbsOffset(FMath::Abs(Unit->FollowOffset.X), FMath::Abs(Unit->FollowOffset.Y));
+				const FVector RandomOffset(
+					FMath::FRandRange(-AbsOffset.X, AbsOffset.X),
+					FMath::FRandRange(-AbsOffset.Y, AbsOffset.Y),
+					0.f // keep on ground plane
+				);
+				TargetLocation += RandomOffset;
+			}
+			// Update cache
+			Unit->LastFollowLeader = Unit->FollowUnit;
+			Unit->LastFollowLeaderLocation = CurrentLeaderLocation;
+			Unit->LastComputedFollowTarget = TargetLocation;
+			Unit->bFollowCachedValid = true;
+		}
+		else
+		{
+			TargetLocation = Unit->LastComputedFollowTarget;
+		}
+
+		// Server-side arrival/acceptance check against the computed target location
+		if (!bIsClient)
+		{
+			const FVector MyLoc = Unit->GetMassActorLocation();
+			const float AcceptanceRadius = (MoveTarget && MoveTarget->SlackRadius > 0.f) ? MoveTarget->SlackRadius : 100.f;
+			if (FVector::Dist2D(MyLoc, TargetLocation) <= AcceptanceRadius)
+			{
+				if (MoveTarget)
+				{
+					StopMovement(*MoveTarget, World);
+				}
+				StateFrag->SwitchingState = true;
+				FMassEntityHandle MutableEntity = Entity; // SwitchState expects non-const ref
+				SwitchState(UnitSignals::Idle, MutableEntity, EntityManager);
+				continue; // Skip issuing a new follow target this tick
+			}
+		}
+
 		if (bIsClient)
 		{
 			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
 			{
-				MassUnit->UpdatePredictionFragment(FollowLocation, Stats->RunSpeed);
+				MassUnit->UpdatePredictionFragment(TargetLocation, Stats->RunSpeed);
 			}
 		}
 		else
 		{
 			if (MoveTarget)
 			{
-				UpdateMoveTarget(*MoveTarget, FollowLocation, Stats->RunSpeed, World);
+				// Avoid redundant updates if target location hasn't changed significantly
+				if (FVector::DistSquared2D(MoveTarget->Center, TargetLocation) > 1.f)
+				{
+					UpdateMoveTarget(*MoveTarget, TargetLocation, Stats->RunSpeed, World);
+				}
+				// Keep Unit's replicated RunLocation in sync for debugging/UI if needed
+				Unit->RunLocation = TargetLocation;
 			}
 		}
 	}
@@ -439,7 +494,13 @@ void UUnitStateProcessor::HandleCheckFollowAssigned(FName SignalName, TArray<FMa
 
 		if (StateFrag->bFollowUnitAssigned && IsValid(Unit->FollowUnit))
 		{
-			SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
+			const FVector MyLoc = Unit->GetMassActorLocation();
+			const FVector FollowLoc = Unit->FollowUnit->GetMassActorLocation();
+			const float Dist2D = FVector::Dist2D(MyLoc, FollowLoc);
+			if (Dist2D > Unit->FollowMinRange)
+			{
+				SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
+			}
 		}
 	}
 }

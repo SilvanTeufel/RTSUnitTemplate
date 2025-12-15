@@ -342,6 +342,10 @@ struct FUnitSpawnParameter : public FTableRowBase
 	// If false, no SquadId is assigned (0) so units behave as independent units (e.g., individual healthbars on hit).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool SpawnAsSquad = false;
+
+	// Whether the spawned unit(s) can be selected by players (default: true)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool CanBeSelected = true;
 };
 
 USTRUCT(BlueprintType)

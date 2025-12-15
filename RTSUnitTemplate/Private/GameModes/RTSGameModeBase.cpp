@@ -900,6 +900,8 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		}
 
 		UnitBase->InitializeAttributes();
+		// Apply selectability from spawn parameter
+		UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
 
 		
 		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);

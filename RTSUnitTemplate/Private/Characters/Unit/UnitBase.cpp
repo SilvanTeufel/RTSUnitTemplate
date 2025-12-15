@@ -23,6 +23,11 @@
 #include "Widgets/SquadHealthBar.h"
 #include "EngineUtils.h"
 #include <climits>
+// Mass includes for follow application and spawn return adjustments
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
+#include "Mass/UnitMassTag.h"
+#include "Mass/MassActorBindingComponent.h"
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -281,10 +286,14 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, UnitToChase);
 	DOREPLIFETIME(AUnitBase, FollowUnit);
-
+	DOREPLIFETIME(AUnitBase, FollowOffset);
+	DOREPLIFETIME(AUnitBase, FollowMinRange);
+	
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
 
+
+	DOREPLIFETIME(AUnitBase, CanBeRepaired);
 	DOREPLIFETIME(AUnitBase, CanMove);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackGround);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
@@ -966,13 +975,14 @@ bool AUnitBase::SetNextUnitToChase()
 }
 
 
-void AUnitBase::SpawnUnitsFromParameters(
+TArray<AUnitBase*> AUnitBase::SpawnUnitsFromParameters(
 TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet)
+int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bFollow, bool bSelectable)
 {
+	TArray<AUnitBase*> SpawnedUnits;
 	FUnitSpawnParameter SpawnParameter;
 	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
@@ -983,12 +993,12 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 	SpawnParameter.Material = Material;
 	SpawnParameter.CharacterMesh = CharacterMesh;
 	// Waypointspawn
-
-	if (!SpawnParameter.UnitBaseClass) return;
 	
+	if (!SpawnParameter.UnitBaseClass) return SpawnedUnits;
+		
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-
-	if(!GameMode) return;
+	
+	if(!GameMode) return SpawnedUnits;
 
 	int32 SharedSquadId = 0;
 	if (SpawnAsSquad)
@@ -1054,6 +1064,13 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 				UnitBase->NextWaypoint = Waypoint;
 
 			UnitBase->ScheduleDelayedNavigationUpdate();
+			// Apply selectability flag from params
+			UnitBase->CanBeSelected = bSelectable;
+			// Optionally set follow target to this spawner
+			if (bFollow)
+			{
+				UnitBase->ApplyFollowTarget(this);
+			}
 			
 			{
 				int UIndex = GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
@@ -1070,9 +1087,43 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 				}
 			}
 			
+			SpawnedUnits.Add(UnitBase);
 		}
 	}
 	
+	return SpawnedUnits;
+}
+
+void AUnitBase::ApplyFollowTarget_Implementation(AUnitBase* NewFollowTarget)
+{
+	FollowUnit = NewFollowTarget;
+
+	// Reset follow cache so next follow tick recomputes target
+	LastFollowLeader = nullptr;
+	LastFollowLeaderLocation = FVector::ZeroVector;
+	LastComputedFollowTarget = FVector::ZeroVector;
+	bFollowCachedValid = false;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem) return;
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	if (!MassActorBindingComponent)
+	{
+		return;
+	}
+	const FMassEntityHandle MassEntityHandle = MassActorBindingComponent->GetMassEntityHandle();
+	if (!EntityManager.IsEntityValid(MassEntityHandle))
+	{
+		return;
+	}
+	if (FMassAIStateFragment* AIFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
+	{
+		AIFrag->bFollowUnitAssigned = (NewFollowTarget != nullptr);
+	}
 }
 
 bool AUnitBase::IsSpawnedUnitDead(int UIndex)
