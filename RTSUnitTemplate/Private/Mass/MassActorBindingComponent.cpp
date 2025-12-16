@@ -1016,6 +1016,12 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
        // Make sure collider type matches expectations (Circle assumed here)
        *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()));
     }
+
+	if(FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle))
+	{
+		TargetFrag->FollowRadius = FollowRadius;
+		TargetFrag->FollowOffset = FollowOffset;
+	}
 	
 }
 

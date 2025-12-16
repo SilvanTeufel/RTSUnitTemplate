@@ -371,6 +371,13 @@ struct FMassAITargetFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FVector LastKnownFriendlyLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float FollowRadius = 200.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float FollowOffset = 0.f;
+
 };
 
 //----------------------------------------------------------------------//

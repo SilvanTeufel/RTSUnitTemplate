@@ -140,7 +140,4 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float FollowOffset = 0.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
-	float RepairRange = 50.f;
 };
