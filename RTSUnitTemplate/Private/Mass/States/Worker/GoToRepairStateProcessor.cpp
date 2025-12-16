@@ -108,9 +108,9 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 FriendlyRadius = FriendlyChar->CapsuleRadius;
             }
 
-            // Compute effective repair reach: both capsule radii + base repair distance
-            const float BaseRepairDistance = 250.f; // matches AWorkingUnitBase::RepairDistance default
-            const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + BaseRepairDistance;
+            // Compute effective repair reach based on FollowRadius (keep hysteresis)
+            const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+            const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + FollowRadius;
             const float EnterBuffer = 20.f; // hysteresis buffer for enter
 
             const float Dist2D = FVector::Dist2D(CurrentTransform.GetLocation(), FriendlyLoc);
@@ -127,10 +127,16 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 continue;
             }
 
-            // Otherwise keep chasing the friendly target position
+            // Otherwise keep chasing a position on the FollowRadius ring around the friendly (XY only)
             if (!StateFrag.SwitchingState)
             {
-                UpdateMoveTarget(MoveTarget, FriendlyLoc, StatsFrag.RunSpeed, World);
+                FVector ToSelf2D = (CurrentTransform.GetLocation() - FriendlyLoc);
+                ToSelf2D.Z = 0.f;
+                const float Len = ToSelf2D.Size2D();
+                FVector Dir2D = Len > KINDA_SMALL_NUMBER ? ToSelf2D / Len : FVector::XAxisVector;
+                FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
+                DesiredPos.Z = FriendlyLoc.Z; // ignore Z for follow
+                UpdateMoveTarget(MoveTarget, DesiredPos, StatsFrag.RunSpeed, World);
             }
         }
     });

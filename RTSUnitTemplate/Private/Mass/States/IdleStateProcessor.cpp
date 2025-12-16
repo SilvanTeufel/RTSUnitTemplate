@@ -95,15 +95,46 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
             
             
-            // If following a friendly target, switch to Run to start moving towards it
+            // If following a friendly target, evaluate desired follow position (ring + optional offset)
             if (bFollowTickThisFrame && !StateFrag.SwitchingState && SignalSubsystem)
             {
                 const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
                 if (bHasFriendly)
                 {
-                    StateFrag.SwitchingState = true;
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Run, Entity);
-                    continue;
+                    // Friendly location
+                    FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+                    if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                    {
+                        FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+                    }
+
+                    // Desired ring position at FollowRadius (XY only)
+                    const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+                    FVector ToSelf2D = (Transform.GetLocation() - FriendlyLoc);
+                    ToSelf2D.Z = 0.f;
+                    const float Len2D = ToSelf2D.Size2D();
+                    const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
+                    FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
+
+                    // Apply optional random XY offset clamped to the radius
+                    float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
+                    if (OffsetMag > 0.f)
+                    {
+                        const int32 Hash = (int32)Entity.Index ^ (int32)Entity.SerialNumber;
+                        const float SignX = (Hash & 1) ? 1.f : -1.f;
+                        const float SignY = (Hash & 2) ? 1.f : -1.f;
+                        DesiredPos.X += SignX * OffsetMag;
+                        DesiredPos.Y += SignY * OffsetMag;
+                    }
+
+                    const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
+                    const float Threshold = 20.f; // small hysteresis to avoid oscillation
+                    if (Dist2D > Threshold)
+                    {
+                        StateFrag.SwitchingState = true;
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Run, Entity);
+                        continue;
+                    }
                 }
             }
 

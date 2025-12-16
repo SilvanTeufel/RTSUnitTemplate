@@ -199,13 +199,36 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
             if (bHasFriendly && !StateFrag.SwitchingState)
             {
-                FVector FollowLocation = FinalDestination;
+                // Determine the friendly's current location
+                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
                 if (const FTransformFragment* FriendlyTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
                 {
-                    FollowLocation = FriendlyTransform->GetTransform().GetLocation();
+                    FriendlyLoc = FriendlyTransform->GetTransform().GetLocation();
                 }
-                // Update MoveTarget towards the friendly unit; skip Idle arrival while following
-                UpdateMoveTarget(MoveTarget, FollowLocation, Stats.RunSpeed, World);
+
+                // Desired ring position at FollowRadius away from the friendly (XY only)
+                const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+                FVector ToSelf2D = (CurrentMassTransform.GetLocation() - FriendlyLoc);
+                ToSelf2D.Z = 0.f;
+                const float Len2D = ToSelf2D.Size2D();
+                const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
+                FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
+
+                // Apply optional random XY offset, clamped to radius
+                float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
+                if (OffsetMag > 0.f)
+                {
+                    // Deterministic pseudo-random signs based on entity IDs for stability
+                    const int32 Hash = (int32)Entity.Index ^ (int32)Entity.SerialNumber;
+                    const float SignX = (Hash & 1) ? 1.f : -1.f;
+                    const float SignY = (Hash & 2) ? 1.f : -1.f;
+                    DesiredPos.X += SignX * OffsetMag;
+                    DesiredPos.Y += SignY * OffsetMag;
+                }
+                DesiredPos.Z = FriendlyLoc.Z; // ignore Z while following
+
+                // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
+                UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
             }
             
             

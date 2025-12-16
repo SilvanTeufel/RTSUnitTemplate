@@ -96,8 +96,8 @@ void URepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     FriendlyRadius = FriendlyChar->CapsuleRadius;
                 }
 
-                const float BaseRepairDistance = 250.f; // same as AWorkingUnitBase default
-                const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + BaseRepairDistance;
+                const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+                const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + FollowRadius;
                 const float ExitBuffer = 40.f;
                 const float Dist2D = FVector::Dist2D(CurrentTransform.GetLocation(), FriendlyLoc);
 
