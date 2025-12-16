@@ -60,10 +60,19 @@ public:
 	bool AutoMining = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	bool CanRepair = true;
+	bool CanRepair = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	bool CanBeRepaired = true;
+	bool CanBeRepaired = false;
+
+	// Additional repair parameters
+	// Distance buffer a worker needs to be from the FollowUnit (on top of both capsule radii) to start repairing
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	float RepairDistance = 250.f;
+	
+	// Amount of health restored per second while repairing
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	float RepairHealth = 10.f;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;

@@ -341,6 +341,9 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	if (UState != UnitData::Build) EntityManager->Defer().RemoveTag<FMassStateBuildTag>(EntityHandle);
 	if (UState != UnitData::GoToResourceExtraction) EntityManager->Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
 	if (UState != UnitData::ResourceExtraction) EntityManager->Defer().RemoveTag<FMassStateResourceExtractionTag>(EntityHandle);
+	// Repair-specific
+	if (UState != UnitData::GoToRepair) EntityManager->Defer().RemoveTag<FMassStateGoToRepairTag>(EntityHandle);
+	if (UState != UnitData::Repair) EntityManager->Defer().RemoveTag<FMassStateRepairTag>(EntityHandle);
 
 	// Reset state timers
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
@@ -365,6 +368,8 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	case UnitData::Build: StateFrag->PlaceholderSignal = UnitSignals::Build; break;
 	case UnitData::GoToResourceExtraction: StateFrag->PlaceholderSignal = UnitSignals::GoToResourceExtraction; break;
 	case UnitData::ResourceExtraction: StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction; break;
+	case UnitData::GoToRepair: StateFrag->PlaceholderSignal = UnitSignals::GoToRepair; break;
+	case UnitData::Repair: StateFrag->PlaceholderSignal = UnitSignals::Repair; break;
 	default: 
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Invalid UnitStatePlaceholder."), *GetName());
 		break;
@@ -380,72 +385,80 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	    case UnitData::Idle:
 		    {
 			    Defer.AddTag<FMassStateIdleTag>(EntityHandle);
-	    		if (StateFrag->CanAttack && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					if (StateFrag->CanAttack && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
-
+	
 	    case UnitData::Chase:
 			    Defer.AddTag<FMassStateChaseTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::Attack:
 	        Defer.AddTag<FMassStateAttackTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::Pause:
 	        Defer.AddTag<FMassStatePauseTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::Dead:
 	        Defer.AddTag<FMassStateDeadTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::Run:
 	        Defer.AddTag<FMassStateRunTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::PatrolRandom:
 		    {
 			    Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
-	    		if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
-
+	
 	    case UnitData::PatrolIdle:
 		    {
 			    Defer.AddTag<FMassStatePatrolIdleTag>(EntityHandle);
-	    		if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 		    }
 	        break;
-
+	
 	    case UnitData::Casting:
 	        Defer.AddTag<FMassStateCastingTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::IsAttacked:
 	        Defer.AddTag<FMassStateIsAttackedTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::GoToBase:
 	        Defer.AddTag<FMassStateGoToBaseTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::GoToBuild:
 	        Defer.AddTag<FMassStateGoToBuildTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::Build:
 	        Defer.AddTag<FMassStateBuildTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::GoToResourceExtraction:
 	        Defer.AddTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
 	        break;
-
+	
 	    case UnitData::ResourceExtraction:
 	        Defer.AddTag<FMassStateResourceExtractionTag>(EntityHandle);
 	        break;
-
+	
+	    case UnitData::GoToRepair:
+	        Defer.AddTag<FMassStateGoToRepairTag>(EntityHandle);
+	        break;
+	
+	    case UnitData::Repair:
+	        Defer.AddTag<FMassStateRepairTag>(EntityHandle);
+	        break;
+	
 	    default:
 	        UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Unknown UnitState."), *GetName());
 	        return false; // Or handle error appropriately
@@ -2063,4 +2076,86 @@ void AMassUnitBase::PulsateISMScale_Step()
 
 	const FVector NewScale = FMath::Lerp(PulsateMinScale, PulsateMaxScale, Alpha);
 	ApplyLocalVisualScale(NewScale);
+}
+
+
+// Static helper to apply/clear follow target for a unit at the Mass level.
+void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* NewFollowTarget)
+{
+	if (!ThisUnit)
+	{
+		return;
+	}
+
+	// Assign follow on the actor side and reset cached data so follow target recomputes
+	ThisUnit->FollowUnit = NewFollowTarget;
+
+
+	UWorld* World = ThisUnit->GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		return;
+	}
+
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	// Retrieve Mass entity handle from the binding component
+	if (!ThisUnit->MassActorBindingComponent)
+	{
+		return;
+	}
+	const FMassEntityHandle MassEntityHandle = ThisUnit->MassActorBindingComponent->GetMassEntityHandle();
+	if (!EntityManager.IsEntityValid(MassEntityHandle))
+	{
+		return;
+	}
+
+	// Set/clear the friendly follow target on the Mass AI target fragment
+	if (FMassAITargetFragment* AITFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(MassEntityHandle))
+	{
+		if (NewFollowTarget && NewFollowTarget->MassActorBindingComponent)
+		{
+			const FMassEntityHandle TargetHandle = NewFollowTarget->MassActorBindingComponent->GetMassEntityHandle();
+			if (EntityManager.IsEntityValid(TargetHandle))
+			{
+				AITFrag->FriendlyTargetEntity = TargetHandle;
+				AITFrag->LastKnownFriendlyLocation = NewFollowTarget->GetMassActorLocation();
+			}
+			else
+			{
+				AITFrag->FriendlyTargetEntity.Reset();
+				AITFrag->LastKnownFriendlyLocation = FVector::ZeroVector;
+			}
+		}
+		else
+		{
+			AITFrag->FriendlyTargetEntity.Reset();
+			AITFrag->LastKnownFriendlyLocation = FVector::ZeroVector;
+		}
+	}
+
+	// Immediately switch to appropriate state so movement starts instantly
+	if (UMassSignalSubsystem* Signals = World->GetSubsystem<UMassSignalSubsystem>())
+	{
+		const bool bWantsRepair = (ThisUnit->IsWorker && ThisUnit->CanRepair && NewFollowTarget && NewFollowTarget->CanBeRepaired);
+		if (bWantsRepair)
+		{
+			// Enter dedicated GoToRepair flow; specialized processors will drive follow updates
+			Signals->SignalEntity(UnitSignals::GoToRepair, MassEntityHandle);
+		}
+		else if (NewFollowTarget)
+		{
+			Signals->SignalEntity(UnitSignals::Run, MassEntityHandle);
+		}
+		else
+		{
+			// Clearing follow: controllers will drive the next state/order; no signal here.
+		}
+	}
 }

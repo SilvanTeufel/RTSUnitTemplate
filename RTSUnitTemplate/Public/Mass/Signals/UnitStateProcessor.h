@@ -71,6 +71,10 @@ private:
 	UFUNCTION() // Wichtig für Signal-Registrierung per Name oder Delegate
 	void SyncUnitBase(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
+	// Repair time sync handler (server-authoritative)
+	UFUNCTION()
+	void SyncRepairTime(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
 	UFUNCTION()
 	void SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity);
 
@@ -88,11 +92,15 @@ private:
 		UnitSignals::Run,
 		UnitSignals::Casting,
 		UnitSignals::IsAttacked,
+		// Worker routes
 		UnitSignals::GoToBase,
 		UnitSignals::GoToBuild,
 		UnitSignals::Build,
 		UnitSignals::GoToResourceExtraction,
 		UnitSignals::ResourceExtraction,
+		// Repair routes
+		UnitSignals::GoToRepair,
+		UnitSignals::Repair,
 	};
 
 
@@ -128,9 +136,6 @@ private:
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
 
-	// Follow feature
-	FDelegateHandle UpdateFollowMovementDelegateHandle;
-	FDelegateHandle CheckFollowAssignedDelegateHandle;
 	
 	// Cached subsystem pointers
 	UPROPERTY(Transient)

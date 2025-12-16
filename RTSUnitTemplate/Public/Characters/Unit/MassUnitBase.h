@@ -19,6 +19,8 @@ class UNiagaraComponent;
 
 #include "MassUnitBase.generated.h"
 
+class AUnitBase;
+
 /**
  * 
  */
@@ -28,6 +30,8 @@ class RTSUNITTEMPLATE_API AMassUnitBase : public AAbilityUnit
 	GENERATED_BODY()
 
 public:
+	// Helper to apply/clear follow target from parent class
+	static void ApplyFollowTargetForUnit(class AUnitBase* ThisUnit, class AUnitBase* NewFollowTarget);
 	
 	AMassUnitBase(const FObjectInitializer& ObjectInitializer);
 

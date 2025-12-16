@@ -34,6 +34,8 @@ namespace UnitData
 		Casting UMETA(DisplayName = "Casting"),
 		Healing UMETA(DisplayName = "Healing"),
 		Pause UMETA(DisplayName = "Pause"),
+		GoToRepair UMETA(DisplayName = "GoToRepair"),
+		Repair UMETA(DisplayName = "Repair"),
 		Chase UMETA(DisplayName = "Chase"),
 		IsAttacked UMETA(DisplayName = "IsAttacked") ,
 		Speaking UMETA(DisplayName = "Speaking") ,

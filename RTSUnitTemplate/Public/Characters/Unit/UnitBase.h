@@ -26,25 +26,6 @@ public:
 	// Unit this unit will follow when assigned via PlayerController right-click on a friendly unit.
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* FollowUnit = nullptr;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector2D FollowOffset = FVector2D::ZeroVector;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float FollowMinRange = 500.f;
-
-	// Transient cache to avoid regenerating random follow offsets if the leader hasn't moved
-	UPROPERTY(Transient)
-	AUnitBase* LastFollowLeader = nullptr;
-	
-	UPROPERTY(Transient)
-	FVector LastFollowLeaderLocation = FVector::ZeroVector;
-	
-	UPROPERTY(Transient)
-	FVector LastComputedFollowTarget = FVector::ZeroVector;
-	
-	UPROPERTY(Transient)
-	bool bFollowCachedValid = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;

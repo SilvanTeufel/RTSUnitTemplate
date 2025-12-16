@@ -45,6 +45,12 @@ namespace UnitSignals
 	
 	const FName SyncCastTime(TEXT("SyncCastTime"));
 	const FName EndCast(TEXT("EndCast"));
+	
+	// Repair-specific signals
+	const FName GoToRepair(TEXT("GoToRepair"));
+	const FName Repair(TEXT("Repair"));
+	const FName SyncRepairTime(TEXT("SyncRepairTime"));
+	
 	// Worker Signals
 	const FName GoToBase(TEXT("GoToBase"));
 	const FName GoToBuild(TEXT("GoToBuild"));
@@ -66,9 +72,7 @@ namespace UnitSignals
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 
 	const FName InitUnit(TEXT("InitUnit"));
-	// Follow feature signals
-	const FName UpdateFollowMovement(TEXT("UpdateFollowMovement"));
-	const FName CheckFollowAssigned(TEXT("CheckFollowAssigned"));
+	// Follow feature signals removed (replaced by FriendlyTargetEntity-driven processors)
 	// Client-side navigation mirror signals
 }
 
@@ -153,11 +157,24 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
         if (Tags.Contains<FMassHasTargetTag>())         { PresentTags += TEXT(" HasTarget"); bFoundTags = true; }
         if (Tags.Contains<FMassReachedDestinationTag>()){ PresentTags += TEXT(" ReachedDestination"); bFoundTags = true; }
 
-    	if (Tags.Contains<FMassStateGoToBaseTag>())         { PresentTags += TEXT(" GoToBase"); bFoundTags = true; }
-    	if (Tags.Contains<FMassStateGoToBuildTag>()){ PresentTags += TEXT(" GoToBuild"); bFoundTags = true; }
-    	if (Tags.Contains<FMassStateGoToResourceExtractionTag>())         { PresentTags += TEXT(" GoToResourceExtraction"); bFoundTags = true; }
-    	if (Tags.Contains<FMassStateBuildTag>()){ PresentTags += TEXT(" Build"); bFoundTags = true; }
-    	if (Tags.Contains<FMassStateResourceExtractionTag>()){ PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateGoToBaseTag>())                { PresentTags += TEXT(" GoToBase"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateGoToBuildTag>())               { PresentTags += TEXT(" GoToBuild"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateGoToResourceExtractionTag>())  { PresentTags += TEXT(" GoToResourceExtraction"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateBuildTag>())                   { PresentTags += TEXT(" Build"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateResourceExtractionTag>())      { PresentTags += TEXT(" ResourceExtraction"); bFoundTags = true; }
+
+   		// Repair States
+   		if (Tags.Contains<FMassStateGoToRepairTag>())              { PresentTags += TEXT(" GoToRepair"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateRepairTag>())                  { PresentTags += TEXT(" Repair"); bFoundTags = true; }
+
+   		// Utility/Helper tags
+   		if (Tags.Contains<FMassStateStopMovementTag>())            { PresentTags += TEXT(" StopMovement"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateDisableObstacleTag>())         { PresentTags += TEXT(" DisableObstacle"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateDisableNavManipulationTag>())  { PresentTags += TEXT(" DisableNavManipulation"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateChargingTag>())                { PresentTags += TEXT(" Charging"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStopGameplayEffectTag>())           { PresentTags += TEXT(" StopGameplayEffect"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStopUnitDetectionTag>())            { PresentTags += TEXT(" StopUnitDetection"); bFoundTags = true; }
+   		if (Tags.Contains<FMassDisableAvoidanceTag>())             { PresentTags += TEXT(" DisableAvoidance"); bFoundTags = true; }
 
     	//if (Composition.Tags.Contains<FNeedsActorBindingInitTag>()){ PresentTags += TEXT(" ActorBindingInit"); bFoundTags = true; }
     	

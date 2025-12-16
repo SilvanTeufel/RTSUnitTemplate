@@ -40,6 +40,9 @@ USTRUCT() struct FMassStateGoToBuildTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateGoToResourceExtractionTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
 USTRUCT() struct FMassStateBuildTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateResourceExtractionTag : public FMassTag { GENERATED_BODY() };
+// Repair-specific worker states
+USTRUCT() struct FMassStateGoToRepairTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateRepairTag : public FMassTag { GENERATED_BODY() };
 
 
 // --- Patrouillen-Zustände ---
@@ -298,13 +301,7 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool HoldPosition = false;
-
-	// Whether this unit currently has a FollowUnit assigned (used to early-opt out of follow signals)
-	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	bool bFollowUnitAssigned = false;
 	
-	//UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	//TSet<FMassEntityHandle> LastSeenTargets; 
 };
 
 
@@ -367,6 +364,13 @@ struct FMassAITargetFragment : public FMassFragment
 	
 	UPROPERTY(VisibleAnywhere, Category = "AI|Ability", Transient)
 	FVector AbilityTargetLocation = FVector::ZeroVector;
+
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FMassEntityHandle FriendlyTargetEntity;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastKnownFriendlyLocation = FVector::ZeroVector;
 };
 
 //----------------------------------------------------------------------//
@@ -742,6 +746,9 @@ namespace UnitTagBits
 	// Always replicated control bits
 	static constexpr uint32 StopMovement        = 1u << 19;
 	static constexpr uint32 DisableObstacle     = 1u << 20;
+	// Worker repair states
+	static constexpr uint32 GoToRepair          = 1u << 21;
+	static constexpr uint32 Repair              = 1u << 22;
 }
 
 
@@ -761,6 +768,9 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateGoToResourceExtractionTag::StaticStruct())) Bits |= UnitTagBits::GoToResource;
 	if (H(FMassStateGoToBuildTag::StaticStruct()))            Bits |= UnitTagBits::GoToBuild;
 	if (H(FMassStateGoToBaseTag::StaticStruct()))             Bits |= UnitTagBits::GoToBase;
+	// Repair flow
+	if (H(FMassStateGoToRepairTag::StaticStruct()))           Bits |= UnitTagBits::GoToRepair;
+	if (H(FMassStateRepairTag::StaticStruct()))               Bits |= UnitTagBits::Repair;
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
@@ -818,6 +828,9 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
 		SetTag(UnitTagBits::GoToBuild,           FMassStateGoToBuildTag());
 		SetTag(UnitTagBits::GoToBase,            FMassStateGoToBaseTag());
+		// Repair flow
+		SetTag(UnitTagBits::GoToRepair,         FMassStateGoToRepairTag());
+		SetTag(UnitTagBits::Repair,             FMassStateRepairTag());
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());

@@ -108,7 +108,7 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
-
+            
             if (!WorkerStats.BaseAvailable)
             {
                 AIState.SwitchingState = true;

@@ -87,7 +87,6 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
-
             
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& AIState = AIStateList[i];

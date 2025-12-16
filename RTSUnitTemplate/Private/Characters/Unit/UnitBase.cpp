@@ -28,6 +28,8 @@
 #include "MassEntityManager.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "MassSignalSubsystem.h"
+#include "Mass/Signals/MySignals.h"
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -286,14 +288,10 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, UnitToChase);
 	DOREPLIFETIME(AUnitBase, FollowUnit);
-	DOREPLIFETIME(AUnitBase, FollowOffset);
-	DOREPLIFETIME(AUnitBase, FollowMinRange);
 	
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
-
-
-	DOREPLIFETIME(AUnitBase, CanBeRepaired);
+	
 	DOREPLIFETIME(AUnitBase, CanMove);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackGround);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
@@ -1096,34 +1094,8 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 
 void AUnitBase::ApplyFollowTarget_Implementation(AUnitBase* NewFollowTarget)
 {
-	FollowUnit = NewFollowTarget;
-
-	// Reset follow cache so next follow tick recomputes target
-	LastFollowLeader = nullptr;
-	LastFollowLeaderLocation = FVector::ZeroVector;
-	LastComputedFollowTarget = FVector::ZeroVector;
-	bFollowCachedValid = false;
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-	if (!MassSubsystem) return;
-	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-
-	if (!MassActorBindingComponent)
-	{
-		return;
-	}
-	const FMassEntityHandle MassEntityHandle = MassActorBindingComponent->GetMassEntityHandle();
-	if (!EntityManager.IsEntityValid(MassEntityHandle))
-	{
-		return;
-	}
-	if (FMassAIStateFragment* AIFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-	{
-		AIFrag->bFollowUnitAssigned = (NewFollowTarget != nullptr);
-	}
+	// Delegate implementation to MassUnit base helper so logic lives in parent class
+	ApplyFollowTargetForUnit(this, NewFollowTarget);
 }
 
 bool AUnitBase::IsSpawnedUnitDead(int UIndex)

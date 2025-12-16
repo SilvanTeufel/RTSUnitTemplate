@@ -50,7 +50,19 @@ void UUnitTimerWidget::TimerTick()
 			TimerBar->SetFillColorAndOpacity(ExtractionColor);
 		}
 		break;
-		case UnitData::Casting:
+	case UnitData::Casting:
+		{
+			// Compute percent safely and auto-hide when casting complete on client
+			float Denom = UnitBase->CastTime;
+			float Percent = (Denom > KINDA_SMALL_NUMBER) ? (UnitBase->UnitControlTimer / Denom) : 1.f;
+			Percent = FMath::Clamp(Percent, 0.f, 1.f);
+			TimerBar->SetPercent(Percent);
+			TimerBar->SetFillColorAndOpacity(CastingColor);
+			// Visible only while cast is in progress and has actually started
+			MyWidgetIsVisible = (Percent > 0.f && Percent < 1.f);
+		}
+		break;
+	case UnitData::Repair:
 		{
 			// Compute percent safely and auto-hide when casting complete on client
 			float Denom = UnitBase->CastTime;

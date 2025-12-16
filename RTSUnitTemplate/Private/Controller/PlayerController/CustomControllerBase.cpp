@@ -36,6 +36,7 @@
 #include "Characters\Unit\UnitBase.h"
 #include "Characters/Unit/SpeakingUnit.h"
 #include "GameplayTagContainer.h"
+#include "Characters/Unit/ConstructionUnit.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -242,6 +243,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+	// Ensure movement is not blocked by a lingering stop movement tag
+	EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(MassEntityHandle);
 
 	// Inform every client to predict locally for this single unit
 	if (UWorld* PCWorld = GetWorld())
@@ -385,6 +388,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateRepairTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 		
@@ -555,6 +560,8 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateRepairTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	}
@@ -816,20 +823,12 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 	if (!MassSubsystem) return;
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-	for (AUnitBase* Unit : Units)
-	{
-		if (!Unit) continue;
-		Unit->FollowUnit = FollowTarget;
-
-		if (!Unit->MassActorBindingComponent) continue;
-		const FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (!EntityManager.IsEntityValid(MassEntityHandle)) continue;
-
-		if (FMassAIStateFragment* AIFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle))
-		{
-			AIFrag->bFollowUnitAssigned = (FollowTarget != nullptr);
-		}
-	}
+	 for (AUnitBase* Unit : Units)
+	 {
+ 		if (!Unit) continue;
+ 		// Use the per-unit API so it updates Mass flag and triggers immediate signals
+ 		Unit->ApplyFollowTarget(FollowTarget);
+	 }
 }
 
 void ACustomControllerBase::RightClickPressedMass()
@@ -838,28 +837,30 @@ void ACustomControllerBase::RightClickPressedMass()
 
 	FHitResult HitPawn;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-
+	
 	// If we clicked on a friendly unit while having a selection, assign follow and early return
 	if (SelectedUnits.Num() > 0 && HitPawn.bBlockingHit)
 	{
-		if (AUnitBase* HitUnit = Cast<AUnitBase>(HitPawn.GetActor()))
-		{
-			const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
-			if (bFriendly)
+		if (!Cast<AConstructionUnit>(HitPawn.GetActor()))
+			if (AUnitBase* HitUnit = Cast<AUnitBase>(HitPawn.GetActor()))
 			{
-				Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
-				return;
+				const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
+				if (bFriendly)
+				{
+					Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
+					return;
+				}
 			}
-		}
 	}
-
+	
 	// Otherwise clear any existing follow assignment when right-clicking elsewhere
+	
 	if (SelectedUnits.Num() > 0)
 	{
 		Server_SetUnitsFollowTarget(SelectedUnits, nullptr);
 	}
 
-	// Existing transporter/work area/move logic
+	
 	FHitResult Hit;
 	if (!CheckClickOnTransportUnitMass(HitPawn))
 	{
@@ -1045,7 +1046,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		bool UnitIsValid = true;
     	
     	if (!U->IsInitialized) UnitIsValid = false;
-	
+    	
     	if (U->CurrentSnapshot.AbilityClass)
     	{
 
@@ -1077,7 +1078,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         auto* U = P.Key;
         FVector Loc = P.Value;
         if (!U || U == CameraUnitWithTag || U->UnitState == UnitData::Dead) continue;
-    
+    	
         bool bNavMod;
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue;

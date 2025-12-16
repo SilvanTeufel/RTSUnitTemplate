@@ -45,6 +45,7 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Components/CapsuleComponent.h"
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
@@ -127,8 +128,16 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     	SyncCastTimeDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncCastTime)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncCastTime));
 
-    	EndCastDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, EndCast));
+     EndCastDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
+                .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, EndCast));
+    
+    // Repair time sync
+    if (SignalSubsystem)
+    {
+        FDelegateHandle NewRepairSyncHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncRepairTime)
+            .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncRepairTime));
+        SightChangeRequestDelegateHandle.Add(NewRepairSyncHandle);
+    }
     	
 
 
@@ -150,12 +159,7 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
    		UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
 
-		// Follow feature delegates
-		UpdateFollowMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFollowMovement)
-			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateFollowMovement));
-		CheckFollowAssignedDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CheckFollowAssigned)
-			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleCheckFollowAssigned));
-			
+		// Follow feature delegates removed: following now uses FriendlyTargetEntity on FMassAITargetFragment
 		}
 }
 
@@ -168,171 +172,161 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 	}
 	bDelegatesUnbound = true;
 
-	// Unregister all signal handlers safely (must run on GameThread)
-	for (int i = 0; i < StateChangeSignalDelegateHandle.Num(); i++)
+	if (SignalSubsystem)
 	{
-		if (SignalSubsystem && StateChangeSignalDelegateHandle[i].IsValid())
+		// Unregister all signal handlers safely (must run on GameThread)
+		for (int i = 0; i < StateChangeSignalDelegateHandle.Num(); i++)
 		{
-			SignalSubsystem->GetSignalDelegateByName(StateChangeSignals[i])
-				.Remove(StateChangeSignalDelegateHandle[i]);
-			StateChangeSignalDelegateHandle[i].Reset();
+			if (StateChangeSignalDelegateHandle[i].IsValid())
+			{
+				auto& Delegate = SignalSubsystem->GetSignalDelegateByName(StateChangeSignals[i]);
+				Delegate.Remove(StateChangeSignalDelegateHandle[i]);
+				StateChangeSignalDelegateHandle[i].Reset();
+			}
 		}
-	}
 
-	for (int i = 0; i < SightChangeRequestDelegateHandle.Num(); i++)
-	{
-		if (SignalSubsystem && SightChangeRequestDelegateHandle[i].IsValid())
+		for (int i = 0; i < SightChangeRequestDelegateHandle.Num(); i++)
 		{
-			SignalSubsystem->GetSignalDelegateByName(SightChangeSignals[i])
-				.Remove(SightChangeRequestDelegateHandle[i]);
-			SightChangeRequestDelegateHandle[i].Reset();
+			if (SightChangeRequestDelegateHandle[i].IsValid())
+			{
+				auto& Delegate = SignalSubsystem->GetSignalDelegateByName(SightChangeSignals[i]);
+				Delegate.Remove(SightChangeRequestDelegateHandle[i]);
+				SightChangeRequestDelegateHandle[i].Reset();
+			}
 		}
-	}
-	
-	if (SignalSubsystem && FogParametersDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask)
-			.Remove(FogParametersDelegateHandle);
-		FogParametersDelegateHandle.Reset();
-	}
+		
+		if (FogParametersDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFogMask);
+			Delegate.Remove(FogParametersDelegateHandle);
+			FogParametersDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && SelectionCircleDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
-			.Remove(SelectionCircleDelegateHandle);
-		SelectionCircleDelegateHandle.Reset();
-	}
+		if (SelectionCircleDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle);
+			Delegate.Remove(SelectionCircleDelegateHandle);
+			SelectionCircleDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && SyncUnitBaseDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
-			.Remove(SyncUnitBaseDelegateHandle);
-		SyncUnitBaseDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && SetUnitToChaseSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase)
-			.Remove(SetUnitToChaseSignalDelegateHandle);
-		SetUnitToChaseSignalDelegateHandle.Reset();
-	}
+		if (SyncUnitBaseDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase);
+			Delegate.Remove(SyncUnitBaseDelegateHandle);
+			SyncUnitBaseDelegateHandle.Reset();
+		}
+		
+		if (SetUnitToChaseSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitToChase);
+			Delegate.Remove(SetUnitToChaseSignalDelegateHandle);
+			SetUnitToChaseSignalDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && RangedAbilitySignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UseRangedAbilitys)
-			.Remove(RangedAbilitySignalDelegateHandle);
-		RangedAbilitySignalDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && MeleeAttackSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack)
-			.Remove(MeleeAttackSignalDelegateHandle);
-		MeleeAttackSignalDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && RangedAttackSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack)
-			.Remove(RangedAttackSignalDelegateHandle);
-		RangedAttackSignalDelegateHandle.Reset();
-	}
+		if (RangedAbilitySignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UseRangedAbilitys);
+			Delegate.Remove(RangedAbilitySignalDelegateHandle);
+			RangedAbilitySignalDelegateHandle.Reset();
+		}
+		
+		if (MeleeAttackSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::MeleeAttack);
+			Delegate.Remove(MeleeAttackSignalDelegateHandle);
+			MeleeAttackSignalDelegateHandle.Reset();
+		}
+		
+		if (RangedAttackSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack);
+			Delegate.Remove(RangedAttackSignalDelegateHandle);
+			RangedAttackSignalDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && StartDeadSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartDead)
-			.Remove(StartDeadSignalDelegateHandle);
-		StartDeadSignalDelegateHandle.Reset();
-	}
+		if (StartDeadSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::StartDead);
+			Delegate.Remove(StartDeadSignalDelegateHandle);
+			StartDeadSignalDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && EndDeadSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead)
-			.Remove(EndDeadSignalDelegateHandle);
-		EndDeadSignalDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && IdlePatrolSwitcherDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher)
-			.Remove(IdlePatrolSwitcherDelegateHandle);
-		IdlePatrolSwitcherDelegateHandle.Reset();
-	}
+		if (EndDeadSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndDead);
+			Delegate.Remove(EndDeadSignalDelegateHandle);
+			EndDeadSignalDelegateHandle.Reset();
+		}
+		
+		if (IdlePatrolSwitcherDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher);
+			Delegate.Remove(IdlePatrolSwitcherDelegateHandle);
+			IdlePatrolSwitcherDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && UnitStatePlaceholderDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder)
-			.Remove(UnitStatePlaceholderDelegateHandle);
-		UnitStatePlaceholderDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && SyncCastTimeDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncCastTime)
-			.Remove(SyncCastTimeDelegateHandle);
-		SyncCastTimeDelegateHandle.Reset();
-	}
+		if (UnitStatePlaceholderDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder);
+			Delegate.Remove(UnitStatePlaceholderDelegateHandle);
+			UnitStatePlaceholderDelegateHandle.Reset();
+		}
+		
+		if (SyncCastTimeDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncCastTime);
+			Delegate.Remove(SyncCastTimeDelegateHandle);
+			SyncCastTimeDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && EndCastDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
-			.Remove(EndCastDelegateHandle);
-		EndCastDelegateHandle.Reset();
-	}
+		if (EndCastDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast);
+			Delegate.Remove(EndCastDelegateHandle);
+			EndCastDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && ReachedBaseDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase)
-			.Remove(ReachedBaseDelegateHandle);
-		ReachedBaseDelegateHandle.Reset();
-	}
+		if (ReachedBaseDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ReachedBase);
+			Delegate.Remove(ReachedBaseDelegateHandle);
+			ReachedBaseDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && GetResourceDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetResource)
-			.Remove(GetResourceDelegateHandle);
-		GetResourceDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && StartBuildActionDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetClosestBase)
-			.Remove(StartBuildActionDelegateHandle);
-		StartBuildActionDelegateHandle.Reset();
-	}
-	
-	if (SignalSubsystem && SpawnBuildingRequestDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest)
-			.Remove(SpawnBuildingRequestDelegateHandle);
-		SpawnBuildingRequestDelegateHandle.Reset();
-	}
+		if (GetResourceDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetResource);
+			Delegate.Remove(GetResourceDelegateHandle);
+			GetResourceDelegateHandle.Reset();
+		}
+		
+		if (StartBuildActionDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::GetClosestBase);
+			Delegate.Remove(StartBuildActionDelegateHandle);
+			StartBuildActionDelegateHandle.Reset();
+		}
+		
+		if (SpawnBuildingRequestDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SpawnBuildingRequest);
+			Delegate.Remove(SpawnBuildingRequestDelegateHandle);
+			SpawnBuildingRequestDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && SpawnSignalDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
-			.Remove(SpawnSignalDelegateHandle);
-		SpawnSignalDelegateHandle.Reset();
-	}
+		if (SpawnSignalDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned);
+			Delegate.Remove(SpawnSignalDelegateHandle);
+			SpawnSignalDelegateHandle.Reset();
+		}
 
-	if (SignalSubsystem && UpdateWorkerMovementDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
-			.Remove(UpdateWorkerMovementDelegateHandle);
-		UpdateWorkerMovementDelegateHandle.Reset();
-	}
-	// Follow feature unbinding
-	if (SignalSubsystem && UpdateFollowMovementDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateFollowMovement)
-			.Remove(UpdateFollowMovementDelegateHandle);
-		UpdateFollowMovementDelegateHandle.Reset();
-	}
-	if (SignalSubsystem && CheckFollowAssignedDelegateHandle.IsValid())
-	{
-		SignalSubsystem->GetSignalDelegateByName(UnitSignals::CheckFollowAssigned)
-			.Remove(CheckFollowAssignedDelegateHandle);
-		CheckFollowAssignedDelegateHandle.Reset();
+		if (UpdateWorkerMovementDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement);
+			Delegate.Remove(UpdateWorkerMovementDelegateHandle);
+			UpdateWorkerMovementDelegateHandle.Reset();
+		}
 	}
 
 	SignalSubsystem = nullptr;
@@ -390,119 +384,14 @@ void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
 void UUnitStateProcessor::HandleUpdateFollowMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	if (!EntitySubsystem || !World) return;
-
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	const bool bIsClient = (World->GetNetMode() == NM_Client);
-	for (const FMassEntityHandle& Entity : Entities)
-	{
-		if (!EntityManager.IsEntityValid(Entity)) continue;
-		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-		FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-		FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
-		const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
-		if (!ActorFragPtr || !StateFrag || !Stats) continue;
-		AUnitBase* Unit = Cast<AUnitBase>(ActorFragPtr->GetMutable());
-		if (!Unit || !StateFrag->bFollowUnitAssigned || !IsValid(Unit->FollowUnit)) continue;
-
-		// Cache-aware follow target computation: reuse random offset until leader moves
-		const FVector CurrentLeaderLocation = Unit->FollowUnit->GetMassActorLocation();
-		const bool bLeaderChanged = !Unit->bFollowCachedValid
-			|| Unit->LastFollowLeader != Unit->FollowUnit
-			|| FVector::DistSquared2D(Unit->LastFollowLeaderLocation, CurrentLeaderLocation) > 25.f; // ~5 units tolerance
-		FVector TargetLocation;
-		if (bLeaderChanged)
-		{
-			TargetLocation = CurrentLeaderLocation;
-			// If FollowOffset is set (greater than zero), add a random 2D offset in range [-FollowOffset, +FollowOffset]
-			if (Unit->FollowOffset.SizeSquared() > 0.f)
-			{
-				const FVector2D AbsOffset(FMath::Abs(Unit->FollowOffset.X), FMath::Abs(Unit->FollowOffset.Y));
-				const FVector RandomOffset(
-					FMath::FRandRange(-AbsOffset.X, AbsOffset.X),
-					FMath::FRandRange(-AbsOffset.Y, AbsOffset.Y),
-					0.f // keep on ground plane
-				);
-				TargetLocation += RandomOffset;
-			}
-			// Update cache
-			Unit->LastFollowLeader = Unit->FollowUnit;
-			Unit->LastFollowLeaderLocation = CurrentLeaderLocation;
-			Unit->LastComputedFollowTarget = TargetLocation;
-			Unit->bFollowCachedValid = true;
-		}
-		else
-		{
-			TargetLocation = Unit->LastComputedFollowTarget;
-		}
-
-		// Server-side arrival/acceptance check against the computed target location
-		if (!bIsClient)
-		{
-			const FVector MyLoc = Unit->GetMassActorLocation();
-			const float AcceptanceRadius = (MoveTarget && MoveTarget->SlackRadius > 0.f) ? MoveTarget->SlackRadius : 100.f;
-			if (FVector::Dist2D(MyLoc, TargetLocation) <= AcceptanceRadius)
-			{
-				if (MoveTarget)
-				{
-					StopMovement(*MoveTarget, World);
-				}
-				StateFrag->SwitchingState = true;
-				FMassEntityHandle MutableEntity = Entity; // SwitchState expects non-const ref
-				SwitchState(UnitSignals::Idle, MutableEntity, EntityManager);
-				continue; // Skip issuing a new follow target this tick
-			}
-		}
-
-		if (bIsClient)
-		{
-			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
-			{
-				MassUnit->UpdatePredictionFragment(TargetLocation, Stats->RunSpeed);
-			}
-		}
-		else
-		{
-			if (MoveTarget)
-			{
-				// Avoid redundant updates if target location hasn't changed significantly
-				if (FVector::DistSquared2D(MoveTarget->Center, TargetLocation) > 1.f)
-				{
-					UpdateMoveTarget(*MoveTarget, TargetLocation, Stats->RunSpeed, World);
-				}
-				// Keep Unit's replicated RunLocation in sync for debugging/UI if needed
-				Unit->RunLocation = TargetLocation;
-			}
-		}
-	}
+	// Deprecated: Follow movement is now handled directly by state processors via FriendlyTargetEntity.
+	return;
 }
 
 void UUnitStateProcessor::HandleCheckFollowAssigned(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-	if (!EntitySubsystem || !SignalSubsystem) return;
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-
-	for (const FMassEntityHandle& Entity : Entities)
-	{
-		if (!EntityManager.IsEntityValid(Entity)) continue;
-		FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-		FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-		if (!ActorFragPtr || !StateFrag) continue;
-
-		AUnitBase* Unit = Cast<AUnitBase>(ActorFragPtr->GetMutable());
-		if (!Unit) continue;
-
-		if (StateFrag->bFollowUnitAssigned && IsValid(Unit->FollowUnit))
-		{
-			const FVector MyLoc = Unit->GetMassActorLocation();
-			const FVector FollowLoc = Unit->FollowUnit->GetMassActorLocation();
-			const float Dist2D = FVector::Dist2D(MyLoc, FollowLoc);
-			if (Dist2D > Unit->FollowMinRange)
-			{
-				SignalSubsystem->SignalEntity(UnitSignals::Run, Entity);
-			}
-		}
-	}
+	// Deprecated: Follow assignment check is now handled directly in state processors using FriendlyTargetEntity.
+	return;
 }
 
 void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager)
@@ -552,10 +441,14 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     	if (SignalName != UnitSignals::GoToBase) EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
                     	if (SignalName != UnitSignals::GoToBuild) EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
                     	if (SignalName != UnitSignals::Build) EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
-                    	if (SignalName != UnitSignals::GoToResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    	if (SignalName != UnitSignals::ResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                    	
-                        // --- Add new tag ---
+                     if (SignalName != UnitSignals::GoToResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                     if (SignalName != UnitSignals::ResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                        
+                     // Repair-specific
+                     if (SignalName != UnitSignals::GoToRepair) EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(Entity);
+                     if (SignalName != UnitSignals::Repair) EntityManager.Defer().RemoveTag<FMassStateRepairTag>(Entity);
+                        	
+                     // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
                     		if (StateFragment->CanAttack && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
@@ -587,30 +480,32 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             {
                             	if (World && World->GetNetMode() != NM_Client)
                             	{
-                            		if (CU->WorkArea)
-                            		{
-                            			// Clear back-reference and destroy the area
-                            			if (CU->WorkArea->ConstructionUnit == CU)
-                            			{
-                            				CU->WorkArea->ConstructionUnit = nullptr;
-                            			}
-                            			CU->WorkArea->Destroy(false, true);
-                            			CU->WorkArea = nullptr;
-                            		}
-                            		if (CU->Worker)
-                            		{
-                            			// Optionally clear the worker's BuildArea to avoid dangling refs
-                            			CU->Worker->BuildArea = nullptr;
-                            			FMassEntityManager* WorkerMgr = nullptr;
-                            			FMassEntityHandle WorkerEntity;
-                            			if (CU->Worker->GetMassEntityData(WorkerMgr, WorkerEntity))
-                            			{
-                            				if (SignalSubsystem && WorkerMgr && WorkerMgr->IsEntityValid(WorkerEntity))
-                            				{
-                            					SignalSubsystem->SignalEntity(UnitSignals::SetUnitStatePlaceholder, WorkerEntity);
-                            				}
-                            			}
-                            		}
+                         					if (CU->WorkArea)
+                         					{
+                         						// Clear back-reference and destroy the area
+                         						if (CU->WorkArea->ConstructionUnit == CU)
+                         						{
+                         							CU->WorkArea->ConstructionUnit = nullptr;
+                         						}
+                         						CU->WorkArea->Destroy(false, true);
+                         						CU->WorkArea = nullptr;
+                         					}
+                         					if (CU->Worker)
+                         					{
+                         						// Optionally clear the worker's BuildArea to avoid dangling refs
+                         						CU->Worker->BuildArea = nullptr;
+                         						FMassEntityManager* WorkerMgr = nullptr;
+                         						FMassEntityHandle WorkerEntity;
+                         						if (CU->Worker->GetMassEntityData(WorkerMgr, WorkerEntity))
+                         						{
+                         							if (SignalSubsystem && WorkerMgr && WorkerMgr->IsEntityValid(WorkerEntity))
+                         							{
+                         								// Split call to avoid macro parsing issues
+                         								UMassSignalSubsystem* LocalSignalSubsystem = SignalSubsystem;
+                         								LocalSignalSubsystem->SignalEntity(UnitSignals::SetUnitStatePlaceholder, WorkerEntity);
+                         							}
+                         						}
+                         					}
                             	}
                             }
 
@@ -681,6 +576,18 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	UnitBase->UnitStatePlaceholder = UnitData::Run;
                         }
                         else if (SignalName == UnitSignals::Casting) { EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity); }
+                        else if (SignalName == UnitSignals::GoToRepair)
+                        {
+                            EntityManager.Defer().AddTag<FMassStateGoToRepairTag>(Entity);
+                            StateFragment->PlaceholderSignal = UnitSignals::GoToRepair;
+                            UnitBase->UnitStatePlaceholder = UnitData::GoToRepair;
+                        }
+                        else if (SignalName == UnitSignals::Repair)
+                        {
+                            EntityManager.Defer().AddTag<FMassStateRepairTag>(Entity);
+                            StateFragment->PlaceholderSignal = UnitSignals::Repair;
+                            UnitBase->UnitStatePlaceholder = UnitData::Repair;
+                        }
                         else if (SignalName == UnitSignals::IsAttacked)
                         {
                         	if (StateFragment->CanAttack && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
@@ -797,7 +704,16 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
                     		UpdateUnitMovement(Entity , UnitBase);
                     	}
-                    	else if (SignalName == UnitSignals::ResourceExtraction) { UnitBase->SetUnitState(UnitData::ResourceExtraction); }
+                  		else if (SignalName == UnitSignals::ResourceExtraction) { UnitBase->SetUnitState(UnitData::ResourceExtraction); }
+                  		else if (SignalName == UnitSignals::GoToRepair)
+                  		{
+                  			UnitBase->SetUnitState(UnitData::GoToRepair);
+                  			UpdateUnitMovement(Entity , UnitBase);
+                  		}
+                  		else if (SignalName == UnitSignals::Repair)
+                  		{
+                  			UnitBase->SetUnitState(UnitData::Repair);
+                  		}
 
                     	//FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
                     	//State->StateTimer = 0.f;
@@ -1067,6 +983,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
     // --- AsyncTask an den GameThread senden ---
     AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity]() mutable
     {
+    	
         // --- Code in dieser Lambda läuft jetzt im GameThread ---
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
@@ -1281,6 +1198,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	
     			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
 						   && StrongUnitActor->GetUnitState() == UnitData::Idle
+						   && !StrongUnitActor->FollowUnit
 						   && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
     				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
 				}
@@ -1299,6 +1217,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
     			}
 
+
     			if(StrongUnitActor->GetUnitState() != UnitData::GoToBuild && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
     				StrongUnitActor->SetUnitState(UnitData::GoToBuild);
 				}else if(StrongUnitActor->GetUnitState() != UnitData::ResourceExtraction && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
@@ -1310,18 +1229,21 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				}else if(StrongUnitActor->GetUnitState() != UnitData::GoToBase && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
 					StrongUnitActor->SetUnitState(UnitData::GoToBase);
 				}
-
+    	
+    	
    				// Debug logging for UnitState, Tags, and BuildArea before movement update
-   				const bool bTagIdle = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateIdleTag::StaticStruct());
-   				const bool bTagGoToBuild = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateGoToBuildTag::StaticStruct());
-   				const bool bTagResourceExtraction = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateResourceExtractionTag::StaticStruct());
-   				const bool bTagBuild = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateBuildTag::StaticStruct());
-   				const bool bTagGoToRes = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct());
-   				const bool bTagGoToBase = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateGoToBaseTag::StaticStruct());
-   				const FString BuildAreaName = (StrongUnitActor->BuildArea) ? StrongUnitActor->BuildArea->GetName() : TEXT("None");
+
    		
    				UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
-    }); // Ende AsyncTask Lambda
+
+   				// Log current UnitState at the end of SynchronizeUnitState to trace state changes
+   				{
+   					const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
+   					const uint8 RawState = (uint8)StrongUnitActor->GetUnitState();
+   					const FString StateName = UnitStateEnum ? UnitStateEnum->GetNameStringByValue((int64)RawState) : FString::FromInt(RawState);
+   					UE_LOG(LogTemp, Warning, TEXT("[SynchronizeUnitState][END] Unit=%s State=%s (%d)"), *StrongUnitActor->GetName(), *StateName, RawState);
+   				}
+   	}); // Ende AsyncTask Lambda
 }
 
 void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<FMassEntityHandle>& Entities)
@@ -2569,6 +2491,7 @@ void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
 	}
 }
 
+
 void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
@@ -2620,11 +2543,11 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 						// Ensure worker is registered in the WorkArea while building
 						if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
 						{
- 						if (Worker->BuildArea)
- 						{
- 							Worker->BuildArea->AddWorkerToArray(Worker);
+ 							if (Worker->BuildArea)
+ 							{
+ 								Worker->BuildArea->AddWorkerToArray(Worker);
+ 							}
  						}
- 					}
  						// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
  						// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
  						if (UnitBase->BuildArea)
@@ -2828,7 +2751,7 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 }
 
 
-void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& Entities)
+ void UUnitStateProcessor::EndCast(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
@@ -2935,8 +2858,7 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 					{
 						StateFrag->StateTimer = 0.f;
 						UnitBase->UnitControlTimer = 0.f;
-
-						//UE_LOG(LogTemp, Warning, TEXT("Switch to Placeholder Signal %s:"), *StateFrag->PlaceholderSignal.ToString());
+						
 						SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
@@ -3339,9 +3261,125 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->BuildAreaPosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->BuildAreaPosition, StatsFrag.RunSpeed, World);
-		}else if (UnitBase->UnitState == UnitData::Idle)
+		}
+		else if (UnitBase->UnitState == UnitData::GoToRepair)
+		{
+			// Move towards the friendly repair target if available; otherwise use last known friendly location
+			if (const FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
+			{
+				FVector Goal = TargetFrag->LastKnownFriendlyLocation;
+				if (EntityManager.IsEntityValid(TargetFrag->FriendlyTargetEntity))
+				{
+					if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag->FriendlyTargetEntity))
+					{
+						Goal = FriendlyXform->GetTransform().GetLocation();
+					}
+				}
+				StateFraggPtr->StoredLocation = Goal;
+				UpdateMoveTarget(MoveTarget, Goal, StatsFrag.RunSpeed, World);
+			}
+		}
+		else if (UnitBase->UnitState == UnitData::Idle)
 		{
 			StopMovement(MoveTarget, World);
 		}
 	}
+}
+
+
+void UUnitStateProcessor::SyncRepairTime(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem)
+	{
+		return;
+	}
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities;
+	AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy]() mutable
+	{
+		if (!EntitySubsystem) { return; }
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (const FMassEntityHandle& Entity : EntitiesCopy)
+		{
+			if (!EntityManager.IsEntityValid(Entity)) { continue; }
+			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+			FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+			if (!ActorFragPtr || !StateFrag) { continue; }
+
+			AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragPtr->GetMutable());
+			if (!UnitBase) { continue; }
+
+			// Only workers can repair
+			if (!UnitBase->IsWorker) { continue; }
+
+			// Require a valid repair target and not building
+			if (UnitBase->BuildArea || !UnitBase->FollowUnit || !UnitBase->CanRepair || !UnitBase->FollowUnit->CanBeRepaired)
+			{
+				continue;
+			}
+
+			AUnitBase* Target = UnitBase->FollowUnit;
+			float MyRadius = 0.f, TargetRadius = 0.f;
+			if (UCapsuleComponent* MyCapsule = UnitBase->GetCapsuleComponent()) MyRadius = MyCapsule->GetScaledCapsuleRadius();
+			if (UCapsuleComponent* TRCapsule = Target->GetCapsuleComponent()) TargetRadius = TRCapsule->GetScaledCapsuleRadius();
+			const AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
+			const float RepairReach = MyRadius + TargetRadius + (Worker ? Worker->RepairDistance : 50.f);
+			const float Dist2D = FVector::Dist2D(UnitBase->GetMassActorLocation(), Target->GetMassActorLocation());
+
+			// If out of range while repairing, go back to GoToRepair to re-approach (with hysteresis)
+			const float ExitBuffer = 40.f;
+			if (Dist2D > (RepairReach + ExitBuffer))
+			{
+				FMassEntityHandle MutableEntity = Entity;
+				SwitchState(UnitSignals::GoToRepair, MutableEntity, EntityManager);
+				continue;
+			}
+
+			// Compute CastTime and progress from target health
+			const float RepairRate = FMath::Max((Worker ? Worker->RepairHealth : 10.f), 0.001f);
+			if (Target->Attributes)
+			{
+				const float MaxHP = Target->Attributes->GetMaxHealth();
+				if (MaxHP > 0.f)
+				{
+					UnitBase->CastTime = MaxHP / RepairRate;
+					if (FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+					{
+						StatsFrag->CastTime = UnitBase->CastTime;
+					}
+				}
+				const float CurrHPNow = Target->Attributes->GetHealth();
+				const float Elapsed = CurrHPNow / RepairRate;
+				UnitBase->UnitControlTimer = Elapsed;
+				StateFrag->StateTimer = Elapsed;
+			}
+
+			// Apply heal once per second
+			static TMap<AUnitBase*, float> LastRepairTick;
+			const float Now = World ? World->GetTimeSeconds() : 0.f;
+			float& LastTick = LastRepairTick.FindOrAdd(UnitBase);
+			if (World && (Now - LastTick) >= 1.0f)
+			{
+				LastTick = Now;
+				if (Target->Attributes)
+				{
+					const float MaxHP = Target->Attributes->GetMaxHealth();
+					const float CurrHP = Target->Attributes->GetHealth();
+					const float HealAmt = Worker ? Worker->RepairHealth : 10.f;
+					const float NewHP = FMath::Clamp(CurrHP + HealAmt, 0.f, MaxHP);
+					Target->SetHealth(NewHP);
+				}
+			}
+
+			// If target fully repaired: clear follow and return to Idle
+			if (!Target->Attributes || Target->Attributes->GetHealth() >= Target->Attributes->GetMaxHealth())
+			{
+				UnitBase->FollowUnit = nullptr;
+				FMassEntityHandle MutableEntity = Entity;
+				SwitchState(UnitSignals::GoToBase, MutableEntity, EntityManager);
+				continue;
+			}
+		}
+	});
 }

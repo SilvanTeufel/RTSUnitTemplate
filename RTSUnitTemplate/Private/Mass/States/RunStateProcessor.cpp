@@ -63,6 +63,7 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
     // propagate to member so ExecuteClient/Server can read it
     this->bFollowTickThisFrame = bFollowTickThisFrameLocal;
     // Get World and Signal Subsystem once
+    
     if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
     {
         //ExecuteRepClient(EntityManager, Context);
@@ -100,12 +101,14 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
+            const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // If already dead, do not modify any tags on client
@@ -126,17 +129,11 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const FVector FinalDestination = MoveTarget.Center;
             const float AcceptanceRadius = MoveTarget.SlackRadius;
 
-            // Periodic follow update on client for prediction
-            if (this->bFollowTickThisFrame && StateFrag.bFollowUnitAssigned)
-            {
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UpdateFollowMovement, Entity);
-                }
-            }
+            // No legacy follow signal; client-side prediction may be handled elsewhere
 
             // Only arrival check on client (skip if following a unit)
-            if (!StateFrag.bFollowUnitAssigned && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
+            if (!bHasFriendly && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
 
@@ -180,13 +177,14 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Keep reference if State needs updates
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
             const FMassAITargetFragment& TargetFrag = TargetList[i];
-            
+            const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
@@ -196,11 +194,20 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
             StateFrag.StateTimer += ExecutionInterval;
 
-            // Periodic follow update on client for prediction
-            if (this->bFollowTickThisFrame && StateFrag.bFollowUnitAssigned && SignalSubsystem)
+            
+            // Follow friendly target directly if assigned
+            const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
+            if (bHasFriendly && !StateFrag.SwitchingState)
             {
-                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UpdateFollowMovement, Entity);
+                FVector FollowLocation = FinalDestination;
+                if (const FTransformFragment* FriendlyTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    FollowLocation = FriendlyTransform->GetTransform().GetLocation();
+                }
+                // Update MoveTarget towards the friendly unit; skip Idle arrival while following
+                UpdateMoveTarget(MoveTarget, FollowLocation, Stats.RunSpeed, World);
             }
+            
             
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
                 TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
@@ -211,8 +218,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
                 }
             }
-            // Arrival check on server (skip if following a unit)
-            else if (!StateFrag.bFollowUnitAssigned && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            else if (!bHasFriendly && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

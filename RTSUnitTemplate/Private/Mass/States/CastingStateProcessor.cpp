@@ -6,6 +6,8 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Characters/Unit/UnitBase.h"
+#include "MassCommonFragments.h"
 
 
 UCastingStateProcessor::UCastingStateProcessor(): EntityQuery()
@@ -153,9 +155,11 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncCastTime, Entity);
             }
             // 4. Check if cast time is finished
-
+            
+            
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
+                UE_LOG(LogTemp, Log, TEXT("!!!1111111"));
                 // Clear rotate flag at end of cast
                 //TargetFrag.bRotateTowardsAbility = false;
                 if (SignalSubsystem)

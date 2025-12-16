@@ -84,7 +84,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-           
+            
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FTransform& Transform = TransformList[i].GetTransform();
@@ -93,11 +93,18 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
-
-            // Periodic follow assignment check
-            if (bFollowTickThisFrame && StateFrag.bFollowUnitAssigned && SignalSubsystem)
+            
+            
+            // If following a friendly target, switch to Run to start moving towards it
+            if (bFollowTickThisFrame && !StateFrag.SwitchingState && SignalSubsystem)
             {
-                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::CheckFollowAssigned, Entity);
+                const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
+                if (bHasFriendly)
+                {
+                    StateFrag.SwitchingState = true;
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Run, Entity);
+                    continue;
+                }
             }
 
             if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)

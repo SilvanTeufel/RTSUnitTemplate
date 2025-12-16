@@ -98,7 +98,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Chase;
 	}
-	
 	if (HasTag(FMassStateBuildTag::StaticStruct()))
 	{
 		return EState::Build;
@@ -118,6 +117,14 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	if (HasTag(FMassStateGoToBaseTag::StaticStruct()))
 	{
 		return EState::GoToBase;
+	}
+	if (HasTag(FMassStateGoToRepairTag::StaticStruct()))
+	{
+		return EState::GoToRepair;
+	}
+	if (HasTag(FMassStateRepairTag::StaticStruct()))
+	{
+		return EState::Repair;
 	}
 	if (HasTag(FMassStatePatrolIdleTag::StaticStruct()))
 	{
@@ -171,6 +178,9 @@ void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, T
 		}
 		
 		if (NewState != UnitData::None && AbilityUnit->GetUnitState() != UnitData::Dead)
-			AbilityUnit->SetUnitState(NewState);
+			if (!(NewState == UnitData::Repair && OldState == UnitData::Run))
+			{
+				AbilityUnit->SetUnitState(NewState);
+			}
 	}
 }
