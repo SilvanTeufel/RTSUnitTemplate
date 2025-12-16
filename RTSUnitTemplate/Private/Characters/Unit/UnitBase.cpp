@@ -12,6 +12,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "NavFilters/NavigationQueryFilter.h"
@@ -978,7 +979,7 @@ TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bFollow, bool bSelectable)
+int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable)
 {
 	TArray<AUnitBase*> SpawnedUnits;
 	FUnitSpawnParameter SpawnParameter;
@@ -1065,10 +1066,6 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 			// Apply selectability flag from params
 			UnitBase->CanBeSelected = bSelectable;
 			// Optionally set follow target to this spawner
-			if (bFollow)
-			{
-				UnitBase->ApplyFollowTarget(this);
-			}
 			
 			{
 				int UIndex = GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);

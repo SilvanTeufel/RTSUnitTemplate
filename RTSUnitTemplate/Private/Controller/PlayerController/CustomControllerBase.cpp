@@ -823,12 +823,49 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 	if (!MassSubsystem) return;
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-	 for (AUnitBase* Unit : Units)
-	 {
- 		if (!Unit) continue;
- 		// Use the per-unit API so it updates Mass flag and triggers immediate signals
- 		Unit->ApplyFollowTarget(FollowTarget);
-	 }
+	// First, apply the follow target on each unit so Mass flags/signals update immediately
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit) continue;
+		Unit->ApplyFollowTarget(FollowTarget);
+	}
+
+	// If we have a valid target to follow, also issue a batched move towards its current location
+	if (FollowTarget)
+	{
+		const FVector FollowLocation = FollowTarget->GetActorLocation();
+
+		TArray<AUnitBase*> ValidUnits;
+		TArray<FVector> NewTargetLocations;
+		TArray<float> DesiredSpeeds;
+		ValidUnits.Reserve(Units.Num());
+		NewTargetLocations.Reserve(Units.Num());
+		DesiredSpeeds.Reserve(Units.Num());
+
+		for (AUnitBase* Unit : Units)
+		{
+			if (!Unit) continue;
+			// Only include in batched move if this unit does NOT want to repair the follow target
+			const bool bWantsRepair = (Unit->IsWorker && Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired);
+			if (bWantsRepair)
+			{
+				continue; // skip batched move command for repairers
+			}
+			ValidUnits.Add(Unit);
+			NewTargetLocations.Add(FollowLocation);
+			float Speed = 300.f;
+			if (Unit->Attributes)
+			{
+				Speed = Unit->Attributes->GetBaseRunSpeed();
+			}
+			DesiredSpeeds.Add(Speed);
+		}
+
+		if (ValidUnits.Num() > 0)
+		{
+			Server_Batch_CorrectSetUnitMoveTargets(World, ValidUnits, NewTargetLocations, DesiredSpeeds, 40.0f, false);
+		}
+	}
 }
 
 void ACustomControllerBase::RightClickPressedMass()

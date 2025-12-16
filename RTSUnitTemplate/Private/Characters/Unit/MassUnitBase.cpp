@@ -2155,6 +2155,19 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 		else if (NewFollowTarget)
 		{
 			Signals->SignalEntity(UnitSignals::Run, MassEntityHandle);
+			/*
+			// Immediately push a MoveTarget towards the follow target's current location to get moving this tick.
+			if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle))
+			{
+				const FVector NewTargetLocation = NewFollowTarget->GetMassActorLocation();
+				float DesiredSpeed = 300.f;
+				if (ThisUnit && ThisUnit->Attributes)
+				{
+					DesiredSpeed = ThisUnit->Attributes->GetBaseRunSpeed();
+				}
+				UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+			}
+			*/
 		}
 		else
 		{
