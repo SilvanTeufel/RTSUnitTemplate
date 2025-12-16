@@ -11,11 +11,11 @@
 
 struct FMassExecutionContext;
 
-/**
- * Applies a simple repulsion force between nearby units that are currently in Attack or Pause state
- * to avoid clumping up while engaging the same target area. Uses FMassForceFragment so the existing
- * movement processor (UUnitApplyMassMovementProcessor) can consume it in the Avoidance->Movement order.
- */
+	/**
+	 * Applies a simple repulsion force between nearby units that are currently in Attack, Pause, Build or Repair state
+	 * to avoid clumping up while engaging the same target area. Uses FMassForceFragment so the existing
+	 * movement processor (UUnitApplyMassMovementProcessor) can consume it in the Avoidance->Movement order.
+	 */
 UCLASS()
 class RTSUNITTEMPLATE_API UAttackPauseClumpSeparationProcessor : public UMassProcessor
 {
@@ -55,10 +55,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float DistanceMultiplierEnemy = 1.f;
 private:
-	// We keep two queries since Mass tag queries do not support OR within a single requirement.
+	// We keep multiple queries since Mass tag queries do not support OR within a single requirement.
 	FMassEntityQuery AttackQuery;
 	FMassEntityQuery PauseQuery;
 	FMassEntityQuery BuildQuery;
+	FMassEntityQuery RepairQuery;
 	
 	float TimeSinceLastRun = 0.f;
 };

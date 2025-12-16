@@ -27,6 +27,7 @@ namespace
 UAttackPauseClumpSeparationProcessor::UAttackPauseClumpSeparationProcessor()
 	: AttackQuery()
 	, PauseQuery()
+	, RepairQuery()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Avoidance;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
@@ -73,6 +74,18 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	BuildQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	BuildQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
 	BuildQuery.RegisterWithProcessor(*this);
+
+	RepairQuery.Initialize(EntityManager);
+	RepairQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::All);
+	RepairQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	RepairQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	RepairQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+	RepairQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+	RepairQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	RepairQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	RepairQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	RepairQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	RepairQuery.RegisterWithProcessor(*this);
 }
 
 void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -111,6 +124,7 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 	AttackQuery.ForEachEntityChunk(Context, GatherFromQuery);
 	PauseQuery.ForEachEntityChunk(Context, GatherFromQuery);
 	BuildQuery.ForEachEntityChunk(Context, GatherFromQuery);
+	RepairQuery.ForEachEntityChunk(Context, GatherFromQuery);
 	
 	if (Units.Num() <= 1)
 	{
@@ -192,4 +206,5 @@ void UAttackPauseClumpSeparationProcessor::Execute(FMassEntityManager& EntityMan
 	AttackQuery.ForEachEntityChunk(Context, ApplyToQuery);
 	PauseQuery.ForEachEntityChunk(Context, ApplyToQuery);
 	BuildQuery.ForEachEntityChunk(Context, ApplyToQuery);
+	RepairQuery.ForEachEntityChunk(Context, ApplyToQuery);
 }

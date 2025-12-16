@@ -50,6 +50,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStateGoToRepairTag>(EMassFragmentPresence::Any);
 
         EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
+        EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::Any);
     
         EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
@@ -84,6 +85,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStateGoToRepairTag>(EMassFragmentPresence::Any);
 
         ClientEntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
+        ClientEntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::Any);
     
         ClientEntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
@@ -299,7 +301,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         if (LookAtDir.Normalize())
         {
             
-            if (UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair)
+            if (UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair)
             {
                 UnitBase->SetUnitState(UnitData::Run);
             }
@@ -308,8 +310,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
             if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
                 DesiredQuat *= UnitBase->MeshRotationOffset;
         }
-    }
-    else if (UnitBase->GetUnitState() == UnitData::Run)
+    }else if (UnitBase->GetUnitState() == UnitData::Run)
     {
         UnitBase->SetUnitState(UnitData::Idle);
     }
@@ -573,6 +574,9 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             if (bLocationChanged || bRotationChanged)
             {
                 PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+            }else if (UnitBase->GetUnitState() == UnitData::Run)
+            {
+                    UnitBase->SetUnitState(UnitData::Idle);
             }
         }
     });
@@ -713,6 +717,9 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             if (bLocationChanged || bRotationChanged)
             {
                 PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+            }else if (UnitBase->GetUnitState() == UnitData::Run)
+            {
+                    UnitBase->SetUnitState(UnitData::Idle);
             }
             
         }

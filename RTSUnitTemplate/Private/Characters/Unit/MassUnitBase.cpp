@@ -698,7 +698,8 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	if (!TargetFrag) return false;
 	
 	TargetFrag->IsFocusedOnTarget = false;
-
+	TargetFrag->TargetEntity.Reset();
+	
 	return true;
 }
 
@@ -2136,6 +2137,8 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 		else
 		{
 			AITFrag->FriendlyTargetEntity.Reset();
+			AITFrag->TargetEntity.Reset();
+			AITFrag->IsFocusedOnTarget = false;
 			AITFrag->LastKnownFriendlyLocation = FVector::ZeroVector;
 		}
 	}
