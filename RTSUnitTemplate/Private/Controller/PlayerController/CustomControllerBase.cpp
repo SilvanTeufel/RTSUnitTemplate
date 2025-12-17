@@ -814,27 +814,137 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 	return false;
 }
 
-void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget)
+void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT)
+{
+	// Authority-only: schedule retries if Mass or units are not ready yet
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (IsFollowCommandReady(Units))
+	{
+		ExecuteFollowCommand(Units, FollowTarget, AttackT);
+	}
+	else
+	{
+		ScheduleFollowRetry(Units, FollowTarget, AttackT, 8, 0.5f);
+	}
+}
+
+bool ACustomControllerBase::IsFollowCommandReady(const TArray<AUnitBase*>& Units)
 {
 	UWorld* World = GetWorld();
-	if (!World) return;
-
+	if (!World)
+	{
+		return false;
+	}
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-	if (!MassSubsystem) return;
-	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+	if (!MassSubsystem)
+	{
+		return false;
+	}
+	// Ensure units have Mass ready
+	bool bAnyUnit = false;
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit) { continue; }
+		bAnyUnit = true;
+		if (!Unit->MassActorBindingComponent)
+		{
+			return false;
+		}
+		if (Unit->MassActorBindingComponent->bNeedsMassUnitSetup)
+		{
+			return false; // still setting up
+		}
+	}
+	// If there are no valid units, consider ready (no-op)
+	return true;
+}
 
-	// First, apply the follow target on each unit so Mass flags/signals update immediately
+void ACustomControllerBase::ScheduleFollowRetry(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT, int32 MaxAttempts, float DelaySeconds)
+{
+	if (!HasAuthority()) return;
+	// Save pending parameters as weak pointers
+	PendingFollowUnits.Reset();
+	PendingFollowUnits.Reserve(Units.Num());
+	for (AUnitBase* Unit : Units)
+	{
+		PendingFollowUnits.Add(Unit);
+	}
+	PendingFollowTarget = FollowTarget;
+	PendingFollowAttackT = AttackT;
+	FollowRetryRemaining = MaxAttempts;
+
+	// Clear any existing timer and set a new one
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FollowRetryTimerHandle);
+		World->GetTimerManager().SetTimer(FollowRetryTimerHandle, this, &ACustomControllerBase::Retry_Server_SetUnitsFollowTarget, DelaySeconds, false);
+	}
+}
+
+void ACustomControllerBase::Retry_Server_SetUnitsFollowTarget()
+{
+	if (!HasAuthority()) return;
+	if (FollowRetryRemaining <= 0)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(FollowRetryTimerHandle);
+		}
+		return;
+	}
+	FollowRetryRemaining--;
+
+	// Rebuild strong array from weaks
+	TArray<AUnitBase*> StrongUnits;
+	StrongUnits.Reserve(PendingFollowUnits.Num());
+	for (const TWeakObjectPtr<AUnitBase>& WeakUnit : PendingFollowUnits)
+	{
+		if (AUnitBase* U = WeakUnit.Get())
+		{
+			StrongUnits.Add(U);
+		}
+	}
+	AUnitBase* StrongTarget = PendingFollowTarget.Get();
+
+	if (IsFollowCommandReady(StrongUnits))
+	{
+		ExecuteFollowCommand(StrongUnits, StrongTarget, PendingFollowAttackT);
+		// Clear timer and pending state
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(FollowRetryTimerHandle);
+		}
+		PendingFollowUnits.Reset();
+		PendingFollowTarget.Reset();
+		PendingFollowAttackT = false;
+		FollowRetryRemaining = 0;
+	}
+	else
+	{
+		// Schedule next attempt if any left
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(FollowRetryTimerHandle, this, &ACustomControllerBase::Retry_Server_SetUnitsFollowTarget, 0.5f, false);
+		}
+	}
+}
+
+void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT)
+{
+	// Apply follow target immediately
 	for (AUnitBase* Unit : Units)
 	{
 		if (!Unit) continue;
 		Unit->ApplyFollowTarget(FollowTarget);
 	}
 
-	// If we have a valid target to follow, also issue a batched move towards its current location
 	if (FollowTarget)
 	{
 		const FVector FollowLocation = FollowTarget->GetActorLocation();
-
 		TArray<AUnitBase*> ValidUnits;
 		TArray<FVector> NewTargetLocations;
 		TArray<float> DesiredSpeeds;
@@ -845,11 +955,10 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 		for (AUnitBase* Unit : Units)
 		{
 			if (!Unit) continue;
-			// Only include in batched move if this unit does NOT want to repair the follow target
 			const bool bWantsRepair = (Unit->IsWorker && Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired);
 			if (bWantsRepair)
 			{
-				continue; // skip batched move command for repairers
+				continue;
 			}
 			ValidUnits.Add(Unit);
 			NewTargetLocations.Add(FollowLocation);
@@ -863,7 +972,7 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 
 		if (ValidUnits.Num() > 0)
 		{
-			Server_Batch_CorrectSetUnitMoveTargets(World, ValidUnits, NewTargetLocations, DesiredSpeeds, 40.0f, false);
+			Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, 40.0f, AttackT);
 		}
 	}
 }

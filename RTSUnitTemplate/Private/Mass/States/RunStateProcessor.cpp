@@ -197,7 +197,17 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             // Follow friendly target directly if assigned
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
-            if (bHasFriendly && !StateFrag.SwitchingState)
+            
+            
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
+                TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                }
+            }else if (bHasFriendly && !StateFrag.SwitchingState)
             {
                 // Determine the friendly's current location
                 FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
@@ -229,17 +239,6 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
-            }
-            
-            
-            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
-                TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
-            {
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
-                }
             }
             else if (!bHasFriendly && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {

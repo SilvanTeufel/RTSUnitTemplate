@@ -95,7 +95,38 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
             
             
-            // If following a friendly target, evaluate desired follow position (ring + optional offset)
+
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)
+            {
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                }
+                continue;
+            }
+
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && StateFrag.HoldPosition)
+            {
+                const float EffectiveAttackRange = StatsFrag.AttackRange;
+    
+              const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+                        
+              const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+              // --- In Attack Range ---
+              if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
+              {
+                  StateFrag.SwitchingState = true;
+                  if (SignalSubsystem)
+                  {
+                      SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
+                  }
+                  continue;
+              }
+            }
+
+                      // If following a friendly target, evaluate desired follow position (ring + optional offset)
             if (bFollowTickThisFrame && !StateFrag.SwitchingState && SignalSubsystem)
             {
                 const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
@@ -137,37 +168,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                     }
                 }
             }
-
-            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)
-            {
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
-                }
-                continue;
-            }
-
-            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && StateFrag.HoldPosition)
-            {
-                const float EffectiveAttackRange = StatsFrag.AttackRange;
-    
-              const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-                        
-              const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
-
-              // --- In Attack Range ---
-              if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
-              {
-                  StateFrag.SwitchingState = true;
-                  if (SignalSubsystem)
-                  {
-                      SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
-                  }
-                  continue;
-              }
-            }
-
 
             StateFrag.StateTimer += ExecutionInterval;
             

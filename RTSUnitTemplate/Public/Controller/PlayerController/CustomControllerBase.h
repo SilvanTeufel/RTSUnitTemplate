@@ -15,6 +15,7 @@
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
 #include "Engine/EngineTypes.h"   // For FHitResult in UFUNCTION params
+#include "TimerManager.h"  // For FTimerHandle
 
 class USoundBase;
 class AUnitBase;
@@ -39,7 +40,19 @@ protected:
 	// /** A snapshot of the last group of units for which a formation was calculated. Used to detect changes in selection. */
 	TArray<TWeakObjectPtr<AUnitBase>> LastFormationUnits;
 
-	
+	// Retry state for deferred follow-target commands
+	FTimerHandle FollowRetryTimerHandle;
+	int32 FollowRetryRemaining = 0;
+	TArray<TWeakObjectPtr<AUnitBase>> PendingFollowUnits;
+	TWeakObjectPtr<AUnitBase> PendingFollowTarget;
+	bool PendingFollowAttackT = false;
+
+	// Helpers for follow-target deferral
+	bool IsFollowCommandReady(const TArray<AUnitBase*>& Units);
+	void ScheduleFollowRetry(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT, int32 MaxAttempts = 8, float DelaySeconds = 0.5f);
+	void Retry_Server_SetUnitsFollowTarget();
+	void ExecuteFollowCommand(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT);
+
 public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
@@ -68,7 +81,7 @@ public:
 
 	// Assign or clear a follow target for a set of units on the server.
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void Server_SetUnitsFollowTarget(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget);
+	void Server_SetUnitsFollowTarget(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT = false);
 
 	// Batched version to reduce per-unit RPC spamming when issuing group move orders
 	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
