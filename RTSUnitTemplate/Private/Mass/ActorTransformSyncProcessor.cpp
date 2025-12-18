@@ -301,7 +301,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         if (LookAtDir.Normalize())
         {
             
-            if (UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair)
+            if (UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair && UnitBase->GetUnitState() != UnitData::Casting)
             {
                 UnitBase->SetUnitState(UnitData::Run);
             }
