@@ -47,6 +47,53 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/CapsuleComponent.h"
 
+namespace
+{
+	FVector ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target)
+	{
+		if (!Target)
+		{
+			return FVector::ZeroVector;
+		}
+
+		// Prefer Mass actor locations when available
+		auto GetMassLoc = [](const AActor* Actor)->FVector
+		{
+			if (const AUnitBase* UB = Cast<AUnitBase>(Actor))
+			{
+				return UB->GetMassActorLocation();
+			}
+			return Actor ? Actor->GetActorLocation() : FVector::ZeroVector;
+		};
+
+		const FVector AttackerLoc = GetMassLoc(Attacker);
+		const FVector TargetCenter = GetMassLoc(Target);
+
+		FVector Dir2D(TargetCenter.X - AttackerLoc.X, TargetCenter.Y - AttackerLoc.Y, 0.f);
+		if (Dir2D.IsNearlyZero())
+		{
+			return TargetCenter;
+		}
+
+		// Use capsule radius if present, otherwise bounds extent
+		float Radius2D = 0.f;
+		if (const UCapsuleComponent* Capsule = Target->FindComponentByClass<UCapsuleComponent>())
+		{
+			Radius2D = Capsule->GetScaledCapsuleRadius();
+		}
+		else
+		{
+			FVector Origin, Extent;
+			Target->GetActorBounds(true, Origin, Extent);
+			Radius2D = FVector2D(Extent.X, Extent.Y).Size();
+		}
+
+		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
+		Surface.Z = TargetCenter.Z; // Only adjust X/Y as requested
+		return Surface;
+	}
+}
+
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
     ProcessingPhase = EMassProcessingPhase::PostPhysics; // Run fairly late
@@ -1326,6 +1373,7 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
         } // End if (ActorFragPtr)
     } // End loop through Entities
 }
+
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
     if (!EntitySubsystem) return;
@@ -1434,7 +1482,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         {
                             if (PerfAttacker->HasAuthority())
                             {
-                                const FVector ImpactLocation = StrongTarget->GetMassActorLocation();
+                                const FVector ImpactLocation = ComputeImpactSurfaceXY(StrongAttacker, StrongTarget);
 
                                 const float KillDelay = 2.0f; // Reasonable lifetime for spawned components
                                 PerfAttacker->FireEffectsAtLocation(
