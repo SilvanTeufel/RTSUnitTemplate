@@ -273,4 +273,7 @@ public:
 	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResourcePlacementDistance = 1000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool NeedsBeacon = false;
 };

@@ -6,6 +6,7 @@
 #include "GameModes/ResourceGameMode.h"
 #include "Components/CapsuleComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "EngineUtils.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -303,5 +304,40 @@ void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit*
 			}
 		}
 	*/
+}
+
+bool ABuildingBase::IsInBeaconRange() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+	return ABuildingBase::IsLocationInBeaconRange(World, GetActorLocation());
+}
+
+bool ABuildingBase::IsLocationInBeaconRange(UWorld* World, const FVector& Location)
+{
+	if (!World)
+	{
+		return false;
+	}
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		ABuildingBase* Beacon = *It;
+		if (!Beacon)
+		{
+			continue;
+		}
+		if (Beacon->BeaconRange > 0.f)
+		{
+			const float Dist2D = FVector::Dist2D(Beacon->GetActorLocation(), Location);
+			if (Dist2D <= Beacon->BeaconRange)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 

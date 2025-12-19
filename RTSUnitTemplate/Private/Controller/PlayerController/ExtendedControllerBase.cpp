@@ -1400,6 +1400,16 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
     // Compute desired grounded location for the dragged area
     const FVector DesiredGrounded = ComputeGroundedLocation(DraggedWorkArea, MouseGround);
 
+    // Beacon visual feedback: if this WorkArea needs a beacon and we are outside any beacon range, flash material
+    if (DraggedWorkArea->NeedsBeacon)
+    {
+        UWorld* WorldCtx = GetWorld();
+        if (WorldCtx && !ABuildingBase::IsLocationInBeaconRange(WorldCtx, DesiredGrounded))
+        {
+            DraggedWorkArea->TemporarilyChangeMaterial();
+        }
+    }
+
     // Persist last safe location per dragged area (function-local static state to avoid header changes)
     static TWeakObjectPtr<AWorkArea> LastAreaRef = nullptr;
     static FVector LastSafeLoc = FVector::ZeroVector;
@@ -1716,6 +1726,19 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 		return; // Mouse not over NavMesh: stop moving until it is
 	}
 	const FVector MouseGround = NavLoc.Location;
+	// Beacon visual feedback in legacy path
+	if (DraggedWorkArea->NeedsBeacon)
+	{
+		UWorld* WorldCtx = GetWorld();
+		if (WorldCtx)
+		{
+			const FVector DesiredGrounded = ComputeGroundedLocation(DraggedWorkArea, MouseGround);
+			if (!ABuildingBase::IsLocationInBeaconRange(WorldCtx, DesiredGrounded))
+			{
+				DraggedWorkArea->TemporarilyChangeMaterial();
+			}
+		}
+	}
 	float Distance = FVector::Dist(
 		MouseGround,
 		DraggedWorkArea->GetActorLocation()
@@ -2744,27 +2767,27 @@ bool AExtendedControllerBase::DropWorkArea()
 				break;
 			}
 		}
-	
+
+		// NeedsBeacon check: outside of any beacon range?
+		bool bNeedsBeaconOutOfRange = false;
+		if (SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->NeedsBeacon)
+		{
+			UWorld* WorldCtx = GetWorld();
+			if (WorldCtx)
+			{
+				const FVector Pos = SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation();
+				bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
+			}
+		}
+		
 		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
-		if ((bIsOverlappingWithValidArea && !WorkAreaIsSnapped) || IsNoBuildZone) // bIsOverlappingWithValidArea &&
+		if ((bIsOverlappingWithValidArea && !WorkAreaIsSnapped) || IsNoBuildZone || bNeedsBeaconOutOfRange) // bIsOverlappingWithValidArea &&
 		{
 			if (DropWorkAreaFailedSound)
 			{
 				UGameplayStatics::PlaySound2D(this, DropWorkAreaFailedSound);
 			}
 			
-			/*
-			if (RTSGameMode)
-			{
-				// Cast to your custom game mode class.
-				AResourceGameMode* MyGameMode = Cast<AResourceGameMode>(RTSGameMode);
-				if (MyGameMode)
-				{
-					// Use ModifyResource to adjust the resource amount.
-					// Here we refund the construction cost to the ability's team.
-					MyGameMode->ModifyResourceCCost(SelectedUnits[0]->CurrentDraggedWorkArea->ConstructionCost, SelectedUnits[0]->TeamId);
-				}
-			}*/
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
 			SelectedUnits[0]->BuildArea = nullptr;
 			SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
@@ -2821,8 +2844,20 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 
+		// NeedsBeacon check: outside of any beacon range?
+		bool bNeedsBeaconOutOfRange = false;
+		if (UnitBase && UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->NeedsBeacon)
+		{
+			UWorld* WorldCtx = GetWorld();
+			if (WorldCtx)
+			{
+				const FVector Pos = UnitBase->CurrentDraggedWorkArea->GetActorLocation();
+				bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
+			}
+		}
+
 		// && !bWorkAreaIsSnapped
-		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone)
+		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange)
 		{
 			if (InDropWorkAreaFailedSound)
 			{

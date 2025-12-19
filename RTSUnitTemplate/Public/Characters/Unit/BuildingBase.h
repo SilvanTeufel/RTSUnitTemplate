@@ -37,6 +37,9 @@ public:
 	// Per-building adjustment to controller SnapGap (can be negative). Effective gap is clamped to >= 0.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapGapAdjustment = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BeaconRange = 0.f;
 	
 	virtual void Tick(float DeltaTime) override;
 
@@ -68,6 +71,14 @@ public:
 
 
 	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible) override;
+
+	// Returns true if this building's location is within range of any Beacon (any BuildingBase with BeaconRange > 0)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsInBeaconRange() const;
+
+	// Utility: Returns true if the given world location is within range of any Beacon (any BuildingBase with BeaconRange > 0)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static bool IsLocationInBeaconRange(UWorld* World, const FVector& Location);
 };
 
 
