@@ -33,6 +33,8 @@ USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableObstacleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableNavManipulationTag : public FMassTag { GENERATED_BODY() };
+// New tag to freeze only horizontal (X/Y) movement while allowing Z updates (e.g., landing)
+USTRUCT() struct FMassStateStopXYMovementTag : public FMassTag { GENERATED_BODY() };
 
 // --- Worker-Zustände ---
 USTRUCT() struct FMassStateGoToBaseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
@@ -756,6 +758,8 @@ namespace UnitTagBits
 	// Worker repair states
 	static constexpr uint32 GoToRepair          = 1u << 21;
 	static constexpr uint32 Repair              = 1u << 22;
+	// Control: stop only horizontal motion while allowing vertical updates
+	static constexpr uint32 StopXYMovement      = 1u << 23;
 }
 
 
@@ -786,6 +790,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	// Always replicated control bits
 	if (H(FMassStateStopMovementTag::StaticStruct()))         Bits |= UnitTagBits::StopMovement;
 	if (H(FMassStateDisableObstacleTag::StaticStruct()))      Bits |= UnitTagBits::DisableObstacle;
+	if (H(FMassStateStopXYMovementTag::StaticStruct()))       Bits |= UnitTagBits::StopXYMovement;
 	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
@@ -810,9 +815,10 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
 	};
 
-	// Always replicate/control these two tags regardless of death state
+	// Always replicate/control these tags regardless of death state
 	SetTag(UnitTagBits::StopMovement,        FMassStateStopMovementTag());
 	SetTag(UnitTagBits::DisableObstacle,     FMassStateDisableObstacleTag());
+	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 
 	// If the client already has Dead tag AND Health <= 0 on client, skip replication of other state tags
 	const bool bClientHasDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());

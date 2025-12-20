@@ -99,4 +99,32 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Area Decal", Server, Reliable)
 	void Server_DeactivateDecal();
+
+	/**
+	 * Smoothly scales the decal radius to the target value over the given time (linear interpolation).
+	 * Must be called on the server.
+	 * @param EndRadius Target radius to reach.
+	 * @param TimeSeconds Duration for the transition. If <= 0, the radius is set immediately.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Area Decal", Server, Reliable)
+	void Server_ScaleDecalToRadius(float EndRadius, float TimeSeconds);
+
+private:
+	// Timer-driven smooth scaling state (server-only)
+	FTimerHandle ScaleTimerHandle;
+	float ScaleStartRadius = 0.f;
+	float ScaleTargetRadius = 0.f;
+	float ScaleDuration = 0.f;
+	float ScaleStartTime = 0.f;
+	bool bIsScaling = false;
+
+	// Timer tick interval for scaling updates (seconds). Lower is smoother but more network updates.
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	float ScaleUpdateInterval = 0.05f;
+
+	UFUNCTION()
+	void HandleScaleStep();
+
+	// Helper to propagate radius to Mass fragment when available (server-only)
+	void UpdateMassEffectRadius(float NewRadius);
 };

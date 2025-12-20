@@ -81,6 +81,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopMovementTagToEntity();
 
+	// Apply or remove the tag that freezes only X/Y movement (allowing Z updates)
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool ApplyStopXYMovementTag(bool bApply);
+
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool EnableDynamicObstacle(bool Enable);
 

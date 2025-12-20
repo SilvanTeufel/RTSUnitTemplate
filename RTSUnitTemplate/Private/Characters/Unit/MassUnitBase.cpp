@@ -140,6 +140,29 @@ bool AMassUnitBase::AddStopMovementTagToEntity()
 	
 	EntityManager->Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
 	
+ return true;
+}
+
+bool AMassUnitBase::ApplyStopXYMovementTag(bool bApply)
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle) || !EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): ApplyStopXYMovementTag failed - invalid entity or manager."), *GetName());
+		return false;
+	}
+
+	auto& Defer = EntityManager->Defer();
+	if (bApply)
+	{
+		Defer.AddTag<FMassStateStopXYMovementTag>(EntityHandle);
+	}
+	else
+	{
+		Defer.RemoveTag<FMassStateStopXYMovementTag>(EntityHandle);
+	}
 	return true;
 }
 

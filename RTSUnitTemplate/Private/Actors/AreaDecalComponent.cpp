@@ -5,6 +5,8 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
@@ -133,6 +135,16 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 		return;
 	}
 
+	// If we are scaling currently, stop it
+	if (bIsScaling)
+	{
+		bIsScaling = false;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+		}
+	}
+
 	bDecalIsVisible = true;
 	// Update the replicated properties. This will trigger the OnRep functions on all clients.
 	CurrentMaterial = NewMaterial;
@@ -184,8 +196,15 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 
 void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 {
-	// Setting the material to null is the signal for deactivation.
-	// CurrentMaterial = nullptr;
+	// Stop scaling if active
+	if (bIsScaling)
+	{
+		bIsScaling = false;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+		}
+	}
 
 	// The server hides it immediately.
 	bDecalIsVisible = false;
@@ -195,6 +214,109 @@ void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 	SetHiddenInGame(true, true);
 	UpdateDecalVisuals();
 	// OnRep_CurrentMaterial will be called on clients, which will then also hide it.
+}
+
+void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadius, float TimeSeconds)
+{
+	if (EndRadius < 0.f)
+	{
+		EndRadius = 0.f;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Cancel any previous scaling
+	if (bIsScaling)
+	{
+		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+		bIsScaling = false;
+	}
+
+	// Immediate set if time <= 0
+	if (TimeSeconds <= KINDA_SMALL_NUMBER)
+	{
+		CurrentDecalRadius = EndRadius;
+		UpdateMassEffectRadius(EndRadius);
+		UpdateDecalVisuals();
+		return;
+	}
+
+	// Initialize scaling state
+	ScaleStartRadius = CurrentDecalRadius;
+	ScaleTargetRadius = EndRadius;
+	ScaleDuration = TimeSeconds;
+	ScaleStartTime = World->GetTimeSeconds();
+	bIsScaling = true;
+
+	// Ensure decal visible while scaling
+	bDecalIsVisible = true;
+
+	// Start timer
+	const float Interval = FMath::Max(0.01f, ScaleUpdateInterval);
+	World->GetTimerManager().SetTimer(ScaleTimerHandle, this, &UAreaDecalComponent::HandleScaleStep, Interval, true);
+}
+
+void UAreaDecalComponent::HandleScaleStep()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (!bIsScaling)
+	{
+		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+		return;
+	}
+
+	const float Now = World->GetTimeSeconds();
+	const float Elapsed = Now - ScaleStartTime;
+	float Alpha = (ScaleDuration > 0.f) ? (Elapsed / ScaleDuration) : 1.f;
+	Alpha = FMath::Clamp(Alpha, 0.f, 1.f);
+
+	const float NewRadius = FMath::Lerp(ScaleStartRadius, ScaleTargetRadius, Alpha);
+	CurrentDecalRadius = NewRadius;
+	UpdateMassEffectRadius(NewRadius);
+	UpdateDecalVisuals();
+
+	if (Alpha >= 1.f - KINDA_SMALL_NUMBER)
+	{
+		// Finish
+		bIsScaling = false;
+		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+	}
+}
+
+void UAreaDecalComponent::UpdateMassEffectRadius(float NewRadius)
+{
+	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+	if (!OwningUnit)
+	{
+		return;
+	}
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	if (!OwningUnit->GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		return;
+	}
+
+	FMassGameplayEffectFragment* EffectFragment = EntityManager->GetFragmentDataPtr<FMassGameplayEffectFragment>(EntityHandle);
+	if (EffectFragment)
+	{
+		EffectFragment->EffectRadius = NewRadius;
+	}
 }
 
 

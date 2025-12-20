@@ -134,6 +134,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
 
+        const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
         static int32 GApplyMoveClientChunkCounter = 0;
         if (((++GApplyMoveClientChunkCounter) % 60) == 0)
@@ -168,7 +169,14 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
             NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
 
-            Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+            if (bFreezeXY)
+            {
+                Velocity.Value = FVector(0.f, 0.f, OriginalZVelocity);
+            }
+            else
+            {
+                Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+            }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
             const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
@@ -194,6 +202,8 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
 
+        const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
+
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
             FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
@@ -218,7 +228,14 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
             NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
 
-            Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+            if (bFreezeXY)
+            {
+                Velocity.Value = FVector(0.f, 0.f, OriginalZVelocity);
+            }
+            else
+            {
+                Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
+            }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
             const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;

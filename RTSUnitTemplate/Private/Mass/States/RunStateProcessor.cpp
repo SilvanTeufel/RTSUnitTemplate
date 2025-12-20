@@ -228,12 +228,20 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
                 if (OffsetMag > 0.f)
                 {
-                    // Deterministic pseudo-random signs based on entity IDs for stability
-                    const int32 Hash = (int32)Entity.Index ^ (int32)Entity.SerialNumber;
-                    const float SignX = (Hash & 1) ? 1.f : -1.f;
-                    const float SignY = (Hash & 2) ? 1.f : -1.f;
-                    DesiredPos.X += SignX * OffsetMag;
-                    DesiredPos.Y += SignY * OffsetMag;
+                    // Unique, deterministic angular offset per entity to avoid identical positions
+                    uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
+                    // SplitMix64 scramble for good distribution
+                    Seed += 0x9E3779B97F4A7C15ull;
+                    Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
+                    Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
+                    Seed ^= (Seed >> 31);
+                    // Map to [0,1) with 53-bit precision, then to [0, 2pi)
+                    const double Unit = (double)(Seed >> 11) * (1.0 / 9007199254740992.0);
+                    const float Angle = (float)(Unit * 2.0 * PI);
+                    const float CosA = FMath::Cos(Angle);
+                    const float SinA = FMath::Sin(Angle);
+                    DesiredPos.X += CosA * OffsetMag;
+                    DesiredPos.Y += SinA * OffsetMag;
                 }
                 DesiredPos.Z = FriendlyLoc.Z; // ignore Z while following
 
