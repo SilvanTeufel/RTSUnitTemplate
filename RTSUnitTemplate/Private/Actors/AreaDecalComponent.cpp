@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Characters/Unit/BuildingBase.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
@@ -216,7 +217,7 @@ void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 	// OnRep_CurrentMaterial will be called on clients, which will then also hide it.
 }
 
-void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadius, float TimeSeconds)
+void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadius, float TimeSeconds, bool OwnerIsBeacon)
 {
 	if (EndRadius < 0.f)
 	{
@@ -242,6 +243,15 @@ void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadi
 		CurrentDecalRadius = EndRadius;
 		UpdateMassEffectRadius(EndRadius);
 		UpdateDecalVisuals();
+
+		// If owner is a beacon, propagate radius immediately
+		if (OwnerIsBeacon)
+		{
+			if (ABuildingBase* Building = Cast<ABuildingBase>(GetOwner()))
+			{
+				Building->SetBeaconRange(EndRadius);
+			}
+		}
 		return;
 	}
 
@@ -251,6 +261,7 @@ void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadi
 	ScaleDuration = TimeSeconds;
 	ScaleStartTime = World->GetTimeSeconds();
 	bIsScaling = true;
+	bScaleOwnerIsBeacon = OwnerIsBeacon;
 
 	// Ensure decal visible while scaling
 	bDecalIsVisible = true;
@@ -283,6 +294,15 @@ void UAreaDecalComponent::HandleScaleStep()
 	CurrentDecalRadius = NewRadius;
 	UpdateMassEffectRadius(NewRadius);
 	UpdateDecalVisuals();
+
+	// If the owner is a beacon, update its beacon range every tick with the current radius
+	if (bScaleOwnerIsBeacon)
+	{
+		if (ABuildingBase* Building = Cast<ABuildingBase>(GetOwner()))
+		{
+			Building->SetBeaconRange(NewRadius);
+		}
+	}
 
 	if (Alpha >= 1.f - KINDA_SMALL_NUMBER)
 	{

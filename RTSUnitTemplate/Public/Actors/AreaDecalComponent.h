@@ -107,7 +107,7 @@ public:
 	 * @param TimeSeconds Duration for the transition. If <= 0, the radius is set immediately.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Area Decal", Server, Reliable)
-	void Server_ScaleDecalToRadius(float EndRadius, float TimeSeconds);
+	void Server_ScaleDecalToRadius(float EndRadius, float TimeSeconds, bool OwnerIsBeacon = false);
 
 private:
 	// Timer-driven smooth scaling state (server-only)
@@ -117,6 +117,7 @@ private:
 	float ScaleDuration = 0.f;
 	float ScaleStartTime = 0.f;
 	bool bIsScaling = false;
+	bool bScaleOwnerIsBeacon = false; // if true, push current radius to owning Building's beacon range each step
 
 	// Timer tick interval for scaling updates (seconds). Lower is smoother but more network updates.
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)

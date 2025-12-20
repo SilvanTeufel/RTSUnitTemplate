@@ -110,6 +110,11 @@ void ABuildingBase::BeginPlay()
 		ResourceGameMode->AddBaseToGroup(this);
 }
 
+void ABuildingBase::SetBeaconRange(float NewRange)
+{
+	BeaconRange = FMath::Max(0.f, NewRange);
+}
+
 void ABuildingBase::Destroyed()
 {
 	Super::Destroyed();

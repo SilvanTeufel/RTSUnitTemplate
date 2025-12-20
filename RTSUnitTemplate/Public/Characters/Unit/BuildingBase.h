@@ -40,6 +40,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BeaconRange = 0.f;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetBeaconRange(float NewRange);
 	
 	virtual void Tick(float DeltaTime) override;
 
