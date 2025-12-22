@@ -977,13 +977,8 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 	}
 }
 
-void ACustomControllerBase::RightClickPressedMass()
+bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPawn)
 {
-	AttackToggled = false;
-
-	FHitResult HitPawn;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-	
 	// If we clicked on a friendly unit while having a selection, assign follow and early return
 	if (SelectedUnits.Num() > 0 && HitPawn.bBlockingHit)
 	{
@@ -994,22 +989,37 @@ void ACustomControllerBase::RightClickPressedMass()
 				if (bFriendly)
 				{
 					Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
-					return;
+					return true;
 				}
 			}
 	}
-	
-	// Otherwise clear any existing follow assignment when right-clicking elsewhere
 	
 	if (SelectedUnits.Num() > 0)
 	{
 		Server_SetUnitsFollowTarget(SelectedUnits, nullptr);
 	}
 
+	return false;
+}
+
+void ACustomControllerBase::RightClickPressedMass()
+{
+	AttackToggled = false;
+
+	FHitResult HitPawn;
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+	
+
 	
 	FHitResult Hit;
 	if (!CheckClickOnTransportUnitMass(HitPawn))
 	{
+		// Only handle follow if not clicking on a transport unit
+		if (TryHandleFollowOnRightClick(HitPawn))
+		{
+			return;
+		}
+		
 		if (!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		{
 			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);

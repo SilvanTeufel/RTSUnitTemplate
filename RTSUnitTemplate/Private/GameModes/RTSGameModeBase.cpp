@@ -43,7 +43,7 @@ void ARTSGameModeBase::BeginPlay()
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
 
 	FTimerHandle TimerHandleStartDataTable;
-	GetWorldTimerManager().SetTimer(TimerHandleStartDataTable, this, &ARTSGameModeBase::DataTableTimerStart, GatherControllerTimer+5.f, false);
+	GetWorldTimerManager().SetTimer(TimerHandleStartDataTable, this, &ARTSGameModeBase::DataTableTimerStart, GatherControllerTimer+5.f+DelaySpawnTableTime, false);
 	
 }
 

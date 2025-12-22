@@ -53,6 +53,9 @@ protected:
 	void Retry_Server_SetUnitsFollowTarget();
 	void ExecuteFollowCommand(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT);
 
+	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
+	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
+
 public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
