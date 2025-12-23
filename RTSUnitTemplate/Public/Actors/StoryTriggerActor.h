@@ -9,7 +9,7 @@
 #include "Materials/MaterialInterface.h"
 #include "StoryTriggerActor.generated.h"
 
-class UCapsuleComponent;
+class UBoxComponent;
 class UPrimitiveComponent;
 class UStoryWidgetBase;
 class USoundBase;
@@ -74,9 +74,9 @@ protected:
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	// Overlap capsule used as the lightweight trigger
+	// Overlap box used as the lightweight trigger
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Story)
-	TObjectPtr<UCapsuleComponent> TriggerCapsule;
+	TObjectPtr<UBoxComponent> TriggerBox;
 
 	// DataTable and Row Id to load the story data from on BeginPlay
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Data")
@@ -131,6 +131,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
 	int32 TeamId = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	int32 TriggerTeamId = 0;
 	// Auto-remove the widget after this many seconds (<=0 disables auto-remove)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story, meta=(ClampMin="0.0"))
 	float WidgetLifetimeSeconds = 10.f;

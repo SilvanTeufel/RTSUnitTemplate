@@ -100,19 +100,117 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
 */
 FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    // We only care about the left mouse button for moving the camera.
-    if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+    const FKey Button = InMouseEvent.GetEffectingButton();
+
+    // Compute local mouse position once
+    const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+
+    // Helper to compute world XY from minimap click with rotation correction
+    auto ComputeWorldXY = [&](FVector2D& OutWorldXY)
     {
-        // Get the position of the click in the widget's local space.
-        FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+        if (!MinimapActorRef) return false;
+        const FVector2D WidgetSize = InGeometry.GetLocalSize();
+        if (WidgetSize.X <= 0 || WidgetSize.Y <= 0) return false;
 
+        // Rotation compensation identical to MoveCameraToMinimapLocation
+        const FVector2D Center(WidgetSize.X * 0.5f, WidgetSize.Y * 0.5f);
+        const float dx = LocalMousePosition.X - Center.X;
+        const float dy = LocalMousePosition.Y - Center.Y;
+        const float AngleRad = FMath::DegreesToRadians(-CurrentMapAngle);
+        const float CosAngle = FMath::Cos(AngleRad);
+        const float SinAngle = FMath::Sin(AngleRad);
+        const float RotatedX_relative = dx * CosAngle - dy * SinAngle;
+        const float RotatedY_relative = dx * SinAngle + dy * CosAngle;
+        const FVector2D CorrectedLocalPosition(RotatedX_relative + Center.X, RotatedY_relative + Center.Y);
+
+        const float U = FMath::Clamp(CorrectedLocalPosition.X / WidgetSize.X, 0.f, 1.f);
+        const float V = FMath::Clamp(CorrectedLocalPosition.Y / WidgetSize.Y, 0.f, 1.f);
+        const FVector2D& Min = MinimapActorRef->MinimapMinBounds;
+        const FVector2D& Max = MinimapActorRef->MinimapMaxBounds;
+        const float WorldExtentX = Max.X - Min.X;
+        const float WorldExtentY = Max.Y - Min.Y;
+        OutWorldXY.X = Min.X + (U * WorldExtentX);
+        OutWorldXY.Y = Min.Y + (V * WorldExtentY);
+        return true;
+    };
+
+    auto LineTraceGround = [&](const FVector2D& WorldXY, FVector& OutGround)
+    {
+        UWorld* World = GetWorld();
+        if (!World) return false;
+        APawn* PlayerPawn = GetOwningPlayerPawn();
+        const FVector TraceStart(WorldXY.X, WorldXY.Y, 10000.0f);
+        const FVector TraceEnd(WorldXY.X, WorldXY.Y, -10000.0f);
+        FHitResult Hit;
+        FCollisionQueryParams Params(SCENE_QUERY_STAT(MinimapTrace), false);
+        if (PlayerPawn) Params.AddIgnoredActor(PlayerPawn);
+        if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params) && Hit.bBlockingHit)
+        {
+            OutGround = Hit.ImpactPoint;
+            return true;
+        }
+        OutGround = FVector(WorldXY.X, WorldXY.Y, 0.f);
+        return false;
+    };
+
+    // Handle Right Mouse Button: issue move commands for selected units via controller
+    if (Button == EKeys::RightMouseButton)
+    {
+        FVector2D WorldXY;
+        if (!ComputeWorldXY(WorldXY))
+        {
+            return FReply::Unhandled();
+        }
+        FVector Ground;
+        LineTraceGround(WorldXY, Ground);
+
+        // Call controller function
+        APlayerController* PC = GetOwningPlayer();
+        ACustomControllerBase* Ctrl = PC ? Cast<ACustomControllerBase>(PC) : nullptr;
+        if (!Ctrl)
+        {
+            APawn* Pawn = GetOwningPlayerPawn();
+            Ctrl = Pawn ? Cast<ACustomControllerBase>(Pawn->GetController()) : nullptr;
+        }
+        if (Ctrl)
+        {
+            Ctrl->RightClickPressedMassMinimap(Ground);
+            return FReply::Handled();
+        }
+        return FReply::Unhandled();
+    }
+
+    // Handle Left Mouse Button
+    if (Button == EKeys::LeftMouseButton)
+    {
+        // If AttackToggled and units are selected, do attack-move to minimap position
+        APlayerController* PC = GetOwningPlayer();
+        ACustomControllerBase* Ctrl = PC ? Cast<ACustomControllerBase>(PC) : nullptr;
+        if (!Ctrl)
+        {
+            APawn* Pawn = GetOwningPlayerPawn();
+            Ctrl = Pawn ? Cast<ACustomControllerBase>(Pawn->GetController()) : nullptr;
+        }
+
+        if (Ctrl && Ctrl->AttackToggled && Ctrl->SelectedUnits.Num() > 0)
+        {
+            FVector2D WorldXY;
+            if (!ComputeWorldXY(WorldXY))
+            {
+                return FReply::Unhandled();
+            }
+            FVector Ground;
+            LineTraceGround(WorldXY, Ground);
+            Ctrl->LeftClickPressedMassMinimapAttack(Ground);
+            return FReply::Handled();
+        }
+
+        // Default behavior: move camera to minimap location
         MoveCameraToMinimapLocation(LocalMousePosition, InGeometry);
-
-        // Return FReply::Handled() to signify that we have processed this input event.
         return FReply::Handled();
     }
 
-    // If it's any other button, let the event bubble up.
+    // Other buttons: unhandled
     return FReply::Unhandled();
 }
 

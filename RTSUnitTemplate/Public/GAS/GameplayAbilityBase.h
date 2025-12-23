@@ -6,6 +6,7 @@
 #include "GAS.h"
 #include "Abilities/GameplayAbility.h"
 #include "Actors/WorkArea.h"
+class AUnitBase;
 #include "GameplayAbilityBase.generated.h"
 
 /**
@@ -27,6 +28,10 @@ public:
 	// New: Ability can be globally disabled via this flag (per ability asset)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bDisabled = false;
+
+	// If true and this ability was saved as Disabled, execute it once when loading instead of disabling it
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExecuteOnLoadIfDisabled = false;
 
 	// New: Unique key to group abilities, default "None"
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

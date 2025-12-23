@@ -23,6 +23,11 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "AIController.h"
 #include "Actors/WorkResource.h"
+#include "AbilitySystemInterface.h"
+#include "AbilitySystemComponent.h"
+#include "GAS/GameplayAbilityBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
+#include "Characters/Unit/GASUnit.h"
 
 void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 {
@@ -124,6 +129,38 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
                 AttrData.BaseRunSpeed = Attr->GetBaseRunSpeed();
 
                 Data.AttributeSaveData = AttrData;
+            }
+        }
+
+        // Ability states (owner-level toggles) for this unit
+        if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Unit))
+        {
+            if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
+            {
+                if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+                {
+                    auto CollectFromList = [&](const TArray<TSubclassOf<UGameplayAbilityBase>>& List)
+                    {
+                        for (const TSubclassOf<UGameplayAbilityBase>& AbilityClass : List)
+                        {
+                            if (!AbilityClass) continue;
+                            const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+                            if (!AbilityCDO) continue;
+
+                            FAbilitySaveData AbilitySave;
+                            AbilitySave.AbilityClass = FSoftClassPath(AbilityClass);
+                            AbilitySave.AbilityKey = AbilityCDO->AbilityKey;
+                            AbilitySave.bOwnerDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForOwner(ASC, AbilitySave.AbilityKey);
+                            AbilitySave.bOwnerForceEnabled = UGameplayAbilityBase::IsAbilityKeyForceEnabledForOwner(ASC, AbilitySave.AbilityKey);
+                            Data.Abilities.Add(MoveTemp(AbilitySave));
+                        }
+                    };
+
+                    CollectFromList(GASUnit->DefaultAbilities);
+                    CollectFromList(GASUnit->SecondAbilities);
+                    CollectFromList(GASUnit->ThirdAbilities);
+                    CollectFromList(GASUnit->FourthAbilities);
+                }
             }
         }
 
@@ -416,6 +453,78 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             if (LevelUnitForAttr->Attributes)
             {
                 LevelUnitForAttr->Attributes->UpdateAttributes(SavedUnit.AttributeSaveData);
+            }
+        }
+
+        // Re-apply saved ability states (owner-level toggles) and optional execute-on-load
+        if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Unit))
+        {
+            if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
+            {
+                auto MirrorToClients = [&](const FString& Key, bool bEnable)
+                {
+                    if (!Unit->HasAuthority()) return;
+                    UWorld* World = Unit->GetWorld();
+                    if (!World) return;
+                    int32 SentCount = 0;
+                    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+                    {
+                        ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+                        if (!CustomPC) continue;
+                        if (CustomPC->SelectableTeamId == Unit->TeamId)
+                        {
+                            CustomPC->Client_ApplyOwnerAbilityKeyToggle(Unit, Key, bEnable);
+                            ++SentCount;
+                        }
+                    }
+                };
+
+                for (const FAbilitySaveData& SavedAbility : SavedUnit.Abilities)
+                {
+                    const FString& Key = SavedAbility.AbilityKey;
+
+                    // Apply force-enabled state first
+                    if (SavedAbility.bOwnerForceEnabled)
+                    {
+                        UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(ASC, Key, true);
+                        MirrorToClients(Key, true);
+                        continue; // force enable overrides disabled
+                    }
+
+                    if (SavedAbility.bOwnerDisabled)
+                    {
+                        bool bExecutedInstead = false;
+                        if (SavedAbility.AbilityClass.IsValid())
+                        {
+                            if (UClass* AbilityCls = SavedAbility.AbilityClass.TryLoadClass<UGameplayAbilityBase>())
+                            {
+                                if (const UGameplayAbilityBase* CDO = AbilityCls->GetDefaultObject<UGameplayAbilityBase>())
+                                {
+                                    if (CDO->bExecuteOnLoadIfDisabled)
+                                    {
+                                        // Try to activate this ability instead of disabling it
+                                        if (ASC->TryActivateAbilityByClass(AbilityCls, true))
+                                        {
+                                            bExecutedInstead = true;
+                                        }
+                                        else
+                                        {
+                                            // If activation failed, still choose not to disable per requirement
+                                            bExecutedInstead = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // If not executed-instead, then apply disable
+                        if (!bExecutedInstead)
+                        {
+                            UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(ASC, Key, false);
+                            MirrorToClients(Key, false);
+                        }
+                    }
+                }
             }
         }
 

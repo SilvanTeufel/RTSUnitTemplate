@@ -215,6 +215,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickReleasedMass();
+
+	// Minimap-specific commands
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RightClickPressedMassMinimap(const FVector& GroundLocation);
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void LeftClickPressedMassMinimapAttack(const FVector& GroundLocation);
 	// Updates the Fog Mask using visible units
 	UFUNCTION()
 	void UpdateFogMaskWithCircles(const TArray<FMassEntityHandle>& Entities);

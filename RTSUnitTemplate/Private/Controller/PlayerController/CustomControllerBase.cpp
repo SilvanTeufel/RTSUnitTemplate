@@ -1036,6 +1036,100 @@ void ACustomControllerBase::RightClickPressedMass()
 	}
 }
 
+void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& GroundLocation)
+{
+	// Ignore pawn hits and follow logic for minimap
+	AttackToggled = false;
+
+	if (!SelectedUnits.Num())
+	{
+		return;
+	}
+
+	// If we are dragging a work area, destroy it as in normal right-click behavior
+	if (SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
+	{
+		DestroyDraggedArea(SelectedUnits[0]);
+		return;
+	}
+
+	// Synthesize a hit result using minimap ground location and reuse existing logic
+	FHitResult SynthHit;
+	SynthHit.Location = GroundLocation;
+	RunUnitsAndSetWaypointsMass(SynthHit);
+}
+
+void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& GroundLocation)
+{
+	// Mimic LeftClickPressedMass attack branch using GroundLocation from minimap
+	if (!AttackToggled)
+	{
+		// Enforce attack mode for this call as per requirement
+		AttackToggled = true;
+	}
+
+	int32 NumUnits = SelectedUnits.Num();
+	if (NumUnits == 0) return;
+
+	// 2) precompute grid offsets around GroundLocation
+	TArray<FVector> Offsets = ComputeSlotOffsets(NumUnits);
+
+	AWaypoint* BWaypoint = nullptr;
+	bool PlayWaypointSound = false;
+	bool PlayAttackSound   = false;
+
+	TArray<AUnitBase*> MassUnits;
+	TArray<FVector>    MassLocations;
+	for (int32 i = 0; i < NumUnits; ++i)
+	{
+		AUnitBase* U = SelectedUnits[i];
+		if (U == nullptr || U == CameraUnitWithTag) continue;
+
+		FVector RunLocation = GroundLocation + Offsets[i];
+
+		bool bNavMod;
+		RunLocation = TraceRunLocation(RunLocation, bNavMod);
+		if (bNavMod) continue;
+
+		if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+		{
+			// waypoint placed
+		}
+		else
+		{
+			DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+			if (U->bIsMassUnit)
+			{
+				MassUnits.Add(U);
+				MassLocations.Add(RunLocation);
+			}
+			else
+			{
+				LeftClickAttack(U, RunLocation);
+			}
+
+			PlayAttackSound = true;
+		}
+	}
+
+	if (MassUnits.Num() > 0)
+	{
+		LeftClickAttackMass(MassUnits, MassLocations, true, nullptr);
+	}
+
+	// Reset toggle after issuing attack move, as in normal LeftClickPressedMass
+	AttackToggled = false;
+
+	if (WaypointSound && PlayWaypointSound)
+	{
+		UGameplayStatics::PlaySound2D(this, WaypointSound);
+	}
+	if (AttackSound && PlayAttackSound)
+	{
+		UGameplayStatics::PlaySound2D(this, AttackSound);
+	}
+}
+
 // Helper to get a unit's world location (actor or ISM)
 FVector ACustomControllerBase::GetUnitWorldLocation(const AUnitBase* Unit) const
 {

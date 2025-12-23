@@ -21,6 +21,27 @@ struct FCameraSaveData
 };
 
 USTRUCT(BlueprintType)
+struct FAbilitySaveData
+{
+    GENERATED_BODY()
+
+    // Ability class to identify which ability this refers to
+    UPROPERTY()
+    FSoftClassPath AbilityClass;
+
+    // Optional: key used by ability gating system
+    UPROPERTY()
+    FString AbilityKey;
+
+    // Saved owner-level toggles
+    UPROPERTY()
+    bool bOwnerDisabled = false;
+
+    UPROPERTY()
+    bool bOwnerForceEnabled = false;
+};
+
+USTRUCT(BlueprintType)
 struct FUnitSaveData
 {
     GENERATED_BODY()
@@ -66,6 +87,10 @@ struct FUnitSaveData
 
     UPROPERTY()
     FAttributeSaveData AttributeSaveData;
+
+    // Saved abilities states for this unit
+    UPROPERTY()
+    TArray<FAbilitySaveData> Abilities;
 };
 
 USTRUCT(BlueprintType)

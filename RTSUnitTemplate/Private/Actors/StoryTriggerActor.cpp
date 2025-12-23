@@ -1,5 +1,5 @@
 ﻿#include "Actors/StoryTriggerActor.h"
-#include "Components/CapsuleComponent.h"
+#include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Widgets/StoryWidgetBase.h"
@@ -13,16 +13,15 @@ AStoryTriggerActor::AStoryTriggerActor()
     PrimaryActorTick.bCanEverTick = false;
     bReplicates = true;
 
-    TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("TriggerCapsule"));
-    RootComponent = TriggerCapsule;
+    TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
+    RootComponent = TriggerBox;
 
-    TriggerCapsule->SetCapsuleHalfHeight(90.f);
-    TriggerCapsule->SetCapsuleRadius(45.f);
-    TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    TriggerCapsule->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
-    TriggerCapsule->SetCollisionResponseToChannel(ECC_Pawn, ECollisionResponse::ECR_Overlap);
-    TriggerCapsule->SetGenerateOverlapEvents(true);
-    TriggerCapsule->SetHiddenInGame(true);
+    TriggerBox->SetBoxExtent(FVector(45.f, 45.f, 90.f));
+    TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    TriggerBox->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+    TriggerBox->SetCollisionResponseToChannel(ECC_Pawn, ECollisionResponse::ECR_Overlap);
+    TriggerBox->SetGenerateOverlapEvents(true);
+    TriggerBox->SetHiddenInGame(true);
 }
 
 void AStoryTriggerActor::BeginPlay()
@@ -63,9 +62,9 @@ void AStoryTriggerActor::BeginPlay()
         }
     }
 
-    if (TriggerCapsule)
+    if (TriggerBox)
     {
-        TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AStoryTriggerActor::OnOverlapBegin);
+        TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &AStoryTriggerActor::OnOverlapBegin);
     }
 }
 
@@ -83,7 +82,7 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
     }
 
     // Team gate: only trigger for units with matching team id
-    if (Unit->TeamId != TeamId)
+    if (Unit->TeamId != TriggerTeamId)
     {
         return;
     }
@@ -100,10 +99,10 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
     bHasTriggered = true;
 
     // Disable further overlaps to save resources
-    if (TriggerCapsule && bTriggerOnce)
+    if (TriggerBox && bTriggerOnce)
     {
-        TriggerCapsule->SetGenerateOverlapEvents(false);
-        TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        TriggerBox->SetGenerateOverlapEvents(false);
+        TriggerBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
 
     // Instead of playing immediately, enqueue into the StoryTriggerQueueSubsystem to ensure sequential display
