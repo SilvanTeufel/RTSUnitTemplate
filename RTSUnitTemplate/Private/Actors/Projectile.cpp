@@ -14,6 +14,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/MassUnitBase.h"
 
 namespace
 {
@@ -59,8 +60,17 @@ namespace
 		}
 
 		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
-		// Keep Z the same as the target center (we only adjust X/Y as requested)
-		Surface.Z = TargetCenter.Z;
+		// If attacker is not flying, use attacker Z; otherwise keep target Z
+		bool bAttackerFlying = false;
+		if (const AUnitBase* AttackerUB = Cast<AUnitBase>(Attacker))
+		{
+			bAttackerFlying = AttackerUB->IsFlying;
+		}
+		else if (const AMassUnitBase* AttackerMUB = Cast<AMassUnitBase>(Attacker))
+		{
+			bAttackerFlying = AttackerMUB->IsFlying;
+		}
+		Surface.Z = bAttackerFlying ? TargetCenter.Z : AttackerLoc.Z;
 		return Surface;
 	}
 
@@ -803,7 +813,20 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		// Spawn impact effects at the surface point so they are visible on large units/buildings
 		if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 		{
-			const FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			// Always use the projectile's world Z (ISM instance if available)
+			{
+				FTransform InstanceXform;
+				if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+				{
+					ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, /*bWorldSpace=*/true);
+				}
+				else
+				{
+					InstanceXform = GetActorTransform();
+				}
+				SurfaceLoc.Z = InstanceXform.GetLocation().Z;
+			}
 			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
@@ -895,7 +918,20 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		// Spawn impact effects at the surface point even for heals (so it's on the unit surface)
 		if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 		{
-			const FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			// Always use the projectile's world Z (ISM instance if available)
+			{
+				FTransform InstanceXform;
+				if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+				{
+					ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, /*bWorldSpace=*/true);
+				}
+				else
+				{
+					InstanceXform = GetActorTransform();
+				}
+				SurfaceLoc.Z = InstanceXform.GetLocation().Z;
+			}
 			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
@@ -980,7 +1016,20 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
-				const FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				// Always use the projectile's world Z (ISM instance if available)
+				{
+					FTransform InstanceXform;
+					if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+					{
+						ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, /*bWorldSpace=*/true);
+					}
+					else
+					{
+						InstanceXform = GetActorTransform();
+					}
+					SurfaceLoc.Z = InstanceXform.GetLocation().Z;
+				}
 				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;
@@ -999,7 +1048,20 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
-				const FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				// Always use the projectile's world Z (ISM instance if available)
+				{
+					FTransform InstanceXform;
+					if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+					{
+						ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, /*bWorldSpace=*/true);
+					}
+					else
+					{
+						InstanceXform = GetActorTransform();
+					}
+					SurfaceLoc.Z = InstanceXform.GetLocation().Z;
+				}
 				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;

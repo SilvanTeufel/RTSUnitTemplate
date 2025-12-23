@@ -222,6 +222,13 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
 	void SetHealth(float NewHealth);
 
+	// Fires when health crosses 25% or 50% thresholds either upwards or downwards.
+	// DidIncrease: true if health rose above the threshold, false if it dropped below it.
+	// LowThreshold: true if 25% threshold is concerned.
+	// HighThreshold: true if 50% threshold is concerned.
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void OnHealthThresholdCrossed(bool DidIncrease, bool LowThreshold, bool HighThreshold, float NewHealth);
+	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void DeadMultiCast();
 

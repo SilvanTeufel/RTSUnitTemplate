@@ -89,7 +89,34 @@ namespace
 		}
 
 		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
-		Surface.Z = TargetCenter.Z; // Only adjust X/Y as requested
+		// If the target is flying, always use target Z (melee impact on flying units)
+		bool bTargetFlying = false;
+		if (const AUnitBase* TargetUB = Cast<AUnitBase>(Target))
+		{
+			bTargetFlying = TargetUB->IsFlying;
+		}
+		else if (const AMassUnitBase* TargetMUB = Cast<AMassUnitBase>(Target))
+		{
+			bTargetFlying = TargetMUB->IsFlying;
+		}
+		if (bTargetFlying)
+		{
+			Surface.Z = TargetCenter.Z;
+		}
+		else
+		{
+			// Otherwise, if attacker is not flying, use attacker Z; else use target Z
+			bool bAttackerFlying = false;
+			if (const AUnitBase* AttackerUB = Cast<AUnitBase>(Attacker))
+			{
+				bAttackerFlying = AttackerUB->IsFlying;
+			}
+			else if (const AMassUnitBase* AttackerMUB = Cast<AMassUnitBase>(Attacker))
+			{
+				bAttackerFlying = AttackerMUB->IsFlying;
+			}
+			Surface.Z = bAttackerFlying ? TargetCenter.Z : AttackerLoc.Z;
+		}
 		return Surface;
 	}
 }

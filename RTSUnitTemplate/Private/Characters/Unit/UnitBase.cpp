@@ -402,6 +402,7 @@ void AUnitBase::MultiCastMeeleImpactEvent_Implementation()
 	MeeleImpactEvent();
 }
 
+
 void AUnitBase::IsAttacked(AActor* AttackingCharacter) 
 {
 	SetUnitState(UnitData::IsAttacked);
@@ -434,6 +435,29 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	float OldHealth = Attributes->GetHealth();
+
+	// Fire Blueprint event when crossing 25% or 50% thresholds (up or down)
+	{
+		const float MaxHealth = Attributes->GetMaxHealth();
+		if (MaxHealth > 0.f && OldHealth != NewHealth)
+		{
+			const float OldPct = OldHealth / MaxHealth;
+			const float NewPct = NewHealth / MaxHealth;
+
+			auto Fire = [this, NewHealth](bool bIncrease, bool bLow, bool bHigh)
+			{
+				OnHealthThresholdCrossed(bIncrease, bLow, bHigh, NewHealth);
+			};
+
+			// Downward crossings
+			if (OldPct >= 0.50f && NewPct < 0.50f) { Fire(false, false, true); }
+			if (OldPct >= 0.25f && NewPct < 0.25f) { Fire(false, true,  false); }
+
+			// Upward crossings
+			if (OldPct <= 0.25f && NewPct > 0.25f) { Fire(true,  true,  false); }
+			if (OldPct <= 0.50f && NewPct > 0.50f) { Fire(true,  false, true); }
+		}
+	}
 	
 	Attributes->SetAttributeHealth(NewHealth);
 	UpdateEntityHealth(NewHealth);
