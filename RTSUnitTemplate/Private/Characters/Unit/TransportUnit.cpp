@@ -62,9 +62,10 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 
 	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
 
-	if (TransportId != 0 && TransportId != UnitToLoad->TransportId)
+	// If the unit has been assigned a specific transporter (non-zero TransportId),
+	// only allow loading into that exact transporter. Do NOT modify readiness on mismatch.
+	if (UnitToLoad && UnitToLoad->TransportId != 0 && TransportId != UnitToLoad->TransportId)
 	{
-		UnitToLoad->SetRdyForTransport(false);
 		return;
 	}
 	
@@ -235,6 +236,8 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 	LoadedUnit->IsInitialized = true;
 	LoadedUnit->CanActivateAbilities = true;
 	LoadedUnit->CanBeSelected = true;
+	// Clear any transporter assignment so the unit can be loaded by any transporter next time
+	LoadedUnit->TransportId = 0;
 }
 
 void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToLoad, const FVector& TransporterLocation)

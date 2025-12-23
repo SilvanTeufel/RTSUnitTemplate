@@ -671,6 +671,11 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 {
 		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
 		{
+			// Assign a non-zero TransportId to the clicked transporter (stable identifier)
+			if (Transporter->TransportId == 0)
+			{
+				Transporter->TransportId = Transporter->GetUniqueID();
+			}
 
 			// Set up start and end points for the line trace (downward direction)
 			FVector Start = Transporter->GetMassActorLocation();
@@ -690,10 +695,12 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			TArray<FVector>    BatchLocations;
 			TArray<float>      BatchSpeeds;
 			
-			for (int32 i = 0; i < UnitsToLoad.Num(); i++)
+   for (int32 i = 0; i < UnitsToLoad.Num(); i++)
 			{
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
+					// Bind this unit to the clicked transporter so it won't load into others en route
+					UnitsToLoad[i]->TransportId = Transporter->TransportId;
 					UnitsToLoad[i]->RemoveFocusEntityTarget();
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
 
@@ -774,6 +781,8 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
 					UnitsToLoad[i]->SetRdyForTransport(false);
+					// Clear any prior transporter assignment since the target transporter is invalid
+					UnitsToLoad[i]->TransportId = 0;
 				}
 			}
 		}
