@@ -19,7 +19,73 @@
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "Actors/Waypoint.h"
 
+
+void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, float DashLen, float GapLen, FColor Color, float Thickness, float ZOffset)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FVector Start = InStart; Start.Z += ZOffset;
+	FVector End = InEnd; End.Z += ZOffset;
+
+	const FVector Dir = (End - Start);
+	const float TotalLen = Dir.Size();
+	if (TotalLen <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+	const FVector StepDir = Dir / TotalLen;
+	const float SegmentLen = FMath::Max(1.f, DashLen);
+	const float SkipLen = FMath::Max(0.f, GapLen);
+
+	float Traveled = 0.f;
+	while (Traveled < TotalLen)
+	{
+		const float ThisDash = FMath::Min(SegmentLen, TotalLen - Traveled);
+		const FVector SegStart = Start + StepDir * Traveled;
+		const FVector SegEnd = Start + StepDir * (Traveled + ThisDash);
+		DrawDebugLine(World, SegStart, SegEnd, Color, /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, Thickness);
+		Traveled += ThisDash + SkipLen;
+	}
+}
+
+void AHUDBase::DrawSelectedBuildingWaypointLinks()
+{
+	if (SelectedUnits.Num() == 0)
+	{
+		return;
+	}
+
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		ABuildingBase* Building = Cast<ABuildingBase>(Unit);
+		if (!Building)
+		{
+			continue; // only buildings have visualized waypoint links
+		}
+		if (!Building->HasWaypoint)
+		{
+			continue;
+		}
+		AWaypoint* WP = Building->NextWaypoint;
+		if (!IsValid(WP))
+		{
+			continue;
+		}
+
+		const FVector Start = Building->GetActorLocation();
+		const FVector End = WP->GetActorLocation();
+
+		// Choose color by team: friendly green, enemy red, neutral yellow
+		DrawDashedLine3D(Start, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+	}
+}
 
 void AHUDBase::DrawHUD()
 {
@@ -213,6 +279,9 @@ void AHUDBase::Tick(float DeltaSeconds)
 		MoveUnitsThroughWayPoints(FriendlyUnits);
 		IsSpeakingUnitClose(FriendlyUnits, GameMode->SpeakingUnits);
 	}
+
+	// Draw dashed links between selected buildings and their waypoints each frame
+	DrawSelectedBuildingWaypointLinks();
 }
 
 
