@@ -11,6 +11,7 @@
 #include "Misc/DateTime.h"
 #include "Widgets/SaveSlotClickHandler.h"
 #include "Widgets/SaveSlotClickHandler.h"
+#include "Blueprint/WidgetTree.h"
 
 void USaveGameWidget::InitializeWidget(const FString& InSlotName, ASaveGameActor* InOwningActor)
 {
@@ -92,9 +93,33 @@ void USaveGameWidget::PopulateSavesList()
                         bHasSummary ? *MapAssetName : TEXT("<unknown>"),
                         *When);
 
-                    // Button mit Textinhalt erstellen
-                    UButton* Button = NewObject<UButton>(this);
-                    UTextBlock* Label = NewObject<UTextBlock>(this);
+                    // Button mit Textinhalt erstellen (optional benutzerdefinierte Klassen)
+                    UClass* ButtonClassToUse = SaveSlotButtonClass ? SaveSlotButtonClass.Get() : UButton::StaticClass();
+                    UClass* LabelClassToUse = SaveSlotLabelClass ? SaveSlotLabelClass.Get() : UTextBlock::StaticClass();
+
+                    UButton* Button = nullptr;
+                    UTextBlock* Label = nullptr;
+
+                    if (WidgetTree)
+                    {
+                        Button = WidgetTree->ConstructWidget<UButton>(ButtonClassToUse);
+                        Label = WidgetTree->ConstructWidget<UTextBlock>(LabelClassToUse);
+                    }
+                    else
+                    {
+                        Button = NewObject<UButton>(this, ButtonClassToUse);
+                        Label = NewObject<UTextBlock>(this, LabelClassToUse);
+                    }
+
+                    if (!Button)
+                    {
+                        Button = NewObject<UButton>(this);
+                    }
+                    if (!Label)
+                    {
+                        Label = NewObject<UTextBlock>(this);
+                    }
+
                     Label->SetText(FText::FromString(Display));
                     Button->SetContent(Label);
 

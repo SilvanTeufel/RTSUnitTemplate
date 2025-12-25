@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/EditableTextBox.h"
+#include "Templates/SubclassOf.h"
 #include "SaveGameWidget.generated.h"
 
 class UTextBlock;
@@ -45,6 +46,13 @@ protected:
     // Load
     UPROPERTY(meta = (BindWidget))
     UButton* LoadButton;
+
+    // Optional: Custom classes for the generated list entry button/label
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SaveGame|List")
+    TSubclassOf<UButton> SaveSlotButtonClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SaveGame|List")
+    TSubclassOf<UTextBlock> SaveSlotLabelClass;
 
     UFUNCTION()
     void OnYesClicked();
