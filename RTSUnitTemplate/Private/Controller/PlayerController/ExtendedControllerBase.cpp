@@ -25,6 +25,7 @@
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Default.h"
 #include "Engine/EngineTypes.h"
+#include "Kismet/GameplayStatics.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -172,6 +173,14 @@ void AExtendedControllerBase::Client_ApplyCustomizations_Implementation(USoundBa
 	AttackSound = InAttackSound;
 	DropWorkAreaFailedSound = InDropWorkAreaFailedSound;
 	DropWorkAreaSound = InDropWorkAreaSound;
+}
+
+void AExtendedControllerBase::Client_PlaySound2D_Implementation(USoundBase* Sound, float VolumeMultiplier, float PitchMultiplier)
+{
+	if (Sound)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound, VolumeMultiplier, PitchMultiplier);
+	}
 }
 
 void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)

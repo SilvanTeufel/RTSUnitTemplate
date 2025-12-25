@@ -14,6 +14,9 @@
 #include "GameplayAbilitySpec.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/EngineTypes.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/PlayerController.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAbilityKeyGate, Log, All);
 
@@ -686,4 +689,55 @@ bool UGameplayAbilityBase::WasAbilityClassExecuted(TSubclassOf<UGameplayAbilityB
 bool UGameplayAbilityBase::WasThisAbilityClassExecuted() const
 {
 	return UGameplayAbilityBase::WasAbilityClassExecuted(GetClass());
+}
+
+
+void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMultiplier, float PitchMultiplier)
+{
+	if (!Sound)
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
+	if (!Info)
+	{
+		return;
+	}
+
+	APlayerController* PC = nullptr;
+	if (Info->PlayerController.IsValid())
+	{
+		PC = Cast<APlayerController>(Info->PlayerController.Get());
+	}
+	if (!PC)
+	{
+		// Try to retrieve from owner pawn/controller
+		AActor* OwnerActor = Info->OwnerActor.Get();
+		if (APawn* Pawn = Cast<APawn>(OwnerActor))
+		{
+			PC = Cast<APlayerController>(Pawn->GetController());
+		}
+		else if (AController* C = Cast<AController>(OwnerActor))
+		{
+			PC = Cast<APlayerController>(C);
+		}
+	}
+
+	if (!PC)
+	{
+		return;
+	}
+
+	if (PC->IsLocalController())
+	{
+		UGameplayStatics::PlaySound2D(PC, Sound, VolumeMultiplier, PitchMultiplier);
+	}
+	else
+	{
+		if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(PC))
+		{
+			ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+		}
+	}
 }

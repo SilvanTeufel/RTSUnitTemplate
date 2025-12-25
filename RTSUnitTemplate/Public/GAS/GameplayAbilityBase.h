@@ -7,6 +7,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Actors/WorkArea.h"
 class AUnitBase;
+class USoundBase;
 #include "GameplayAbilityBase.generated.h"
 
 /**
@@ -21,6 +22,10 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 	
 public:
 	UGameplayAbilityBase();
+
+	// Play a 2D sound only for the owning player of this ability (works from server or client)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void PlayOwnerLocalSound(class USoundBase* Sound, float VolumeMultiplier = 1.f, float PitchMultiplier = 1.f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AbilityCanBeCanceled = true;
