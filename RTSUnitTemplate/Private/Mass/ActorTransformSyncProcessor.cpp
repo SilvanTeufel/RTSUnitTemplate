@@ -548,7 +548,6 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
             if (TargetList[i].bRotateTowardsAbility)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Client Rotate to AbilityTarget!"));
                 const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
                 if (bReached)
                 {

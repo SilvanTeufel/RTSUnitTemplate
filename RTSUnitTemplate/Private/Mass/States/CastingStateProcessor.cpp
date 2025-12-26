@@ -159,7 +159,7 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
-                UE_LOG(LogTemp, Log, TEXT("!!!1111111"));
+                UE_LOG(LogTemp, Log, TEXT("!!!Casting finished!!!!"));
                 // Clear rotate flag at end of cast
                 //TargetFrag.bRotateTowardsAbility = false;
                 if (SignalSubsystem)

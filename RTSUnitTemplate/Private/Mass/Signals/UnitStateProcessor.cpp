@@ -2236,7 +2236,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								SpawnParameter.StatePlaceholder = UnitData::Idle;
 								SpawnParameter.Material = nullptr;
 
-								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
+								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation() + FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
 								if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
 								{
 									UnitBase->BuildArea->RemoveAreaFromGroup();
@@ -2567,6 +2567,7 @@ void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
 }
 
 
+
 void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
@@ -2582,6 +2583,7 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 	{
 		if (!EntitySubsystem) 
 		{
+				UE_LOG(LogTemp, Warning, TEXT("Early Return 1"));
 			 return;
 		}
     
@@ -2609,215 +2611,27 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					if (UnitBase )
 					{
 						
-    					UnitBase->UnitControlTimer = StateFrag->StateTimer;
+						UnitBase->UnitControlTimer = StateFrag->StateTimer;
 
-						if (!UnitBase->IsWorker) return;
-						
-						if (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct())) return;
-						
-						// Ensure worker is registered in the WorkArea while building
-						if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+						// Extension path handled via helper when the Mass entity is the ConstructionUnit
+						if (AConstructionUnit* Construction = Cast<AConstructionUnit>(UnitBase))
 						{
- 							if (Worker->BuildArea)
- 							{
- 								Worker->BuildArea->AddWorkerToArray(Worker);
- 							}
- 						}
- 						// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
- 						// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
- 						if (UnitBase->BuildArea)
- 						{
- 							const int32 MaxAllowed = UnitBase->BuildArea->MaxWorkerCount > 0 ? UnitBase->BuildArea->MaxWorkerCount : UnitBase->BuildArea->Workers.Num();
- 							const int32 EffectiveWorkers = FMath::Min(UnitBase->BuildArea->Workers.Num(), MaxAllowed);
- 							if (EffectiveWorkers > 1)
- 							{
- 								StateFrag->StateTimer += 0.5f * StateFrag->DeltaTime*(EffectiveWorkers-1.f);
- 								UnitBase->UnitControlTimer = StateFrag->StateTimer;
- 							}
- 						}
- 							if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
- 							{
- 								StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
- 								UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
- 							}
- 							else
- 							{
- 								UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
- 							}
-
-							// Construction site handling (optional)
-							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)
+							if (HandleExtensionCastForConstructionUnit(EntityManager, Entity, StateFrag, Construction))
 							{
-								//const float TotalDuration = (UnitBase->CastTime > 0.f) ? UnitBase->CastTime : FMath::Max(0.01f, UnitBase->BuildArea->BuildTime);
-								const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / UnitBase->BuildArea->BuildTime, 0.f, 1.f);
-								// Early safeguard: if a construction unit exists but is dead, hide and prevent any respawn
-								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
-								{
-									const float CurrHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
-									if (CurrHP <= 0.f)
-									{
-										UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
-										UnitBase->BuildArea->bConstructionUnitSpawned = true; // lock out respawn
-										continue;
-									}
-								}
-								// spawn at 5-10% only once
-								if (!UnitBase->BuildArea->ConstructionUnit && !UnitBase->BuildArea->bConstructionUnitSpawned && Progress >= 0.05f && Progress <= 0.10f)
-								{
- 								// location from work area, adjusted later to ground
- 								const FVector BaseLoc = UnitBase->BuildArea->GetActorLocation();
- 								const FTransform SpawnTM(FRotator::ZeroRotator, BaseLoc);
- 								AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
- 								if (NewConstruction)
- 								{
-												// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
-												NewConstruction->TeamId = UnitBase->TeamId;
-
-												// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
-												if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
-												{
-													if (ABuildingBase* BuildingCDO = UnitBase->BuildArea->BuildingClass->GetDefaultObject<ABuildingBase>())
-													{
-														NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
-													}
-												}
-
-												// assign pointers if it is a AConstructionUnit
-												if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
-												{
-													CU->Worker = UnitBase;
-													CU->WorkArea = UnitBase->BuildArea;
-												}
-												// Finish spawning after initializing properties
-												NewConstruction->FinishSpawning(SpawnTM);
-												if (NewConstruction->AbilitySystemComponent)
-												{
-													NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
-													NewConstruction->InitializeAttributes();
-												}
-
-									
-
-												// Fit, center, and ground-align construction unit to WorkArea footprint
-												{
-													// Determine target area bounds and center
-													FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
-													const FVector AreaCenter = AreaBox.GetCenter();
-													const FVector AreaSize = AreaBox.GetSize();
-													
-													// Ground trace at the area center to find floor Z
-													FHitResult Hit;
-													FVector Start = AreaCenter + FVector(0, 0, 10000.f);
-													FVector End   = AreaCenter - FVector(0, 0, 10000.f);
-													FCollisionQueryParams Params;
-													Params.AddIgnoredActor(UnitBase->BuildArea);
-													Params.AddIgnoredActor(NewConstruction);
-													bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
-													float GroundZ = bHit ? Hit.Location.Z : NewConstruction->GetActorLocation().Z;
-													
-													// Compute uniform scale to fit XY footprint (use full sizes)
-													FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
-													FVector UnitSize = PreBox.GetSize();
-													if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
-													{
-														// Slight margin keeps it visually inside
-     													const float Margin = 0.98f;
-     													const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;
-     													const float ScaleY = (AreaSize.Y * Margin) / UnitSize.Y;
-														const float ScaleZ = (AreaSize.Z * Margin) / UnitSize.Z;
-     													const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
-     													// Apply XY scaling; optionally scale Z if ConstructionUnit.ScaleZ is true
-     													FVector NewScale = NewConstruction->GetActorScale3D();
-     													NewScale.X = Uniform;
-     													NewScale.Y = Uniform;
-														NewScale.Z = Uniform;
-     													if (const AConstructionUnit* CU_ScaleCheck = Cast<AConstructionUnit>(NewConstruction))
-     													{
-     														if (CU_ScaleCheck->ScaleZ)
-     														{
-     															NewScale.Z = ScaleZ;
-     														}
-     													}
-     													NewConstruction->SetActorScale3D(NewScale*2.f);
-													}
-													
-    												// Recompute bounds after scale and compute single final location
-    												FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
-    												const FVector UnitCenter = ScaledBox.GetCenter();
-    												const float BottomZ = ScaledBox.Min.Z;
-    												FVector FinalLoc = NewConstruction->GetActorLocation();
-    												FinalLoc.X += (AreaCenter.X - UnitCenter.X);
-    												FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-    												FinalLoc.Z += (GroundZ - BottomZ);
-    												NewConstruction->SetActorLocation(FinalLoc);
-												}
-
-															// store pointer on area
-															UnitBase->BuildArea->ConstructionUnit = NewConstruction;
-															UnitBase->BuildArea->bConstructionUnitSpawned = true;
-
-													// start construction animations (rotate + oscillate) for remaining build time (95%)
-    									if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
-    									{
-    										const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
-    										CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
-    										CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
-    										// Start multiplicative pulsating scale around base (configured on construction unit)
-    										if (CU_Anim->bPulsateScaleDuringBuild)
-    										{
-    											CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
-    										}
-    									}
-
-													// set initial health (>=5%)
-													if (NewConstruction->Attributes)
-													{
-    													const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
-														const float MaxShield = NewConstruction->Attributes->GetMaxShield();
-    													NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
-														NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
-    													UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
-													}
-												}
-											}
-
-								// Update health and shield over time additively based on progress delta
-								if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
-								{
-									const float MaxHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxHealth();
-									const float MaxShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxShield();
-									float PreviousProgress = UnitBase->BuildArea->LastAppliedBuildProgress;
-									const float CurrentHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
-									const float CurrentShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetShield();
-									// If we resume mid-build and have non-zero health but no tracked progress yet, infer it from current health
-									if (CurrentHealth <= 0.f)
-									{
-										UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
-										UnitBase->BuildArea->bConstructionUnitSpawned = true;
-										continue;
-									}
-									
-									if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
-									{
-										PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
-									}
-									const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
-									if (StepProgress > 0.f)
-									{
-										// Health
-										const float StepHealth = MaxHP * StepProgress;
-										const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
-										UnitBase->BuildArea->ConstructionUnit->SetHealth(NewHealth);
-										
-										// Shield
-										const float StepShield = MaxShield * StepProgress;
-										const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
-										UnitBase->BuildArea->ConstructionUnit->SetShield(NewShield);
-										
-										UnitBase->BuildArea->LastAppliedBuildProgress = Progress;
-									}
-								}
+								continue;
 							}
+						}
+
+						// Allow workers in Build state and non-worker buildings in Casting state to progress build
+						if (!UnitBase->IsWorker && (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct())))
+						{
+							continue;
+						}
+						
+						if (!UnitBase->BuildArea || (!DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) && !DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct()))) continue;
+						// Worker/building path handled via helper for clean code
+						HandleWorkerOrBuildingCastProgress(EntityManager, Entity, StateFrag, UnitBase);
+						
 					}
 				}
 			}
@@ -2866,23 +2680,32 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase )
 					{
-						if (UnitBase->ActivatedAbilityInstance)
-						{
-							UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
-						}
-							StateFrag->StateTimer = 0.f;
-							UnitBase->UnitControlTimer = 0.f;
+									if (UnitBase->ActivatedAbilityInstance)
+									{
+										UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+									}
+									StateFrag->StateTimer = 0.f;
+									UnitBase->UnitControlTimer = 0.f;
 
-							// Stop ConstructionUnit pulsation when casting ends
-							if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnit)
-							{
-								if (AConstructionUnit* CU_Stop = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
-								{
-									CU_Stop->MulticastPulsateScale(CU_Stop->PulsateMinMultiplier, CU_Stop->PulsateMaxMultiplier, CU_Stop->PulsateTimeMinToMax, false);
-								}
-							}
+									// Stop ConstructionUnit pulsation when casting ends
+									if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnit)
+									{
+										if (AConstructionUnit* CU_Stop = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
+										{
+											CU_Stop->MulticastPulsateScale(CU_Stop->PulsateMinMultiplier, CU_Stop->PulsateMaxMultiplier, CU_Stop->PulsateTimeMinToMax, false);
+										}
+									}
 
-							SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
+									// If this was a non-worker building casting to build an extension, trigger final spawn now
+									if (!UnitBase->IsWorker && UnitBase->BuildArea && DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct()))
+									{
+										if (SignalSubsystem)
+										{
+											SignalSubsystem->SignalEntity(UnitSignals::SpawnBuildingRequest, Entity);
+										}
+									}
+
+									SwitchState(StateFrag->PlaceholderSignal, Entity, EntityManager);
 					}
 				}
 			}
@@ -3457,4 +3280,255 @@ void UUnitStateProcessor::SyncRepairTime(FName SignalName, TArray<FMassEntityHan
 			}
 		}
 	});
+}
+
+
+// === Extracted helper: handles casting/build progress for ConstructionUnit path ===
+bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, FMassAIStateFragment* StateFrag, AConstructionUnit* Construction)
+{
+	if (!Construction || !StateFrag)
+	{
+		return false; // not handled
+	}
+	AWorkArea* WA = Construction->BuildArea;
+	// For construction units, we always skip the worker path regardless
+	if (!WA)
+	{
+		return true; // handled (skip worker path)
+	}
+	// Keep timers in sync with WA
+	if (WA->CurrentBuildTime > Construction->UnitControlTimer)
+	{
+		StateFrag->StateTimer = WA->CurrentBuildTime;
+		Construction->UnitControlTimer = WA->CurrentBuildTime;
+	}
+	else
+	{
+		WA->CurrentBuildTime = Construction->UnitControlTimer;
+	}
+	// If CU died, hide and lock out respawn
+	if (WA->ConstructionUnit && WA->ConstructionUnit->Attributes)
+	{
+		if (WA->ConstructionUnit->Attributes->GetHealth() <= 0.f)
+		{
+			WA->ConstructionUnit->SetHidden(true);
+			WA->bConstructionUnitSpawned = true;
+			return true; // handled
+		}
+	}
+	// Health/shield growth based on progress
+	const float Progress = FMath::Clamp(Construction->UnitControlTimer / FMath::Max(0.001f, WA->BuildTime), 0.f, 1.f);
+	if (WA->ConstructionUnit && WA->ConstructionUnit->Attributes)
+	{
+		const float MaxHP = WA->ConstructionUnit->Attributes->GetMaxHealth();
+		const float MaxShield = WA->ConstructionUnit->Attributes->GetMaxShield();
+		float PreviousProgress = WA->LastAppliedBuildProgress;
+		const float CurrentHealth = WA->ConstructionUnit->Attributes->GetHealth();
+		const float CurrentShield = WA->ConstructionUnit->Attributes->GetShield();
+		if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
+		{
+			PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
+		}
+		const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
+		if (StepProgress > 0.f)
+		{
+			const float StepHealth = MaxHP * StepProgress;
+			const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
+			WA->ConstructionUnit->SetHealth(NewHealth);
+			const float StepShield = MaxShield * StepProgress;
+			const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
+			WA->ConstructionUnit->SetShield(NewShield);
+			WA->LastAppliedBuildProgress = Progress;
+		}
+	}
+	return true; // handled
+}
+
+// === Extracted helper: worker/building path to progress build and manage optional construction site ===
+void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, FMassAIStateFragment* StateFrag, AUnitBase* UnitBase)
+{
+	if (!UnitBase || !StateFrag) return;
+
+	if (!UnitBase->BuildArea || !UnitBase->BuildArea->AllowAddingWorkers) return;
+	// Ensure worker is registered in the WorkArea while building
+	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+	{
+		if (Worker->BuildArea)
+		{
+			Worker->BuildArea->AddWorkerToArray(Worker);
+		}
+	}
+	// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
+	// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
+	if (UnitBase->BuildArea)
+	{
+		const int32 MaxAllowed = UnitBase->BuildArea->MaxWorkerCount > 0 ? UnitBase->BuildArea->MaxWorkerCount : UnitBase->BuildArea->Workers.Num();
+		const int32 EffectiveWorkers = FMath::Min(UnitBase->BuildArea->Workers.Num(), MaxAllowed);
+		if (EffectiveWorkers > 1)
+		{
+			StateFrag->StateTimer += 0.5f * StateFrag->DeltaTime*(EffectiveWorkers-1.f);
+			UnitBase->UnitControlTimer = StateFrag->StateTimer;
+		}
+	}
+	if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
+	{
+		StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
+		UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
+	}
+	else
+	{
+		UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
+	}
+
+	// Construction site handling (optional)
+	if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)
+	{
+		const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / UnitBase->BuildArea->BuildTime, 0.f, 1.f);
+		// Early safeguard: if a construction unit exists but is dead, hide and prevent any respawn
+		if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
+		{
+			const float CurrHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+			if (CurrHP <= 0.f)
+			{
+				UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
+				UnitBase->BuildArea->bConstructionUnitSpawned = true; // lock out respawn
+				return;
+			}
+		}
+		// spawn at 5-10% only once
+		if (!UnitBase->BuildArea->ConstructionUnit && !UnitBase->BuildArea->bConstructionUnitSpawned && Progress >= 0.05f && Progress <= 0.10f)
+		{
+			const FVector BaseLoc = UnitBase->BuildArea->GetActorLocation();
+			const FTransform SpawnTM(FRotator::ZeroRotator, BaseLoc);
+			AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			if (NewConstruction)
+			{
+				// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
+				NewConstruction->TeamId = UnitBase->TeamId;
+				// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
+				if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
+				{
+					if (ABuildingBase* BuildingCDO = UnitBase->BuildArea->BuildingClass->GetDefaultObject<ABuildingBase>())
+					{
+						NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
+					}
+				}
+				// assign pointers if it is a AConstructionUnit
+				if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+				{
+					CU->Worker = UnitBase;
+					CU->WorkArea = UnitBase->BuildArea;
+				}
+				// Finish spawning after initializing properties
+				NewConstruction->FinishSpawning(SpawnTM);
+				if (NewConstruction->AbilitySystemComponent)
+				{
+					NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
+					NewConstruction->InitializeAttributes();
+				}
+
+				// Fit, center, and ground-align construction unit to WorkArea footprint
+				{
+					FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
+					const FVector AreaCenter = AreaBox.GetCenter();
+					const FVector AreaSize = AreaBox.GetSize();
+					// Ground trace at the area center to find floor Z
+					FHitResult Hit;
+					FVector Start = AreaCenter + FVector(0, 0, 10000.f);
+					FVector End   = AreaCenter - FVector(0, 0, 10000.f);
+					FCollisionQueryParams Params;
+					Params.AddIgnoredActor(UnitBase->BuildArea);
+					Params.AddIgnoredActor(NewConstruction);
+					bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+					float GroundZ = bHit ? Hit.Location.Z : NewConstruction->GetActorLocation().Z;
+					// Compute uniform scale to fit XY footprint
+					FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
+					FVector UnitSize = PreBox.GetSize();
+					if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+					{
+						const float Margin = 0.98f;
+						const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;
+						const float ScaleY = (AreaSize.Y * Margin) / UnitSize.Y;
+						const float ScaleZ = (AreaSize.Z * Margin) / UnitSize.Z;
+						const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+						FVector NewScale = NewConstruction->GetActorScale3D();
+						NewScale.X = Uniform;
+						NewScale.Y = Uniform;
+						NewScale.Z = Uniform;
+						if (const AConstructionUnit* CU_ScaleCheck = Cast<AConstructionUnit>(NewConstruction))
+						{
+							if (CU_ScaleCheck->ScaleZ)
+							{
+								NewScale.Z = ScaleZ;
+							}
+						}
+						NewConstruction->SetActorScale3D(NewScale*2.f);
+					}
+					// Recompute bounds after scale and compute single final location
+					FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
+					const FVector UnitCenter = ScaledBox.GetCenter();
+					const float BottomZ = ScaledBox.Min.Z;
+					FVector FinalLoc = NewConstruction->GetActorLocation();
+					FinalLoc.X += (AreaCenter.X - UnitCenter.X);
+					FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
+					FinalLoc.Z += (GroundZ - BottomZ);
+					NewConstruction->SetActorLocation(FinalLoc);
+				}
+				// store pointer on area
+				UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+				UnitBase->BuildArea->bConstructionUnitSpawned = true;
+				// start construction animations (rotate + oscillate) for remaining build time (95%)
+				if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
+				{
+					const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
+					CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+					CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+					// Start multiplicative pulsating scale around base (configured on construction unit)
+					if (CU_Anim->bPulsateScaleDuringBuild)
+					{
+						CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+					}
+				}
+				// set initial health (>=5%)
+				if (NewConstruction->Attributes)
+				{
+					const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
+					const float MaxShield = NewConstruction->Attributes->GetMaxShield();
+					NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
+					NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+					UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
+				}
+			}
+		}
+		// Update health and shield over time additively based on progress delta
+		if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
+		{
+			const float MaxHP = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxHealth();
+			const float MaxShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetMaxShield();
+			float PreviousProgress = UnitBase->BuildArea->LastAppliedBuildProgress;
+			const float CurrentHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
+			const float CurrentShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetShield();
+			if (CurrentHealth <= 0.f)
+			{
+				UnitBase->BuildArea->ConstructionUnit->SetHidden(true);
+				UnitBase->BuildArea->bConstructionUnitSpawned = true;
+				return;
+			}
+			if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
+			{
+				PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
+			}
+			const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
+			if (StepProgress > 0.f)
+			{
+				const float StepHealth = MaxHP * StepProgress;
+				const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
+				UnitBase->BuildArea->ConstructionUnit->SetHealth(NewHealth);
+				const float StepShield = MaxShield * StepProgress;
+				const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
+				UnitBase->BuildArea->ConstructionUnit->SetShield(NewShield);
+				UnitBase->BuildArea->LastAppliedBuildProgress = Progress;
+			}
+		}
+	}
 }

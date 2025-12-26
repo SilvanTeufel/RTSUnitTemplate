@@ -18,6 +18,9 @@
 // Forward declarations
 class UMassSignalSubsystem;
 class AUnitBase;
+class AConstructionUnit;
+struct FMassEntityManager;
+struct FMassAIStateFragment;
 struct FMassActorFragment; // Include MassActorFragment.h if needed
 
 UCLASS()
@@ -237,6 +240,14 @@ private:
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities
 	);
+
+private:
+	// Clean code helpers extracted from SyncCastTime
+	// Returns true if the ConstructionUnit path handled the entity (skip worker path)
+	bool HandleExtensionCastForConstructionUnit(FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, FMassAIStateFragment* StateFrag, class AConstructionUnit* Construction);
+
+	// Handles regular worker/building cast progress and optional construction-site support
+	void HandleWorkerOrBuildingCastProgress(FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, FMassAIStateFragment* StateFrag, class AUnitBase* UnitBase);
 
 	UFUNCTION()
 	void EndCast(
