@@ -41,6 +41,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BeaconRange = 0.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector ExtensionOffset = FVector(20.f, 20.f, 0.f);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetBeaconRange(float NewRange);
 	

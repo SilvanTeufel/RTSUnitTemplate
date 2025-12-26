@@ -1311,12 +1311,12 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
    				UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
 
    				// Log current UnitState at the end of SynchronizeUnitState to trace state changes
-   				{
+   				/*{
    					const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
    					const uint8 RawState = (uint8)StrongUnitActor->GetUnitState();
    					const FString StateName = UnitStateEnum ? UnitStateEnum->GetNameStringByValue((int64)RawState) : FString::FromInt(RawState);
    					UE_LOG(LogTemp, Warning, TEXT("[SynchronizeUnitState][END] Unit=%s State=%s (%d)"), *StrongUnitActor->GetName(), *StateName, RawState);
-   				}
+   				}*/
    	}); // Ende AsyncTask Lambda
 }
 

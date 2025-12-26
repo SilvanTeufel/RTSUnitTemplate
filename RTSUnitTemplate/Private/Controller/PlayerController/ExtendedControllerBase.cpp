@@ -26,6 +26,8 @@
 #include "NavAreas/NavArea_Default.h"
 #include "Engine/EngineTypes.h"
 #include "Kismet/GameplayStatics.h"
+#include "Characters/Unit/ConstructionUnit.h"
+#include "Mass/UnitMassTag.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -1677,24 +1679,89 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
 
 void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 {
-    // Simplified path; keep legacy code below as fallback
+    // Ensure we have a unit and a dragged work area
+    if (SelectedUnits.Num() == 0 || !SelectedUnits[0]) { return; }
+    AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
+    if (!DraggedWorkArea) { return; }
+
+    // Special handling for Extension Areas: mimic UExtensionAbility::UpdatePreviewFollow
+    if (DraggedWorkArea->IsExtensionArea)
+    {
+        ABuildingBase* Unit = Cast<ABuildingBase>(SelectedUnits[0]);
+    	Unit->ShowWorkAreaIfNoFog(DraggedWorkArea);
+        // Determine mouse world hit
+        FHitResult Hit;
+        if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        {
+            return;
+        }
+
+        const FVector UnitLoc = Unit ? Unit->GetMassActorLocation() : FVector::ZeroVector;
+        FVector TargetLoc = UnitLoc;
+        // Compute building bounds extents to derive offset from actual size (ISM or components)
+        FVector UnitCenterBounds(0.f, 0.f, 0.f), UnitExtentBounds(100.f, 100.f, 100.f);
+        GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
+
+    	if (Unit->ExtensionOffset.Z <= 0.f)
+    	{
+    		// Axis-dominant side selection relative to mouse position
+    		const FVector2D Delta2D(Hit.Location.X - UnitLoc.X, Hit.Location.Y - UnitLoc.Y);
+   			const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X; // half-size X from actor bounds
+   			const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;  // half-size Y from actor bounds
+
+    		if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
+    		{
+    			const float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
+    			TargetLoc.X += SignX * AbsX;
+    		}
+    		else
+    		{
+    			const float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
+    			TargetLoc.Y += SignY * AbsY;
+    		}
+    	}
+
+    	if (Unit->ExtensionOffset.Z <= 0.f)
+    	{
+    		// Ground align: trace down ignoring the unit and the area itself
+    		FHitResult GroundHit;
+    		FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), /*bTraceComplex*/ true);
+    		if (Unit) Params.AddIgnoredActor(Unit);
+    		Params.AddIgnoredActor(DraggedWorkArea);
+    		GetWorld()->LineTraceSingleByChannel(GroundHit, TargetLoc + FVector(0,0,2000.f), TargetLoc - FVector(0,0,2000.f), ECC_Visibility, Params);
+    		if (GroundHit.bBlockingHit)
+    		{
+    			TargetLoc.Z = GroundHit.Location.Z;
+    		}
+    	}else
+    	{
+   			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
+    		TargetLoc.X += Unit->ExtensionOffset.X;
+    		TargetLoc.Y += Unit->ExtensionOffset.Y;
+    	}
+
+        // Adjust Z so the mesh bottom sits exactly on the ground plus a small clearance
+        if (UStaticMeshComponent* MeshComp = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
+        {
+            const FBoxSphereBounds Bounds = MeshComp->CalcBounds(MeshComp->GetComponentTransform());
+            const float BottomZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+            const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
+            const float Clearance = 2.f;
+            const float NewZ = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
+            TargetLoc.Z = NewZ;
+        }
+
+        DraggedWorkArea->SetActorLocation(TargetLoc);
+        return;
+    }
+
+    // Non-extension areas: use simplified path first
     if (MoveWorkArea_Local_Simplified(DeltaSeconds))
     {
         return;
     }
-    // Sanity check that we have at least one "SelectedUnit"
-    if (SelectedUnits.Num() == 0 || !SelectedUnits[0])
-    {
-        return;
-    }
 
-    AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
-    if (!DraggedWorkArea)
-    {
-        return;
-    }
-	
-	SelectedUnits[0]->ShowWorkAreaIfNoFog(DraggedWorkArea);
+    SelectedUnits[0]->ShowWorkAreaIfNoFog(DraggedWorkArea);
 	
     FVector MousePosition, MouseDirection;
     DeprojectMousePositionToWorld(MousePosition, MouseDirection);
@@ -2683,6 +2750,128 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
     }
 }
 
+void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementation(AUnitBase* Unit, AWorkArea* WA)
+{
+	if (!WA || !Unit) return;
+	if (!WA->IsExtensionArea) return;
+	
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	if (WA->ConstructionUnitClass)
+	{
+		const FTransform SpawnTM(FRotator::ZeroRotator, WA->GetActorLocation());
+		AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (NewConstruction)
+		{
+			NewConstruction->TeamId = Unit->TeamId;
+			if (WA->BuildingClass)
+			{
+				if (ABuildingBase* BuildingCDO = WA->BuildingClass->GetDefaultObject<ABuildingBase>())
+				{
+					NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
+				}
+			}
+			if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+			{
+				CU->Worker = Unit;
+				CU->WorkArea = WA;
+				CU->CastTime = WA->BuildTime;
+			}
+			NewConstruction->FinishSpawning(SpawnTM);
+			if (NewConstruction->AbilitySystemComponent)
+			{
+				NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
+				NewConstruction->InitializeAttributes();
+			}
+			// Fit/ground-align and visuals same as before
+			{
+				FBox AreaBox = WA->Mesh ? WA->Mesh->Bounds.GetBox() : WA->GetComponentsBoundingBox(true);
+				const FVector AreaCenter = AreaBox.GetCenter();
+				const FVector AreaSize = AreaBox.GetSize();
+				FHitResult Hit;
+				FVector Start = AreaCenter + FVector(0, 0, 10000.f);
+				FVector End = AreaCenter - FVector(0, 0, 10000.f);
+				FCollisionQueryParams Params;
+				Params.AddIgnoredActor(WA);
+				Params.AddIgnoredActor(NewConstruction);
+				bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+				float GroundZ = bHit ? Hit.Location.Z : NewConstruction->GetActorLocation().Z;
+				FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
+				FVector UnitSize = PreBox.GetSize();
+				if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+				{
+					const float Margin = 0.98f;
+					const float ScaleX = (AreaSize.X * Margin) / FMath::Max(KINDA_SMALL_NUMBER, UnitSize.X);
+					const float ScaleY = (AreaSize.Y * Margin) / FMath::Max(KINDA_SMALL_NUMBER, UnitSize.Y);
+					const float ScaleZComp = (AreaSize.Z * Margin) / FMath::Max(KINDA_SMALL_NUMBER, UnitSize.Z);
+					const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+					FVector NewScale = NewConstruction->GetActorScale3D();
+					NewScale.X = Uniform;
+					NewScale.Y = Uniform;
+					NewScale.Z = Uniform;
+					if (AConstructionUnit* CU_ScaleCheck = Cast<AConstructionUnit>(NewConstruction))
+					{
+						if (CU_ScaleCheck->ScaleZ)
+						{
+							NewScale.Z = ScaleZComp;
+						}
+					}
+					NewConstruction->SetActorScale3D(NewScale * 2.f);
+				}
+				FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
+				const FVector UnitCenter = ScaledBox.GetCenter();
+				const float BottomZ = ScaledBox.Min.Z;
+				FVector FinalLoc = NewConstruction->GetActorLocation();
+				FinalLoc.X += (AreaCenter.X - UnitCenter.X);
+				FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
+				FinalLoc.Z += (GroundZ - BottomZ);
+				NewConstruction->SetActorLocation(FinalLoc);
+			}
+			if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
+			{
+				const float AnimDuration = WA->BuildTime * 0.95f;
+				CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+				CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+				if (CU_Anim->bPulsateScaleDuringBuild)
+				{
+					CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+				}
+			}
+			WA->ConstructionUnit = NewConstruction;
+			WA->bConstructionUnitSpawned = true;
+			NewConstruction->BuildArea = WA;
+			if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+			{
+				CU->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+			}
+			
+				if (!Unit->CurrentDraggedWorkArea)
+				{
+					return;
+				}
+				
+					Unit->BuildArea = Unit->CurrentDraggedWorkArea;
+					Unit->BuildArea->TeamId = Unit->TeamId;
+					Unit->BuildArea->PlannedBuilding = true;
+					Unit->BuildArea->ControlTimer = 0.f;
+					Unit->BuildArea->AddAreaToGroup();
+					AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode);
+
+					if(ResourceGameMode && Unit->BuildArea->IsPaid)
+					{
+						ResourceGameMode->ModifyResource(EResourceType::Primary, Unit->TeamId, -Unit->BuildArea->ConstructionCost.PrimaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Secondary, Unit->TeamId, -Unit->BuildArea->ConstructionCost.SecondaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Tertiary, Unit->TeamId, -Unit->BuildArea->ConstructionCost.TertiaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Rare, Unit->TeamId, -Unit->BuildArea->ConstructionCost.RareCost);
+						ResourceGameMode->ModifyResource(EResourceType::Epic, Unit->TeamId, -Unit->BuildArea->ConstructionCost.EpicCost);
+						ResourceGameMode->ModifyResource(EResourceType::Legendary, Unit->TeamId, -Unit->BuildArea->ConstructionCost.LegendaryCost);
+					}
+				 Unit->CurrentDraggedWorkArea = nullptr;
+		}
+	}
+}
+
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
 
@@ -2764,9 +2953,17 @@ bool AExtendedControllerBase::DropWorkArea()
 	
 		bool bIsOverlappingWithValidArea = false;
 		bool IsNoBuildZone = false;
+		// Determine initiating building to ignore for extension areas
+		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(SelectedUnits[0]);
+		const bool bIsExtensionArea = SelectedUnits[0]->CurrentDraggedWorkArea->IsExtensionArea;
 		// Loop through the overlapping actors to check if they are instances of AWorkArea or ABuildingBase
 		for (AActor* OverlappedActor : OverlappingActors)
 		{
+			// Ignore the initiating building when placing an Extension Area
+			if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
+			{
+				continue;
+			}
 			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
 			{
 				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
@@ -2818,8 +3015,15 @@ bool AExtendedControllerBase::DropWorkArea()
 					Server_FinalizeWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea,
 						SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation());
 				}
+				// If this is an extension area, spawn its ConstructionUnit now on the server
 				SendWorkerToWork(SelectedUnits[0]);
 				return true;
+		}
+
+		if (SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->IsExtensionArea)
+		{
+			Server_SpawnExtensionConstructionUnit(SelectedUnits[0], SelectedUnits[0]->CurrentDraggedWorkArea);
+			return true;
 		}
 	}
  //SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
@@ -2828,10 +3032,12 @@ bool AExtendedControllerBase::DropWorkArea()
 
 bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
 {
+	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit1"));
 	if (!UnitBase) return false;
-
+	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit2"));
 	if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->PlannedBuilding == false)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit3"));
 		UnitBase->ShowWorkAreaIfNoFog(UnitBase->CurrentDraggedWorkArea);
 
 		TArray<AActor*> OverlappingActors;
@@ -2839,8 +3045,15 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 		bool bIsOverlappingWithValidArea = false;
 		bool bIsNoBuildZone = false;
+		// Determine initiating building to ignore when placing an Extension Area
+		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+		const bool bIsExtensionArea = UnitBase->CurrentDraggedWorkArea->IsExtensionArea;
 		for (AActor* OverlappedActor : OverlappingActors)
 		{
+			if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
+			{
+				continue;
+			}
 			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
 			{
 				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
@@ -2853,6 +3066,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit4"));
 		// NeedsBeacon check: outside of any beacon range?
 		bool bNeedsBeaconOutOfRange = false;
 		if (UnitBase && UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->NeedsBeacon)
@@ -2893,7 +3107,15 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 					UnitBase->CurrentDraggedWorkArea->GetActorLocation());
 			}
+			// If this is an extension area, spawn its ConstructionUnit now on the server
 			SendWorkerToWork(UnitBase);
+			return true;
+		}
+
+		if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->IsExtensionArea)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit6"));
+			Server_SpawnExtensionConstructionUnit(UnitBase, UnitBase->CurrentDraggedWorkArea);
 			return true;
 		}
 	}
@@ -3012,138 +3234,6 @@ void AExtendedControllerBase::CancelAbilitiesIfNoBuilding(AUnitBase* Unit)
 		}
 }
 
-void AExtendedControllerBase::LeftClickPressed()
-{
-	LeftClickIsPressed = true;
-	AbilityArrayIndex = 0;
-	
-	if (!CameraBase || CameraBase->TabToggled) return;
-	
-	if(AltIsPressed)
-	{
-		DestroyWorkArea();
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			CancelAbilitiesIfNoBuilding(SelectedUnits[i]);
-		}
-		
-	}else if (AttackToggled) {
-		AttackToggled = false;
-		FHitResult Hit;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
-		int32 NumUnits = SelectedUnits.Num();
-		const int32 GridSize = ComputeGridSize(NumUnits);
-		AWaypoint* BWaypoint = nullptr;
-
-		bool PlayWaypointSound = false;
-		bool PlayAttackSound = false;
-		
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-			if (SelectedUnits[i] != CameraUnitWithTag)
-			{
-				int32 Row = i / GridSize;     // Row index
-				int32 Col = i % GridSize;     // Column index
-				
-				FVector RunLocation = Hit.Location + CalculateGridOffset(Row, Col);
-
-				bool HitNavModifier;
-				RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
-				if (HitNavModifier) continue;
-				
-				if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
-				{
-					// Do Nothing
-				}else
-				{
-					DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-					LeftClickAttack(SelectedUnits[i], RunLocation);
-					PlayAttackSound = true;
-				}
-			}
-			
-			if (SelectedUnits[i])
-				FireAbilityMouseHit(SelectedUnits[i], Hit);
-		}
-
-		if (WaypointSound && PlayWaypointSound)
-		{
-			UGameplayStatics::PlaySound2D(this, WaypointSound);
-		}
-
-		if (AttackSound && PlayAttackSound)
-		{
-			UGameplayStatics::PlaySound2D(this, AttackSound);
-		}
-		
-	}
-	else {
-		DropWorkArea();
-		//LeftClickSelect_Implementation();
-
-		
-		FHitResult Hit_Pawn;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
-
-		bool AbilityFired = false;
-		for (int32 i = 0; i < SelectedUnits.Num(); i++)
-		{
-				if (SelectedUnits[i] && SelectedUnits[i]->CurrentSnapshot.AbilityClass && SelectedUnits[i]->CurrentDraggedAbilityIndicator)
-				{
-						FireAbilityMouseHit(SelectedUnits[i], Hit_Pawn);
-						AbilityFired = true;
-				}
-		}
-		
-		if (AbilityFired) return;
-		
-		if (Hit_Pawn.bBlockingHit && HUDBase)
-		{
-			AActor* HitActor = Hit_Pawn.GetActor();
-			
-			if(!HitActor->IsA(ALandscape::StaticClass()))
-				ClickedActor = Hit_Pawn.GetActor();
-			else
-				ClickedActor = nullptr;
-			
-			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
-			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Hit_Pawn.GetActor());
-			
-			if (UnitBase && (UnitBase->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit )
-			{
-				HUDBase->DeselectAllUnits();
-				HUDBase->SetUnitSelected(UnitBase);
-				DragUnitBase(UnitBase);
-		
-				
-				if(CameraBase->AutoLockOnSelect)
-					LockCameraToUnit = true;
-			}
-			else {
-				HUDBase->InitialPoint = HUDBase->GetMousePos2D();
-				HUDBase->bSelectFriendly = true;
-			}
-		}
-	}
-	
-}
-
-void AExtendedControllerBase::LeftClickReleased()
-{
-	LeftClickIsPressed = false;
-	HUDBase->bSelectFriendly = false;
-	SelectedUnits = HUDBase->SelectedUnits;
-	DropUnitBase();
-	int BestIndex = GetHighestPriorityWidgetIndex();
-	CurrentUnitWidgetIndex = BestIndex;
-	if(Cast<AExtendedCameraBase>(GetPawn())->TabToggled)
-	{
-		SetWidgets(BestIndex);
-	}
-}
-
-
 void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase* Worker)
 {
 	if(!Worker->CurrentDraggedWorkArea)
@@ -3164,33 +3254,6 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 		CancelCurrentAbility(Unit);
 	}
 }
-
-void AExtendedControllerBase::RightClickPressed()
-{
-	
-	AttackToggled = false;
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
-	
-	if (!CheckClickOnTransportUnit(Hit))
-	{
-		if(!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
-		{
-			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-			if(!CheckClickOnWorkArea(Hit))
-			{
-				RunUnitsAndSetWaypoints(Hit);
-			}
-		}
-	}
-
-
-	if (SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
-	{
-		DestroyDraggedArea(SelectedUnits[0]);
-	}
-	
-}	
 
 void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 {
@@ -3365,68 +3428,6 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 		CurrentUnitWidgetIndex = StartIndex;
 	}
 }
-
-/*
-void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
-{
-	if (SelectedUnits.Num() == 0)
-	{
-		return;
-	}
-	
-	if (!SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex))
-    {
-    	return;
-    }
-
-	bool HasAbilities = false;
-
-	for (int x = 0 ; x < SelectedUnits.Num(); x++)
-	{
-		if (SelectedUnits[x]->DefaultAbilities.Num())
-		{
-			HasAbilities = true;
-		}
-	}
-
-	if (!HasAbilities) return;
-	
-	int StartIndex = CurrentUnitWidgetIndex;
-	FGameplayTag CurrentTag = SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag;
-
-	int i = 0;
-	while (i < SelectedUnits.Num())
-	{
-		// Move index
-		CurrentUnitWidgetIndex += Add;
-
-		// Wrap around
-		if (CurrentUnitWidgetIndex < 0)
-		{
-			CurrentUnitWidgetIndex = SelectedUnits.Num() - 1;
-		}
-		else if (CurrentUnitWidgetIndex >= SelectedUnits.Num())
-		{
-			CurrentUnitWidgetIndex = 0;
-		}
-
-		if (!SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num())
-			continue;
-		// If the newly selected unit has a different tag, stop
-		if (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag)
-		{
-			break;
-		}
-
-		// If we've come back to the original index, stop
-		if (CurrentUnitWidgetIndex == StartIndex)
-		{
-			break;
-		}
-		i++;
-	}
-}
-*/
 
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {

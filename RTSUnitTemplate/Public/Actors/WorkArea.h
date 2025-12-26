@@ -279,4 +279,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AllowAddingWorkers = true;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsExtensionArea = false;
 };

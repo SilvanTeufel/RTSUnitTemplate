@@ -32,8 +32,8 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category=Worker)
 	void ServerSpawnWorkArea(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector HitLocation);
 
- UFUNCTION(BlueprintCallable, Category=Worker)
-	void SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector SpawnLocation, const  FBuildingCost ConstructionCost, bool IsPaid = false, TSubclassOf<class AUnitBase> ConstructionUnitClass = nullptr);
+	UFUNCTION(BlueprintCallable, Category=Worker)
+	void SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint, FVector SpawnLocation, const  FBuildingCost ConstructionCost, bool IsPaid = false, TSubclassOf<class AUnitBase> ConstructionUnitClass = nullptr, bool IsExtensionArea = false);
 	
 	UFUNCTION(Client, Reliable)
 	void ClientReceiveWorkArea(AWorkArea* ClientArea);

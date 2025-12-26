@@ -128,7 +128,8 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 								   FVector SpawnLocation,
 								   const FBuildingCost ConstructionCost,
 								   bool IsPaid,
-								   TSubclassOf<AUnitBase> ConstructionUnitClass) 
+								   TSubclassOf<AUnitBase> ConstructionUnitClass,
+								   bool IsExtensionArea) 
 {
 	
  // && !CurrentDraggedWorkArea
@@ -168,7 +169,13 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			SpawnedWorkArea->TeamId          = TeamId;
 			SpawnedWorkArea->IsPaid          = IsPaid;
 			SpawnedWorkArea->ConstructionCost = ConstructionCost;
+			SpawnedWorkArea->IsExtensionArea = IsExtensionArea;
 
+			if (SpawnedWorkArea->IsExtensionArea)
+			{
+				SpawnedWorkArea->AllowAddingWorkers = false;
+			}
+			
 			CurrentDraggedWorkArea = SpawnedWorkArea;
 			CurrentDraggedWorkArea->SetReplicateMovement(true);
 

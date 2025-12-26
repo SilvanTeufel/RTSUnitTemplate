@@ -284,6 +284,10 @@ public:
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToBase(AUnitBase* Worker);
 	
+	// Spawns the ConstructionUnit for an Extension WorkArea on the server
+	UFUNCTION(Server, Reliable)
+	void Server_SpawnExtensionConstructionUnit(AUnitBase* Unit, AWorkArea* WA);
+	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();
 	
@@ -316,19 +320,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CancelAbilitiesIfNoBuilding(AUnitBase* Unit);
-
-	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	//void FireAbilityMouseHit(AUnitBase* Unit, const FHitResult& InHitResult);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void LeftClickPressed();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void LeftClickReleased();
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void RightClickPressed();
-
 
 	UFUNCTION(Server, Reliable)
 	void SendWorkerToResource(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
