@@ -2764,6 +2764,7 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 		AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (NewConstruction)
 		{
+			NewConstruction->FlyHeight = WA->GetActorLocation().Z;
 			NewConstruction->TeamId = Unit->TeamId;
 			if (WA->BuildingClass)
 			{
@@ -2819,13 +2820,14 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 					}
 					NewConstruction->SetActorScale3D(NewScale * 2.f);
 				}
+				
 				FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
 				const FVector UnitCenter = ScaledBox.GetCenter();
 				const float BottomZ = ScaledBox.Min.Z;
 				FVector FinalLoc = NewConstruction->GetActorLocation();
 				FinalLoc.X += (AreaCenter.X - UnitCenter.X);
 				FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-				FinalLoc.Z += (GroundZ - BottomZ);
+				if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
 				NewConstruction->SetActorLocation(FinalLoc);
 			}
 			if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))

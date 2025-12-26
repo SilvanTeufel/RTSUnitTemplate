@@ -3408,6 +3408,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			if (NewConstruction)
 			{
 				// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
+				NewConstruction->FlyHeight = BaseLoc.Z;
 				NewConstruction->TeamId = UnitBase->TeamId;
 				// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
 				if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
@@ -3475,7 +3476,8 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					FVector FinalLoc = NewConstruction->GetActorLocation();
 					FinalLoc.X += (AreaCenter.X - UnitCenter.X);
 					FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-					FinalLoc.Z += (GroundZ - BottomZ);
+					if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
+					
 					NewConstruction->SetActorLocation(FinalLoc);
 				}
 				// store pointer on area
