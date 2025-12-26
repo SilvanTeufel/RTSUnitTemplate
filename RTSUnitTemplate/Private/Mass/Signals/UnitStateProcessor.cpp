@@ -3349,7 +3349,11 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 {
 	if (!UnitBase || !StateFrag) return;
 
-	if (!UnitBase->BuildArea || !UnitBase->BuildArea->AllowAddingWorkers) return;
+	if (!UnitBase->BuildArea || !UnitBase->BuildArea->AllowAddingWorkers)
+	{
+		UnitBase->SwitchEntityTag(FMassStateGoToBaseTag::StaticStruct());
+		return;
+	}
 	// Ensure worker is registered in the WorkArea while building
 	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
 	{
