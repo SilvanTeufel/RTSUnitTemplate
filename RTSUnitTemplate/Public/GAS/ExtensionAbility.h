@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "TimerManager.h"
 #include "ExtensionAbility.generated.h"
 
 class USoundBase;
@@ -29,12 +30,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<AWorkArea> WorkAreaClass;
 
- // Optional: a construction site unit to visualize building progress
+	// Optional: a construction site unit to visualize building progress
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<AUnitBase> ConstructionUnitClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AllowAddingWorkers = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool UseMousePosition = true;
+
+	// Expose a callable to perform immediate spawn (used when UseMousePosition=false or from BP)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void PlaceAndSpawnAt(const FVector& TargetLoc);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MouseHitWorkAreaCreation(const FHitResult& InHitResult);
+	
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -53,11 +65,26 @@ protected:
 	// Helper: validate area by checking overlap with other WorkAreas/Buildings (ignoring the creator)
 	bool IsPlacementBlocked(AActor* IgnoredActor, const FVector& TestLocation, float TestRadius, TArray<AActor*>& OutBlockingActors) const;
 
+	// Timer-driven preview follow when UseMousePosition is true
+	void StartFollowTimer();
+	void StopFollowTimer();
+	void UpdatePreviewFollow();
+
 	// Tracked weak pointers for cleanup and state rollback
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AWorkArea> TrackedWorkArea;
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AUnitBase> TrackedUnit;
 
+	// Local-only timer to update preview WorkArea position
+	FTimerHandle FollowMouseTimerHandle;
+	bool bFollowingPreview = false;
+
 	bool bEndedByWorkArea = false;
+
+	// During interactive mouse placement, temporarily override Range to 0 so second click is not gated by distance
+	UPROPERTY(Transient)
+	float SavedRange = 0.f;
+	UPROPERTY(Transient)
+	bool bRangeOverridden = false;
 };

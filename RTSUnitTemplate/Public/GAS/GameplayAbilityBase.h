@@ -51,7 +51,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnAbilityCastComplete( const FHitResult& InHitResult = FHitResult());
 	
-	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintNativeEvent, Category = RTSUnitTemplate)
 	void OnAbilityMouseHit(const FHitResult& InHitResult);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

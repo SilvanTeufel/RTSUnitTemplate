@@ -104,6 +104,11 @@ UGameplayAbilityBase::UGameplayAbilityBase()
 	UpdateTooltipText();
 }
 
+void UGameplayAbilityBase::OnAbilityMouseHit_Implementation(const FHitResult& InHitResult)
+{
+	// Default no-op implementation; abilities can override
+}
+
 void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	// Mark this ability class as executed in this play session (exact class type)
