@@ -1702,10 +1702,12 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         FVector UnitCenterBounds(0.f, 0.f, 0.f), UnitExtentBounds(100.f, 100.f, 100.f);
         GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
 
-   		if (Unit->ExtensionOffset.Z <= 0.f)
+   		if (Unit->ExtensionOffset.Z == 0.f)
    		{
    			// Axis-dominant side selection relative to mouse position
    			const FVector2D Delta2D(Hit.Location.X - UnitLoc.X, Hit.Location.Y - UnitLoc.Y);
+
+   			
    			const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X; // half-size X from actor bounds
    			const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;  // half-size Y from actor bounds
 
@@ -1727,21 +1729,44 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
    			const FRotator NewRot(0.f, DesiredYaw, 0.f);
    			DraggedWorkArea->SetActorRotation(NewRot);
    			DraggedWorkArea->ServerMeshRotationBuilding = NewRot;
+   		}if (Unit->ExtensionOffset.Z < 0.f)
+   		{
+   			TargetLoc.X += Unit->ExtensionOffset.X;
+   			TargetLoc.Y += Unit->ExtensionOffset.Y;
    		}
 
-    	if (Unit->ExtensionOffset.Z <= 0.f)
-    	{
-    		// Ground align: trace down ignoring the unit and the area itself
-    		FHitResult GroundHit;
-    		FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), /*bTraceComplex*/ true);
-    		if (Unit) Params.AddIgnoredActor(Unit);
-    		Params.AddIgnoredActor(DraggedWorkArea);
-    		GetWorld()->LineTraceSingleByChannel(GroundHit, TargetLoc + FVector(0,0,2000.f), TargetLoc - FVector(0,0,2000.f), ECC_Visibility, Params);
-    		if (GroundHit.bBlockingHit)
-    		{
-    			TargetLoc.Z = GroundHit.Location.Z;
-    		}
-    	}else
+   		if (Unit->ExtensionOffset.Z <= 0.f)
+   		{
+   			// Ground align: trace down while ignoring the unit, the dragged area, and any WorkAreas/Buildings under the cursor
+   			const FVector TraceStart = TargetLoc + FVector(0, 0, 2000.f);
+   			const FVector TraceEnd   = TargetLoc - FVector(0, 0, 2000.f);
+   			FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), /*bTraceComplex*/ true);
+   			if (Unit) Params.AddIgnoredActor(Unit);
+   			Params.AddIgnoredActor(DraggedWorkArea);
+   			bool bFoundValidGround = false;
+   			FHitResult GroundHit;
+   			// Try multiple times, each time ignoring AWorkArea/ABuildingBase hits so we only align to real ground
+   			const int32 MaxTries = 8;
+   			for (int32 Try = 0; Try < MaxTries; ++Try)
+   			{
+   				if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+   				{
+   					break; // nothing hit
+   				}
+   				AActor* HitActor = GroundHit.GetActor();
+   				if (HitActor && (HitActor->IsA(AWorkArea::StaticClass()) || HitActor->IsA(ABuildingBase::StaticClass())))
+   				{
+   					Params.AddIgnoredActor(HitActor);
+   					continue; // ignore and try again
+   				}
+   				bFoundValidGround = true;
+   				break;
+   			}
+   			if (bFoundValidGround)
+   			{
+   				TargetLoc.Z = GroundHit.Location.Z;
+   			}
+   		}else
     	{
    			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
     		TargetLoc.X += Unit->ExtensionOffset.X;
@@ -1757,6 +1782,55 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
             const float Clearance = 2.f;
             const float NewZ = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
             TargetLoc.Z = NewZ;
+        }
+
+        // Overlap check at the prospective TargetLoc: if overlapping other WorkAreas or Buildings (excluding the initiating Unit), flash material
+        {
+            UStaticMeshComponent* MeshComp2 = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>();
+            if (MeshComp2)
+            {
+                const FTransform PreviewTM(DraggedWorkArea->GetActorRotation(), TargetLoc, DraggedWorkArea->GetActorScale3D());
+                const FBoxSphereBounds PreviewBounds = MeshComp2->CalcBounds(PreviewTM);
+                const FVector OverlapCenter = PreviewBounds.Origin;
+                const float OverlapRadius = PreviewBounds.SphereRadius;
+
+                TArray<AActor*> ActorsToIgnore;
+                ActorsToIgnore.Add(DraggedWorkArea);
+                if (Unit) { ActorsToIgnore.Add(Unit); }
+
+                // Limit to relevant object types: WorldStatic (WorkAreas), WorldDynamic, and Pawn (Buildings)
+                TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+                ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldStatic));
+                ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
+                ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
+
+                TArray<AActor*> OverlappedActors;
+                const bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
+                    this,
+                    OverlapCenter,
+                    OverlapRadius,
+                    ObjectTypes,
+                    AActor::StaticClass(),
+                    ActorsToIgnore,
+                    OverlappedActors
+                );
+
+                if (bAnyOverlap)
+                {
+                    for (AActor* Overlapped : OverlappedActors)
+                    {
+                        if (!Overlapped) { continue; }
+                        if (Overlapped == DraggedWorkArea) { continue; }
+                        if (Unit && Overlapped == Unit) { continue; }
+
+                        if (Overlapped->IsA(AWorkArea::StaticClass()) || Overlapped->IsA(ABuildingBase::StaticClass()))
+                        {
+                            DraggedWorkArea->TemporarilyChangeMaterial();
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         DraggedWorkArea->SetActorLocation(TargetLoc);
