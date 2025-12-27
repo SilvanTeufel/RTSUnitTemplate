@@ -1702,24 +1702,32 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         FVector UnitCenterBounds(0.f, 0.f, 0.f), UnitExtentBounds(100.f, 100.f, 100.f);
         GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
 
-    	if (Unit->ExtensionOffset.Z <= 0.f)
-    	{
-    		// Axis-dominant side selection relative to mouse position
-    		const FVector2D Delta2D(Hit.Location.X - UnitLoc.X, Hit.Location.Y - UnitLoc.Y);
+   		if (Unit->ExtensionOffset.Z <= 0.f)
+   		{
+   			// Axis-dominant side selection relative to mouse position
+   			const FVector2D Delta2D(Hit.Location.X - UnitLoc.X, Hit.Location.Y - UnitLoc.Y);
    			const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X; // half-size X from actor bounds
    			const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;  // half-size Y from actor bounds
 
-    		if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
-    		{
-    			const float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
-    			TargetLoc.X += SignX * AbsX;
-    		}
-    		else
-    		{
-    			const float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
-    			TargetLoc.Y += SignY * AbsY;
-    		}
-    	}
+   			float DesiredYaw = DraggedWorkArea->GetActorRotation().Yaw;
+   			if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
+   			{
+   				const float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
+   				TargetLoc.X += SignX * AbsX;
+   				DesiredYaw = (SignX > 0.f) ? 0.f : 180.f; // Face +X or -X
+   			}
+   			else
+   			{
+   				const float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
+   				TargetLoc.Y += SignY * AbsY;
+   				DesiredYaw = (SignY > 0.f) ? 90.f : 270.f; // Face +Y or -Y
+   			}
+
+   			// Apply discrete rotation to the preview and cache it on the WorkArea for server-side spawns
+   			const FRotator NewRot(0.f, DesiredYaw, 0.f);
+   			DraggedWorkArea->SetActorRotation(NewRot);
+   			DraggedWorkArea->ServerMeshRotationBuilding = NewRot;
+   		}
 
     	if (Unit->ExtensionOffset.Z <= 0.f)
     	{
@@ -2760,32 +2768,52 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 
 	if (WA->ConstructionUnitClass)
 	{
-		const FTransform SpawnTM(FRotator::ZeroRotator, WA->GetActorLocation());
-		AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (NewConstruction)
+ 	// Determine desired yaw for extension based on WA position relative to the initiating Unit
+	FRotator DesiredRot = WA->ServerMeshRotationBuilding;
+	if (Unit)
+	{
+		const FVector UnitLoc = Unit->GetActorLocation();
+		const FVector WLoc = WA->GetActorLocation();
+		const FVector2D Delta2D(WLoc.X - UnitLoc.X, WLoc.Y - UnitLoc.Y);
+		if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
 		{
-			NewConstruction->FlyHeight = WA->GetActorLocation().Z;
-			NewConstruction->TeamId = Unit->TeamId;
-			if (WA->BuildingClass)
+			DesiredRot = FRotator(0.f, (Delta2D.X >= 0.f) ? 0.f : 180.f, 0.f);
+		}
+		else
+		{
+			DesiredRot = FRotator(0.f, (Delta2D.Y >= 0.f) ? 90.f : 270.f, 0.f);
+		}
+	}
+	WA->ServerMeshRotationBuilding = DesiredRot;
+
+	const FTransform SpawnTM(DesiredRot, WA->GetActorLocation());
+	AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (NewConstruction)
+	{
+		NewConstruction->FlyHeight = WA->GetActorLocation().Z;
+		NewConstruction->TeamId = Unit->TeamId;
+		if (WA->BuildingClass)
+		{
+			if (ABuildingBase* BuildingCDO = WA->BuildingClass->GetDefaultObject<ABuildingBase>())
 			{
-				if (ABuildingBase* BuildingCDO = WA->BuildingClass->GetDefaultObject<ABuildingBase>())
-				{
-					NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
-				}
+				NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
 			}
-			if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
-			{
-				CU->Worker = Unit;
-				CU->WorkArea = WA;
-				CU->CastTime = WA->BuildTime;
-			}
-			NewConstruction->FinishSpawning(SpawnTM);
-			if (NewConstruction->AbilitySystemComponent)
-			{
-				NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
-				NewConstruction->InitializeAttributes();
-			}
-			// Fit/ground-align and visuals same as before
+		}
+		if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
+		{
+			CU->Worker = Unit;
+			CU->WorkArea = WA;
+			CU->CastTime = WA->BuildTime;
+		}
+		NewConstruction->ServerMeshRotation = DesiredRot;
+		NewConstruction->FinishSpawning(SpawnTM);
+		if (NewConstruction->AbilitySystemComponent)
+		{
+			NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
+			NewConstruction->InitializeAttributes();
+		}
+		NewConstruction->SetMeshRotationServer();
+		// Fit/ground-align and visuals same as before
 			{
 				FBox AreaBox = WA->Mesh ? WA->Mesh->Bounds.GetBox() : WA->GetComponentsBoundingBox(true);
 				const FVector AreaCenter = AreaBox.GetCenter();

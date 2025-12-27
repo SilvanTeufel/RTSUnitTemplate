@@ -2313,13 +2313,14 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     int TeamId,
     AWaypoint* Waypoint)
 {
-    // 1) Transformation mit (vorläufigem) Spawn-Ort
+    // 1) Transformation with preliminary spawn location and desired rotation
     FTransform EnemyTransform;
     EnemyTransform.SetLocation(
         FVector(Location.X + SpawnParameter.UnitOffset.X,
                 Location.Y + SpawnParameter.UnitOffset.Y,
                 Location.Z + SpawnParameter.UnitOffset.Z)
     );
+    EnemyTransform.SetRotation(FQuat(SpawnParameter.ServerMeshRotation));
 
     // 2) Deferrten Actor-Spawn starten
     AUnitBase* UnitBase = Cast<AUnitBase>(
