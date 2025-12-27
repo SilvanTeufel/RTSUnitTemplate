@@ -290,5 +290,5 @@ public:
 	bool KillOrigin = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ResultCanBeSelected = false;
+	bool ResultCanBeSelected = true;
 };
