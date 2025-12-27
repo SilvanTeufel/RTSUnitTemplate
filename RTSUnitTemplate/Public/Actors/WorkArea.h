@@ -282,4 +282,13 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsExtensionArea = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	AWorkingUnitBase* Origin = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool KillOrigin = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ResultCanBeSelected = false;
 };

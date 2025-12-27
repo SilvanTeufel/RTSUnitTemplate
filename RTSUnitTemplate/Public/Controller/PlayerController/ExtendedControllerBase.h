@@ -67,6 +67,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_PlaySound2D(USoundBase* Sound, float VolumeMultiplier = 1.f, float PitchMultiplier = 1.f);
 
+	void SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable);
 	// New variant that operates on a specific unit (no UFUNCTION to avoid UHT overloading conflicts)
 	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
 	

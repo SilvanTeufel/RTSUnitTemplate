@@ -101,6 +101,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAbilityEnabledByKey(const FString& Key, bool bEnable);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const FString& Key, bool bEnable);
 		
 	// Static helpers to toggle/query by key/team id
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

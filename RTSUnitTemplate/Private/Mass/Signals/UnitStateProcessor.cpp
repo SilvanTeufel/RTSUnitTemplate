@@ -1830,6 +1830,16 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
+
+                    		ABuildingBase* Building = Cast<ABuildingBase>(UnitBase);
+                    		if (Building && Building->Origin)
+                    		{
+							
+								Building->Origin->Extension = nullptr;
+                    			SetAbilityEnabledByKey(Building->Origin, "ExtensionAbility", true);
+								// Also Enable ExtensionAbility here from Origin
+							}
+                    	
                     		if (UnitBase->DestroyAfterDeath)
                     		{
                     			UnitBase->Destroy(true, false);
@@ -1839,6 +1849,29 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
             }
         } // End For loop
     }); // End AsyncTask Lambda
+}
+
+void UUnitStateProcessor::SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable)
+{
+	const FString NormalizedKey = NormalizeAbilityKey(Key);
+	
+	if (UnitBase && UnitBase->HasAuthority())
+	{
+		if (World)
+		{
+			int32 SentCount = 0;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+				if (!CustomPC) continue;
+				if (CustomPC->SelectableTeamId == UnitBase->TeamId)
+				{
+					CustomPC->Client_ApplyOwnerAbilityKeyToggle(UnitBase, NormalizedKey, bEnable);
+					++SentCount;
+				}
+			}
+		}
+	}
 }
 
 void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntityHandle>& Entities)
@@ -2237,12 +2270,12 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								SpawnParameter.Material = nullptr;
 
 								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation() + FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
-								if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
+								/*if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
 								{
 									UnitBase->BuildArea->RemoveAreaFromGroup();
 									UnitBase->BuildArea->Destroy(false, true);
 									UnitBase->BuildArea = nullptr;
-								}
+								}*/
 
     							if(!ControllerBase)
     							{
@@ -2261,15 +2294,14 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								}
 
 								// After InitializeAttributes() inside SpawnSingleUnit, apply preserved stats to the spawned building
-								if (bHasSavedStats && NewUnit)
+   								ABuildingBase* SpawnedBuilding = Cast<ABuildingBase>(NewUnit);
+   									
+								if (bHasSavedStats && NewUnit && SpawnedBuilding)
 								{
-									if (ABuildingBase* SpawnedBuilding = Cast<ABuildingBase>(NewUnit))
+									if (SpawnedBuilding->Attributes)
 									{
-										if (SpawnedBuilding->Attributes)
-										{
-											SpawnedBuilding->SetHealth_Implementation(SavedHealth);
-											SpawnedBuilding->SetShield_Implementation(SavedShield);
-										}
+										SpawnedBuilding->SetHealth_Implementation(SavedHealth);
+										SpawnedBuilding->SetShield_Implementation(SavedShield);
 									}
 								}
 
@@ -2282,12 +2314,12 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 			
 								if(NewUnit)
 								{
-									ABuildingBase* Building = Cast<ABuildingBase>(NewUnit);
-									if (Building && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
-										Building->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+						
+									if (SpawnedBuilding && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
+										SpawnedBuilding->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
 
-									if (Building && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
-										UnitBase->BuildArea->Building = Building;
+									if (SpawnedBuilding && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
+										UnitBase->BuildArea->Building = SpawnedBuilding;
 
 									RegisterBuildingAsObstacle(NewUnit);
 
@@ -2295,6 +2327,29 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									{
 										NewUnit->InitializeUnitMode();
 									}
+
+									if (UnitBase->BuildArea->IsExtensionArea && SpawnedBuilding)
+									{
+										SpawnedBuilding->Origin = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
+										SpawnedBuilding->Origin->Extension = SpawnedBuilding;
+
+										if (UnitBase->BuildArea->KillOrigin)
+										{
+											SpawnedBuilding->Origin->Destroy(false, true);
+										}
+									}
+								}
+   								
+   								if(UnitBase->BuildArea && SpawnedBuilding)
+   								{
+   									SpawnedBuilding->CanBeSelected = UnitBase->BuildArea->ResultCanBeSelected;
+   								}
+   								
+   								if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild && NewUnit)
+   								{
+									   UnitBase->BuildArea->RemoveAreaFromGroup();
+									   UnitBase->BuildArea->Destroy(false, true);
+									   UnitBase->BuildArea = nullptr;
 								}
 							}
     					}

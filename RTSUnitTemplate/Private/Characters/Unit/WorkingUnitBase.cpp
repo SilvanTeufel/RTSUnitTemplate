@@ -123,7 +123,7 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 	}
 }
 
-void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass,
+AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaClass,
 								   AWaypoint* Waypoint,
 								   FVector SpawnLocation,
 								   const FBuildingCost ConstructionCost,
@@ -183,10 +183,14 @@ void AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> WorkAreaCl
 			if (CurrentDraggedWorkArea && ConstructionUnitClass)
 			{
 				CurrentDraggedWorkArea->ConstructionUnitClass = ConstructionUnitClass;
+				CurrentDraggedWorkArea->Origin = this;
 			}
 
+			return CurrentDraggedWorkArea;
 		}
 	}
+
+	return nullptr;
 }
 
 

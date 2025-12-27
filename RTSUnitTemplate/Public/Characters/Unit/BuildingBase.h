@@ -43,6 +43,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector ExtensionOffset = FVector(20.f, 20.f, 0.f);
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	ABuildingBase* Extension = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	ABuildingBase* Origin = nullptr;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetBeaconRange(float NewRange);

@@ -3134,14 +3134,37 @@ bool AExtendedControllerBase::DropWorkArea()
 	return false;
 }
 
+
+void AExtendedControllerBase::SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable)
+{
+	const FString NormalizedKey = NormalizeAbilityKey(Key);
+	
+	if (UnitBase && UnitBase->HasAuthority())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			int32 SentCount = 0;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+				if (!CustomPC) continue;
+				if (CustomPC->SelectableTeamId == UnitBase->TeamId)
+				{
+					CustomPC->Client_ApplyOwnerAbilityKeyToggle(UnitBase, NormalizedKey, bEnable);
+					++SentCount;
+				}
+			}
+		}
+	}
+}
+
 bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
 {
-	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit1"));
 	if (!UnitBase) return false;
-	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit2"));
+
 	if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->PlannedBuilding == false)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit3"));
+
 		UnitBase->ShowWorkAreaIfNoFog(UnitBase->CurrentDraggedWorkArea);
 
 		TArray<AActor*> OverlappingActors;
@@ -3170,8 +3193,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit4"));
-		// NeedsBeacon check: outside of any beacon range?
+	
 		bool bNeedsBeaconOutOfRange = false;
 		if (UnitBase && UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->NeedsBeacon)
 		{
@@ -3218,8 +3240,8 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 		if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->IsExtensionArea)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit6"));
 			Server_SpawnExtensionConstructionUnit(UnitBase, UnitBase->CurrentDraggedWorkArea);
+			SetAbilityEnabledByKey(UnitBase, "ExtensionAbility", false);
 			return true;
 		}
 	}

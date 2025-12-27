@@ -86,19 +86,6 @@ namespace
 	static FAbilityKeyGateSessionReset GAbilityKeyGateSessionReset;
 }
 
-// Helper: normalize keys for consistent matching/logging
-static FString NormalizeAbilityKey(const FString& InKey)
-{
-	FString Out = InKey;
-	Out.TrimStartAndEndInline();
-	Out = Out.ToLower();
-	if (Out.IsEmpty() || Out == TEXT("none"))
-	{
-		return FString();
-	}
-	return Out;
-}
-
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
 	UpdateTooltipText();
@@ -522,14 +509,12 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 	const FString NormalizedKey = NormalizeAbilityKey(Key);
 	if (NormalizedKey.IsEmpty())
 	{
-		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilityEnabledByKey ignored empty/none key. Raw='%s'"), *Key);
 		return;
 	}
 
 	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
 	if (!Info || !Info->AbilitySystemComponent.IsValid())
 	{
-		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilityEnabledByKey: missing ActorInfo/ASC. Key='%s'"), *NormalizedKey);
 		return;
 	}
 
@@ -550,17 +535,11 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 		{
 			ForceSet.Add(NormalizedKey);
 		}
-		UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilityEnabledByKey (Owner): Unit=%s ASC=%s Key='%s' Enable=true (wasDisabled=%s, nowForce=%s)"),
-			*GetNameSafe(Unit), *GetNameSafe(ASC), *NormalizedKey, bWasDisabled ? TEXT("true") : TEXT("false"), bAlreadyForced ? TEXT("true") : TEXT("false"));
 	}
 	else
 	{
 		// Disabling per owner: add to disabled and remove any per-owner force override
-		const bool bWasInDisabled = DisabledSet.Contains(NormalizedKey);
 		DisabledSet.Add(NormalizedKey);
-		const bool bRemovedForce = ForceSet.Remove(NormalizedKey) > 0;
-		UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilityEnabledByKey (Owner): Unit=%s ASC=%s Key='%s' Enable=false (wasInDisabled=%s, removedForce=%s)"),
-			*GetNameSafe(Unit), *GetNameSafe(ASC), *NormalizedKey, bWasInDisabled ? TEXT("true") : TEXT("false"), bRemovedForce ? TEXT("true") : TEXT("false"));
 	}
 
 	// Clean up empty sets to avoid clutter
@@ -590,7 +569,72 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 					++SentCount;
 				}
 			}
-			UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilityEnabledByKey: Mirrored to %d client(s) for TeamId=%d Key='%s'"), SentCount, Unit->TeamId, *NormalizedKey);
+		}
+	}
+}
+
+void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const FString& Key, bool bEnable)
+{
+	const FString NormalizedKey = NormalizeAbilityKey(Key);
+	if (NormalizedKey.IsEmpty())
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
+	if (!Info || !Info->AbilitySystemComponent.IsValid())
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = Info->AbilitySystemComponent.Get();
+
+
+	// Update per-owner registries instead of touching ability instances/CDOs
+	TSet<FString>& DisabledSet = GDisabledAbilityKeysByOwner.FindOrAdd(ASC);
+	TSet<FString>& ForceSet = GForceEnabledAbilityKeysByOwner.FindOrAdd(ASC);
+
+	if (bEnable)
+	{
+		// Enabling per owner: remove from disabled and add to force so it works even if asset bDisabled
+		const bool bAlreadyForced = ForceSet.Contains(NormalizedKey);
+		if (!bAlreadyForced)
+		{
+			ForceSet.Add(NormalizedKey);
+		}
+	}
+	else
+	{
+		DisabledSet.Add(NormalizedKey);
+	}
+
+	// Clean up empty sets to avoid clutter
+	if (DisabledSet.Num() == 0)
+	{
+		GDisabledAbilityKeysByOwner.Remove(ASC);
+	}
+	if (ForceSet.Num() == 0)
+	{
+		GForceEnabledAbilityKeysByOwner.Remove(ASC);
+	}
+
+	// Mirror the toggle to all relevant owning clients (same team) so their UI can update immediately
+	if (Unit && Unit->HasAuthority())
+	{
+		UWorld* World = Unit->GetWorld();
+		if (World)
+		{
+			int32 SentCount = 0;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+				if (!CustomPC) continue;
+				if (CustomPC->SelectableTeamId == Unit->TeamId)
+				{
+					CustomPC->Client_ApplyOwnerAbilityKeyToggle(Unit, NormalizedKey, bEnable);
+					++SentCount;
+				}
+			}
 		}
 	}
 }

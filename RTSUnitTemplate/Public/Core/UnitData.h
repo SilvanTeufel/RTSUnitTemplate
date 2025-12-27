@@ -273,6 +273,19 @@ inline float CalcAngle(FVector VectorOne, FVector VectorTwo)
 	return AngleOneX - AngleTwoX;
 };
 
+static FString NormalizeAbilityKey(const FString& InKey)
+{
+	FString Out = InKey;
+	Out.TrimStartAndEndInline();
+	Out = Out.ToLower();
+	if (Out.IsEmpty() || Out == TEXT("none"))
+	{
+		return FString();
+	}
+	return Out;
+}
+
+
 USTRUCT(BlueprintType)
 struct FUnitSpawnParameter : public FTableRowBase
 {
