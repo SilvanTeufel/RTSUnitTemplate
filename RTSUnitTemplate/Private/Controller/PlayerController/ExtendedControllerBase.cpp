@@ -218,7 +218,7 @@ void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* 
 {
 	if(UnitBase && UnitBase->DefaultAbilities.Num())
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities, HitResult);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities, HitResult, this);
 	}
 	
 }
@@ -227,7 +227,7 @@ void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* U
 {
 	if (UnitBase && UnitBase->SecondAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities, HitResult);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities, HitResult, this);
 	}
 }
 
@@ -235,7 +235,7 @@ void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* Un
 {
 	if (UnitBase && UnitBase->ThirdAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities, HitResult);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities, HitResult, this);
 	}
 }
 
@@ -243,7 +243,7 @@ void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* U
 {
 	if (UnitBase && UnitBase->FourthAbilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities, HitResult);
+		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities, HitResult, this);
 	}
 }
 
@@ -251,7 +251,7 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 {
 	if (UnitBase && Abilities.Num() > 0)
 	{
-		UnitBase->ActivateAbilityByInputID(InputID, Abilities);
+		UnitBase->ActivateAbilityByInputID(InputID, Abilities, FHitResult(), this);
 	}
 }
 

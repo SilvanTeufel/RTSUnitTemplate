@@ -13,6 +13,7 @@
 #include "Engine/Engine.h"
 #include "Characters/Unit/LevelUnit.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/ActorChannel.h"
 #include "GameModes/ResourceGameMode.h"
@@ -202,7 +203,8 @@ bool AGASUnit::GetToggleUnitDetection()
 bool AGASUnit::ActivateAbilityByInputID(
 	EGASAbilityInputID InputID,
 	const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray,
-	const FHitResult& HitResult)
+	const FHitResult& HitResult,
+	APlayerController* InstigatorPC)
 {
 	
 	if (!AbilitySystemComponent)
@@ -235,6 +237,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 			FQueuedAbility Queued;
 			Queued.AbilityClass = AbilityToActivate;
 			Queued.HitResult    = HitResult;
+			Queued.InstigatorPC = InstigatorPC;
 			QueSnapshot.Add(Queued);
 			AbilityQueue.Enqueue(Queued);
 			AbilityQueueSize++;
@@ -254,7 +257,9 @@ bool AGASUnit::ActivateAbilityByInputID(
 			FQueuedAbility Queued;
 			Queued.AbilityClass = AbilityToActivate;
 			Queued.HitResult    = HitResult;
+			Queued.InstigatorPC = InstigatorPC;
 			CurrentSnapshot = Queued;
+			CurrentInstigatorPC = InstigatorPC;
 		}
 		if (bIsActivated && HitResult.IsValidBlockingHit())
 		{
@@ -272,6 +277,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 				FQueuedAbility Queued;
 				Queued.AbilityClass = AbilityToActivate;
 				Queued.HitResult    = HitResult;
+				Queued.InstigatorPC = InstigatorPC;
 				QueSnapshot.Add(Queued);
 				AbilityQueue.Enqueue(Queued);
 				AbilityQueueSize++;
@@ -328,6 +334,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 			if (bIsActivated)
 			{
 				CurrentSnapshot = Next;
+				CurrentInstigatorPC = Next.InstigatorPC.Get();
 				//UE_LOG(LogTemp, Warning, TEXT("Ability %s activated successfully."), *Next.AbilityClass->GetName());
 
 				if (Next.HitResult.IsValidBlockingHit())

@@ -690,8 +690,51 @@ void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float Fade
     {
         if (UNiagaraComponent* NC = ActiveNiagara[i].Get())
         {
-            NC->DeactivateImmediate();
-            NC->DestroyComponent();
+            if (FadeTime > 0.f && World)
+            {
+                // Gracefully stop spawning and let particles die over time
+                NC->Deactivate();
+
+                // Fade out the scale of the component over FadeTime
+                FVector InitialScale = NC->GetRelativeScale3D();
+                TWeakObjectPtr<UNiagaraComponent> WeakNC = NC;
+                auto ScheduleScale = [World, this, WeakNC, InitialScale](float Delay, float Multiplier)
+                {
+                    if (!World) return;
+                    FTimerHandle H;
+                    World->GetTimerManager().SetTimer(H, [WeakNC, InitialScale, Multiplier]()
+                    {
+                        if (UNiagaraComponent* C = WeakNC.Get())
+                        {
+                            C->SetRelativeScale3D(InitialScale * Multiplier);
+                        }
+                    }, FMath::Max(0.f, Delay), false);
+                    PendingEffectTimers.Add(H);
+                };
+
+                // Quarter-step scale downs to zero
+                ScheduleScale(FadeTime * 0.25f, 0.75f);
+                ScheduleScale(FadeTime * 0.50f, 0.50f);
+                ScheduleScale(FadeTime * 0.75f, 0.25f);
+                ScheduleScale(FadeTime * 0.98f, 0.00f);
+
+                // Schedule destruction after the fade window to avoid popping
+                FTimerHandle DestroyHandle;
+                World->GetTimerManager().SetTimer(DestroyHandle, [WeakNC]()
+                {
+                    if (WeakNC.IsValid())
+                    {
+                        WeakNC->DeactivateImmediate();
+                        WeakNC->DestroyComponent();
+                    }
+                }, FadeTime + 0.01f, false);
+                PendingEffectTimers.Add(DestroyHandle);
+            }
+            else
+            {
+                NC->DeactivateImmediate();
+                NC->DestroyComponent();
+            }
         }
     }
     ActiveNiagara.Empty();

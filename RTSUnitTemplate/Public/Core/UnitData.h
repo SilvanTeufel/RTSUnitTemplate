@@ -105,6 +105,49 @@ namespace UInvestmentData
 }
 
 USTRUCT(BlueprintType)
+struct FBuildingCost
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 PrimaryCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 SecondaryCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 TertiaryCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 RareCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 EpicCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 LegendaryCost = 0;
+
+
+	FString ToFormattedString() const {
+		TArray<FString> parts;
+        
+		if(PrimaryCost > 0) parts.Add(FString::Printf(TEXT("Primary: %d"), PrimaryCost));
+		if(SecondaryCost > 0) parts.Add(FString::Printf(TEXT("Secondary: %d"), SecondaryCost));
+		if(TertiaryCost > 0) parts.Add(FString::Printf(TEXT("Tertiary: %d"), TertiaryCost));
+		if(RareCost > 0) parts.Add(FString::Printf(TEXT("Rare: %d"), RareCost));
+		if(EpicCost > 0) parts.Add(FString::Printf(TEXT("Epic: %d"), EpicCost));
+		if(LegendaryCost > 0) parts.Add(FString::Printf(TEXT("Legendary: %d"), LegendaryCost));
+
+		if (parts.Num())
+		return FString::Join(parts, TEXT("\n"));
+		else
+		return FString("");
+		
+	}
+};
+
+USTRUCT(BlueprintType)
 struct FSpeechData_Texts : public FTableRowBase
 {
 	GENERATED_BODY()
@@ -340,6 +383,9 @@ struct FUnitSpawnParameter : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FBuildingCost ConstructionCost;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect> Attributes;

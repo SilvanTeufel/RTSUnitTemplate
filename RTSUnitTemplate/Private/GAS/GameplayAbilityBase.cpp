@@ -17,6 +17,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Unit/GASUnit.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAbilityKeyGate, Log, All);
 
@@ -749,44 +750,92 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 	}
 
 	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
-	if (!Info)
+	if (!Info || !Info->OwnerActor.IsValid())
 	{
 		return;
 	}
 
-	APlayerController* PC = nullptr;
-	if (Info->PlayerController.IsValid())
+	int32 TeamId = INDEX_NONE;
+	if (const AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get()))
 	{
-		PC = Cast<APlayerController>(Info->PlayerController.Get());
-	}
-	if (!PC)
-	{
-		// Try to retrieve from owner pawn/controller
-		AActor* OwnerActor = Info->OwnerActor.Get();
-		if (APawn* Pawn = Cast<APawn>(OwnerActor))
-		{
-			PC = Cast<APlayerController>(Pawn->GetController());
-		}
-		else if (AController* C = Cast<AController>(OwnerActor))
-		{
-			PC = Cast<APlayerController>(C);
-		}
+		TeamId = Unit->TeamId;
 	}
 
-	if (!PC)
+	UWorld* World = GetWorld();
+	if (TeamId != INDEX_NONE && World)
 	{
-		return;
-	}
-
-	if (PC->IsLocalController())
-	{
-		UGameplayStatics::PlaySound2D(PC, Sound, VolumeMultiplier, PitchMultiplier);
-	}
-	else
-	{
-		if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(PC))
+		if (const AGASUnit* Unit = Cast<AGASUnit>(Info->AvatarActor.Get()))
 		{
-			ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+			if (APlayerController* InitiatorPC = Unit->CurrentInstigatorPC.Get())
+			{
+				if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(InitiatorPC))
+				{
+					if (ExtPC->IsLocalController())
+					{
+						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier, PitchMultiplier);
+					}
+					else
+					{
+						ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+					}
+					return;
+				}
+			}
+		}
+
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			APlayerController* PC = It->Get();
+			if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(PC))
+			{
+				if (ExtPC->SelectableTeamId == TeamId)
+				{
+					if (ExtPC->IsLocalController())
+					{
+						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier, PitchMultiplier);
+					}
+					else
+					{
+						ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+					}
+				}
+			}
 		}
 	}
+	/*else
+	{
+		APlayerController* PC = nullptr;
+		if (Info->PlayerController.IsValid())
+		{
+			PC = Cast<APlayerController>(Info->PlayerController.Get());
+		}
+		
+		if (!PC)
+		{
+			AActor* OwnerActor = Info->OwnerActor.Get();
+			if (APawn* Pawn = Cast<APawn>(OwnerActor))
+			{
+				PC = Cast<APlayerController>(Pawn->GetController());
+			}
+			else if (AController* C = Cast<AController>(OwnerActor))
+			{
+				PC = Cast<APlayerController>(C);
+			}
+		}
+
+		if (PC)
+		{
+			if (PC->IsLocalController())
+			{	
+				UGameplayStatics::PlaySound2D(PC, Sound, VolumeMultiplier, PitchMultiplier);
+			}
+			else
+			{
+				if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(PC))
+				{
+					ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+				}
+			}
+		}
+	}*/
 }

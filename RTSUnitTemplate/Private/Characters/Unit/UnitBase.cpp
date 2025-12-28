@@ -1003,7 +1003,7 @@ TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable)
+int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable)
 {
 	TArray<AUnitBase*> SpawnedUnits;
 	FUnitSpawnParameter SpawnParameter;
@@ -1015,6 +1015,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 	SpawnParameter.StatePlaceholder = UStatePlaceholder;
 	SpawnParameter.Material = Material;
 	SpawnParameter.CharacterMesh = CharacterMesh;
+	SpawnParameter.ConstructionCost = UsedConstructionCost;
 	// Waypointspawn
 	
 	if (!SpawnParameter.UnitBaseClass) return SpawnedUnits;
@@ -1066,6 +1067,7 @@ int NewTeamId, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool
 		
 			UnitBase->UnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
+			UnitBase->ConstructionCost = UsedConstructionCost;
 			
 			if(UnitToChase)
 			{

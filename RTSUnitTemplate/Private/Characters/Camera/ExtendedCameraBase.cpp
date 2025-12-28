@@ -1,5 +1,6 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "GameFramework/PlayerController.h"
 
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -306,7 +307,7 @@ void AExtendedCameraBase::OnAbilityInputDetected(EGASAbilityInputID InputID, AGA
 	if(SelectedUnit && InputID != EGASAbilityInputID::None)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("OnAbilityInputDetected: Activating ability ID %d for unit: %s"), static_cast<int32>(InputID), *SelectedUnit->GetName());
-		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray);
+		SelectedUnit->ActivateAbilityByInputID(InputID, AbilitiesArray, FHitResult(), Cast<APlayerController>(GetController()));
 	}
 }
 

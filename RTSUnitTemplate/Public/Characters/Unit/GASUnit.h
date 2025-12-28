@@ -13,6 +13,9 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Containers/Queue.h"
+
+class APlayerController;
+
 #include "GASUnit.generated.h"
 
 USTRUCT(BlueprintType)
@@ -27,6 +30,9 @@ struct FQueuedAbility
 	// If your abilities need HitResult data (mouse hit, etc.), store it here
 	UPROPERTY()
 	FHitResult HitResult;
+
+	UPROPERTY()
+	TWeakObjectPtr<APlayerController> InstigatorPC;
     
 	bool operator==(const FQueuedAbility& Other) const
 	{
@@ -113,7 +119,7 @@ public:
 	bool GetToggleUnitDetection();
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
-	bool ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult = FHitResult());
+	bool ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult = FHitResult(), APlayerController* InstigatorPC = nullptr);
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	TSubclassOf<UGameplayAbility> GetAbilityForInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray);
@@ -154,6 +160,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category=Ability)
 	FQueuedAbility CurrentSnapshot;
+
+	UPROPERTY()
+	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const FQueuedAbility GetCurrentSnapshot();
