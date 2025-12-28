@@ -15,6 +15,10 @@
 #include "Components/SpotLightComponent.h"
 #include "PerformanceUnit.generated.h"
 
+class UNiagaraComponent;
+class UAudioComponent;
+struct FTimerHandle;
+
 UCLASS()
 class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase
 {
@@ -166,13 +170,25 @@ public:
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void FireEffects(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay = 0.f, float SoundDelay = 0.f);
 
-	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+ UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void FireEffectsAtLocation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound,const FVector Location, float KillDelay, FRotator Rotation = FRotator(0.0f, 0.0f, 0.0f));
 	
-private:
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool IsInViewport(FVector WorldPosition, float Offset);
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void StopAllEffects(bool bFadeAudio = true, float FadeTime = 0.15f);
+		
+	private:
+		
+		UPROPERTY(Transient)
+		TArray<TWeakObjectPtr<UNiagaraComponent>> ActiveNiagara;
+		
+		UPROPERTY(Transient)
+		TArray<TWeakObjectPtr<UAudioComponent>> ActiveAudio;
+		
+		UPROPERTY(Transient)
+		TArray<FTimerHandle> PendingEffectTimers;
+		
+		UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		bool IsInViewport(FVector WorldPosition, float Offset);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckHealthBarVisibility();

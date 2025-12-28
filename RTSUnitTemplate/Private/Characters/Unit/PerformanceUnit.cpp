@@ -23,6 +23,9 @@
 #include "Engine/World.h"              // For UWorld, GetWorld()
 #include "GameFramework/Actor.h"         // For FActorSpawnParameters, SpawnActo
 #include "Logging/LogMacros.h"
+#include "NiagaraComponent.h"
+#include "Components/AudioComponent.h"
+#include "TimerManager.h"
 
 // Debug category for squad healthbar visibility
 DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
@@ -437,24 +440,28 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                 FTimerHandle VisualEffectTimerHandle;
                 World->GetTimerManager().SetTimer(
                     VisualEffectTimerHandle,
-                    [WeakThis, ImpactVFX, ScaleVFX]() // Capture the weak pointer
+                    [WeakThis, ImpactVFX, ScaleVFX]()
                     {
-                        // First, check if the Actor is still valid
-                        if (WeakThis.IsValid())
+                        if (!WeakThis.IsValid()) return;
+
+                        FVector Location = WeakThis->GetMassActorLocation();
+                        FRotator Rotation = WeakThis->GetActorRotation();
+                        if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(WeakThis->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX))
                         {
-                            // It's safe to use the actor's functions now
-                            FVector Location = WeakThis->GetMassActorLocation();
-                            FRotator Rotation = WeakThis->GetActorRotation();
-                            UNiagaraFunctionLibrary::SpawnSystemAtLocation(WeakThis->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX);
+                            WeakThis->ActiveNiagara.Add(NiagaraComp);
                         }
                     },
                     EffectDelay,
                     false
                 );
+                PendingEffectTimers.Add(VisualEffectTimerHandle);
             }
             else
             {
-                UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetMassActorLocation(), GetActorRotation(), ScaleVFX);
+                if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetMassActorLocation(), GetActorRotation(), ScaleVFX))
+                {
+                    ActiveNiagara.Add(NiagaraComp);
+                }
             }
         }
 
@@ -466,23 +473,28 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                 FTimerHandle SoundTimerHandle;
                 World->GetTimerManager().SetTimer(
                     SoundTimerHandle,
-                    [WeakThis, ImpactSound, ScaleSound]() // Capture the weak pointer
+                    [WeakThis, ImpactSound, ScaleSound]()
                     {
-                        // First, check if the Actor is still valid
-                        if (WeakThis.IsValid())
+                        if (!WeakThis.IsValid()) return;
+
+                        FVector Location = WeakThis->GetMassActorLocation();
+                        FRotator Rotation = WeakThis->GetActorRotation();
+                        if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(WeakThis->GetWorld(), ImpactSound, Location, Rotation, ScaleSound))
                         {
-                            // It's safe to use the actor's functions now
-                            FVector Location = WeakThis->GetMassActorLocation();
-                            UGameplayStatics::PlaySoundAtLocation(WeakThis->GetWorld(), ImpactSound, Location, ScaleSound);
+                            WeakThis->ActiveAudio.Add(AudioComp);
                         }
                     },
                     SoundDelay,
                     false
                 );
+                PendingEffectTimers.Add(SoundTimerHandle);
             }
             else
             {
-                UGameplayStatics::PlaySoundAtLocation(GetWorld(), ImpactSound, GetMassActorLocation(), ScaleSound);
+                if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(GetWorld(), ImpactSound, GetMassActorLocation(), GetActorRotation(), ScaleSound))
+                {
+                    ActiveAudio.Add(AudioComp);
+                }
             }
         }
     }
@@ -503,6 +515,10 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
         if (ImpactVFX)
         {
             NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
+            if (NiagaraComp)
+            {
+                ActiveNiagara.Add(NiagaraComp);
+            }
         }
 
         // Spawn the sound effect and get its audio component
@@ -510,6 +526,10 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
         if (ImpactSound)
         {
             AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, ScaleSound);
+            if (AudioComp)
+            {
+                ActiveAudio.Add(AudioComp);
+            }
         }
 
         // If either component is valid and a kill delay is provided, set up a timer to kill them.
@@ -536,6 +556,8 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
                     WeakAudioComp->DestroyComponent();
                 }
             }, KillDelay, false);
+
+            PendingEffectTimers.Add(TimerHandle);
         }
     }
 }
@@ -648,4 +670,61 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 		&& ( !EnableFog
 		   || IsVisibleEnemy
 		   || IsMyTeam );
+}
+
+
+void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float FadeTime)
+{
+    UWorld* World = GetWorld();
+    if (World)
+    {
+        for (FTimerHandle& H : PendingEffectTimers)
+        {
+            World->GetTimerManager().ClearTimer(H);
+        }
+    }
+    PendingEffectTimers.Empty();
+
+    // Stop and destroy VFX
+    for (int32 i = ActiveNiagara.Num() - 1; i >= 0; --i)
+    {
+        if (UNiagaraComponent* NC = ActiveNiagara[i].Get())
+        {
+            NC->DeactivateImmediate();
+            NC->DestroyComponent();
+        }
+    }
+    ActiveNiagara.Empty();
+
+    // Stop and destroy SFX
+    for (int32 i = ActiveAudio.Num() - 1; i >= 0; --i)
+    {
+        if (UAudioComponent* AC = ActiveAudio[i].Get())
+        {
+            if (bFadeAudio && FadeTime > 0.f)
+            {
+                AC->FadeOut(FadeTime, 0.f);
+                if (World)
+                {
+                    TWeakObjectPtr<UAudioComponent> WeakAC = AC;
+                    FTimerHandle DestroyHandle;
+                    World->GetTimerManager().SetTimer(DestroyHandle, [WeakAC]()
+                    {
+                        if (WeakAC.IsValid())
+                        {
+                            WeakAC->Stop();
+                            WeakAC->DestroyComponent();
+                        }
+                    }, FadeTime + 0.01f, false);
+                    PendingEffectTimers.Add(DestroyHandle);
+                }
+            }
+            else
+            {
+                AC->Stop();
+                AC->DestroyComponent();
+            }
+        }
+    }
+    ActiveAudio.Empty();
 }

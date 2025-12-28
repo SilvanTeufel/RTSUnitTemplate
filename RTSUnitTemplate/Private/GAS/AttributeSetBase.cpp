@@ -108,6 +108,22 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 					}
 				}
 
+				// Compute threshold crossings before applying damage to Health
+				{
+					const float NewHealthProjected = FMath::Clamp(GetHealth() + DamageAmount, 0.0f, GetMaxHealth());
+					const float MaxH = GetMaxHealth();
+					if (MaxH > 0.f && OldHealth != NewHealthProjected)
+					{
+						const float OldPct = OldHealth / MaxH;
+						const float NewPct = NewHealthProjected / MaxH;
+						// Downward crossings (damage)
+						if (OldPct >= 0.50f && NewPct < 0.50f) { UnitBase->OnHealthThresholdCrossed(false, false, true, NewHealthProjected); }
+						if (OldPct >= 0.25f && NewPct < 0.25f) { UnitBase->OnHealthThresholdCrossed(false, true,  false, NewHealthProjected); }
+						// Upward crossings (edge case if shield overflow indirectly heals, included for completeness)
+						if (OldPct <= 0.25f && NewPct > 0.25f) { UnitBase->OnHealthThresholdCrossed(true,  true,  false, NewHealthProjected); }
+						if (OldPct <= 0.50f && NewPct > 0.50f) { UnitBase->OnHealthThresholdCrossed(true,  false, true, NewHealthProjected); }
+					}
+				}
 				SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 
@@ -121,6 +137,22 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				if (OldHealth + DamageAmount <= GetMaxHealth())
 					SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
 
+				// Compute threshold crossings before applying heal to Health
+				{
+					const float NewHealthProjected = FMath::Clamp(GetHealth() + DamageAmount, 0.0f, GetMaxHealth());
+					const float MaxH = GetMaxHealth();
+					if (MaxH > 0.f && OldHealth != NewHealthProjected)
+					{
+						const float OldPct = OldHealth / MaxH;
+						const float NewPct = NewHealthProjected / MaxH;
+						// Upward crossings (healing)
+						if (OldPct <= 0.25f && NewPct > 0.25f) { UnitBase->OnHealthThresholdCrossed(true,  true,  false, NewHealthProjected); }
+						if (OldPct <= 0.50f && NewPct > 0.50f) { UnitBase->OnHealthThresholdCrossed(true,  false, true, NewHealthProjected); }
+						// Downward crossings shouldn't happen on heal, but keep checks symmetrical for safety
+						if (OldPct >= 0.50f && NewPct < 0.50f) { UnitBase->OnHealthThresholdCrossed(false, false, true, NewHealthProjected); }
+						if (OldPct >= 0.25f && NewPct < 0.25f) { UnitBase->OnHealthThresholdCrossed(false, true,  false, NewHealthProjected); }
+					}
+				}
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
 
