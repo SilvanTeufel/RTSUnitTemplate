@@ -3095,7 +3095,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		{
 			if (DropWorkAreaFailedSound)
 			{
-				UGameplayStatics::PlaySound2D(this, DropWorkAreaFailedSound);
+				Client_PlaySound2D(DropWorkAreaFailedSound);
 			}
 			
 			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
@@ -3110,7 +3110,7 @@ bool AExtendedControllerBase::DropWorkArea()
 		{
 			if (DropWorkAreaSound)
 			{
-				UGameplayStatics::PlaySound2D(this, DropWorkAreaSound);
+				Client_PlaySound2D(DropWorkAreaSound);
 			}
 	
 				// Finalize placement on the server now that the player dropped the area
@@ -3210,7 +3210,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		{
 			if (InDropWorkAreaFailedSound)
 			{
-				UGameplayStatics::PlaySound2D(this, InDropWorkAreaFailedSound);
+				Client_PlaySound2D(InDropWorkAreaFailedSound);
 			}
 
 			UnitBase->CurrentDraggedWorkArea->Destroy();
@@ -3225,7 +3225,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		{
 			if (DropWorkAreaSound)
 			{
-				UGameplayStatics::PlaySound2D(this, DropWorkAreaSound);
+				Client_PlaySound2D(DropWorkAreaSound);
 			}
 
 			if (UnitBase->CurrentDraggedWorkArea)
