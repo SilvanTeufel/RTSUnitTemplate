@@ -50,15 +50,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 600.0f, 0.0f);
 	GetCharacterMovement()->SetIsReplicated(true);
 	*/
-	if (RootComponent == nullptr) {
-		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
-	}
 	
-	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
-	HealthWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-	HealthWidgetComp->SetVisibility(true);
-
-
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(RootComponent);
 	
@@ -82,9 +74,6 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	}
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
-
-	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
-	TimerWidgetComp->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
 	// Example: Inside AUnitBase::AUnitBase() constructor
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
@@ -513,6 +502,14 @@ void AUnitBase::DeadEffectsAndEvents()
 {
 	if (!DeadEffectsExecuted)
 	{
+		if (HasAuthority())
+		{
+			if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode()))
+			{
+				GM->CheckWinLoseCondition(this);
+			}
+		}
+
 		DeadMultiCast();
 		//FireEffects(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
 		StoppedMoving();

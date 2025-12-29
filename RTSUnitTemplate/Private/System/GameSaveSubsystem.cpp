@@ -214,6 +214,7 @@ void UGameSaveSubsystem::LoadGameFromSlot(const FString& SlotName)
 
     PendingLoadedSave = Save;
     PendingSlotName = SlotName;
+    bPendingQuickSave = false;
 
     UWorld* World = GetWorld();
     if (!World) return;
@@ -234,6 +235,15 @@ void UGameSaveSubsystem::LoadGameFromSlot(const FString& SlotName)
     }
 }
 
+void UGameSaveSubsystem::SetPendingQuickSave(bool bPending)
+{
+    bPendingQuickSave = bPending;
+    if (bPendingQuickSave)
+    {
+        FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UGameSaveSubsystem::OnPostLoadMapWithWorld);
+    }
+}
+
 void UGameSaveSubsystem::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {
     FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
@@ -242,6 +252,12 @@ void UGameSaveSubsystem::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
         ApplyLoadedData(LoadedWorld, PendingLoadedSave);
         PendingLoadedSave = nullptr;
         PendingSlotName.Reset();
+    }
+
+    if (bPendingQuickSave)
+    {
+        SaveCurrentGame(TEXT("QuickSave"));
+        bPendingQuickSave = false;
     }
 }
 

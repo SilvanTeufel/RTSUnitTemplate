@@ -58,6 +58,8 @@ public:
 	virtual void BeginPlay() override;
 	
 	virtual void Destroyed() override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnOverlapBegin(

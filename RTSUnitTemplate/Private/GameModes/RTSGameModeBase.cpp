@@ -2,8 +2,11 @@
 
 
 #include "GameModes/RTSGameModeBase.h"
+#include "Actors/WinLoseConfigActor.h"
 #include "PlayerStart/PlayerStartBase.h"
 #include "Characters/Camera/CameraBase.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "Widgets/WinLoseWidget.h"
 #include "EngineUtils.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Hud/PathProviderHUD.h"
@@ -39,6 +42,16 @@ void ARTSGameModeBase::BeginPlay()
 
 	FillUnitArrays();
 
+	// Find the first WinLoseConfigActor in the world
+	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
+	{
+		WinLoseConfigActor = *It;
+		if (WinLoseConfigActor)
+		{
+			break;
+		}
+	}
+
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
 
@@ -50,6 +63,76 @@ void ARTSGameModeBase::BeginPlay()
 void ARTSGameModeBase::DataTableTimerStart()
 {
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
+}
+
+void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
+{
+	if (!DestroyedUnit || !WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None) return;
+
+	TArray<ABuildingBase*> AllBuildings;
+	for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+	{
+		ABuildingBase* Building = *It;
+		if (Building && Building != DestroyedUnit && Building->GetUnitState() != UnitData::Dead)
+		{
+			AllBuildings.Add(Building);
+		}
+	}
+
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+	{
+		ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+		if (!PC) continue;
+
+		int32 PlayerTeamId = PC->SelectableTeamId;
+
+		if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
+		{
+			bool bFriendlyBuildingsExist = false;
+			bool bEnemyBuildingsExist = false;
+
+			for (ABuildingBase* Building : AllBuildings)
+			{
+				if (Building->TeamId == PlayerTeamId)
+				{
+					bFriendlyBuildingsExist = true;
+				}
+				else
+				{
+					bEnemyBuildingsExist = true;
+				}
+			}
+
+			FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+			if (!bFriendlyBuildingsExist)
+			{
+				PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Lose
+			}
+			else if (!bEnemyBuildingsExist)
+			{
+				PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Win
+			}
+		}
+		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
+		{
+			if (DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
+			{
+				FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+				if (DestroyedUnit->TeamId == PlayerTeamId)
+				{
+					PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Lose
+				}
+				else
+				{
+					PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Win
+				}
+			}
+		}
+	}
+}
+
+void ARTSGameModeBase::Multicast_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName)
+{
 }
 
 void ARTSGameModeBase::NavInitialisation()

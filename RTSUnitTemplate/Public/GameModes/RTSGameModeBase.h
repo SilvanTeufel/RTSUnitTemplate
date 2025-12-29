@@ -11,6 +11,7 @@
 #include "GameplayEffect.h"
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Developer/GraphColor/Private/appconst.h"
+#include "GameplayTagContainer.h"
 #include "RTSGameModeBase.generated.h"
 
 class ARLAgent;
@@ -18,7 +19,9 @@ class ACameraControllerBase;
 class APlayerStartBase;
 class ARTSBTController;
 class UBehaviorTree;
-
+class UWorld;
+class AUnitBase;
+class AWinLoseConfigActor;
 
 USTRUCT(BlueprintType)
 struct FTimerHandleMapping
@@ -75,6 +78,15 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int GatherControllerTimer = 2.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
+	AWinLoseConfigActor* WinLoseConfigActor;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void CheckWinLoseCondition(AUnitBase* DestroyedUnit);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName);
 	
 	virtual void BeginPlay() override;
 

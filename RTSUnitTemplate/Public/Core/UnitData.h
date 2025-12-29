@@ -53,8 +53,15 @@ namespace UnitData
 		Dead UMETA(DisplayName = "Dead"),
 		None UMETA(DisplayName = "None"),
 	};
-
 }
+
+UENUM(BlueprintType)
+enum class EWinLoseCondition : uint8
+{
+	None,
+	AllBuildingsDestroyed,
+	TaggedUnitDestroyed
+};
 
 UENUM()
 namespace CameraData

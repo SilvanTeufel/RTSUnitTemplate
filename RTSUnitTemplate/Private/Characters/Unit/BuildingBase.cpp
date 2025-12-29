@@ -4,6 +4,7 @@
 
 #include "Elements/Framework/TypedElementQueryBuilder.h"
 #include "GameModes/ResourceGameMode.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "EngineUtils.h"
@@ -44,6 +45,18 @@ void ABuildingBase::Destroyed()
 	
 	if(ResourceGameMode)
 		ResourceGameMode->RemoveBaseFromGroup(this);
+}
+
+void ABuildingBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (HasAuthority())
+	{
+		if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode()))
+		{
+			GM->CheckWinLoseCondition(this);
+		}
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 

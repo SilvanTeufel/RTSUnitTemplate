@@ -4,6 +4,9 @@
 #include "Engine/World.h"
 #include "UnrealClient.h"
 #include "Characters/Unit/UnitBase.h" // Include UnitBase for the RPC
+#include "Widgets/WinLoseWidget.h"
+#include "GameModes/RTSGameModeBase.h"
+#include "Blueprint/UserWidget.h"
 
 
 bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(AUnitBase* Unit, const FVector& TargetLocation)
@@ -56,6 +59,19 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 #include "Engine/Engine.h"      
 #include "Kismet/GameplayStatics.h"
 
+
+void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName)
+{
+	if (InWidgetClass)
+	{
+		UWinLoseWidget* WinLoseWidget = CreateWidget<UWinLoseWidget>(this, InWidgetClass);
+		if (WinLoseWidget)
+		{
+			WinLoseWidget->SetupWidget(bWon, InMapName);
+			WinLoseWidget->AddToViewport();
+		}
+	}
+}
 
 ACameraControllerBase::ACameraControllerBase()
 {

@@ -27,6 +27,9 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 	
+	UFUNCTION(Client, Reliable)
+	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName);
+
 	ACameraControllerBase();
 
 public:

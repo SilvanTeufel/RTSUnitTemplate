@@ -30,6 +30,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Save")
     bool LoadSaveSummary(const FString& SlotName, FString& OutMapAssetName, FString& OutLongPackageName, int64& OutUnixTime) const;
 
+    UFUNCTION(BlueprintCallable, Category="Save")
+    void SetPendingQuickSave(bool bPending);
+
     // Fallback-Klasse zum Spawn fehlender Einheiten (im Editor/INI konfigurierbar)
     UPROPERTY(EditDefaultsOnly, Category="Save")
     TSubclassOf<AUnitBase> DefaultUnitClass;
@@ -39,6 +42,8 @@ private:
     URTSSaveGame* PendingLoadedSave = nullptr;
 
     FString PendingSlotName;
+
+    bool bPendingQuickSave = false;
 
     void ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* SaveData);
 

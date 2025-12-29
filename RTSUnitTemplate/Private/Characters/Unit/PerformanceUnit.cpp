@@ -2,6 +2,8 @@
 
 #include "Characters/Unit/PerformanceUnit.h"
 
+#include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "MassCommonFragments.h"
 #include "MassEntitySubsystem.h"
 #include "Net/UnrealNetwork.h"
@@ -32,7 +34,27 @@ DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
 
 APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
-	//bReplicates = true;
+	if (RootComponent == nullptr) {
+		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
+	}
+
+	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
+	HealthWidgetComp->SetupAttachment(RootComponent);
+	HealthWidgetComp->SetVisibility(true);
+
+	float CapsuleHalfHeight = 88.f;
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		CapsuleHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+	}
+
+	HealthWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + HealthWidgetHeightOffset);
+	HealthWidgetComp->SetRelativeLocation(HealthWidgetRelativeOffset);
+
+	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
+	TimerWidgetComp->SetupAttachment(RootComponent);
+	TimerWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + TimerWidgetHeightOffset);
+	TimerWidgetComp->SetRelativeLocation(TimerWidgetRelativeOffset);
 }
 
 void APerformanceUnit::Tick(float DeltaTime)
