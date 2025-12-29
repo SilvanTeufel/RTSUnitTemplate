@@ -4,11 +4,13 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "System/GameSaveSubsystem.h"
+#include "System/MapSwitchSubsystem.h"
 #include "Engine/GameInstance.h"
 
-void UWinLoseWidget::SetupWidget(bool bWon, const FString& MapName)
+void UWinLoseWidget::SetupWidget(bool bWon, const FString& MapName, FName InDestinationSwitchTagToEnable)
 {
 	TargetMapName = MapName;
+	DestinationSwitchTagToEnable = InDestinationSwitchTagToEnable;
 	if (ResultText)
 	{
 		ResultText->SetText(FText::FromString(bWon ? TEXT("You Won!") : TEXT("You Lost!")));
@@ -33,11 +35,24 @@ void UWinLoseWidget::NativeConstruct()
 
 void UWinLoseWidget::OnOkClicked()
 {
+	if (OkButton)
+	{
+		OkButton->SetIsEnabled(false);
+	}
+
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UGameSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UGameSaveSubsystem>())
 		{
 			SaveSubsystem->SetPendingQuickSave(true);
+		}
+
+		if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+		{
+			if (!TargetMapName.IsEmpty() && DestinationSwitchTagToEnable != NAME_None)
+			{
+				MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, DestinationSwitchTagToEnable);
+			}
 		}
 	}
 

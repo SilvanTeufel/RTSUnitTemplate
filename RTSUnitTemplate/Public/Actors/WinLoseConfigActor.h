@@ -26,6 +26,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	TSoftObjectPtr<UWorld> WinLoseTargetMapName;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FName DestinationSwitchTagToEnable;
+
 protected:
 	virtual void BeginPlay() override;
 

@@ -28,7 +28,7 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 	
 	UFUNCTION(Client, Reliable)
-	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName);
+	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
 
 	ACameraControllerBase();
 

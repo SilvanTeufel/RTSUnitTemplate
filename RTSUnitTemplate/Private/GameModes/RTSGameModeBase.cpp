@@ -106,11 +106,11 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
 			if (!bFriendlyBuildingsExist)
 			{
-				PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Lose
+				PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
 			}
 			else if (!bEnemyBuildingsExist)
 			{
-				PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Win
+				PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
 			}
 		}
 		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
@@ -120,18 +120,18 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
 				if (DestroyedUnit->TeamId == PlayerTeamId)
 				{
-					PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Lose
+					PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
 				}
 				else
 				{
-					PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName); // Win
+					PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
 				}
 			}
 		}
 	}
 }
 
-void ARTSGameModeBase::Multicast_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName)
+void ARTSGameModeBase::Multicast_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)
 {
 }
 

@@ -86,7 +86,7 @@ public:
 	void CheckWinLoseCondition(AUnitBase* DestroyedUnit);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName);
+	void Multicast_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
 	
 	virtual void BeginPlay() override;
 

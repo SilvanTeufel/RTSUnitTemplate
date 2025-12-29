@@ -21,7 +21,7 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	class UButton* OkButton;
 
-	void SetupWidget(bool bWon, const FString& MapName);
+	void SetupWidget(bool bWon, const FString& MapName, FName InDestinationSwitchTagToEnable);
 
 protected:
 	virtual void NativeConstruct() override;
@@ -30,4 +30,5 @@ protected:
 	void OnOkClicked();
 
 	FString TargetMapName;
+	FName DestinationSwitchTagToEnable;
 };

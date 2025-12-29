@@ -60,14 +60,14 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 #include "Kismet/GameplayStatics.h"
 
 
-void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName)
+void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)
 {
 	if (InWidgetClass)
 	{
 		UWinLoseWidget* WinLoseWidget = CreateWidget<UWinLoseWidget>(this, InWidgetClass);
 		if (WinLoseWidget)
 		{
-			WinLoseWidget->SetupWidget(bWon, InMapName);
+			WinLoseWidget->SetupWidget(bWon, InMapName, DestinationSwitchTagToEnable);
 			WinLoseWidget->AddToViewport();
 		}
 	}
