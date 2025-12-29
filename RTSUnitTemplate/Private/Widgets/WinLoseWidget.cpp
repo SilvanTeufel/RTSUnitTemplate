@@ -7,8 +7,9 @@
 #include "System/MapSwitchSubsystem.h"
 #include "Engine/GameInstance.h"
 
-void UWinLoseWidget::SetupWidget(bool bWon, const FString& MapName, FName InDestinationSwitchTagToEnable)
+void UWinLoseWidget::SetupWidget(bool bInWon, const FString& MapName, FName InDestinationSwitchTagToEnable)
 {
+	bWon = bInWon;
 	TargetMapName = MapName;
 	DestinationSwitchTagToEnable = InDestinationSwitchTagToEnable;
 	if (ResultText)
@@ -49,7 +50,7 @@ void UWinLoseWidget::OnOkClicked()
 
 		if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
 		{
-			if (!TargetMapName.IsEmpty() && DestinationSwitchTagToEnable != NAME_None)
+			if (bWon && !TargetMapName.IsEmpty() && DestinationSwitchTagToEnable != NAME_None)
 			{
 				MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, DestinationSwitchTagToEnable);
 			}
