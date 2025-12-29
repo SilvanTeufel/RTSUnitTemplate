@@ -502,7 +502,7 @@ void AUnitBase::DeadMultiCast_Implementation()
 {
 	SetUnitState(UnitData::Dead);
 	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
-	FireEffects_Implementation(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound);
+	FireEffects_Implementation(DeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound, -1);
 }
 void AUnitBase::Multicast_SwitchToIdle_Implementation()
 {

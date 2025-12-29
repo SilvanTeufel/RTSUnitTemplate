@@ -419,7 +419,7 @@ void APerformanceUnit::HideAbilityIndicator_Implementation(AAbilityIndicator* Ab
 	}
 }
 
-void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay)
+void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay, int32 ID)
 {
     if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
     {
@@ -440,17 +440,18 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                 FTimerHandle VisualEffectTimerHandle;
                 World->GetTimerManager().SetTimer(
                     VisualEffectTimerHandle,
-                    [WeakThis, ImpactVFX, ScaleVFX]()
+                    FTimerDelegate::CreateLambda([WeakThis, ImpactVFX, ScaleVFX, ID]()
                     {
-                        if (!WeakThis.IsValid()) return;
-
-                        FVector Location = WeakThis->GetMassActorLocation();
-                        FRotator Rotation = WeakThis->GetActorRotation();
-                        if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(WeakThis->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX))
+                        if (APerformanceUnit* Unit = WeakThis.Get())
                         {
-                            WeakThis->ActiveNiagara.Add(NiagaraComp);
+                            FVector Location = Unit->GetMassActorLocation();
+                            FRotator Rotation = Unit->GetActorRotation();
+                            if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(Unit->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX))
+                            {
+                                Unit->ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
+                            }
                         }
-                    },
+                    }),
                     EffectDelay,
                     false
                 );
@@ -460,7 +461,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
             {
                 if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetMassActorLocation(), GetActorRotation(), ScaleVFX))
                 {
-                    ActiveNiagara.Add(NiagaraComp);
+                    ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
                 }
             }
         }
@@ -473,17 +474,18 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                 FTimerHandle SoundTimerHandle;
                 World->GetTimerManager().SetTimer(
                     SoundTimerHandle,
-                    [WeakThis, ImpactSound, ScaleSound]()
+                    FTimerDelegate::CreateLambda([WeakThis, ImpactSound, ScaleSound]()
                     {
-                        if (!WeakThis.IsValid()) return;
-
-                        FVector Location = WeakThis->GetMassActorLocation();
-                        FRotator Rotation = WeakThis->GetActorRotation();
-                        if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(WeakThis->GetWorld(), ImpactSound, Location, Rotation, ScaleSound))
+                        if (APerformanceUnit* Unit = WeakThis.Get())
                         {
-                            WeakThis->ActiveAudio.Add(AudioComp);
+                            FVector Location = Unit->GetMassActorLocation();
+                            FRotator Rotation = Unit->GetActorRotation();
+                            if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(Unit->GetWorld(), ImpactSound, Location, Rotation, ScaleSound))
+                            {
+                                Unit->ActiveAudio.Add(AudioComp);
+                            }
                         }
-                    },
+                    }),
                     SoundDelay,
                     false
                 );
@@ -500,7 +502,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
     }
 }
 
-void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation)
+void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation, int32 ID)
 {
     if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
     {
@@ -517,7 +519,7 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
             NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
             if (NiagaraComp)
             {
-                ActiveNiagara.Add(NiagaraComp);
+                ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
             }
         }
 
@@ -540,22 +542,22 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
             TWeakObjectPtr<UAudioComponent> WeakAudioComp = AudioComp;
 
             FTimerHandle TimerHandle;
-            World->GetTimerManager().SetTimer(TimerHandle, [WeakNiagaraComp, WeakAudioComp]()
+            World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakNiagaraComp, WeakAudioComp]()
             {
                 // Safely check if the Niagara component still exists and then clean it up
-                if (WeakNiagaraComp.IsValid())
+                if (UNiagaraComponent* NC = WeakNiagaraComp.Get())
                 {
-                    WeakNiagaraComp->Deactivate();
-                    WeakNiagaraComp->DestroyComponent();
+                    NC->Deactivate();
+                    NC->DestroyComponent();
                 }
                 
                 // Safely check if the Audio component still exists and then clean it up
-                if (WeakAudioComp.IsValid())
+                if (UAudioComponent* AC = WeakAudioComp.Get())
                 {
-                    WeakAudioComp->Stop();
-                    WeakAudioComp->DestroyComponent();
+                    AC->Stop();
+                    AC->DestroyComponent();
                 }
-            }, KillDelay, false);
+            }), KillDelay, false);
 
             PendingEffectTimers.Add(TimerHandle);
         }
@@ -672,6 +674,91 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 		   || IsMyTeam );
 }
 
+void APerformanceUnit::StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime)
+{
+    if (!NC) return;
+    UWorld* World = GetWorld();
+    if (FadeTime > 0.f && World)
+    {
+        NC->Deactivate();
+        FVector InitialScale = NC->GetRelativeScale3D();
+        TWeakObjectPtr<UNiagaraComponent> WeakNC = NC;
+        const float Delays[] = { 0.25f, 0.50f, 0.75f, 0.98f };
+        const float Multipliers[] = { 0.75f, 0.50f, 0.25f, 0.0f };
+
+        for (int32 Step = 0; Step < 4; ++Step)
+        {
+            FTimerHandle H;
+            World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([WeakNC, InitialScale, M = Multipliers[Step]]()
+            {
+                if (UNiagaraComponent* C = WeakNC.Get())
+                {
+                    C->SetRelativeScale3D(InitialScale * M);
+                }
+            }), FadeTime * Delays[Step], false);
+            PendingEffectTimers.Add(H);
+        }
+
+        FTimerHandle DestroyHandle;
+        World->GetTimerManager().SetTimer(DestroyHandle, FTimerDelegate::CreateLambda([WeakNC]()
+        {
+            if (UNiagaraComponent* C = WeakNC.Get())
+            {
+                C->DeactivateImmediate();
+                C->DestroyComponent();
+            }
+        }), FadeTime + 0.01f, false);
+        PendingEffectTimers.Add(DestroyHandle);
+    }
+    else
+    {
+        NC->DeactivateImmediate();
+        NC->DestroyComponent();
+    }
+}
+
+void APerformanceUnit::StopAudioComponent(UAudioComponent* AC, bool bFade, float FadeTime)
+{
+    if (!AC) return;
+    if (bFade && FadeTime > 0.f)
+    {
+        AC->FadeOut(FadeTime, 0.f);
+        if (UWorld* World = GetWorld())
+        {
+            TWeakObjectPtr<UAudioComponent> WeakAC = AC;
+            FTimerHandle DestroyHandle;
+            World->GetTimerManager().SetTimer(DestroyHandle, FTimerDelegate::CreateLambda([WeakAC]()
+            {
+                if (UAudioComponent* SafeAC = WeakAC.Get())
+                {
+                    SafeAC->Stop();
+                    SafeAC->DestroyComponent();
+                }
+            }), FadeTime + 0.01f, false);
+            PendingEffectTimers.Add(DestroyHandle);
+        }
+    }
+    else
+    {
+        AC->Stop();
+        AC->DestroyComponent();
+    }
+}
+
+void APerformanceUnit::StopNiagaraByID_Implementation(int32 ID, float FadeTime)
+{
+    for (int32 i = ActiveNiagara.Num() - 1; i >= 0; --i)
+    {
+        if (ActiveNiagara[i].Id == ID)
+        {
+            if (UNiagaraComponent* NC = ActiveNiagara[i].Component.Get())
+            {
+                StopNiagaraComponent(NC, FadeTime);
+            }
+            ActiveNiagara.RemoveAt(i);
+        }
+    }
+}
 
 void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float FadeTime)
 {
@@ -688,53 +775,9 @@ void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float Fade
     // Stop and destroy VFX
     for (int32 i = ActiveNiagara.Num() - 1; i >= 0; --i)
     {
-        if (UNiagaraComponent* NC = ActiveNiagara[i].Get())
+        if (UNiagaraComponent* NC = ActiveNiagara[i].Component.Get())
         {
-            if (FadeTime > 0.f && World)
-            {
-                // Gracefully stop spawning and let particles die over time
-                NC->Deactivate();
-
-                // Fade out the scale of the component over FadeTime
-                FVector InitialScale = NC->GetRelativeScale3D();
-                TWeakObjectPtr<UNiagaraComponent> WeakNC = NC;
-                auto ScheduleScale = [World, this, WeakNC, InitialScale](float Delay, float Multiplier)
-                {
-                    if (!World) return;
-                    FTimerHandle H;
-                    World->GetTimerManager().SetTimer(H, [WeakNC, InitialScale, Multiplier]()
-                    {
-                        if (UNiagaraComponent* C = WeakNC.Get())
-                        {
-                            C->SetRelativeScale3D(InitialScale * Multiplier);
-                        }
-                    }, FMath::Max(0.f, Delay), false);
-                    PendingEffectTimers.Add(H);
-                };
-
-                // Quarter-step scale downs to zero
-                ScheduleScale(FadeTime * 0.25f, 0.75f);
-                ScheduleScale(FadeTime * 0.50f, 0.50f);
-                ScheduleScale(FadeTime * 0.75f, 0.25f);
-                ScheduleScale(FadeTime * 0.98f, 0.00f);
-
-                // Schedule destruction after the fade window to avoid popping
-                FTimerHandle DestroyHandle;
-                World->GetTimerManager().SetTimer(DestroyHandle, [WeakNC]()
-                {
-                    if (WeakNC.IsValid())
-                    {
-                        WeakNC->DeactivateImmediate();
-                        WeakNC->DestroyComponent();
-                    }
-                }, FadeTime + 0.01f, false);
-                PendingEffectTimers.Add(DestroyHandle);
-            }
-            else
-            {
-                NC->DeactivateImmediate();
-                NC->DestroyComponent();
-            }
+            StopNiagaraComponent(NC, FadeTime);
         }
     }
     ActiveNiagara.Empty();
@@ -744,29 +787,7 @@ void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float Fade
     {
         if (UAudioComponent* AC = ActiveAudio[i].Get())
         {
-            if (bFadeAudio && FadeTime > 0.f)
-            {
-                AC->FadeOut(FadeTime, 0.f);
-                if (World)
-                {
-                    TWeakObjectPtr<UAudioComponent> WeakAC = AC;
-                    FTimerHandle DestroyHandle;
-                    World->GetTimerManager().SetTimer(DestroyHandle, [WeakAC]()
-                    {
-                        if (WeakAC.IsValid())
-                        {
-                            WeakAC->Stop();
-                            WeakAC->DestroyComponent();
-                        }
-                    }, FadeTime + 0.01f, false);
-                    PendingEffectTimers.Add(DestroyHandle);
-                }
-            }
-            else
-            {
-                AC->Stop();
-                AC->DestroyComponent();
-            }
+            StopAudioComponent(AC, bFadeAudio, FadeTime);
         }
     }
     ActiveAudio.Empty();

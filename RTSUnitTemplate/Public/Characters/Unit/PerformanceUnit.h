@@ -19,6 +19,21 @@ class UNiagaraComponent;
 class UAudioComponent;
 struct FTimerHandle;
 
+USTRUCT(BlueprintType)
+struct FActiveNiagaraEffect
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TWeakObjectPtr<UNiagaraComponent> Component;
+
+	UPROPERTY()
+	int32 Id;
+
+	FActiveNiagaraEffect() : Component(nullptr), Id(-1) {}
+	FActiveNiagaraEffect(UNiagaraComponent* InComponent, int32 InId) : Component(InComponent), Id(InId) {}
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase
 {
@@ -168,24 +183,30 @@ public:
 	void HideAbilityIndicator(AAbilityIndicator* AbilityIndicator);
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void FireEffects(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay = 0.f, float SoundDelay = 0.f);
+	void FireEffects(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay = 0.f, float SoundDelay = 0.f, int32 ID = -1);
 
- UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void FireEffectsAtLocation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound,const FVector Location, float KillDelay, FRotator Rotation = FRotator(0.0f, 0.0f, 0.0f));
-	
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void FireEffectsAtLocation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation = FRotator(0.0f, 0.0f, 0.0f), int32 ID = -1);
+
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void StopAllEffects(bool bFadeAudio = true, float FadeTime = 0.15f);
+
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void StopNiagaraByID(int32 ID, float FadeTime = 0.15f);
 		
 	private:
 		
 		UPROPERTY(Transient)
-		TArray<TWeakObjectPtr<UNiagaraComponent>> ActiveNiagara;
+		TArray<FActiveNiagaraEffect> ActiveNiagara;
 		
 		UPROPERTY(Transient)
 		TArray<TWeakObjectPtr<UAudioComponent>> ActiveAudio;
 		
 		UPROPERTY(Transient)
 		TArray<FTimerHandle> PendingEffectTimers;
+
+		void StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime);
+		void StopAudioComponent(UAudioComponent* AC, bool bFade, float FadeTime);
 		
 		UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool IsInViewport(FVector WorldPosition, float Offset);
