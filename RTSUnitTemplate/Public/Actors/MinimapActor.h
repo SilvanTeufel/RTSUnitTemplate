@@ -70,6 +70,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor EnemyUnitColor = FColor(255, 0, 0, 255);
 
+    /** If true, the MapSwitchActor positions will be updated on the minimap. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    bool bLiveUpdateMapSwitcher = false;
+
+    /** The color used to draw MapSwitchActors on the minimap. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
+    FColor MapSwitcherColor = FColor(255, 255, 0, 255);
+
     //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     //float Size = 250.f;
     /** World-space bounds for the minimap. Should match your FogActor's bounds. */

@@ -6,6 +6,8 @@
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Net/UnrealNetwork.h"
+#include "Actors/MapSwitchActor.h"
+#include "EngineUtils.h"
 
 // Sets default values
 AMinimapActor::AMinimapActor()
@@ -189,6 +191,28 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
             const FColor& UnitColor = (UnitTeamIds[i] == TeamId) ? FriendlyUnitColor : EnemyUnitColor;
 
             DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, UnitColor);
+        }
+    }
+
+    // --- Pass 4: Draw MapSwitchActors if enabled ---
+    if (bLiveUpdateMapSwitcher)
+    {
+        for (TActorIterator<AMapSwitchActor> It(GetWorld()); It; ++It)
+        {
+            AMapSwitchActor* SwitchActor = *It;
+            if (SwitchActor)
+            {
+                const FVector WorldPos = SwitchActor->GetActorLocation();
+                const float U = (WorldPos.X - MinimapMinBounds.X) / WorldExtentX;
+                const float V = (WorldPos.Y - MinimapMinBounds.Y) / WorldExtentY;
+                const int32 CenterX = FMath::RoundToInt(U * MinimapTexSize);
+                const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
+
+                const float NormalizedRadius = 45.f / WorldExtentX;
+                const int32 PixelRadius = FMath::Max(2, FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier));
+
+                DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, MapSwitcherColor);
+            }
         }
     }
 
