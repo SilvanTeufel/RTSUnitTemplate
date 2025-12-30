@@ -44,7 +44,9 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     FName DestinationSwitchTagToEnable;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     bool bIsEnabled = true;
 
     UPROPERTY(EditAnywhere, Category = "UI")

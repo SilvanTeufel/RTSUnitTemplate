@@ -80,7 +80,8 @@ void UMapSwitchWidget::OnYesClicked()
     if (PC)
     {
         // Call the RPC on the player controller, which is owned by the client
-        PC->Server_TravelToMap(TargetMapName);
+        FName Tag = OwningActor ? OwningActor->GetDestinationSwitchTagToEnable() : NAME_None;
+        PC->Server_TravelToMap(TargetMapName, Tag);
     }
 
     // The widget can be closed immediately.

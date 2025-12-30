@@ -22,6 +22,7 @@ class UBehaviorTree;
 class UWorld;
 class AUnitBase;
 class AWinLoseConfigActor;
+class ULoadingWidget;
 
 USTRUCT(BlueprintType)
 struct FTimerHandleMapping
@@ -79,11 +80,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int GatherControllerTimer = 2.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
+	TSubclassOf<class ULoadingWidget> LoadingWidgetClass;
+
 	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
 	AWinLoseConfigActor* WinLoseConfigActor;
 
+	bool bWinLoseTriggered = false;
+
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
-	void CheckWinLoseCondition(AUnitBase* DestroyedUnit);
+	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);

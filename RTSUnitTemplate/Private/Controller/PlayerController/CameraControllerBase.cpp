@@ -5,6 +5,7 @@
 #include "UnrealClient.h"
 #include "Characters/Unit/UnitBase.h" // Include UnitBase for the RPC
 #include "Widgets/WinLoseWidget.h"
+#include "Widgets/LoadingWidget.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Blueprint/UserWidget.h"
 
@@ -42,11 +43,25 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(AUnit
 }
 
 
-void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& MapName)
+#include "Engine/GameInstance.h"
+#include "System/MapSwitchSubsystem.h"
+
+void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& MapName, FName TagToEnable)
 {
 	// This code now runs on the SERVER
 	if (HasAuthority())
 	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+			{
+				if (TagToEnable != NAME_None && !MapName.IsEmpty())
+				{
+					MapSwitchSub->MarkSwitchEnabledForMap(MapName, TagToEnable);
+				}
+			}
+		}
+
 		if (!MapName.IsEmpty())
 		{
 			GetWorld()->ServerTravel(MapName);
@@ -69,6 +84,20 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 		{
 			WinLoseWidget->SetupWidget(bWon, InMapName, DestinationSwitchTagToEnable);
 			WinLoseWidget->AddToViewport();
+		}
+	}
+}
+
+void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime)
+{
+	GameTimerStartTime = InTargetTime;
+	if (InClass && InTargetTime > GetWorld()->GetTimeSeconds())
+	{
+		ULoadingWidget* LoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
+		if (LoadingWidget)
+		{
+			LoadingWidget->SetupLoadingWidget(InTargetTime);
+			LoadingWidget->AddToViewport(9999);
 		}
 	}
 }

@@ -7,6 +7,7 @@
 #include "Characters/Camera/CameraBase.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Widgets/WinLoseWidget.h"
+#include "Widgets/LoadingWidget.h"
 #include "EngineUtils.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Hud/PathProviderHUD.h"
@@ -60,6 +61,9 @@ void ARTSGameModeBase::BeginPlay()
 	
 }
 
+#include "System/MapSwitchSubsystem.h"
+#include "Engine/GameInstance.h"
+
 void ARTSGameModeBase::DataTableTimerStart()
 {
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
@@ -67,15 +71,32 @@ void ARTSGameModeBase::DataTableTimerStart()
 
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (!DestroyedUnit || !WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None) return;
+	if (GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 5.f) return;
+	if (bWinLoseTriggered) return;
+	if (!WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None) return;
 
 	TArray<ABuildingBase*> AllBuildings;
-	for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+	if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 	{
-		ABuildingBase* Building = *It;
-		if (Building && Building != DestroyedUnit && Building->GetUnitState() != UnitData::Dead)
+		for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
 		{
-			AllBuildings.Add(Building);
+			ABuildingBase* Building = *It;
+			if (Building && Building != DestroyedUnit && Building->GetUnitState() != UnitData::Dead)
+			{
+				AllBuildings.Add(Building);
+			}
+		}
+	}
+
+	FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+		{
+			if (WinLoseConfigActor->DestinationSwitchTagToEnable != NAME_None && !TargetMapName.IsEmpty())
+			{
+				MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+			}
 		}
 	}
 
@@ -103,21 +124,22 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				}
 			}
 
-			FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
 			if (!bFriendlyBuildingsExist)
 			{
+				bWinLoseTriggered = true;
 				PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
 			}
 			else if (!bEnemyBuildingsExist)
 			{
+				bWinLoseTriggered = true;
 				PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
 			}
 		}
 		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
 		{
-			if (DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
+			if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
 			{
-				FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+				bWinLoseTriggered = true;
 				if (DestroyedUnit->TeamId == PlayerTeamId)
 				{
 					PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
@@ -126,6 +148,15 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				{
 					PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
 				}
+			}
+		}
+		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TeamReachedGameTime)
+		{
+			if (GetWorld()->GetTimeSeconds() >= WinLoseConfigActor->TargetGameTime)
+			{
+				bWinLoseTriggered = true;
+				bool bWon = (PlayerTeamId == WinLoseConfigActor->TeamId);
+				PC->Client_TriggerWinLoseUI(bWon, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
 			}
 		}
 	}
@@ -218,6 +249,11 @@ void ARTSGameModeBase::NavInitialisation()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+
+	if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
+	{
+		PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
+	}
 }
 
 void ARTSGameModeBase::ApplyCustomizationsFromPlayerStart(APlayerController* PC, const APlayerStartBase* CustomStart)

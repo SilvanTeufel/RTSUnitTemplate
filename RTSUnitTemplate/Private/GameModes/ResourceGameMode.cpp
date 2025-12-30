@@ -6,12 +6,17 @@
 #include "GameFramework/Actor.h"
 #include "EngineUtils.h" // For TActorIterator
 #include "Actors/WorkArea.h"
+#include "Actors/WinLoseConfigActor.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Controller/AIController/BuildingControllerBase.h"
 #include "Controller/AIController/WorkerUnitControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
 
+
+#include "System/MapSwitchSubsystem.h"
+#include "Engine/GameInstance.h"
 
 AResourceGameMode::AResourceGameMode()
 {
@@ -35,6 +40,63 @@ void AResourceGameMode::BeginPlay()
 		RGState->SetTeamResources(TeamResources); 
 	}
 	//AssignWorkAreasToWorkers();
+
+	FTimerHandle WinLoseTimerHandle;
+	GetWorldTimerManager().SetTimer(WinLoseTimerHandle, this, &AResourceGameMode::CheckWinLoseConditionTimer, 1.0f, true);
+}
+
+void AResourceGameMode::CheckWinLoseConditionTimer()
+{
+	CheckWinLoseCondition(nullptr);
+}
+
+void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
+{
+	if (GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 5.f) return;
+	if (bWinLoseTriggered) return;
+	Super::CheckWinLoseCondition(DestroyedUnit);
+	if (bWinLoseTriggered) return;
+
+	if (!WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition != EWinLoseCondition::TeamReachedResourceCount) return;
+
+	int32 TargetTeamId = WinLoseConfigActor->TeamId;
+	const FBuildingCost& TargetResources = WinLoseConfigActor->TargetResourceCount;
+
+	bool bReached = true;
+	if (GetResource(TargetTeamId, EResourceType::Primary) < TargetResources.PrimaryCost) bReached = false;
+	if (GetResource(TargetTeamId, EResourceType::Secondary) < TargetResources.SecondaryCost) bReached = false;
+	if (GetResource(TargetTeamId, EResourceType::Tertiary) < TargetResources.TertiaryCost) bReached = false;
+	if (GetResource(TargetTeamId, EResourceType::Rare) < TargetResources.RareCost) bReached = false;
+	if (GetResource(TargetTeamId, EResourceType::Epic) < TargetResources.EpicCost) bReached = false;
+	if (GetResource(TargetTeamId, EResourceType::Legendary) < TargetResources.LegendaryCost) bReached = false;
+
+	if (bReached)
+	{
+		bWinLoseTriggered = true;
+		FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+			{
+				if (WinLoseConfigActor->DestinationSwitchTagToEnable != NAME_None && !TargetMapName.IsEmpty())
+				{
+					MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+				}
+			}
+		}
+
+		for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+		{
+			ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+			if (!PC) continue;
+
+			int32 PlayerTeamId = PC->SelectableTeamId;
+
+			bool bWon = (PlayerTeamId == TargetTeamId);
+			PC->Client_TriggerWinLoseUI(bWon, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+		}
+	}
 }
 
 void AResourceGameMode::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -144,6 +206,7 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 	{
 		RGState->SetTeamResources(TeamResources);
 	}
+	CheckWinLoseCondition();
 }
 
 bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const
@@ -415,6 +478,8 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 	{
 		RGState->SetTeamResources(TeamResources);
 	}
+
+	CheckWinLoseCondition();
 
 	return true;
 }

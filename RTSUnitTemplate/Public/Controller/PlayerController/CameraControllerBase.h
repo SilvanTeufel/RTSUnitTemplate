@@ -8,6 +8,8 @@
 #include "Controller/Input/EnhancedInputComponentBase.h"
 #include "CameraControllerBase.generated.h"
 
+class ULoadingWidget;
+
 /**
  * 
  */
@@ -18,7 +20,7 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	
 	public:
 	UFUNCTION(Server, Reliable)
-	void Server_TravelToMap(const FString& MapName);
+	void Server_TravelToMap(const FString& MapName, FName TagToEnable = NAME_None);
 
 
 	UFUNCTION(Server, Reliable, WithValidation)
@@ -29,6 +31,9 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	
 	UFUNCTION(Client, Reliable)
 	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
+
+	UFUNCTION(Client, Reliable)
+	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime);
 
 	ACameraControllerBase();
 
@@ -84,6 +89,9 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CalcControlTimer;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float GameTimerStartTime = 0.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float OrbitAndMovePauseTime = 5.f;

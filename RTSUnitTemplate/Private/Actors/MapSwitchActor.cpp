@@ -13,6 +13,14 @@
 
 #define LOCTEXT_NAMESPACE "MapSwitchActor"
 
+#include "Net/UnrealNetwork.h"
+
+void AMapSwitchActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AMapSwitchActor, bIsEnabled);
+}
+
 AMapSwitchActor::AMapSwitchActor()
 {
     PrimaryActorTick.bCanEverTick = true;

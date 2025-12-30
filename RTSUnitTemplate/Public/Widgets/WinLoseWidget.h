@@ -32,4 +32,5 @@ protected:
 	bool bWon;
 	FString TargetMapName;
 	FName DestinationSwitchTagToEnable;
+	bool bAlreadyClicked = false;
 };

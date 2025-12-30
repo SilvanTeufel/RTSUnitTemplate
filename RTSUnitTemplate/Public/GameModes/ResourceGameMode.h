@@ -148,5 +148,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAllCurrentWorkers(int TeamId);
-	
+
+	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr) override;
+
+private:
+	void CheckWinLoseConditionTimer();
 };

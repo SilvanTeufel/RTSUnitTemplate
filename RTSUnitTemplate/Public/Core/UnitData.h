@@ -60,7 +60,9 @@ enum class EWinLoseCondition : uint8
 {
 	None,
 	AllBuildingsDestroyed,
-	TaggedUnitDestroyed
+	TaggedUnitDestroyed,
+	TeamReachedResourceCount,
+	TeamReachedGameTime
 };
 
 UENUM()

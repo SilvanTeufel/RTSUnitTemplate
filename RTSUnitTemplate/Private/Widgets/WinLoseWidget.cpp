@@ -36,6 +36,9 @@ void UWinLoseWidget::NativeConstruct()
 
 void UWinLoseWidget::OnOkClicked()
 {
+	if (bAlreadyClicked) return;
+	bAlreadyClicked = true;
+
 	if (OkButton)
 	{
 		OkButton->SetIsEnabled(false);
@@ -60,6 +63,6 @@ void UWinLoseWidget::OnOkClicked()
 	ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer());
 	if (PC && !TargetMapName.IsEmpty())
 	{
-		PC->Server_TravelToMap(TargetMapName);
+		PC->Server_TravelToMap(TargetMapName, DestinationSwitchTagToEnable);
 	}
 }
