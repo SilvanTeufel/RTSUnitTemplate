@@ -691,7 +691,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if (!bIsAttackingOrPaused)
+            else if (!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Casting)
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
