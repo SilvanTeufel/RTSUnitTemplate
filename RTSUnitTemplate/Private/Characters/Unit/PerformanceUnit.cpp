@@ -109,6 +109,26 @@ void APerformanceUnit::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (bForceWidgetPosition)
+	{
+		float CapsuleHalfHeight = 88.f;
+		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+		{
+			CapsuleHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+		}
+
+		if (HealthWidgetComp)
+		{
+			HealthWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + HealthWidgetHeightOffset);
+			HealthWidgetComp->SetRelativeLocation(HealthWidgetRelativeOffset);
+		}
+
+		if (TimerWidgetComp)
+		{
+			TimerWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + TimerWidgetHeightOffset);
+			TimerWidgetComp->SetRelativeLocation(TimerWidgetRelativeOffset);
+		}
+	}
 }
 
 void APerformanceUnit::Destroyed()
