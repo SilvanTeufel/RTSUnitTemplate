@@ -6,6 +6,8 @@
 #include "Core/UnitData.h"
 #include "WinLoseConfigActor.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnWinLoseEvent);
+
 UCLASS()
 class RTSUNITTEMPLATE_API AWinLoseConfigActor : public AActor
 {
@@ -13,6 +15,15 @@ class RTSUNITTEMPLATE_API AWinLoseConfigActor : public AActor
 	
 public:	
 	AWinLoseConfigActor();
+
+	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|WinLose")
+	FOnWinLoseEvent OnYouWonTheGame;
+
+	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|WinLose")
+	FOnWinLoseEvent OnYouLostTheGame;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	float WinLoseDelay = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	EWinLoseCondition WinLoseCondition = EWinLoseCondition::None;

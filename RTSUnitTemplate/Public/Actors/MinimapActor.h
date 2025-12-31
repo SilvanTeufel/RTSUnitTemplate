@@ -54,6 +54,10 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     float DotMultiplier = 1.f;
+
+    /** The delay before capturing the map topography. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    float DelayTime = 1.f;
     /** The background color of the map where fog of war is not active. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor BackgroundColor = FColor(50, 60, 50, 255);
@@ -117,4 +121,6 @@ private:
     /** The raw pixel data for the minimap texture. */
     UPROPERTY()
     TArray<FColor> MinimapPixels;
+
+    FTimerHandle CaptureTimerHandle;
 };

@@ -27,22 +27,15 @@ bool UStoryTriggerComponent::ShouldTrigger(float ChancePercent) const
 	return Roll < Clamped;
 }
 
-bool UStoryTriggerComponent::BuildQueueItemFromRandomRow(FStoryQueueItem& OutItem) const
+bool UStoryTriggerComponent::BuildQueueItemFromRow(FName RowName, FStoryQueueItem& OutItem) const
 {
 	if (!StoryDataTable)
 	{
 		return false;
 	}
 
-	const TArray<FName> RowNames = StoryDataTable->GetRowNames();
-	if (RowNames.Num() == 0)
-	{
-		return false;
-	}
-
-	const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
-	static const FString Context(TEXT("StoryTriggerComponent_Random"));
-	if (const FStoryWidgetTable* Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowNames[Index], Context, true))
+	static const FString Context(TEXT("StoryTriggerComponent_Row"));
+	if (const FStoryWidgetTable* Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowName, Context, true))
 	{
 		OutItem.WidgetClass = Row->StoryWidgetClass;
 		OutItem.Text = Row->StoryText;
@@ -59,6 +52,23 @@ bool UStoryTriggerComponent::BuildQueueItemFromRandomRow(FStoryQueueItem& OutIte
 	return false;
 }
 
+bool UStoryTriggerComponent::BuildQueueItemFromRandomRow(FStoryQueueItem& OutItem) const
+{
+	if (!StoryDataTable)
+	{
+		return false;
+	}
+
+	const TArray<FName> RowNames = StoryDataTable->GetRowNames();
+	if (RowNames.Num() == 0)
+	{
+		return false;
+	}
+
+	const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
+	return BuildQueueItemFromRow(RowNames[Index], OutItem);
+}
+
 void UStoryTriggerComponent::TryTriggerRandom(float ChancePercent)
 {
 	if (!ShouldTrigger(ChancePercent))
@@ -68,6 +78,26 @@ void UStoryTriggerComponent::TryTriggerRandom(float ChancePercent)
 
 	FStoryQueueItem Item;
 	if (!BuildQueueItemFromRandomRow(Item))
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
+			{
+				Queue->EnqueueStory(Item);
+			}
+		}
+	}
+}
+
+void UStoryTriggerComponent::TriggerSpecific(FName RowName)
+{
+	FStoryQueueItem Item;
+	if (!BuildQueueItemFromRow(RowName, Item))
 	{
 		return;
 	}

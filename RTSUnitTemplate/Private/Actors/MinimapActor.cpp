@@ -8,6 +8,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Actors/MapSwitchActor.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 
 // Sets default values
 AMinimapActor::AMinimapActor()
@@ -56,7 +57,15 @@ void AMinimapActor::BeginPlay()
 
     
     InitMinimapTexture();
-    CaptureMapTopography();
+    
+    if (DelayTime > 0.f)
+    {
+        GetWorldTimerManager().SetTimer(CaptureTimerHandle, this, &AMinimapActor::CaptureMapTopography, DelayTime, false);
+    }
+    else
+    {
+        CaptureMapTopography();
+    }
 }
 
 
@@ -86,6 +95,12 @@ void AMinimapActor::CaptureMapTopography()
     
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APickup::StaticClass(), ActorsToHide);
     SceneCaptureComponent->HiddenActors.Append(ActorsToHide);
+
+    if (bLiveUpdateMapSwitcher)
+    {
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMapSwitchActor::StaticClass(), ActorsToHide);
+        SceneCaptureComponent->HiddenActors.Append(ActorsToHide);
+    }
     // 2. Erstelle das Render Target (die "Leinwand" für unser Foto)
     TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
     if (TopographyRenderTarget)

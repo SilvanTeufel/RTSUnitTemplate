@@ -100,12 +100,17 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		}
 	}
 
+	bool bAnyWon = false;
+	bool bAnyLost = false;
+
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
 		ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
 		if (!PC) continue;
 
 		int32 PlayerTeamId = PC->SelectableTeamId;
+		bool bLocalTriggered = false;
+		bool bWon = false;
 
 		if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 		{
@@ -126,27 +131,27 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 
 			if (!bFriendlyBuildingsExist)
 			{
-				bWinLoseTriggered = true;
-				PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
+				bLocalTriggered = true;
+				bWon = false;
 			}
 			else if (!bEnemyBuildingsExist)
 			{
-				bWinLoseTriggered = true;
-				PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
+				bLocalTriggered = true;
+				bWon = true;
 			}
 		}
 		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
 		{
 			if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
 			{
-				bWinLoseTriggered = true;
+				bLocalTriggered = true;
 				if (DestroyedUnit->TeamId == PlayerTeamId)
 				{
-					PC->Client_TriggerWinLoseUI(false, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Lose
+					bWon = false;
 				}
 				else
 				{
-					PC->Client_TriggerWinLoseUI(true, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable); // Win
+					bWon = true;
 				}
 			}
 		}
@@ -154,12 +159,32 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		{
 			if (GetWorld()->GetTimeSeconds() >= WinLoseConfigActor->TargetGameTime)
 			{
-				bWinLoseTriggered = true;
-				bool bWon = (PlayerTeamId == WinLoseConfigActor->TeamId);
-				PC->Client_TriggerWinLoseUI(bWon, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+				bLocalTriggered = true;
+				bWon = (PlayerTeamId == WinLoseConfigActor->TeamId);
 			}
 		}
+
+		if (bLocalTriggered)
+		{
+			bWinLoseTriggered = true;
+			if (bWon) bAnyWon = true; else bAnyLost = true;
+
+			TWeakObjectPtr<ACameraControllerBase> WeakPC = PC;
+			TSubclassOf<UWinLoseWidget> WidgetClass = WinLoseConfigActor->WinLoseWidgetClass;
+			FName Tag = WinLoseConfigActor->DestinationSwitchTagToEnable;
+
+			GetWorldTimerManager().SetTimer(PC->WinLoseTimerHandle, [WeakPC, bWon, WidgetClass, TargetMapName, Tag]()
+			{
+				if (ACameraControllerBase* StrongPC = WeakPC.Get())
+				{
+					StrongPC->Client_TriggerWinLoseUI(bWon, WidgetClass, TargetMapName, Tag);
+				}
+			}, WinLoseConfigActor->WinLoseDelay, false);
+		}
 	}
+
+	if (bAnyWon) WinLoseConfigActor->OnYouWonTheGame.Broadcast();
+	if (bAnyLost) WinLoseConfigActor->OnYouLostTheGame.Broadcast();
 }
 
 void ARTSGameModeBase::Multicast_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)

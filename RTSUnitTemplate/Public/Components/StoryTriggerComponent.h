@@ -27,7 +27,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Story")
 	void TryTriggerRandom(float ChancePercent = 100.f);
 
+	// Attempt to open a specific story from the DataTable by Row Name (ID)
+	UFUNCTION(BlueprintCallable, Category = "Story")
+	void TriggerSpecific(FName RowName);
+
 private:
 	bool ShouldTrigger(float ChancePercent) const;
+	bool BuildQueueItemFromRow(FName RowName, struct FStoryQueueItem& OutItem) const;
 	bool BuildQueueItemFromRandomRow(struct FStoryQueueItem& OutItem) const;
 };

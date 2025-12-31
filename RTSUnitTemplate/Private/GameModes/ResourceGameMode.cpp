@@ -86,6 +86,9 @@ void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			}
 		}
 
+		bool bAnyWon = false;
+		bool bAnyLost = false;
+
 		for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 		{
 			ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
@@ -94,8 +97,23 @@ void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			int32 PlayerTeamId = PC->SelectableTeamId;
 
 			bool bWon = (PlayerTeamId == TargetTeamId);
-			PC->Client_TriggerWinLoseUI(bWon, WinLoseConfigActor->WinLoseWidgetClass, TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+			if (bWon) bAnyWon = true; else bAnyLost = true;
+
+			TWeakObjectPtr<ACameraControllerBase> WeakPC = PC;
+			TSubclassOf<UWinLoseWidget> WidgetClass = WinLoseConfigActor->WinLoseWidgetClass;
+			FName Tag = WinLoseConfigActor->DestinationSwitchTagToEnable;
+
+			GetWorldTimerManager().SetTimer(PC->WinLoseTimerHandle, [WeakPC, bWon, WidgetClass, TargetMapName, Tag]()
+			{
+				if (ACameraControllerBase* StrongPC = WeakPC.Get())
+				{
+					StrongPC->Client_TriggerWinLoseUI(bWon, WidgetClass, TargetMapName, Tag);
+				}
+			}, WinLoseConfigActor->WinLoseDelay, false);
 		}
+
+		if (bAnyWon) WinLoseConfigActor->OnYouWonTheGame.Broadcast();
+		if (bAnyLost) WinLoseConfigActor->OnYouLostTheGame.Broadcast();
 	}
 }
 
