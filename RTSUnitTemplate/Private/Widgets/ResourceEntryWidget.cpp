@@ -26,9 +26,10 @@ void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 	WorkerCountText->SetText(FText::AsNumber(NewWorkerCount));
 }
 
-void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId, UTexture2D* InIconTexture)
+void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId, UTexture2D* InIconTexture, float InMaxResourceAmount, bool bInIsSupplyLike, bool bInCollapseWorkerUI)
 {
 	ResourceType = InResourceType;
+	bCollapseWorkerUI = bInCollapseWorkerUI;
 
 	if (ResourceNameText)
 	{
@@ -40,7 +41,17 @@ void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const F
 		const int32 Decimals = FMath::Clamp(ResourceAmountDecimalPlaces, 0, 6);
 		FormatOptions.MinimumFractionalDigits = Decimals;
 		FormatOptions.MaximumFractionalDigits = Decimals;
-		ResourceAmountText->SetText(FText::AsNumber(InResourceAmount, &FormatOptions));
+
+		if (bInIsSupplyLike)
+		{
+			FText AmountText = FText::AsNumber(InResourceAmount, &FormatOptions);
+			FText MaxAmountText = FText::AsNumber(InMaxResourceAmount, &FormatOptions);
+			ResourceAmountText->SetText(FText::Format(FText::FromString("{0} / {1}"), AmountText, MaxAmountText));
+		}
+		else
+		{
+			ResourceAmountText->SetText(FText::AsNumber(InResourceAmount, &FormatOptions));
+		}
 	}
 	if (WorkerCountText)
 	{
@@ -60,6 +71,12 @@ void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const F
 		}
 	}
 
-	TeamId = PlayerTeamId;	
+	TeamId = PlayerTeamId;
+
+	// Handle collapse
+	ESlateVisibility WorkerVisibility = bCollapseWorkerUI ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+	if (WorkerCountText) WorkerCountText->SetVisibility(WorkerVisibility);
+	if (AddWorkerButton) AddWorkerButton->SetVisibility(WorkerVisibility);
+	if (RemoveWorkerButton) RemoveWorkerButton->SetVisibility(WorkerVisibility);
 }
 

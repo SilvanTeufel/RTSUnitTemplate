@@ -38,6 +38,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
 	TArray<int> MaxWorkers;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resources")
+	TArray<float> MaxResources;
+
 	// Default constructor
 	FResourceArray()
 		: ResourceType(EResourceType::Primary) // Default value, adjust as needed
@@ -51,6 +55,7 @@ public:
 		Resources.Init(0.0f, Size);
 		CurrentWorkers.Init(0.0f, Size);
 		MaxWorkers.Init(0.0f, Size);
+		MaxResources.Init(0.0f, Size);
 	}
 };
 

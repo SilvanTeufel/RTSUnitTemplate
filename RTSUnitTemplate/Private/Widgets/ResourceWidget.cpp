@@ -9,6 +9,15 @@
 #include "Engine/Engine.h" // For UEnum
 #include "Engine/Texture2D.h"
 
+UResourceWidget::UResourceWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    // Set default collapse behavior for specific resources
+    ResourceWorkerUICollapseOverrides.Add(EResourceType::Rare, true);
+    ResourceWorkerUICollapseOverrides.Add(EResourceType::Epic, true);
+    ResourceWorkerUICollapseOverrides.Add(EResourceType::Legendary, true);
+}
+
 void UResourceWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -77,7 +86,9 @@ void UResourceWidget::PopulateResourceList()
         if (EntryWidget)
         {
             float ResourceAmount = ResourceArray.Resources.IsValidIndex(TeamId) ? ResourceArray.Resources[TeamId] : 0.0f;
+            float MaxResourceAmount = ResourceArray.MaxResources.IsValidIndex(TeamId) ? ResourceArray.MaxResources[TeamId] : 0.0f;
             int32 WorkerCount = ResourceArray.MaxWorkers.IsValidIndex(TeamId) ? ResourceArray.MaxWorkers[TeamId] : 0;
+            bool bIsSupplyLike = ResourceGameState->IsSupplyLike.IsValidIndex(static_cast<int32>(ResourceArray.ResourceType)) ? ResourceGameState->IsSupplyLike[static_cast<int32>(ResourceArray.ResourceType)] : false;
 
             // Name override or default from enum
             FText ResourceName = ResourceDisplayNames.Contains(ResourceArray.ResourceType)
@@ -88,8 +99,12 @@ void UResourceWidget::PopulateResourceList()
             UTexture2D* const* FoundIcon = ResourceIcons.Find(ResourceArray.ResourceType);
             UTexture2D* IconTexture = FoundIcon ? *FoundIcon : nullptr;
 
+            // Get collapse override or default to false
+            const bool* bShouldCollapseOverride = ResourceWorkerUICollapseOverrides.Find(ResourceArray.ResourceType);
+            bool bCollapseWorkerUI = bShouldCollapseOverride ? *bShouldCollapseOverride : false;
+
             // Set the data on the new widget
-            EntryWidget->SetResourceData(ResourceArray.ResourceType, ResourceName, ResourceAmount, WorkerCount, TeamId, IconTexture);
+            EntryWidget->SetResourceData(ResourceArray.ResourceType, ResourceName, ResourceAmount, WorkerCount, TeamId, IconTexture, MaxResourceAmount, bIsSupplyLike, bCollapseWorkerUI);
 
             // Add the newly created widget to our vertical box
             ResourceEntriesBox->AddChild(EntryWidget);
@@ -129,7 +144,10 @@ void UResourceWidget::UpdateWidget()
             {
                 const FResourceArray* ResourceArray = *FoundData;
                 const float ResourceAmount = ResourceArray->Resources.IsValidIndex(TeamId) ? ResourceArray->Resources[TeamId] : 0.0f;
+                const float MaxResourceAmount = ResourceArray->MaxResources.IsValidIndex(TeamId) ? ResourceArray->MaxResources[TeamId] : 0.0f;
                 const int32 WorkerCount = ResourceArray->MaxWorkers.IsValidIndex(TeamId) ? ResourceArray->MaxWorkers[TeamId] : 0;
+                const bool bIsSupplyLike = ResourceGameState->IsSupplyLike.IsValidIndex(static_cast<int32>(ResourceArray->ResourceType)) ? ResourceGameState->IsSupplyLike[static_cast<int32>(ResourceArray->ResourceType)] : false;
+
                 // Name override or default
                 FText ResourceNameText = ResourceDisplayNames.Contains(ResourceArray->ResourceType)
                     ? ResourceDisplayNames[ResourceArray->ResourceType]
@@ -138,8 +156,12 @@ void UResourceWidget::UpdateWidget()
                 // Icon override
                 UTexture2D* const* FoundIcon = ResourceIcons.Find(ResourceArray->ResourceType);
                 UTexture2D* IconTexture = FoundIcon ? *FoundIcon : nullptr;
+
+                // Get collapse override or default to false
+                const bool* bShouldCollapseOverride = ResourceWorkerUICollapseOverrides.Find(ResourceArray->ResourceType);
+                bool bCollapseWorkerUI = bShouldCollapseOverride ? *bShouldCollapseOverride : false;
                 
-                Entry->SetResourceData(ResourceArray->ResourceType, ResourceNameText, ResourceAmount, WorkerCount, TeamId, IconTexture);
+                Entry->SetResourceData(ResourceArray->ResourceType, ResourceNameText, ResourceAmount, WorkerCount, TeamId, IconTexture, MaxResourceAmount, bIsSupplyLike, bCollapseWorkerUI);
             }
         }
     }

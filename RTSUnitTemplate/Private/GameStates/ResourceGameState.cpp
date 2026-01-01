@@ -7,8 +7,8 @@
 void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
 	DOREPLIFETIME(AResourceGameState, TeamResources);
+	DOREPLIFETIME(AResourceGameState, IsSupplyLike);
 }
 
 void AResourceGameState::OnRep_TeamResources()

@@ -70,6 +70,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	int MaxBuildAreasToSet = 15;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
+	float HighestMaxResource = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
+	TMap<EResourceType, bool> SupplyLikeResources;
 	
 	// Helper function to initialize resource arrays
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -108,6 +114,18 @@ public:
 	// Function to modify a resource for a specific team
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ModifyResource(EResourceType ResourceType, int32 TeamId, float Amount);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void ModifyMaxResource(EResourceType ResourceType, int32 TeamId, float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void IncreaseMaxResources(const FBuildingCost& CapacityIncrease, int32 TeamId);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DecreaseMaxResources(const FBuildingCost& CapacityDecrease, int32 TeamId);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetMaxResource(EResourceType ResourceType, int TeamId);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId);

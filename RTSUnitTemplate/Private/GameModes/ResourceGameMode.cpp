@@ -129,10 +129,22 @@ void AResourceGameMode::InitializeResources(int32 InNumberOfTeams)
 	NumberOfTeams = InNumberOfTeams;
 	TeamResources.Empty();
 
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->IsSupplyLike.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+	}
+
 	for(int32 ResourceTypeIndex = 0; ResourceTypeIndex < static_cast<int32>(EResourceType::MAX); ++ResourceTypeIndex)
 	{
 		EResourceType ResourceType = static_cast<EResourceType>(ResourceTypeIndex);
 		TeamResources.Add(FResourceArray(ResourceType, NumberOfTeams));
+
+		if (RGState)
+		{
+			bool bIsSupply = SupplyLikeResources.Contains(ResourceType) ? SupplyLikeResources[ResourceType] : false;
+			RGState->IsSupplyLike[ResourceTypeIndex] = bIsSupply;
+		}
 	}
 }
 void AResourceGameMode::GatherBases()
@@ -213,7 +225,15 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 		{
 			if (TeamId >= 0 && TeamId < ResourceArray.Resources.Num())
 			{
-				ResourceArray.Resources[TeamId] += Amount;
+				bool bIsSupply = SupplyLikeResources.Contains(ResourceType) ? SupplyLikeResources[ResourceType] : false;
+				if (bIsSupply)
+				{
+					ResourceArray.Resources[TeamId] -= Amount; // Inverted logic for Supply
+				}
+				else
+				{
+					ResourceArray.Resources[TeamId] += Amount;
+				}
 				break; // Exit once the correct resource type is modified
 			}
 		}
@@ -225,6 +245,62 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 		RGState->SetTeamResources(TeamResources);
 	}
 	CheckWinLoseCondition();
+}
+
+void AResourceGameMode::ModifyMaxResource_Implementation(EResourceType ResourceType, int32 TeamId, float Amount)
+{
+	for (FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.ResourceType == ResourceType)
+		{
+			if (ResourceArray.MaxResources.IsValidIndex(TeamId))
+			{
+				ResourceArray.MaxResources[TeamId] = FMath::Clamp(ResourceArray.MaxResources[TeamId] + Amount, 0.0f, HighestMaxResource);
+				break;
+			}
+		}
+	}
+
+	AResourceGameState* RGState = GetGameState<AResourceGameState>();
+	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources);
+	}
+}
+
+void AResourceGameMode::IncreaseMaxResources(const FBuildingCost& CapacityIncrease, int32 TeamId)
+{
+	ModifyMaxResource(EResourceType::Primary, TeamId, (float)CapacityIncrease.PrimaryCost);
+	ModifyMaxResource(EResourceType::Secondary, TeamId, (float)CapacityIncrease.SecondaryCost);
+	ModifyMaxResource(EResourceType::Tertiary, TeamId, (float)CapacityIncrease.TertiaryCost);
+	ModifyMaxResource(EResourceType::Rare, TeamId, (float)CapacityIncrease.RareCost);
+	ModifyMaxResource(EResourceType::Epic, TeamId, (float)CapacityIncrease.EpicCost);
+	ModifyMaxResource(EResourceType::Legendary, TeamId, (float)CapacityIncrease.LegendaryCost);
+}
+
+void AResourceGameMode::DecreaseMaxResources(const FBuildingCost& CapacityDecrease, int32 TeamId)
+{
+	ModifyMaxResource(EResourceType::Primary, TeamId, -(float)CapacityDecrease.PrimaryCost);
+	ModifyMaxResource(EResourceType::Secondary, TeamId, -(float)CapacityDecrease.SecondaryCost);
+	ModifyMaxResource(EResourceType::Tertiary, TeamId, -(float)CapacityDecrease.TertiaryCost);
+	ModifyMaxResource(EResourceType::Rare, TeamId, -(float)CapacityDecrease.RareCost);
+	ModifyMaxResource(EResourceType::Epic, TeamId, -(float)CapacityDecrease.EpicCost);
+	ModifyMaxResource(EResourceType::Legendary, TeamId, -(float)CapacityDecrease.LegendaryCost);
+}
+
+float AResourceGameMode::GetMaxResource(EResourceType ResourceType, int TeamId)
+{
+	for (const FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.ResourceType == ResourceType)
+		{
+			if (ResourceArray.MaxResources.IsValidIndex(TeamId))
+			{
+				return ResourceArray.MaxResources[TeamId];
+			}
+		}
+	}
+	return 0.0f;
 }
 
 bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const
@@ -254,9 +330,20 @@ bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionC
 		int32 ResourceAmount = ResourceArray.Resources[TeamId];
 
 		// Check if the team has enough resources of the current type
-		if (Costs.Contains(ResourceArray.ResourceType) && ResourceAmount < Costs[ResourceArray.ResourceType])
+		if (Costs.Contains(ResourceArray.ResourceType))
 		{
-			return false; // Not enough resources of this type
+			bool bIsSupply = SupplyLikeResources.Contains(ResourceArray.ResourceType) ? SupplyLikeResources[ResourceArray.ResourceType] : false;
+			if (bIsSupply)
+			{
+				if (ResourceAmount + Costs[ResourceArray.ResourceType] > ResourceArray.MaxResources[TeamId])
+				{
+					return false;
+				}
+			}
+			else if (ResourceAmount < Costs[ResourceArray.ResourceType])
+			{
+				return false; // Not enough resources of this type
+			}
 		}
 	}
 
@@ -486,7 +573,15 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 			}
 
 			// Now allowed to modify
-			ResourceArray.Resources[TeamId] -= CostMap[ResourceArray.ResourceType];
+			bool bIsSupply = SupplyLikeResources.Contains(ResourceArray.ResourceType) ? SupplyLikeResources[ResourceArray.ResourceType] : false;
+			if (bIsSupply)
+			{
+				ResourceArray.Resources[TeamId] += CostMap[ResourceArray.ResourceType];
+			}
+			else
+			{
+				ResourceArray.Resources[TeamId] -= CostMap[ResourceArray.ResourceType];
+			}
 		}
 	}
 

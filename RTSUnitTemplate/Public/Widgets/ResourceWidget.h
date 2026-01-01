@@ -19,6 +19,8 @@ class RTSUNITTEMPLATE_API UResourceWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UResourceWidget(const FObjectInitializer& ObjectInitializer);
+
 	virtual void NativeConstruct() override;
     
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -67,4 +69,8 @@ public:
 	// If > 0, limit how many resource entries are populated
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Behavior")
 	int32 MaxResourcesToDisplay = -1;
+
+	// Optional per-resource worker UI collapse overrides
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Behavior")
+	TMap<EResourceType, bool> ResourceWorkerUICollapseOverrides;
 };
