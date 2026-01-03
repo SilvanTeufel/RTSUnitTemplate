@@ -330,7 +330,7 @@ bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionC
 		int32 ResourceAmount = ResourceArray.Resources[TeamId];
 
 		// Check if the team has enough resources of the current type
-		if (Costs.Contains(ResourceArray.ResourceType))
+		if (Costs.Contains(ResourceArray.ResourceType) && Costs[ResourceArray.ResourceType] > 0.f)
 		{
 			bool bIsSupply = SupplyLikeResources.Contains(ResourceArray.ResourceType) ? SupplyLikeResources[ResourceArray.ResourceType] : false;
 			if (bIsSupply)

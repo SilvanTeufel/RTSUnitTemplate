@@ -200,6 +200,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase."));
                 return;
             }
+            
 
             if (Action->HasField(TEXT("input_value")))
             {
@@ -309,30 +310,37 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
                 if (NewCameraState == 1)
                 {
-                    MoveWithBounds(FVector(50.0f, 0.0f, 0.0f), FVector(-200.0f, 0.0f, 0.0f));
+                    MoveWithBounds(FVector(250.0f, 0.0f, 0.0f), FVector(-1000.0f, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 2)
                 {
-                    MoveWithBounds(FVector(-50.0f, 0.0f, 0.0f), FVector(200.0f, 0.0f, 0.0f));
+                    MoveWithBounds(FVector(-250.0f, 0.0f, 0.0f), FVector(1000.0f, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 3)
                 {
-                    MoveWithBounds(FVector(0.0f, 50.0f, 0.0f), FVector(0.0f, -200.0f, 0.0f));
+                    MoveWithBounds(FVector(0.0f, 250.0f, 0.0f), FVector(0.0f, -1000.0f, 0.0f));
                 }
                 else if (NewCameraState == 4)
                 {
-                    MoveWithBounds(FVector(0.0f, -50.0f, 0.0f), FVector(0.0f, 200.0f, 0.0f));
+                    MoveWithBounds(FVector(0.0f, -250.0f, 0.0f), FVector(0.0f, 1000.0f, 0.0f));
                 }
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
             {
+                if (ExtendedController->SelectedUnits.Num() &&
+                    ExtendedController->SelectedUnits[0]->BuildArea != nullptr)
+                {
+                    UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Cannot perform action while unit is Building."));
+                    return;
+                }
+                
                 SwitchControllerStateMachine(InputActionValue, NewCameraState);
-
+                
                 if (ActionName.StartsWith("switch_camera_state_ability"))
                 {
                     UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
                     ExtendedController->SetWorkArea(GetActorLocation());
-                    ExtendedController->DropWorkArea();
+                    ExtendedController->DropWorkAreaForUnit(ExtendedController->SelectedUnits[0], false, ExtendedController->DropWorkAreaFailedSound);
                 }
             }
             else if (ActionName == "left_click")
@@ -440,8 +448,6 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 	const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
 	AWaypoint* BWaypoint = nullptr;
 
-	bool PlayWaypointSound = false;
-	bool PlayRunSound = false;
 	
 	for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++) {
 		if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag)
@@ -457,41 +463,24 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 		    bool HitNavModifier;
             RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
 		    if (HitNavModifier) continue;
+
+		    bool PlayWaypointSound;
 		    
 			if(ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
 			{
-				//PlayWaypointSound = true;
+
 			}else if (ExtendedController->IsShiftPressed) {
-				//DrawDebugSphere(GetWorld(), RunLocation, 15, 5, FColor::Green, false, 1.5, 0, 1);
 				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunShift(ExtendedController->SelectedUnits[i], RunLocation); // _Implementation
-				PlayRunSound = true;
 			}else if(ExtendedController->UseUnrealEnginePathFinding)
 			{
 				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunUEPF(ExtendedController->SelectedUnits[i], RunLocation, true); // _Implementation
-				PlayRunSound = true;
 			}
 			else {
 				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunDijkstraPF(ExtendedController->SelectedUnits[i], RunLocation, i); // _Implementation
-				PlayRunSound = true;
 			}
-		}
-	}
-
-	if (ExtendedController->WaypointSound && PlayWaypointSound)
-	{
-		UGameplayStatics::PlaySound2D(this, ExtendedController->WaypointSound, ExtendedController->GetSoundMultiplier());
-	}
-
-	if (ExtendedController->RunSound && PlayRunSound)
-	{
-		const float CurrentTime = GetWorld()->GetTimeSeconds();
-		if (CurrentTime - ExtendedController->LastRunSoundTime >= ExtendedController->RunSoundDelayTime) // Check if 3 seconds have passed
-		{
-			UGameplayStatics::PlaySound2D(this, ExtendedController->RunSound, ExtendedController->GetSoundMultiplier());
-			ExtendedController->LastRunSoundTime = CurrentTime; // Update the timestamp
 		}
 	}
 }
@@ -524,9 +513,6 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         const int32 GridSize = CustomControllerBase->ComputeGridSize(NumUnits);
         AWaypoint* BWaypoint = nullptr;
 
-        bool PlayWaypointSound = false;
-        bool PlayAttackSound = false;
-
         // Collect all mass units and their positions to issue one RPC
         TArray<AUnitBase*> MassUnits;
         TArray<FVector>    MassLocations;
@@ -543,6 +529,8 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 bool HitNavModifier;
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;
+
+                bool PlayWaypointSound;
                 
                 if (CustomControllerBase->SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
                 {
@@ -560,7 +548,6 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                     {
                         CustomControllerBase->LeftClickAttack(U, RunLocation);
                     }
-                    PlayAttackSound = true;
                 }
             }
 
@@ -573,15 +560,6 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
             CustomControllerBase->LeftClickAttackMass(MassUnits, MassLocations, AttackToggled);
         }
 
-        if (CustomControllerBase->WaypointSound && PlayWaypointSound)
-        {
-            UGameplayStatics::PlaySound2D(this, CustomControllerBase->WaypointSound, CustomControllerBase->GetSoundMultiplier());
-        }
-
-        if (CustomControllerBase->AttackSound && PlayAttackSound)
-        {
-            UGameplayStatics::PlaySound2D(this, CustomControllerBase->AttackSound, CustomControllerBase->GetSoundMultiplier());
-        }
     } else {
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
