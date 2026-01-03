@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Templates/SubclassOf.h"
 #include "Engine/DataTable.h"
 #include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData and UInferenceComponent
 #include "RTSRuleBasedDeciderComponent.generated.h"
@@ -36,6 +37,8 @@ struct FRTSRuleRow : public FTableRowBase
 	// Caps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	int32 MaxFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	int32 MinFriendlyUnitCount = 0;
 
 	// Per-tag caps for friendly unit counts (defaults = 999)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMaxFriendlyUnitCount = 999;
@@ -56,6 +59,26 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMaxFriendlyUnitCount = 999;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMaxFriendlyUnitCount = 999;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMaxFriendlyUnitCount = 999;
+
+	// Per-tag minimums for friendly unit counts (defaults = 0)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 0;
 
 	// Output actions (indices into InferenceComponent's ActionSpace)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
@@ -79,24 +102,24 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	FName RuleName;
 
 	// Per-tag caps for friendly unit counts (defaults = 999)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 999;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
@@ -118,6 +141,10 @@ class RTSUNITTEMPLATE_API URTSRuleBasedDeciderComponent : public UActorComponent
 public:
 	URTSRuleBasedDeciderComponent();
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	// Entry point: returns a JSON action string based on simple rules and fallbacks.
 	UFUNCTION(BlueprintCallable, Category="AI|Rules")
 	FString ChooseJsonActionRuleBased(const FGameStateData& GameState);
@@ -144,6 +171,14 @@ public:
 	// Optional override positions for attack rules by table row index. Index 0 -> Row 0, 1 -> Row 1, etc.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	TArray<FVector> AttackPositions;
+
+	// Class of actors to find at game start to populate AttackPositions.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	TSubclassOf<AActor> AttackPositionSourceClass;
+
+	// Delay in seconds after game start before searching for AttackPositionSourceClass actors.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	float AttackPositionUpdateDelay = 2.0f;
 
 
 	// ---------------- Wander (small movement) fallback ----------------
@@ -205,6 +240,9 @@ private:
 	bool EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference);
 	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference);
 
+	// Finds all actors of AttackPositionSourceClass and fills AttackPositions with their locations.
+	void PopulateAttackPositions();
+
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;
 
@@ -215,4 +253,10 @@ private:
 	bool bAttackReturnBlockActive = false;
 	// Absolute time (GetWorld()->GetTimeSeconds) when the block should auto-expire (safety in case the timer is canceled)
 	float AttackReturnBlockUntilTimeSeconds = 0.f;
+
+	// Location to return the RLAgent to after the attack sequence finishes
+	FVector AttackReturnLocation = FVector::ZeroVector;
+
+	// Helper to handle the return move and post-return actions
+	void FinalizeAttackReturn();
 };

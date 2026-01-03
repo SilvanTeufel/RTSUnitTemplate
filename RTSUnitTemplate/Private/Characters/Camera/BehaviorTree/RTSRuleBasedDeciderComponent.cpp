@@ -10,6 +10,7 @@
 #include "TimerManager.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Components/CapsuleComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 {
@@ -17,6 +18,17 @@ URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 
 	// Default random wander choices = move_camera 1..4 (indices 17..20)
 	RandomWanderIndices = {17,18,19,20};
+}
+
+void URTSRuleBasedDeciderComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (AttackPositionSourceClass)
+	{
+		FTimerHandle PopulateTimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(PopulateTimerHandle, this, &URTSRuleBasedDeciderComponent::PopulateAttackPositions, AttackPositionUpdateDelay, false);
+	}
 }
 
 static FORCEINLINE int32 ArgMax2D(const FVector2D& V)
@@ -147,23 +159,56 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 
 	// Caps
 	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.MyUnitCount >= Row.MinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount min: %d < %d"), *RowLabel, GS.MyUnitCount, Row.MinFriendlyUnitCount); return TEXT("{}"); }
+
 	// Per-tag friendly unit caps
 	if (!(GS.Alt1TagFriendlyUnitCount <= Row.Alt1TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt1 cap: %d > %d"), *RowLabel, GS.Alt1TagFriendlyUnitCount, Row.Alt1TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt1TagFriendlyUnitCount >= Row.Alt1TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt1 min: %d < %d"), *RowLabel, GS.Alt1TagFriendlyUnitCount, Row.Alt1TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Alt2TagFriendlyUnitCount <= Row.Alt2TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt2 cap: %d > %d"), *RowLabel, GS.Alt2TagFriendlyUnitCount, Row.Alt2TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt2TagFriendlyUnitCount >= Row.Alt2TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt2 min: %d < %d"), *RowLabel, GS.Alt2TagFriendlyUnitCount, Row.Alt2TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Alt3TagFriendlyUnitCount <= Row.Alt3TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt3 cap: %d > %d"), *RowLabel, GS.Alt3TagFriendlyUnitCount, Row.Alt3TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt3TagFriendlyUnitCount >= Row.Alt3TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt3 min: %d < %d"), *RowLabel, GS.Alt3TagFriendlyUnitCount, Row.Alt3TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Alt4TagFriendlyUnitCount <= Row.Alt4TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt4 cap: %d > %d"), *RowLabel, GS.Alt4TagFriendlyUnitCount, Row.Alt4TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt4TagFriendlyUnitCount >= Row.Alt4TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt4 min: %d < %d"), *RowLabel, GS.Alt4TagFriendlyUnitCount, Row.Alt4TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Alt5TagFriendlyUnitCount <= Row.Alt5TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt5 cap: %d > %d"), *RowLabel, GS.Alt5TagFriendlyUnitCount, Row.Alt5TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt5TagFriendlyUnitCount >= Row.Alt5TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt5 min: %d < %d"), *RowLabel, GS.Alt5TagFriendlyUnitCount, Row.Alt5TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Alt6TagFriendlyUnitCount <= Row.Alt6TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt6 cap: %d > %d"), *RowLabel, GS.Alt6TagFriendlyUnitCount, Row.Alt6TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Alt6TagFriendlyUnitCount >= Row.Alt6TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Alt6 min: %d < %d"), *RowLabel, GS.Alt6TagFriendlyUnitCount, Row.Alt6TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl1TagFriendlyUnitCount <= Row.Ctrl1TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl1 cap: %d > %d"), *RowLabel, GS.Ctrl1TagFriendlyUnitCount, Row.Ctrl1TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl1TagFriendlyUnitCount >= Row.Ctrl1TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl1 min: %d < %d"), *RowLabel, GS.Ctrl1TagFriendlyUnitCount, Row.Ctrl1TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl2TagFriendlyUnitCount <= Row.Ctrl2TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl2 cap: %d > %d"), *RowLabel, GS.Ctrl2TagFriendlyUnitCount, Row.Ctrl2TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl2TagFriendlyUnitCount >= Row.Ctrl2TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl2 min: %d < %d"), *RowLabel, GS.Ctrl2TagFriendlyUnitCount, Row.Ctrl2TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl3TagFriendlyUnitCount <= Row.Ctrl3TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl3 cap: %d > %d"), *RowLabel, GS.Ctrl3TagFriendlyUnitCount, Row.Ctrl3TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl3TagFriendlyUnitCount >= Row.Ctrl3TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl3 min: %d < %d"), *RowLabel, GS.Ctrl3TagFriendlyUnitCount, Row.Ctrl3TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl4TagFriendlyUnitCount <= Row.Ctrl4TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl4 cap: %d > %d"), *RowLabel, GS.Ctrl4TagFriendlyUnitCount, Row.Ctrl4TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl4TagFriendlyUnitCount >= Row.Ctrl4TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl4 min: %d < %d"), *RowLabel, GS.Ctrl4TagFriendlyUnitCount, Row.Ctrl4TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl5TagFriendlyUnitCount <= Row.Ctrl5TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl5 cap: %d > %d"), *RowLabel, GS.Ctrl5TagFriendlyUnitCount, Row.Ctrl5TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl5TagFriendlyUnitCount >= Row.Ctrl5TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl5 min: %d < %d"), *RowLabel, GS.Ctrl5TagFriendlyUnitCount, Row.Ctrl5TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.Ctrl6TagFriendlyUnitCount <= Row.Ctrl6TagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl6 cap: %d > %d"), *RowLabel, GS.Ctrl6TagFriendlyUnitCount, Row.Ctrl6TagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.Ctrl6TagFriendlyUnitCount >= Row.Ctrl6TagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed Ctrl6 min: %d < %d"), *RowLabel, GS.Ctrl6TagFriendlyUnitCount, Row.Ctrl6TagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.CtrlQTagFriendlyUnitCount <= Row.CtrlQTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlQ cap: %d > %d"), *RowLabel, GS.CtrlQTagFriendlyUnitCount, Row.CtrlQTagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlQTagFriendlyUnitCount >= Row.CtrlQTagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlQ min: %d < %d"), *RowLabel, GS.CtrlQTagFriendlyUnitCount, Row.CtrlQTagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.CtrlWTagFriendlyUnitCount <= Row.CtrlWTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlW cap: %d > %d"), *RowLabel, GS.CtrlWTagFriendlyUnitCount, Row.CtrlWTagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlWTagFriendlyUnitCount >= Row.CtrlWTagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlW min: %d < %d"), *RowLabel, GS.CtrlWTagFriendlyUnitCount, Row.CtrlWTagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.CtrlETagFriendlyUnitCount <= Row.CtrlETagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlE cap: %d > %d"), *RowLabel, GS.CtrlETagFriendlyUnitCount, Row.CtrlETagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlETagFriendlyUnitCount >= Row.CtrlETagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlE min: %d < %d"), *RowLabel, GS.CtrlETagFriendlyUnitCount, Row.CtrlETagMinFriendlyUnitCount); return TEXT("{}"); }
+	
 	if (!(GS.CtrlRTagFriendlyUnitCount <= Row.CtrlRTagMaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlR cap: %d > %d"), *RowLabel, GS.CtrlRTagFriendlyUnitCount, Row.CtrlRTagMaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.CtrlRTagFriendlyUnitCount >= Row.CtrlRTagMinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed CtrlR min: %d < %d"), *RowLabel, GS.CtrlRTagFriendlyUnitCount, Row.CtrlRTagMinFriendlyUnitCount); return TEXT("{}"); }
 
 	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Ability=%d"), *RowLabel, Row.SelectionActionIndex, Row.AbilityActionIndex);
 	// Build output
@@ -326,8 +371,7 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	Inference->ExecuteActionFromJSON(Json);
 
 	// Schedule return to original location after delay
-	TWeakObjectPtr<ARLAgent> WeakAgent(RLAgent);
-	const FVector ReturnLocation = OriginalLocation;
+	AttackReturnLocation = OriginalLocation;
 	if (UWorld* World = GetWorld())
 	{
 		// Activate block until the timer completes
@@ -336,73 +380,83 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 		FTimerHandle Handle;
 		TWeakObjectPtr<URTSRuleBasedDeciderComponent> WeakDecider(this);
-		World->GetTimerManager().SetTimer(Handle, [WeakAgent, ReturnLocation, WeakDecider]()
+		World->GetTimerManager().SetTimer(Handle, [WeakDecider]()
 		{
-			if (WeakAgent.IsValid())
-			{
-				ARLAgent* Agent = WeakAgent.Get();
-				UWorld* W = Agent ? Agent->GetWorld() : nullptr;
-				float CapsuleHalfHeight = 88.f;
-				if (Agent)
-				{
-					if (UCapsuleComponent* Cap = Agent->FindComponentByClass<UCapsuleComponent>())
-					{
-						CapsuleHalfHeight = Cap->GetScaledCapsuleHalfHeight();
-					}
-				}
-				FVector FinalLoc = ReturnLocation;
-				if (Agent && W)
-				{
-					const float CurrentZ = Agent->GetActorLocation().Z;
-					const FVector TraceStart(ReturnLocation.X, ReturnLocation.Y, CurrentZ + 10000.f);
-					const FVector TraceEnd(ReturnLocation.X, ReturnLocation.Y, CurrentZ - 10000.f);
-					FHitResult Hit;
-					FCollisionQueryParams Params(SCENE_QUERY_STAT(AttackRuleGroundTraceReturn), false);
-					Params.AddIgnoredActor(Agent);
-					if (W->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
-					{
-						const float GroundZ = Hit.ImpactPoint.Z;
-						if (GroundZ > CurrentZ)
-						{
-							FinalLoc.Z = GroundZ + CapsuleHalfHeight;
-						}
-						else
-						{
-							FinalLoc.Z = CurrentZ;
-						}
-					}
-					else
-					{
-						FinalLoc.Z = CurrentZ;
-					}
-				}
-				Agent->SetActorLocation(FinalLoc);
-				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
-
-				// After returning to the original location, perform an additional action:
-				// Issue a left_click 1 (ActionSpace index 27). This is typically a move/confirm click.
-				if (Agent)
-				{
-					if (UInferenceComponent* PostInf = Agent->FindComponentByClass<UInferenceComponent>())
-					{
-						const int32 LeftClickMoveIndex = 27; // left_click 1
-						const FString ClickJson = PostInf->GetActionAsJSON(LeftClickMoveIndex);
-						PostInf->ExecuteActionFromJSON(ClickJson);
-						UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), LeftClickMoveIndex);
-					}
-				}
-			}
-
-			// Clear block after timer finishes
 			if (WeakDecider.IsValid())
 			{
-				WeakDecider->bAttackReturnBlockActive = false;
-				WeakDecider->AttackReturnBlockUntilTimeSeconds = 0.f;
+				WeakDecider->FinalizeAttackReturn();
 			}
 		}, AttackReturnDelaySeconds, false);
 	}
 
 	return true;
+}
+
+void URTSRuleBasedDeciderComponent::FinalizeAttackReturn()
+{
+	if (!bAttackReturnBlockActive)
+	{
+		return;
+	}
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	ARLAgent* Agent = OwnerPawn ? Cast<ARLAgent>(OwnerPawn) : nullptr;
+	if (!Agent)
+	{
+		return;
+	}
+
+	UWorld* W = Agent->GetWorld();
+	if (!W)
+	{
+		return;
+	}
+
+	float CapsuleHalfHeight = 88.f;
+	if (UCapsuleComponent* Cap = Agent->FindComponentByClass<UCapsuleComponent>())
+	{
+		CapsuleHalfHeight = Cap->GetScaledCapsuleHalfHeight();
+	}
+
+	const float CurrentZ = Agent->GetActorLocation().Z;
+	const FVector TraceStart(AttackReturnLocation.X, AttackReturnLocation.Y, CurrentZ + 10000.f);
+	const FVector TraceEnd(AttackReturnLocation.X, AttackReturnLocation.Y, CurrentZ - 10000.f);
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AttackRuleGroundTraceReturn), false);
+	Params.AddIgnoredActor(Agent);
+
+	FVector FinalLoc = AttackReturnLocation;
+	if (W->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
+	{
+		const float GroundZ = Hit.ImpactPoint.Z;
+		if (GroundZ > CurrentZ)
+		{
+			FinalLoc.Z = GroundZ + CapsuleHalfHeight;
+		}
+		else
+		{
+			FinalLoc.Z = CurrentZ;
+		}
+	}
+	else
+	{
+		FinalLoc.Z = CurrentZ;
+	}
+
+	Agent->SetActorLocation(FinalLoc);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
+
+	// Post-return action: left_click 1
+	if (UInferenceComponent* PostInf = Agent->FindComponentByClass<UInferenceComponent>())
+	{
+		const int32 LeftClickMoveIndex = 27; // left_click 1
+		const FString ClickJson = PostInf->GetActionAsJSON(LeftClickMoveIndex);
+		PostInf->ExecuteActionFromJSON(ClickJson);
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), LeftClickMoveIndex);
+	}
+
+	bAttackReturnBlockActive = false;
+	AttackReturnBlockUntilTimeSeconds = 0.f;
 }
 
 bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference)
@@ -438,6 +492,34 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 	return false;
 }
 
+void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
+{
+	if (!AttackPositionSourceClass)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(World, AttackPositionSourceClass, FoundActors);
+
+	AttackPositions.Empty();
+	for (AActor* Actor : FoundActors)
+	{
+		if (Actor)
+		{
+			AttackPositions.Add(Actor->GetActorLocation());
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Populated %d AttackPositions from class %s"), AttackPositions.Num(), *AttackPositionSourceClass->GetName());
+}
+
 FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStateData& GameState)
 {
 	UInferenceComponent* Inference = GetInferenceComponent();
@@ -459,8 +541,13 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 				UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Blocking actions during attack return (%.2fs remaining)."), Remaining);
 				return TEXT("{}");
 			}
-			// Safety: auto-clear if time elapsed but timer didn't clear it
-			bAttackReturnBlockActive = false;
+
+			// Safety: block expired but timer didn't clear it yet.
+			// Force return move now and clear the block.
+			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack return block expired via safety; forcing return now."));
+			FinalizeAttackReturn();
+
+			// Fall through to evaluate rules normally now that we are supposedly back
 		}
 	}
 

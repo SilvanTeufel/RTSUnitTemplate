@@ -41,6 +41,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
     bool bIsTraining = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
+    float DeltaMovement = 250.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
+    float FallbackBounceDelta = 1000.0f;
     // Setup input (optional – you might not bind physical input if RL supplies values)
     //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
     

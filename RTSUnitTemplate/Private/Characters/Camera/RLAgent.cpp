@@ -310,19 +310,19 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
                 if (NewCameraState == 1)
                 {
-                    MoveWithBounds(FVector(250.0f, 0.0f, 0.0f), FVector(-1000.0f, 0.0f, 0.0f));
+                    MoveWithBounds(FVector(DeltaMovement, 0.0f, 0.0f), FVector(-FallbackBounceDelta, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 2)
                 {
-                    MoveWithBounds(FVector(-250.0f, 0.0f, 0.0f), FVector(1000.0f, 0.0f, 0.0f));
+                    MoveWithBounds(FVector(-DeltaMovement, 0.0f, 0.0f), FVector(FallbackBounceDelta, 0.0f, 0.0f));
                 }
                 else if (NewCameraState == 3)
                 {
-                    MoveWithBounds(FVector(0.0f, 250.0f, 0.0f), FVector(0.0f, -1000.0f, 0.0f));
+                    MoveWithBounds(FVector(0.0f, DeltaMovement, 0.0f), FVector(0.0f, -FallbackBounceDelta, 0.0f));
                 }
                 else if (NewCameraState == 4)
                 {
-                    MoveWithBounds(FVector(0.0f, -250.0f, 0.0f), FVector(0.0f, 1000.0f, 0.0f));
+                    MoveWithBounds(FVector(0.0f, -DeltaMovement, 0.0f), FVector(0.0f, FallbackBounceDelta, 0.0f));
                 }
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
