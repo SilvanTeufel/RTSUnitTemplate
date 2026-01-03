@@ -13,6 +13,8 @@
 #include "Widgets/TaggedUnitSelector.h"
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
+#include "Widgets/SoundControlWidget.h"
+#include "Blueprint/UserWidget.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
 {

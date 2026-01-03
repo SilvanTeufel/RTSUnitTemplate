@@ -67,6 +67,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void ToggleUnitCountDisplay(bool bEnable);
 	
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	float GetSoundMultiplier() const;
+
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
 

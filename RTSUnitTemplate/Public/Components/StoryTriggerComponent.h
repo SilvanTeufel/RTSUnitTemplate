@@ -11,12 +11,24 @@ class UStoryTriggerQueueSubsystem;
 struct FStoryWidgetTable;
 struct FStoryQueueItem;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStoryComponentTriggered);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStoryComponentFinished);
+
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RTSUNITTEMPLATE_API UStoryTriggerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 public:
 	UStoryTriggerComponent();
+
+	UPROPERTY(BlueprintAssignable, Category = Story)
+	FOnStoryComponentTriggered OnStoryTriggered;
+
+	UPROPERTY(BlueprintAssignable, Category = Story)
+	FOnStoryComponentFinished OnStoryFinished;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	float LowerVolume = 0.4f;
 
 	// Data table that contains rows of FStoryTriggerRow
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Data")

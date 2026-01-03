@@ -4,6 +4,8 @@
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound\SoundCue.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Engine/GameInstance.h"
 
 ASpeakingUnit::ASpeakingUnit(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer)
 {
@@ -27,8 +29,17 @@ void ASpeakingUnit::PlaySoundOnce(float Timer, UAudioComponent*& Component, USou
 	{
 		if(Component)
 			Component->Stop();
+
+		float Multiplier = Volume;
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
+			{
+				Multiplier *= Queue->GetGlobalSoundMultiplier() * Queue->GetDefaultSoundVolume();
+			}
+		}
 				
-		Component = UGameplayStatics::SpawnSoundAtLocation(this, Sound, GetActorLocation(), GetActorRotation(), Volume);
+		Component = UGameplayStatics::SpawnSoundAtLocation(this, Sound, GetActorLocation(), GetActorRotation(), Multiplier);
 	}
 }
 

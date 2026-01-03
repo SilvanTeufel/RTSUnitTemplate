@@ -5,6 +5,9 @@
 #include "Engine/World.h"
 #include "Engine/StreamableManager.h"
 #include "Engine/AssetManager.h"
+#include "Actors/StoryTriggerActor.h"
+#include "Components/StoryTriggerComponent.h"
+#include "Sound/SoundClass.h"
 
 UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 {
@@ -14,7 +17,29 @@ void UStoryTriggerQueueSubsystem::Deinitialize()
 {
 	ClearActive();
 	Pending.Empty();
- Super::Deinitialize();
+	Super::Deinitialize();
+}
+
+void UStoryTriggerQueueSubsystem::SetDefaultSoundVolume(float Volume)
+{
+	DefaultSoundVolume = Volume;
+}
+
+void UStoryTriggerQueueSubsystem::SetMasterVolume(float Volume)
+{
+	if (MasterSoundClass)
+	{
+		MasterSoundClass->Properties.Volume = Volume;
+	}
+}
+
+float UStoryTriggerQueueSubsystem::GetMasterVolume() const
+{
+	if (MasterSoundClass)
+	{
+		return MasterSoundClass->Properties.Volume;
+	}
+	return 1.0f;
 }
 
 void UStoryTriggerQueueSubsystem::EnqueueStory(const FStoryQueueItem& Item)
@@ -29,6 +54,25 @@ void UStoryTriggerQueueSubsystem::ClearActive()
 	{
 		World->GetTimerManager().ClearTimer(ActiveTimerHandle);
 	}
+
+	if (bIsStoryActive)
+	{
+		bIsStoryActive = false;
+		GlobalSoundMultiplier = 1.0f;
+
+		if (CurrentItem.TriggeringSource.IsValid())
+		{
+			if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(CurrentItem.TriggeringSource.Get()))
+			{
+				Actor->OnStoryFinished.Broadcast();
+			}
+			else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(CurrentItem.TriggeringSource.Get()))
+			{
+				Comp->OnStoryFinished.Broadcast();
+			}
+		}
+	}
+
 	if (ActiveWidget)
 	{
 		ActiveWidget->RemoveFromParent();
@@ -47,8 +91,10 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		return;
 	}
 
-	FStoryQueueItem Item = Pending[0];
+	CurrentItem = Pending[0];
 	Pending.RemoveAt(0);
+
+	FStoryQueueItem Item = CurrentItem;
 
 	// Fallback: if no widget class provided, default to base class
 	if (!Item.WidgetClass)
@@ -60,6 +106,23 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	if (!World)
 	{
 		return;
+	}
+
+	bIsStoryActive = true;
+	if (Item.TriggeringSource.IsValid())
+	{
+		if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(Item.TriggeringSource.Get()))
+		{
+			GlobalSoundMultiplier = Actor->LowerVolume;
+		}
+		else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(Item.TriggeringSource.Get()))
+		{
+			GlobalSoundMultiplier = Comp->LowerVolume;
+		}
+	}
+	else
+	{
+		GlobalSoundMultiplier = 0.4f; // Default lowering
 	}
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
@@ -111,15 +174,7 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 
 void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()
 {
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(ActiveTimerHandle);
-	}
-	if (ActiveWidget)
-	{
-		ActiveWidget->RemoveFromParent();
-		ActiveWidget = nullptr;
-	}
+	ClearActive();
 	// Proceed to next item
 	TryPlayNext();
 }

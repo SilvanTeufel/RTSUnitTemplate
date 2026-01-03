@@ -123,7 +123,9 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
                 Item.OffsetY = ScreenOffsetY;
                 Item.LifetimeSeconds = WidgetLifetimeSeconds;
                 Item.Sound = TriggerSound;
+                Item.TriggeringSource = this;
                 Queue->EnqueueStory(Item);
+                OnStoryTriggered.Broadcast();
             }
         }
     }

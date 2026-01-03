@@ -21,6 +21,8 @@
 #include "NavMesh/NavMeshPath.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Engine/GameInstance.h"
 
 
 AControllerBase::AControllerBase() {
@@ -73,6 +75,19 @@ void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 		// Stop the timer if it's running
 		GetWorldTimerManager().ClearTimer(FPSTimerHandle);
 	}
+}
+
+float AControllerBase::GetSoundMultiplier() const
+{
+	float Multiplier = 1.0f;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
+		{
+			Multiplier = Queue->GetGlobalSoundMultiplier() * Queue->GetDefaultSoundVolume();
+		}
+	}
+	return Multiplier;
 }
 
 void AControllerBase::DisplayUnitCount()
@@ -868,7 +883,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 
 	if (WaypointSound && PlayWaypointSound)
 	{
-		UGameplayStatics::PlaySound2D(this, WaypointSound);
+		UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
 	}
 
 	if (RunSound && PlayRunSound)
@@ -876,7 +891,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 		const float CurrentTime = GetWorld()->GetTimeSeconds();
 		if (CurrentTime - LastRunSoundTime >= RunSoundDelayTime) // Check if 3 seconds have passed
 		{
-			UGameplayStatics::PlaySound2D(this, RunSound);
+			UGameplayStatics::PlaySound2D(this, RunSound, GetSoundMultiplier());
 			LastRunSoundTime = CurrentTime; // Update the timestamp
 		}
 	}

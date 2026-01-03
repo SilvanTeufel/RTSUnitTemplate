@@ -28,6 +28,9 @@
 #include "NiagaraComponent.h"
 #include "Components/AudioComponent.h"
 #include "TimerManager.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Controller/PlayerController/ControllerBase.h"
 
 // Debug category for squad healthbar visibility
 DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
@@ -522,7 +525,20 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                         {
                             FVector Location = Unit->GetMassActorLocation();
                             FRotator Rotation = Unit->GetActorRotation();
-                            if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(Unit->GetWorld(), ImpactSound, Location, Rotation, ScaleSound))
+
+                            float Multiplier = ScaleSound;
+                            if (UGameInstance* GI = Unit->GetGameInstance())
+                            {
+                                if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+                                {
+                                    if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+                                    {
+                                        Multiplier *= ControllerBase->GetSoundMultiplier();
+                                    }
+                                }
+                            }
+
+                            if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(Unit->GetWorld(), ImpactSound, Location, Rotation, Multiplier))
                             {
                                 Unit->ActiveAudio.Add(AudioComp);
                             }
@@ -535,7 +551,19 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
             }
             else
             {
-                if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(GetWorld(), ImpactSound, GetMassActorLocation(), GetActorRotation(), ScaleSound))
+                float Multiplier = ScaleSound;
+                if (UGameInstance* GI = GetGameInstance())
+                {
+                    if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+                    {
+                        if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+                        {
+                            Multiplier *= ControllerBase->GetSoundMultiplier();
+                        }
+                    }
+                }
+
+                if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(GetWorld(), ImpactSound, GetMassActorLocation(), GetActorRotation(), Multiplier))
                 {
                     ActiveAudio.Add(AudioComp);
                 }
@@ -569,7 +597,18 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
         UAudioComponent* AudioComp = nullptr;
         if (ImpactSound)
         {
-            AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, ScaleSound);
+            float Multiplier = ScaleSound;
+            if (UGameInstance* GI = World->GetGameInstance())
+            {
+                if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+                {
+                    if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+                    {
+                        Multiplier *= ControllerBase->GetSoundMultiplier();
+                    }
+                }
+            }
+            AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, Multiplier);
             if (AudioComp)
             {
                 ActiveAudio.Add(AudioComp);

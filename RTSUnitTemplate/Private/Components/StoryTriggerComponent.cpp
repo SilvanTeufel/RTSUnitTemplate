@@ -88,7 +88,9 @@ void UStoryTriggerComponent::TryTriggerRandom(float ChancePercent)
 		{
 			if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
 			{
+				Item.TriggeringSource = this;
 				Queue->EnqueueStory(Item);
+				OnStoryTriggered.Broadcast();
 			}
 		}
 	}
@@ -108,7 +110,9 @@ void UStoryTriggerComponent::TriggerSpecific(FName RowName)
 		{
 			if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
 			{
+				Item.TriggeringSource = this;
 				Queue->EnqueueStory(Item);
+				OnStoryTriggered.Broadcast();
 			}
 		}
 	}

@@ -61,12 +61,24 @@ struct FStoryWidgetTable : public FTableRowBase
 	float WidgetLifetimeSeconds = 10.f;
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStoryTriggered);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStoryFinished);
+
 UCLASS()
 class RTSUNITTEMPLATE_API AStoryTriggerActor : public AActor
 {
 	GENERATED_BODY()
 public:
 	AStoryTriggerActor();
+
+	UPROPERTY(BlueprintAssignable, Category = Story)
+	FOnStoryTriggered OnStoryTriggered;
+
+	UPROPERTY(BlueprintAssignable, Category = Story)
+	FOnStoryFinished OnStoryFinished;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+    float LowerVolume = 0.4f;
 
 protected:
 	virtual void BeginPlay() override;

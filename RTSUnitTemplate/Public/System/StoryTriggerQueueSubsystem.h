@@ -54,6 +54,9 @@ struct FStoryQueueItem
 	// Sound to play when this item becomes active
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<USoundBase> Sound = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, Category = "StoryQueue")
+	TWeakObjectPtr<UObject> TriggeringSource = nullptr;
 };
 
 UCLASS()
@@ -71,6 +74,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category="StoryQueue")
 	void ClearActive();
 
+	UFUNCTION(BlueprintCallable, Category="StoryQueue")
+	float GetGlobalSoundMultiplier() const { return GlobalSoundMultiplier; }
+
+	UFUNCTION(BlueprintCallable, Category="StoryQueue")
+	float GetDefaultSoundVolume() const { return DefaultSoundVolume; }
+
+	UFUNCTION(BlueprintCallable, Category="StoryQueue")
+	void SetDefaultSoundVolume(float Volume);
+
+	UFUNCTION(BlueprintCallable, Category="StoryQueue")
+	void SetMasterVolume(float Volume);
+
+	UFUNCTION(BlueprintCallable, Category="StoryQueue")
+	float GetMasterVolume() const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	TObjectPtr<class USoundClass> MasterSoundClass;
+
 protected:
 	virtual void Deinitialize() override;
 
@@ -78,6 +99,14 @@ private:
 	// Queue of pending items
 	UPROPERTY(Transient)
 	TArray<FStoryQueueItem> Pending;
+
+	UPROPERTY(Transient)
+	FStoryQueueItem CurrentItem;
+
+	bool bIsStoryActive = false;
+
+	float GlobalSoundMultiplier = 1.0f;
+	float DefaultSoundVolume = 1.0f;
 
 	// Currently active widget
 	UPROPERTY(Transient)

@@ -482,7 +482,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 	if (ExtendedController->WaypointSound && PlayWaypointSound)
 	{
-		UGameplayStatics::PlaySound2D(this, ExtendedController->WaypointSound);
+		UGameplayStatics::PlaySound2D(this, ExtendedController->WaypointSound, ExtendedController->GetSoundMultiplier());
 	}
 
 	if (ExtendedController->RunSound && PlayRunSound)
@@ -490,7 +490,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 		const float CurrentTime = GetWorld()->GetTimeSeconds();
 		if (CurrentTime - ExtendedController->LastRunSoundTime >= ExtendedController->RunSoundDelayTime) // Check if 3 seconds have passed
 		{
-			UGameplayStatics::PlaySound2D(this, ExtendedController->RunSound);
+			UGameplayStatics::PlaySound2D(this, ExtendedController->RunSound, ExtendedController->GetSoundMultiplier());
 			ExtendedController->LastRunSoundTime = CurrentTime; // Update the timestamp
 		}
 	}
@@ -575,12 +575,12 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
         if (CustomControllerBase->WaypointSound && PlayWaypointSound)
         {
-            UGameplayStatics::PlaySound2D(this, CustomControllerBase->WaypointSound);
+            UGameplayStatics::PlaySound2D(this, CustomControllerBase->WaypointSound, CustomControllerBase->GetSoundMultiplier());
         }
 
         if (CustomControllerBase->AttackSound && PlayAttackSound)
         {
-            UGameplayStatics::PlaySound2D(this, CustomControllerBase->AttackSound);
+            UGameplayStatics::PlaySound2D(this, CustomControllerBase->AttackSound, CustomControllerBase->GetSoundMultiplier());
         }
     } else {
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)

@@ -181,7 +181,7 @@ void AExtendedControllerBase::Client_PlaySound2D_Implementation(USoundBase* Soun
 {
 	if (Sound)
 	{
-		UGameplayStatics::PlaySound2D(this, Sound, VolumeMultiplier, PitchMultiplier);
+		UGameplayStatics::PlaySound2D(this, Sound, VolumeMultiplier * GetSoundMultiplier(), PitchMultiplier);
 	}
 }
 
@@ -450,7 +450,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 	if (AbilitySound)
 	{
-		UGameplayStatics::PlaySound2D(this, AbilitySound);
+		UGameplayStatics::PlaySound2D(this, AbilitySound, GetSoundMultiplier());
 	}
 	
 	bool bActivatedAny = false;

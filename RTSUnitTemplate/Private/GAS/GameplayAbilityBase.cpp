@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/GameplayAbilityBase.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Engine/GameInstance.h"
 
 #include "Characters/Unit/UnitBase.h"
 #include "Containers/Map.h"
@@ -772,7 +774,7 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 				{
 					if (ExtPC->IsLocalController())
 					{
-						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier, PitchMultiplier);
+						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
 					}
 					else
 					{
@@ -792,7 +794,7 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 				{
 					if (ExtPC->IsLocalController())
 					{
-						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier, PitchMultiplier);
+						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
 					}
 					else
 					{

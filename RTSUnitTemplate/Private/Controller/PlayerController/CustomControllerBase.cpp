@@ -1131,11 +1131,11 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 
 	if (WaypointSound && PlayWaypointSound)
 	{
-		UGameplayStatics::PlaySound2D(this, WaypointSound);
+		UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
 	}
 	if (AttackSound && PlayAttackSound)
 	{
-		UGameplayStatics::PlaySound2D(this, AttackSound);
+		UGameplayStatics::PlaySound2D(this, AttackSound, GetSoundMultiplier());
 	}
 }
 
@@ -1395,13 +1395,13 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     if (WaypointSound && PlayWaypoint)
     {
-        UGameplayStatics::PlaySound2D(this, WaypointSound);
+        UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
     }
 
     const bool bCanPlayRunSound = RunSound && PlayRun && (GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime);
     if (bCanPlayRunSound)
     {
-        UGameplayStatics::PlaySound2D(this, RunSound);
+        UGameplayStatics::PlaySound2D(this, RunSound, GetSoundMultiplier());
         LastRunSoundTime = GetWorld()->GetTimeSeconds();
     }
 }
@@ -1491,11 +1491,11 @@ void ACustomControllerBase::LeftClickPressedMass()
         // 4) play sounds
         if (WaypointSound && PlayWaypointSound)
         {
-            UGameplayStatics::PlaySound2D(this, WaypointSound);
+            UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
         }
         if (AttackSound && PlayAttackSound)
         {
-            UGameplayStatics::PlaySound2D(this, AttackSound);
+            UGameplayStatics::PlaySound2D(this, AttackSound, GetSoundMultiplier());
         }
     }
     else
