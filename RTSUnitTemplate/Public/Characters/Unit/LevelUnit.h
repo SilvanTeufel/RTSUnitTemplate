@@ -92,7 +92,9 @@ public:
 	// Array of Custom Effects
 	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadWrite, Category = "Leveling")
 	TArray<TSubclassOf<UGameplayEffect>> CustomEffects;
-	
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void OnLevelUp();
 	// Methods for handling leveling up and investing talent points
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
 	void LevelUp();

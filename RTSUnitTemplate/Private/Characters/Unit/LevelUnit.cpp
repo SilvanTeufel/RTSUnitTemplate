@@ -67,6 +67,7 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.CharacterLevel++;
 		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
+		OnLevelUp();
 		// Trigger any additional level-up effects or logic here
 	}
 
