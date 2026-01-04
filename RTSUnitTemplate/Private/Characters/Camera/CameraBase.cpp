@@ -15,6 +15,8 @@
 #include "Engine/GameViewportClient.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "NavMesh/NavMeshBoundsVolume.h"
+#include "EngineUtils.h"
 
 
 void ACameraBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -26,6 +28,23 @@ void ACameraBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 void ACameraBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UseNavBoundMinMax)
+	{
+		for (TActorIterator<ANavMeshBoundsVolume> It(GetWorld()); It; ++It)
+		{
+			if (ANavMeshBoundsVolume* NavVolume = *It)
+			{
+				FVector Origin;
+				FVector Extent;
+				NavVolume->GetActorBounds(false, Origin, Extent);
+
+				CameraPositionMin = FVector2D(Origin.X - Extent.X, Origin.Y - Extent.Y);
+				CameraPositionMax = FVector2D(Origin.X + Extent.X, Origin.Y + Extent.Y);
+				break;
+			}
+		}
+	}
 	
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{

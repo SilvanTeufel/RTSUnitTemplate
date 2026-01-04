@@ -49,6 +49,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
 	FVector2D CameraPositionMax = FVector2D(10000.0f, 10000.0f); 
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	bool UseNavBoundMinMax = true;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
