@@ -73,6 +73,11 @@ void AAbilityUnit::LevelUp_Implementation()
 		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
 		// Trigger any additional level-up effects or logic here
+
+		OnLevelUp(LevelData.CharacterLevel);
+		
+		LevelVisibilityCheck();
+
 		if(HasAuthority())
 			AddAbilityPoint();
 	}

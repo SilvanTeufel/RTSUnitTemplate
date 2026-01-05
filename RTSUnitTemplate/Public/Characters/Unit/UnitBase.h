@@ -37,12 +37,6 @@ public:
 	UTexture2D* UnitIcon;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FTimerHandle HealthWidgetTimerHandle;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float HealthWidgetDisplayDuration = 5.0f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString Name = "Unit";
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -255,9 +249,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShieldCollapseCheck(float NewShield, float OldShield);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void HideHealthWidget();
 ///////////////////////////////////////////////////////////////////
 
 

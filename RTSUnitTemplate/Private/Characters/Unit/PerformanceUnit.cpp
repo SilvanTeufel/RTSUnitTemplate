@@ -81,7 +81,6 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(APerformanceUnit, OpenHealthWidget);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
 	DOREPLIFETIME(APerformanceUnit, HealthWidgetRelativeOffset);
@@ -342,12 +341,12 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 
 	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
 
-	if (IsOnViewport && OpenHealthWidget && !HealthBarUpdateTriggered && bFogAllows)
+	if (IsOnViewport && (OpenHealthWidget || bShowLevelOnly) && !HealthBarUpdateTriggered && bFogAllows)
 	{
 		HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 		HealthBarUpdateTriggered = true;
 	}
-	else if (HealthBarUpdateTriggered && !OpenHealthWidget)
+	else if (HealthBarUpdateTriggered && !OpenHealthWidget && !bShowLevelOnly)
 	{
 		HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 		HealthBarUpdateTriggered = false;
@@ -355,6 +354,7 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 
 	if (HealthBarUpdateTriggered)
 	{
+		HealthBarWidget->bShowLevelOnly = bShowLevelOnly;
 		HealthBarWidget->UpdateWidget();
 	}
 

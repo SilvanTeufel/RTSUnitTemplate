@@ -48,8 +48,24 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
+	DOREPLIFETIME(ALevelUnit, OpenHealthWidget);
+	DOREPLIFETIME(ALevelUnit, bShowLevelOnly);
+}
 
-	
+void ALevelUnit::HideHealthWidget()
+{
+	OpenHealthWidget = false;
+	bShowLevelOnly = false;
+}
+
+void ALevelUnit::LevelVisibilityCheck()
+{
+	if (GetWorld())
+	{
+		OpenHealthWidget = true;
+		bShowLevelOnly = true;
+		GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
+	}
 }
 
 void ALevelUnit::SetUnitIndex(int32 NewIndex)
@@ -67,7 +83,7 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.CharacterLevel++;
 		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
-		OnLevelUp();
+		OnLevelUp(LevelData.CharacterLevel);
 		// Trigger any additional level-up effects or logic here
 	}
 

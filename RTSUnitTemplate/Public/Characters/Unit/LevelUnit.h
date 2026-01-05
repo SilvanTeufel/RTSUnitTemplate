@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GASUnit.h"
+#include "TimerManager.h"
 #include "LevelUnit.generated.h"
 
 /**
@@ -94,7 +95,7 @@ public:
 	TArray<TSubclassOf<UGameplayEffect>> CustomEffects;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
-	void OnLevelUp();
+	void OnLevelUp(int NewLevel);
 	// Methods for handling leveling up and investing talent points
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Leveling")
 	void LevelUp();
@@ -141,4 +142,22 @@ public:
 	// Helper method to handle the actual attribute increase when a point is invested
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	bool OpenHealthWidget = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	bool bShowLevelOnly = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	FTimerHandle HealthWidgetTimerHandle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	float HealthWidgetDisplayDuration = 5.0f;
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void HideHealthWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void LevelVisibilityCheck();
 };

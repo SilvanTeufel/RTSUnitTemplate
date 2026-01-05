@@ -68,6 +68,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HideWidget = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bShowLevelOnly = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HideTextLabelsAlways = true;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ResetCollapseTimer(float VisibleTime = 10.f);

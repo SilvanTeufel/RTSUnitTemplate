@@ -57,27 +57,56 @@ void UUnitBaseHealthBar::UpdateWidget()
 	
 	if (!OwnerCharacter)
 		return;
-	// Update Health values
-	HealthBar->SetPercent(OwnerCharacter->Attributes->GetHealth() / OwnerCharacter->Attributes->GetMaxHealth());
+
 	FNumberFormattingOptions Opts;
 	Opts.SetMaximumFractionalDigits(0);
+
+	if (bShowLevelOnly)
+	{
+		HealthBar->SetVisibility(ESlateVisibility::Collapsed);
+		CurrentHealthLabel->SetVisibility(ESlateVisibility::Collapsed);
+		MaxHealthLabel->SetVisibility(ESlateVisibility::Collapsed);
+		ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
+		CurrentShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+		MaxShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+		if (ExperienceProgressBar) ExperienceProgressBar->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		HealthBar->SetVisibility(ESlateVisibility::Visible);
+
+		ESlateVisibility LabelVisibility = HideTextLabelsAlways ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+		CurrentHealthLabel->SetVisibility(LabelVisibility);
+		MaxHealthLabel->SetVisibility(LabelVisibility);
+		
+		if (ExperienceProgressBar) ExperienceProgressBar->SetVisibility(ESlateVisibility::Visible);
+		
+		// Update Shield values
+		float CurrentShieldValue = OwnerCharacter->Attributes->GetShield();
+
+		if (CurrentShieldValue <= 0.f)
+		{
+			ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
+			CurrentShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+			MaxShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			ShieldBar->SetVisibility(ESlateVisibility::Visible);
+			CurrentShieldLabel->SetVisibility(LabelVisibility);
+			MaxShieldLabel->SetVisibility(LabelVisibility);
+		}
+		
+		ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
+		CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
+		MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
+	}
+	
+	// Update Health values
+	HealthBar->SetPercent(OwnerCharacter->Attributes->GetHealth() / OwnerCharacter->Attributes->GetMaxHealth());
 	CurrentHealthLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetHealth(), &Opts));
 	MaxHealthLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxHealth(), &Opts));
 	
-	// Update Shield values
-	float CurrentShieldValue = OwnerCharacter->Attributes->GetShield();
-
-	if (CurrentShieldValue <= 0.f)
-	{
-		ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
-	}else
-	{
-		ShieldBar->SetVisibility(ESlateVisibility::Visible);
-	}
-	
-	ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());
-	CurrentShieldLabel->SetText(FText::AsNumber(CurrentShieldValue, &Opts));
-	MaxShieldLabel->SetText(FText::AsNumber(OwnerCharacter->Attributes->GetMaxShield(), &Opts));
 	CharacterLevel->SetText(FText::AsNumber(OwnerCharacter->LevelData.CharacterLevel, &Opts));
 	
 	UpdateExperience();

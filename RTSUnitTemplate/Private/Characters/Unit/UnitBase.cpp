@@ -560,12 +560,13 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
                     if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)) // Verwende StrongThis->Member
                     {
                        StrongThis->OpenHealthWidget = true;
+                       StrongThis->bShowLevelOnly = false;
                     }
 
                     World->GetTimerManager().SetTimer(
                         StrongThis->HealthWidgetTimerHandle, // Verwende StrongThis->Member
                         StrongThis,
-                        &AUnitBase::HideHealthWidget,
+                        &ALevelUnit::HideHealthWidget,
                         LocalHealthWidgetDisplayDuration,
                         false);
                 }
@@ -583,17 +584,14 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
         	if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
         	{
                 OpenHealthWidget = true;
+                bShowLevelOnly = false;
         	}
-            World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+            World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
         }
     }
 
 }
 
-void AUnitBase::HideHealthWidget()
-{
-	OpenHealthWidget = false;
-}
 
 
 void AUnitBase::SetShield_Implementation(float NewShield)
@@ -632,13 +630,14 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 					   && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)
 				   {
 					   StrongThis->OpenHealthWidget = true;
+					   StrongThis->bShowLevelOnly = false;
 				   }
 
 				   // Timer setzen, um das Widget später zu verstecken
 				   World->GetTimerManager().SetTimer(
 					   StrongThis->HealthWidgetTimerHandle,
 					   StrongThis,
-					   &AUnitBase::HideHealthWidget,
+					   &ALevelUnit::HideHealthWidget,
 					   LocalHealthWidgetDisplayDuration,
 					   false
 				   );
@@ -659,9 +658,10 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 					  && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount)
 			{
 				OpenHealthWidget = true;
+				bShowLevelOnly = false;
 			}
 
-			World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &AUnitBase::HideHealthWidget, HealthWidgetDisplayDuration, false);
+			World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
 		}
 	}
 }
