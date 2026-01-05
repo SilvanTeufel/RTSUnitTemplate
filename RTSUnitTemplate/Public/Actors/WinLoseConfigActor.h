@@ -23,7 +23,10 @@ public:
 	FOnWinLoseEvent OnYouLostTheGame;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
-	float WinLoseDelay = 5.0f;
+	float WinDelay = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	float LoseDelay = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	EWinLoseCondition WinLoseCondition = EWinLoseCondition::None;

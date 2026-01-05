@@ -179,7 +179,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				{
 					StrongPC->Client_TriggerWinLoseUI(bWon, WidgetClass, TargetMapName, Tag);
 				}
-			}, WinLoseConfigActor->WinLoseDelay, false);
+			}, bWon ? WinLoseConfigActor->WinDelay : WinLoseConfigActor->LoseDelay, false);
 		}
 	}
 
