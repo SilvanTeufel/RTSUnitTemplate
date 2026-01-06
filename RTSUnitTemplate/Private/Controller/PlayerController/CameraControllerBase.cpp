@@ -1701,13 +1701,30 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         				Server_SyncCameraPosition(CameraBase->GetActorLocation());
         			}
         		}
+        	}
 
-        		const FVector MoveTargetLocation = GetPawn()->GetActorLocation();
+        	APawn* ControlledPawn = GetPawn();
+        	if (ControlledPawn)
+        	{
+        		FVector MoveTargetLocation = ControlledPawn->GetActorLocation();
+        		const bool bIsLocal = IsLocalController();
+
+        		if (CameraUnitMouseFollow && bIsLocal)
+        		{
+        			FHitResult Hit;
+        			if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        			{
+        				MoveTargetLocation = Hit.Location;
+        			}
+        		}
 
         		if (!MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
         		{
-        			LastCameraUnitMovementLocation = MoveTargetLocation;
-        			Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);
+        			if (!CameraUnitMouseFollow || bIsLocal)
+        			{
+        				LastCameraUnitMovementLocation = MoveTargetLocation;
+        				Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);
+        			}
         		}
         	}
         	

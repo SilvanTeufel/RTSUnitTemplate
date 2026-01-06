@@ -3461,10 +3461,7 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	// Update the HUD with the sorted selection
 
 	// Call this on Server
-	if (HasAuthority())
-		Client_UpdateHUDSelection_Implementation(NewSelection, TeamId);
-	else
-		Client_UpdateHUDSelection(NewSelection, TeamId);
+	Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)

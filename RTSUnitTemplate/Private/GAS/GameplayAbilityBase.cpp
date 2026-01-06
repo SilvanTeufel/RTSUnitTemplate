@@ -532,7 +532,7 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 	if (bEnable)
 	{
 		// Enabling per owner: remove from disabled and add to force so it works even if asset bDisabled
-		const bool bWasDisabled = DisabledSet.Remove(NormalizedKey) > 0;
+		DisabledSet.Remove(NormalizedKey);
 		const bool bAlreadyForced = ForceSet.Contains(NormalizedKey);
 		if (!bAlreadyForced)
 		{
@@ -543,6 +543,7 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 	{
 		// Disabling per owner: add to disabled and remove any per-owner force override
 		DisabledSet.Add(NormalizedKey);
+		ForceSet.Remove(NormalizedKey);
 	}
 
 	// Clean up empty sets to avoid clutter
@@ -578,20 +579,22 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 
 void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const FString& Key, bool bEnable)
 {
+	if (!Unit)
+	{
+		return;
+	}
+
 	const FString NormalizedKey = NormalizeAbilityKey(Key);
 	if (NormalizedKey.IsEmpty())
 	{
 		return;
 	}
 
-	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
-	if (!Info || !Info->AbilitySystemComponent.IsValid())
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	if (!ASC)
 	{
 		return;
 	}
-
-	UAbilitySystemComponent* ASC = Info->AbilitySystemComponent.Get();
-
 
 	// Update per-owner registries instead of touching ability instances/CDOs
 	TSet<FString>& DisabledSet = GDisabledAbilityKeysByOwner.FindOrAdd(ASC);
@@ -600,6 +603,7 @@ void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const 
 	if (bEnable)
 	{
 		// Enabling per owner: remove from disabled and add to force so it works even if asset bDisabled
+		DisabledSet.Remove(NormalizedKey);
 		const bool bAlreadyForced = ForceSet.Contains(NormalizedKey);
 		if (!bAlreadyForced)
 		{
@@ -608,7 +612,9 @@ void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const 
 	}
 	else
 	{
+		// Disabling per owner: add to disabled and remove any per-owner force override
 		DisabledSet.Add(NormalizedKey);
+		ForceSet.Remove(NormalizedKey);
 	}
 
 	// Clean up empty sets to avoid clutter
@@ -622,7 +628,7 @@ void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const 
 	}
 
 	// Mirror the toggle to all relevant owning clients (same team) so their UI can update immediately
-	if (Unit && Unit->HasAuthority())
+	if (Unit->HasAuthority())
 	{
 		UWorld* World = Unit->GetWorld();
 		if (World)
