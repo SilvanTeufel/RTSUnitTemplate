@@ -20,6 +20,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Characters/Unit/GASUnit.h"
+#include "GameModes/ResourceGameMode.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAbilityKeyGate, Log, All);
 
@@ -107,6 +108,33 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		GExecutedAbilityClasses.Add(ThisClass);
 	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+}
+
+void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	if (bWasCancelled && bRefundOnCancel && ActorInfo && ActorInfo->OwnerActor.IsValid())
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->HasAuthority())
+			{
+				if (AResourceGameMode* RGMode = Cast<AResourceGameMode>(Unit->GetWorld()->GetAuthGameMode()))
+				{
+					FBuildingCost RefundCost;
+					RefundCost.PrimaryCost = -ConstructionCost.PrimaryCost;
+					RefundCost.SecondaryCost = -ConstructionCost.SecondaryCost;
+					RefundCost.TertiaryCost = -ConstructionCost.TertiaryCost;
+					RefundCost.RareCost = -ConstructionCost.RareCost;
+					RefundCost.EpicCost = -ConstructionCost.EpicCost;
+					RefundCost.LegendaryCost = -ConstructionCost.LegendaryCost;
+
+					RGMode->ModifyResourceCCost(RefundCost, Unit->TeamId);
+				}
+			}
+		}
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
