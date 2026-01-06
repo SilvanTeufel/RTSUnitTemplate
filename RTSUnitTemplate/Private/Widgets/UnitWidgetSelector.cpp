@@ -331,6 +331,17 @@ void UUnitWidgetSelector::ChangeAbilityButtonCount(int Count)
 
 void UUnitWidgetSelector::GetButtonsFromBP()
 {
+	AbilityQueWidgets.Empty();
+	AbilityQueButtons.Empty();
+	AbilityQueIcons.Empty();
+	AbilityButtonWidgets.Empty();
+	AbilityButtons.Empty();
+	AbilityCooldownTexts.Empty();
+	SelectButtonWidgets.Empty();
+	SelectButtons.Empty();
+	SingleSelectButtons.Empty();
+	ButtonLabels.Empty();
+	UnitIcons.Empty();
 
 	for (int32 i = 0; i <= MaxQueButtonCount; i++)
 	{
@@ -342,16 +353,11 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 			
 			FString AbilityQueButtonName = FString::Printf(TEXT("AbilityQueButton"));
 			UButton* AbilityQueButton = Cast<UButton>(Widget->GetWidgetFromName(FName(*AbilityQueButtonName)));
-			if (AbilityQueButton)
-			{
-				AbilityQueButtons.Add(AbilityQueButton);
-			}
+			AbilityQueButtons.Add(AbilityQueButton);
 
 			FString AbilityQueIconName = FString::Printf(TEXT("AbilityQueIcon"));
-			if (UImage* Image = Cast<UImage>(Widget->GetWidgetFromName(FName(*AbilityQueIconName))))
-			{
-				AbilityQueIcons.Add(Image);
-			}
+			UImage* IconImage = Cast<UImage>(Widget->GetWidgetFromName(FName(*AbilityQueIconName)));
+			AbilityQueIcons.Add(IconImage);
 		}
 	}
 
@@ -365,17 +371,11 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 			
 			FString AbilityButtonName = FString::Printf(TEXT("AbilityButton"));
 			UButton* AbilityButton = Cast<UButton>(Widget->GetWidgetFromName(FName(*AbilityButtonName)));
-			if (AbilityButton)
-			{
-				AbilityButtons.Add(AbilityButton);
-			}
+			AbilityButtons.Add(AbilityButton);
 
 			FString TextBlockName = FString::Printf(TEXT("AbilityCooldownText"));
 			UTextBlock* TextBlock = Cast<UTextBlock>(Widget->GetWidgetFromName(FName(*TextBlockName)));
-			if (TextBlock)
-			{
-				AbilityCooldownTexts.Add(TextBlock);
-			}
+			AbilityCooldownTexts.Add(TextBlock);
 		}
 		
 	}
@@ -394,23 +394,15 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 
 			FString SingleButtonName = FString::Printf(TEXT("SingleSelectButton"));
 			USelectorButton* SingleButton = Cast<USelectorButton>(Widget->GetWidgetFromName(FName(*SingleButtonName)));
-			if (SingleButton)
-			{
-				SingleSelectButtons.Add(SingleButton);
-			}
+			SingleSelectButtons.Add(SingleButton);
 
 			FString TextBlockName = FString::Printf(TEXT("TextBlock"));
 			UTextBlock* TextBlock = Cast<UTextBlock>(Widget->GetWidgetFromName(FName(*TextBlockName)));
-			if (TextBlock)
-			{
-				ButtonLabels.Add(TextBlock);
-			}
+			ButtonLabels.Add(TextBlock);
 
 			FString IconName = FString::Printf(TEXT("UnitIcon"));
-			if (UImage* Image = Cast<UImage>(Widget->GetWidgetFromName(FName(*IconName))))
-			{
-				UnitIcons.Add(Image);
-			}
+			UImage* IconImage = Cast<UImage>(Widget->GetWidgetFromName(FName(*IconName)));
+			UnitIcons.Add(IconImage);
 		}
 	}
 }
@@ -637,10 +629,15 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
 	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = ControllerBase->GetAbilityArrayByIndex();
 
-	for (int32 i = 0; i < AbilityButtons.Num(); ++i)
+	// Use the larger of the two arrays to ensure we cover all buttons and widgets
+	int32 MaxIndex = FMath::Max(AbilityButtons.Num(), AbilityButtonWidgets.Num());
+
+	for (int32 i = 0; i < MaxIndex; ++i)
 	{
-		UButton* Btn = AbilityButtons[i];
-		if (!Btn) continue;
+		UButton* Btn = AbilityButtons.IsValidIndex(i) ? AbilityButtons[i] : nullptr;
+		UUserWidget* Widget = AbilityButtonWidgets.IsValidIndex(i) ? AbilityButtonWidgets[i] : nullptr;
+		
+		if (!Btn && !Widget) continue;
 
 		bool bEnable = false;
 		if (AbilityArray.IsValidIndex(i) && AbilityArray[i])
@@ -650,15 +647,13 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 			{
 				bool bCDO_Disabled = AbilityCDO->bDisabled;
 				const FString RawKey = AbilityCDO->AbilityKey;
-				FString NormalizedKey = RawKey;
-				NormalizedKey.TrimStartAndEndInline();
-				NormalizedKey = NormalizedKey.ToLower();
+				const FString NormalizedKey = NormalizeAbilityKey(RawKey);
 
 				bool bTeamKeyDisabled = false;
 				bool bTeamForceEnabled = false;
 				bool bOwnerKeyDisabled = false;
 				bool bOwnerForceEnabled = false;
-				const bool bHasKey = (!NormalizedKey.IsEmpty() && NormalizedKey != TEXT("none"));
+				const bool bHasKey = !NormalizedKey.IsEmpty();
 				if (bHasKey)
 				{
 					bTeamKeyDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(RawKey, TeamId);
@@ -692,7 +687,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 					bEnable = true;
 				}
 
-				UE_LOG(LogTemp, VeryVerbose, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s -> SetEnabled=%s"),
+				UE_LOG(LogTemp, Log, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s -> SetEnabled=%s"),
 					i,
 					TeamId,
 					*RawKey,
@@ -706,6 +701,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 			}
 		}
 
-		Btn->SetIsEnabled(bEnable);
+		if (Btn) Btn->SetIsEnabled(bEnable);
+		if (Widget) Widget->SetIsEnabled(bEnable);
 	}
 }

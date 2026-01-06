@@ -113,6 +113,11 @@ namespace UE::UnitMassAvoidance
 			const int32 MaxIdx = Items.GetMaxIndex();
 			for (const FSortingCell& SortedCell : Cells)
 			{
+				if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
+				{
+					continue;
+				}
+
 				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
 				{
 					// Validate starting index
@@ -303,6 +308,8 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	// Execute after LOD and UnitMovementProcessor
 	ExecutionOrder.ExecuteAfter.Add(FName("LOD"));
 	ExecutionOrder.ExecuteAfter.Add(FName("UnitMovementProcessor"));
+	ExecutionOrder.ExecuteAfter.Add(FName("MassNavigationObstacleGridProcessor"));
+	ExecutionOrder.ExecuteAfter.Add(FName("DynamicObstacleRegProcessor"));
 
 	// No need to execute before anything
 	ExecutionOrder.ExecuteBefore.Empty();
@@ -421,6 +428,8 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			bool bIsMoving = false;
 		};
 		TArray<FCollider, TInlineAllocator<16>> Colliders;
+
+		const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid = NavigationSubsystem->GetObstacleGrid();
 
 		for (FMassExecutionContext::FEntityIterator EntityIt = Context.CreateEntityIterator(); EntityIt; ++EntityIt)
 		{
@@ -797,8 +806,6 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			const FVector DesVel = UE::MassNavigation::ClampVector(AgentVelocity + DesAcc * DeltaTime, MaximumSpeed);
 
 			// Find close obstacles
-			const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid = NavigationSubsystem->GetObstacleGridMutable();
-
 			UE::UnitMassAvoidance::FindCloseObstacles(AgentLocation, MovingAvoidanceParams.ObstacleDetectionDistance,
 				AvoidanceObstacleGrid, CloseEntities, UE::UnitMassAvoidance::MaxObstacleResults);
 

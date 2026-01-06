@@ -102,8 +102,23 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		{
 			// If we hit something, draw two lines with a midpoint above the hit location
 			const FVector MidPoint = Hit.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
-			DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
-			DrawDashedLine3D(MidPoint, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+
+			// Check for a second collision between the first midpoint and the end
+			FVector TraceStart2 = MidPoint; TraceStart2.Z += WPLineZOffset;
+			FHitResult Hit2;
+			if (World->LineTraceSingleByChannel(Hit2, TraceStart2, TraceEnd, ECC_WorldStatic, Params))
+			{
+				// If we hit something again, draw three lines with two midpoints
+				const FVector MidPoint2 = Hit2.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
+				DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+				DrawDashedLine3D(MidPoint, MidPoint2, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+				DrawDashedLine3D(MidPoint2, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			}
+			else
+			{
+				DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+				DrawDashedLine3D(MidPoint, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			}
 		}
 		else
 		{

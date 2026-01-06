@@ -142,7 +142,13 @@ void UUnitSightProcessor::ExecuteServer(
             const float Age   = World->GetTimeSeconds() - State.BirthTime;
             const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
   
-            if (Age < 1.f || SinceDeath > 4.f || !State.IsInitialized)
+            // On clients, BirthTime is replicated from the server's clock.
+            // If the server has been running longer than the client, Age will be negative.
+            // We only want to skip the 1s "warmup" if the unit was JUST born on the current instance.
+            const bool bIsTooYoung = (Age < 1.f && Age >= 0.f);
+            const bool bIsDeadTooLong = (SinceDeath > 4.f && SinceDeath >= 0.f);
+            
+            if (bIsTooYoung || bIsDeadTooLong || !State.IsInitialized)
             {
                 continue;
             }

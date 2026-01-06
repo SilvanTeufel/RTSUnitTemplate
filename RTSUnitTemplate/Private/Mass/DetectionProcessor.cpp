@@ -171,7 +171,7 @@ void UDetectionProcessor::Execute(
         }
         
         const float Age = World->GetTimeSeconds() - TgtState->BirthTime;
-        if (Age < 1.f) 
+        if (Age < 1.f && Age >= 0.f) 
             continue;
         
         TargetUnits.Add({
@@ -203,7 +203,7 @@ void UDetectionProcessor::Execute(
         {
             // skip too‐young
             const float Age = World->GetTimeSeconds() - StateList[i].BirthTime;
-            if (Age < 1.f) 
+            if (Age < 1.f && Age >= 0.f) 
                 continue;
 
             DetectorUnits.Add({
@@ -291,7 +291,7 @@ void UDetectionProcessor::Execute(
                 // skip too‐young / too‐old
                 const float TgtAge = Now - Tgt.State->BirthTime;
                 const float SinceDeath = Now - Tgt.State->DeathTime;
-                if (TgtAge < 1.f || SinceDeath > 4.f) 
+                if ((TgtAge < 1.f && TgtAge >= 0.f) || (SinceDeath > 4.f && SinceDeath >= 0.f))
                     continue;
 
                 // can I attack their type?
