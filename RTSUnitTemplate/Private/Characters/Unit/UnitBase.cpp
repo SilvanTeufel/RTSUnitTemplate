@@ -278,6 +278,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, UnitToChase);
 	DOREPLIFETIME(AUnitBase, FollowUnit);
+	DOREPLIFETIME(AUnitBase, NextWaypoint);
 	
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);

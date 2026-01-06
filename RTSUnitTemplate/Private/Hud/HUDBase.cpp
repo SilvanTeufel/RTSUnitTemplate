@@ -5,6 +5,8 @@
 #include "Hud/HUDBase.h"
 
 // Engine Headers
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
 #include "Blueprint/UserWidget.h"
 #include "DrawDebugHelpers.h"
 #include "Components/CapsuleComponent.h"
@@ -62,19 +64,22 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		return;
 	}
 
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
 	for (AUnitBase* Unit : SelectedUnits)
 	{
 		ABuildingBase* Building = Cast<ABuildingBase>(Unit);
-		if (!Building)
+		if (!Building || !Building->HasWaypoint)
 		{
 			continue; // only buildings have visualized waypoint links
 		}
-		if (!Building->HasWaypoint)
-		{
-			continue;
-		}
+
 		AWaypoint* WP = Building->NextWaypoint;
-		if (!IsValid(WP))
+		if (!IsValid(WP) || WP->IsHidden())
 		{
 			continue;
 		}
@@ -82,8 +87,28 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		const FVector Start = Building->GetActorLocation();
 		const FVector End = WP->GetActorLocation();
 
-		// Choose color by team: friendly green, enemy red, neutral yellow
-		DrawDashedLine3D(Start, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+		// Trace to see if the line clips through the landscape
+		// We use an offset to avoid hitting the ground immediately at the start/end points
+		FVector TraceStart = Start; TraceStart.Z += WPLineZOffset;
+		FVector TraceEnd = End; TraceEnd.Z += WPLineZOffset;
+
+		FHitResult Hit;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Building);
+		Params.AddIgnoredActor(WP);
+
+		// Trace against WorldStatic (landscape)
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+		{
+			// If we hit something, draw two lines with a midpoint above the hit location
+			const FVector MidPoint = Hit.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
+			DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			DrawDashedLine3D(MidPoint, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+		}
+		else
+		{
+			DrawDashedLine3D(Start, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+		}
 	}
 }
 

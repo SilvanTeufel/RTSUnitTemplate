@@ -14,6 +14,7 @@
 #include "Actors/UnitSpawnPlatform.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Actors/Waypoint.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -598,20 +599,31 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 
 	if (World && WaypointClass)
 	{
-		// Define the spawn parameters (can customize this further if needed)
+		// Define the spawn parameters
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
 		SpawnParams.Instigator = GetInstigator();
 
-		// Spawn the waypoint actor
-		AWaypoint* NewWaypoint = World->SpawnActor<AWaypoint>(WaypointClass, NewWPLocation, FRotator::ZeroRotator, SpawnParams);
+		// Use deferred spawning to set TeamId before replication and BeginPlay
+		AWaypoint* NewWaypoint = World->SpawnActorDeferred<AWaypoint>(
+			WaypointClass,
+			FTransform(FRotator::ZeroRotator, NewWPLocation),
+			this,
+			GetInstigator(),
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+		);
 
 		if (NewWaypoint)
 		{
+			// Assign the team ID from the building
+			NewWaypoint->TeamId = BuildingBase->TeamId;
+			
+			// Finish spawning
+			NewWaypoint->FinishSpawning(FTransform(FRotator::ZeroRotator, NewWPLocation));
+
 			// Assign the new waypoint to the building
 			BuildingBase->NextWaypoint = NewWaypoint;
-			BuildingBase->NextWaypoint->TeamId = BuildingBase->TeamId;
-			return BuildingBase->NextWaypoint;
+			return NewWaypoint;
 		}
 	}
 
@@ -619,41 +631,86 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 }
 
 
-bool AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound)
+void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool& Success)
 {
-
+	Success = false;
 	ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
 	
 	PlayWaypointSound = false;
 	
-	if (!BuildingBase) return false;
-	if (BuildingBase->CanMove) return false;
-	if (!BuildingBase->HasWaypoint) return true;
+	if (!BuildingBase) return;
+	if (BuildingBase->CanMove) return;
+	if (!BuildingBase->HasWaypoint)
+	{
+		Success = true;
+		return;
+	}
 	
 	PlayWaypointSound = true;
+	Success = true;
 	
-	NewWPLocation.Z += RelocateWaypointZOffset;
-	
-	if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+	if (HasAuthority())
 	{
-		if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+		NewWPLocation.Z += RelocateWaypointZOffset;
+		
+		if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+		{
+			if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
 
-		BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
-	}
-	else if (BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
-	{
-		if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+			BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+		}
+		else if (BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+		{
+			if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
 
-		BuildingBase->NextWaypoint = BuildingWaypoint;
-			
-	}
-	else if( BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
-	else 
-	{
-		BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
-	}
+			BuildingBase->NextWaypoint = BuildingWaypoint;
 				
-	return true;
+		}
+		else if( BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+		else 
+		{
+			BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+		}
+					
+		Multi_SetBuildingWaypoint(NewWPLocation, Unit, BuildingWaypoint, PlayWaypointSound);
+	}
+}
+
+void AControllerBase::Multi_SetBuildingWaypoint_Implementation(FVector NewWPLocation, AUnitBase* Unit, AWaypoint* BuildingWaypoint, bool bPlaySound)
+{
+	if (!HasAuthority())
+	{
+		if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit))
+		{
+			BuildingBase->NextWaypoint = BuildingWaypoint;
+			if (BuildingBase->NextWaypoint)
+			{
+				BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+			}
+		}
+	}
+}
+
+void AControllerBase::Server_SetBuildingWaypoint_Implementation(FVector NewWPLocation, AUnitBase* Unit)
+{
+	AWaypoint* TempWaypoint = nullptr;
+	bool TempPlaySound = false;
+	bool bSuccess = false;
+	SetBuildingWaypoint(NewWPLocation, Unit, TempWaypoint, TempPlaySound, bSuccess);
+}
+
+void AControllerBase::Server_Batch_SetBuildingWaypoints_Implementation(const TArray<FVector>& NewWPLocations, const TArray<AUnitBase*>& Units)
+{
+	AWaypoint* SharedWaypoint = nullptr;
+	bool TempPlaySound = false;
+	bool bSuccess = false;
+	for (int32 i = 0; i < Units.Num(); ++i)
+	{
+		if (Units.IsValidIndex(i) && NewWPLocations.IsValidIndex(i))
+		{
+			SetBuildingWaypoint(NewWPLocations[i], Units[i], SharedWaypoint, TempPlaySound, bSuccess);
+		}
+	}
 }
 
 
@@ -845,6 +902,9 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 	bool PlayWaypointSound = false;
 	bool PlayRunSound = false;
 	
+	TArray<AUnitBase*> BuildingUnits;
+	TArray<FVector>    BuildingLocs;
+
 	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
 		if (SelectedUnits[i] != CameraUnitWithTag)
 		if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead) {
@@ -860,10 +920,14 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
 			if (HitNavModifier) continue;
 			
-			if(SetBuildingWaypoint(RunLocation, SelectedUnits[i], BWaypoint, PlayWaypointSound))
+			ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[i]);
+			if (BuildingBase && !BuildingBase->CanMove)
 			{
-
-			}else if (IsShiftPressed) {
+				BuildingUnits.Add(SelectedUnits[i]);
+				BuildingLocs.Add(RunLocation);
+				if (BuildingBase->HasWaypoint) PlayWaypointSound = true;
+			}
+			else if (IsShiftPressed) {
 				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
@@ -879,6 +943,11 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 				PlayRunSound = true;
 			}
 		}
+	}
+
+	if (BuildingUnits.Num() > 0)
+	{
+		Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
 	}
 
 	if (WaypointSound && PlayWaypointSound)
@@ -1130,6 +1199,18 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
+	OnRep_SelectableTeamId();
+}
+
+void AControllerBase::OnRep_SelectableTeamId()
+{
+	for (TActorIterator<AWaypoint> It(GetWorld()); It; ++It)
+	{
+		if (*It)
+		{
+			It->UpdateVisibility();
+		}
+	}
 }
 
 void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoint* Waypoint)

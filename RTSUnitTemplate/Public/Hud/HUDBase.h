@@ -114,6 +114,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float WPLineZOffset = 30.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float WPLineCollisionZOffset = 500.f;
+
 	// Draw a 3D dashed line between two points; duration 0 so it renders only this frame
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawDashedLine3D(const FVector& Start, const FVector& End, float DashLen = 200.f, float GapLen = 120.f, FColor Color = FColor::Yellow, float Thickness = 2.f, float ZOffset = 30.f);

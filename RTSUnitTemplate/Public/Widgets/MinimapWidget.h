@@ -51,6 +51,13 @@ private:
 	 */
 	void MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry);
 
+	void RetryInitialize();
+	
+	UPROPERTY()
+	int32 PendingTeamId = -1;
+
+	FTimerHandle RetryTimerHandle;
+
 	UPROPERTY()
 	float CurrentMapAngle = -90.f;
 	/** A cached pointer to the MinimapActor this widget is displaying. */

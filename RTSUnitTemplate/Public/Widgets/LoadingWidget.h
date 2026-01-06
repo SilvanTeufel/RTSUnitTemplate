@@ -16,11 +16,12 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	class UProgressBar* LoadingBar;
 
-	void SetupLoadingWidget(float InTargetTime);
+	void SetupLoadingWidget(float InDuration);
 
 protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
-	float TargetTime = 0.f;
+	float Duration = 0.f;
+	float ElapsedTime = 0.f;
 };

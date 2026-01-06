@@ -69,6 +69,9 @@ void UUnitBaseHealthBar::UpdateWidget()
 		ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
 		CurrentShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
 		MaxShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+
+		Dash_0->SetVisibility(ESlateVisibility::Collapsed);
+		Dash_1->SetVisibility(ESlateVisibility::Collapsed);
 		if (ExperienceProgressBar) ExperienceProgressBar->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	else
@@ -78,6 +81,7 @@ void UUnitBaseHealthBar::UpdateWidget()
 		ESlateVisibility LabelVisibility = HideTextLabelsAlways ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
 		CurrentHealthLabel->SetVisibility(LabelVisibility);
 		MaxHealthLabel->SetVisibility(LabelVisibility);
+		Dash_0->SetVisibility(LabelVisibility);
 		
 		if (ExperienceProgressBar) ExperienceProgressBar->SetVisibility(ESlateVisibility::Visible);
 		
@@ -89,12 +93,14 @@ void UUnitBaseHealthBar::UpdateWidget()
 			ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
 			CurrentShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
 			MaxShieldLabel->SetVisibility(ESlateVisibility::Collapsed);
+			Dash_1->SetVisibility(ESlateVisibility::Collapsed);
 		}
 		else
 		{
 			ShieldBar->SetVisibility(ESlateVisibility::Visible);
 			CurrentShieldLabel->SetVisibility(LabelVisibility);
 			MaxShieldLabel->SetVisibility(LabelVisibility);
+			Dash_1->SetVisibility(LabelVisibility);
 		}
 		
 		ShieldBar->SetPercent(CurrentShieldValue / OwnerCharacter->Attributes->GetMaxShield());

@@ -2,26 +2,27 @@
 #include "Components/ProgressBar.h"
 #include "Kismet/GameplayStatics.h"
 
-void ULoadingWidget::SetupLoadingWidget(float InTargetTime)
+void ULoadingWidget::SetupLoadingWidget(float InDuration)
 {
-	TargetTime = InTargetTime;
+	Duration = InDuration;
+	ElapsedTime = 0.f;
 }
 
 void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (TargetTime > 0.f)
+	if (Duration > 0.f)
 	{
-		float CurrentTime = GetWorld()->GetTimeSeconds();
-		float Progress = FMath::Clamp(CurrentTime / TargetTime, 0.f, 1.f);
+		ElapsedTime += InDeltaTime;
+		float Progress = FMath::Clamp(ElapsedTime / Duration, 0.f, 1.f);
 
 		if (LoadingBar)
 		{
 			LoadingBar->SetPercent(Progress);
 		}
 
-		if (CurrentTime >= TargetTime)
+		if (ElapsedTime >= Duration)
 		{
 			RemoveFromParent();
 		}

@@ -41,6 +41,8 @@ void ARTSGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bWinLoseTriggered = false;
+
 	FillUnitArrays();
 
 	// Find the first WinLoseConfigActor in the world
@@ -55,6 +57,22 @@ void ARTSGameModeBase::BeginPlay()
 
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+
+	// Show loading widget for all connected players (especially Host)
+	if (LoadingWidgetClass)
+	{
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+			{
+				PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RTSGameModeBase: LoadingWidgetClass is not set in GameMode!"));
+	}
 
 	FTimerHandle TimerHandleStartDataTable;
 	GetWorldTimerManager().SetTimer(TimerHandleStartDataTable, this, &ARTSGameModeBase::DataTableTimerStart, GatherControllerTimer+5.f+DelaySpawnTableTime, false);
@@ -167,6 +185,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		if (bLocalTriggered)
 		{
 			bWinLoseTriggered = true;
+
 			if (bWon) bAnyWon = true; else bAnyLost = true;
 
 			TWeakObjectPtr<ACameraControllerBase> WeakPC = PC;
@@ -275,9 +294,12 @@ void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
+	if (LoadingWidgetClass)
 	{
-		PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
+		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
+		{
+			PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
+		}
 	}
 }
 

@@ -12,6 +12,8 @@
 
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
 {
+    PendingTeamId = TeamId;
+    
     // --- 1. Find the correct MinimapActor for this player ---
     if (!GetWorld()) return;
 
@@ -37,31 +39,41 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
         UTexture2D* DataTexture = MinimapActorRef->GetDynamicDataTexture();
         UMaterialInstanceDynamic* MID = MinimapImage->GetDynamicMaterial();
 
-        if (MID)
+        if (MID && TopoTexture && DataTexture)
         {
             // 2. Setzen Sie den Textur-Parameter mit dem Namen "MinimapTexture" auf unsere Laufzeit-Textur.
-            if (TopoTexture)
+            MID->SetTextureParameterValue(TEXT("TopographyTexture"), TopoTexture);
+            MID->SetTextureParameterValue(TEXT("MinimapTexture"), DataTexture);
+
+            if (GetWorld())
             {
-                MID->SetTextureParameterValue(TEXT("TopographyTexture"), TopoTexture);
+                GetWorld()->GetTimerManager().ClearTimer(RetryTimerHandle);
             }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("TopographyTexture NOT FOUND for Team ID: %d"), PlayerTeamId);
-            }
-            
-            if (DataTexture)
-            {
-                MID->SetTextureParameterValue(TEXT("MinimapTexture"), DataTexture);
-            }else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("MinimapWidget NOT FOUND for Team ID: %d"), PlayerTeamId);
-            }
+            UE_LOG(LogTemp, Log, TEXT("MinimapWidget successfully initialized for Team ID: %d"), PlayerTeamId);
+        }
+        else
+        {
+             UE_LOG(LogTemp, Warning, TEXT("MinimapWidget found actor but textures or MID not ready for Team ID: %d. Retrying..."), PlayerTeamId);
+             if (GetWorld() && !RetryTimerHandle.IsValid())
+             {
+                 GetWorld()->GetTimerManager().SetTimer(RetryTimerHandle, this, &UMinimapWidget::RetryInitialize, 0.5f, true);
+             }
         }
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("MinimapWidget failed to find MinimapActor for Team ID %d or MinimapImage is not bound!"), PlayerTeamId);
+        UE_LOG(LogTemp, Warning, TEXT("MinimapWidget failed to find MinimapActor for Team ID %d or MinimapImage is not bound! Retrying..."), PlayerTeamId);
+        
+        if (GetWorld() && !RetryTimerHandle.IsValid())
+        {
+            GetWorld()->GetTimerManager().SetTimer(RetryTimerHandle, this, &UMinimapWidget::RetryInitialize, 0.5f, true);
+        }
     }
+}
+
+void UMinimapWidget::RetryInitialize()
+{
+    InitializeForTeam(PendingTeamId);
 }
 
 /*

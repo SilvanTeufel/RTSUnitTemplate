@@ -157,8 +157,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
 	
+	UFUNCTION(NetMulticast, Reliable)
+	void Multi_SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint* BuildingWaypoint, bool bPlaySound);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound);
+	void SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool& Success);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_Batch_SetBuildingWaypoints(const TArray<FVector>& NewWPLocations, const TArray<AUnitBase*>& Units);
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
@@ -271,8 +280,11 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <AUnitBase*> SelectedUnits;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(ReplicatedUsing = OnRep_SelectableTeamId, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SelectableTeamId = -1;
+
+	UFUNCTION()
+	void OnRep_SelectableTeamId();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* DefaultWaypoint;

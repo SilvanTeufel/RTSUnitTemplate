@@ -2,6 +2,7 @@
 
 
 #include "Actors/Waypoint.h"
+#include "Net/UnrealNetwork.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "GameFramework/PlayerController.h"
@@ -27,6 +28,9 @@ AWaypoint::AWaypoint()
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(SceneRoot);
 	
+	bReplicates = true;
+	SetReplicateMovement(true);
+	SetActorHiddenInGame(true); // Start hidden to prevent flickering
 }
 
 void AWaypoint::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -34,12 +38,56 @@ void AWaypoint::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AWaypoint, Mesh);
 	DOREPLIFETIME(AWaypoint, Niagara_A);
+	DOREPLIFETIME(AWaypoint, TeamId);
+	DOREPLIFETIME(AWaypoint, NextWaypoint);
 }
 
 // Called when the game starts or when spawned
 void AWaypoint::BeginPlay()
 {
 	Super::BeginPlay();
+	UpdateVisibility();
+}
+
+void AWaypoint::OnRep_TeamId()
+{
+	UpdateVisibility();
+}
+
+bool AWaypoint::IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const
+{
+	if (const AControllerBase* PC = Cast<AControllerBase>(RealViewer))
+	{
+		// A waypoint is only relevant to its own team (or if it's neutral)
+		if (TeamId == 0 || TeamId == PC->SelectableTeamId)
+		{
+			return Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
+		}
+		return false;
+	}
+	return Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
+}
+
+void AWaypoint::UpdateVisibility()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC) return; // Dedicated server
+
+	if (AControllerBase* MyPC = Cast<AControllerBase>(PC))
+	{
+		// Strict team check for visibility, including on Listen Server hosts
+		if (TeamId != MyPC->SelectableTeamId && TeamId != 0)
+		{
+			SetActorHiddenInGame(true);
+		}
+		else
+		{
+			SetActorHiddenInGame(false);
+		}
+	}
 }
 
 // Called every frame

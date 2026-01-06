@@ -91,14 +91,21 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime)
 {
 	GameTimerStartTime = InTargetTime;
-	if (InClass && InTargetTime > GetWorld()->GetTimeSeconds())
+	if (InClass && InTargetTime > 0.f)
 	{
-		ULoadingWidget* LoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
-		if (LoadingWidget)
+		if (IsLocalPlayerController())
 		{
-			LoadingWidget->SetupLoadingWidget(InTargetTime);
-			LoadingWidget->AddToViewport(9999);
+			ULoadingWidget* LoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
+			if (LoadingWidget)
+			{
+				LoadingWidget->SetupLoadingWidget(InTargetTime);
+				LoadingWidget->AddToViewport(9999);
+			}
 		}
+	}
+	else if (!InClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Client_ShowLoadingWidget: LoadingWidgetClass is null!"));
 	}
 }
 

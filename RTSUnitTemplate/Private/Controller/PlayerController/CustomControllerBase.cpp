@@ -1089,6 +1089,8 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 
 	TArray<AUnitBase*> MassUnits;
 	TArray<FVector>    MassLocations;
+	TArray<AUnitBase*> BuildingUnits;
+	TArray<FVector>    BuildingLocs;
 	for (int32 i = 0; i < NumUnits; ++i)
 	{
 		AUnitBase* U = SelectedUnits[i];
@@ -1100,9 +1102,13 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
 		if (bNavMod) continue;
 
-		if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+		bool bSuccess = false;
+		SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+		if (bSuccess)
 		{
 			// waypoint placed
+			BuildingUnits.Add(U);
+			BuildingLocs.Add(RunLocation);
 		}
 		else
 		{
@@ -1119,6 +1125,11 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 
 			PlayAttackSound = true;
 		}
+	}
+
+	if (BuildingUnits.Num() > 0)
+	{
+		Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
 	}
 
 	if (MassUnits.Num() > 0)
@@ -1331,6 +1342,8 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     TArray<AUnitBase*> BatchUnits;
     TArray<FVector>    BatchLocs;
     TArray<float>      BatchSpeeds;
+    TArray<AUnitBase*> BuildingUnits;
+    TArray<FVector>    BuildingLocs;
 
     for (auto& P : Finals)
     {
@@ -1344,9 +1357,13 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
         U->RemoveFocusEntityTarget();
         float Speed = U->Attributes->GetBaseRunSpeed();
-        if (SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint))
+        bool bSuccess = false;
+        SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint, bSuccess);
+        if (bSuccess)
         {
             PlayWaypoint = true;
+            BuildingUnits.Add(U);
+            BuildingLocs.Add(Loc);
         }
         else if (IsShiftPressed)
         {
@@ -1386,6 +1403,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
             }
             PlayRun = true;
         }
+    }
+
+    if (BuildingUnits.Num() > 0)
+    {
+        Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
     }
 
     if (BatchUnits.Num() > 0)
@@ -1445,6 +1467,8 @@ void ACustomControllerBase::LeftClickPressedMass()
         // 3) issue each unit (collect arrays for mass units)
         TArray<AUnitBase*> MassUnits;
         TArray<FVector>    MassLocations;
+        TArray<AUnitBase*> BuildingUnits;
+        TArray<FVector>    BuildingLocs;
         for (int32 i = 0; i < NumUnits; ++i)
         {
             AUnitBase* U = SelectedUnits[i];
@@ -1457,9 +1481,13 @@ void ACustomControllerBase::LeftClickPressedMass()
             RunLocation = TraceRunLocation(RunLocation, bNavMod);
             if (bNavMod) continue;
         
-            if (SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+            bool bSuccess = false;
+            SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+            if (bSuccess)
             {
                 // waypoint placed
+                BuildingUnits.Add(U);
+                BuildingLocs.Add(RunLocation);
             }
             else
             {
@@ -1479,6 +1507,11 @@ void ACustomControllerBase::LeftClickPressedMass()
 
             // still fire any dragged ability on each unit
             FireAbilityMouseHit(U, Hit);
+        }
+
+        if (BuildingUnits.Num() > 0)
+        {
+            Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
         }
 
         if (MassUnits.Num() > 0)

@@ -67,11 +67,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 FogSize = 200.f;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector2D FogMinBounds = FVector2D(-FogSize*200*50, -FogSize*200*50);
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector2D FogMinBounds = FVector2D(-FogSize*50, -FogSize*50);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector2D FogMaxBounds = FVector2D(FogSize*200*50, FogSize*200*50);
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector2D FogMaxBounds = FVector2D(FogSize*50, FogSize*50);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 FogTexSize = 0.25*1024;

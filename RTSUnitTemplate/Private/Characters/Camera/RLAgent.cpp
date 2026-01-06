@@ -447,8 +447,10 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
 	const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
 	AWaypoint* BWaypoint = nullptr;
+	TArray<AUnitBase*> BuildingUnits;
+	TArray<FVector>    BuildingLocs;
+	bool PlayWaypointSoundTotal = false;
 
-	
 	for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++) {
 		if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag)
 		if (ExtendedController->SelectedUnits[i] && ExtendedController->SelectedUnits[i]->UnitState != UnitData::Dead
@@ -466,9 +468,13 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 
 		    bool PlayWaypointSound;
 		    
-			if(ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound))
+			bool bSuccess = false;
+			ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound, bSuccess);
+			if(bSuccess)
 			{
-
+				BuildingUnits.Add(ExtendedController->SelectedUnits[i]);
+				BuildingLocs.Add(RunLocation);
+				if (PlayWaypointSound) PlayWaypointSoundTotal = true;
 			}else if (ExtendedController->IsShiftPressed) {
 				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunShift(ExtendedController->SelectedUnits[i], RunLocation); // _Implementation
@@ -482,6 +488,16 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 				ExtendedController->RightClickRunDijkstraPF(ExtendedController->SelectedUnits[i], RunLocation, i); // _Implementation
 			}
 		}
+	}
+
+	if (BuildingUnits.Num() > 0)
+	{
+		ExtendedController->Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
+	}
+
+	if (ExtendedController->WaypointSound && PlayWaypointSoundTotal)
+	{
+		UGameplayStatics::PlaySound2D(ExtendedController, ExtendedController->WaypointSound, ExtendedController->GetSoundMultiplier());
 	}
 }
 
@@ -516,6 +532,9 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         // Collect all mass units and their positions to issue one RPC
         TArray<AUnitBase*> MassUnits;
         TArray<FVector>    MassLocations;
+        TArray<AUnitBase*> BuildingUnits;
+        TArray<FVector>    BuildingLocs;
+        bool PlayWaypointSoundTotal = false;
         
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
@@ -532,9 +551,14 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
                 bool PlayWaypointSound;
                 
-                if (CustomControllerBase->SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound))
+                bool bSuccess = false;
+                CustomControllerBase->SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+                if (bSuccess)
                 {
                     // Do Nothing
+                    BuildingUnits.Add(U);
+                    BuildingLocs.Add(RunLocation);
+                    if (PlayWaypointSound) PlayWaypointSoundTotal = true;
                 }
                 else
                 {
@@ -553,6 +577,16 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
             if (U)
                 CustomControllerBase->FireAbilityMouseHit(U, HitResult);
+        }
+
+        if (BuildingUnits.Num() > 0)
+        {
+            CustomControllerBase->Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
+        }
+
+        if (CustomControllerBase->WaypointSound && PlayWaypointSoundTotal)
+        {
+            UGameplayStatics::PlaySound2D(CustomControllerBase, CustomControllerBase->WaypointSound, CustomControllerBase->GetSoundMultiplier());
         }
 
         if (MassUnits.Num() > 0)

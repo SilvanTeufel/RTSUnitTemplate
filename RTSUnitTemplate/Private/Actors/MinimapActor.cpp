@@ -15,6 +15,7 @@ AMinimapActor::AMinimapActor()
 {
     PrimaryActorTick.bCanEverTick = false; // No ticking needed, updates are event-driven.
     bReplicates = true;
+    bAlwaysRelevant = true;
     //SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent")));
 
     MapBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("MapBoundsComponent"));
@@ -33,10 +34,8 @@ AMinimapActor::AMinimapActor()
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
 
-    bReplicates = false;
-    SetNetUpdateFrequency(1);
-    SetMinNetUpdateFrequency(1);
-    SetReplicates(false);
+    SetNetUpdateFrequency(10);
+    SetMinNetUpdateFrequency(10);
 }
 
 void AMinimapActor::BeginPlay()
@@ -101,14 +100,16 @@ void AMinimapActor::CaptureMapTopography()
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMapSwitchActor::StaticClass(), ActorsToHide);
         SceneCaptureComponent->HiddenActors.Append(ActorsToHide);
     }
-    // 2. Erstelle das Render Target (die "Leinwand" für unser Foto)
-    TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
+    // 2. Erstelle oder hole das Render Target (die "Leinwand" für unser Foto)
+    if (!TopographyRenderTarget)
+    {
+        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
+        TopographyRenderTarget->InitCustomFormat(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8, false); // false for sRGB
+        TopographyRenderTarget->UpdateResource();
+    }
+    
     if (TopographyRenderTarget)
     {
-        // Initialisiere die Textur mit der gleichen Größe wie unsere Nebel-Textur
-        TopographyRenderTarget->InitCustomFormat(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8, true); // true für lineares Gamma
-        TopographyRenderTarget->UpdateResource();
-        
         // 3. Weise das Render Target der Capture-Komponente zu
         SceneCaptureComponent->TextureTarget = TopographyRenderTarget;
 
@@ -134,13 +135,20 @@ void AMinimapActor::InitMinimapTexture()
     MinimapTexture = UTexture2D::CreateTransient(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8);
     check(MinimapTexture);
 
-    MinimapTexture->SRGB = false; // Use linear color space for accurate color representation.
-    MinimapTexture->CompressionSettings = TC_VectorDisplacementmap;
+    MinimapTexture->SRGB = true; // Use sRGB color space for accurate color representation in UI.
+    MinimapTexture->CompressionSettings = TC_Default;
     MinimapTexture->AddToRoot(); // Prevent garbage collection.
     MinimapTexture->UpdateResource();
 
     // Initialize the pixel buffer.
     MinimapPixels.SetNumUninitialized(MinimapTexSize * MinimapTexSize);
+
+    if (!TopographyRenderTarget)
+    {
+        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
+        TopographyRenderTarget->InitCustomFormat(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8, false); // false for sRGB
+        TopographyRenderTarget->UpdateResource();
+    }
 }
 
 void AMinimapActor::Multicast_UpdateMinimap_Implementation(

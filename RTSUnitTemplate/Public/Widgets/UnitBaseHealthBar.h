@@ -45,6 +45,9 @@ public:
 		class UTextBlock* CurrentHealthLabel;
 
 	UPROPERTY(meta = (BindWidget))
+		class UTextBlock* Dash_0;
+	
+	UPROPERTY(meta = (BindWidget))
 		class UTextBlock* MaxHealthLabel;
 
 	UPROPERTY(meta = (BindWidget))
@@ -53,6 +56,9 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	    class UTextBlock* CurrentShieldLabel;
 
+	UPROPERTY(meta = (BindWidget))
+		class UTextBlock* Dash_1;
+	
 	UPROPERTY(meta = (BindWidget))
 	    class UTextBlock* MaxShieldLabel;
 

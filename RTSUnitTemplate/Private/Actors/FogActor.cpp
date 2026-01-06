@@ -65,7 +65,8 @@ void AFogActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFogActor, TeamId);
-	//DOREPLIFETIME(AFogActor, PostProcessComponent);
+	DOREPLIFETIME(AFogActor, FogMinBounds);
+	DOREPLIFETIME(AFogActor, FogMaxBounds);
 }
 
 
