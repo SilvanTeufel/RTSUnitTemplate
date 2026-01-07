@@ -101,17 +101,21 @@ void AAbilityUnit::BeginPlay()
 			if (UWorld* World = GetWorld())
 			{
 				float EffectiveDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+				const float WorldSeconds = World->GetTimeSeconds();
 				if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
 				{
-					const float WorldSeconds = World->GetTimeSeconds();
-					if (WorldSeconds < 1.0f)
+					if (WorldSeconds < GM->GatherControllerTimer)
 					{
-						EffectiveDelay += static_cast<float>(GM->GatherControllerTimer);
+						EffectiveDelay += static_cast<float>(GM->GatherControllerTimer*2.f)+2.f;
 						UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: game start detected (t=%.2f). Adding GatherControllerTimer=%d to delay. EffectiveDelay=%.2f for %s"),
 							WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
 					}
 				}
-				else
+				else if (WorldSeconds < 5.f)
+				{
+					EffectiveDelay += 10.f;
+					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using 10s delay %.2f for %s"), EffectiveDelay, *GetName());
+				}else
 				{
 					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using default delay %.2f for %s"), EffectiveDelay, *GetName());
 				}
@@ -656,15 +660,7 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 			bStartAbilitiesRetryScheduled = true;
 			if (UWorld* World = GetWorld())
 			{
-				float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
-				if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
-				{
-					if (World->GetTimeSeconds() <= static_cast<float>(GM->GatherControllerTimer))
-					{
-						RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay) + static_cast<float>(GM->GatherControllerTimer) + 2.f;
-					}
-				}
-				
+				const float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
 				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] No abilities activated; scheduling one retry in %.2fs for %s"), RetryDelay, *GetName());
 				FTimerDelegate Delegate;
 				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));

@@ -6,6 +6,7 @@ void ULoadingWidget::SetupLoadingWidget(float InDuration)
 {
 	Duration = InDuration;
 	ElapsedTime = 0.f;
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget::SetupLoadingWidget: Duration=%f"), InDuration);
 }
 
 void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -24,6 +25,7 @@ void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 		if (ElapsedTime >= Duration)
 		{
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget: Duration reached, removing from parent."));
 			RemoveFromParent();
 		}
 	}

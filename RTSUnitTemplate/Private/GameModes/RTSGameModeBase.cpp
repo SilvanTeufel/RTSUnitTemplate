@@ -61,6 +61,7 @@ void ARTSGameModeBase::BeginPlay()
 	// Show loading widget for all connected players (especially Host)
 	if (LoadingWidgetClass)
 	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Triggering loading widget for all players."));
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
 			SetupLoadingWidgetForPlayer(It->Get());
@@ -68,7 +69,7 @@ void ARTSGameModeBase::BeginPlay()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RTSGameModeBase: LoadingWidgetClass is not set in GameMode!"));
+		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] RTSGameModeBase: LoadingWidgetClass is not set in GameMode!"));
 	}
 
 	FTimerHandle TimerHandleStartDataTable;
@@ -290,6 +291,7 @@ void ARTSGameModeBase::NavInitialisation()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::PostLogin: %s"), NewPlayer ? *NewPlayer->GetName() : TEXT("None"));
 	SetupLoadingWidgetForPlayer(NewPlayer);
 }
 
@@ -299,10 +301,10 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 	{
 		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
 		{
-			const float WidgetDuration = (float)GatherControllerTimer + 1.f;
+			const float WidgetDuration = FMath::Max(5.f, (float)GatherControllerTimer + 1.f);
 			const int32 NewTriggerId = FMath::RandRange(1, 2147483647); // Use a random ID to ensure OnRep fires across map travels
 
-			UE_LOG(LogTemp, Log, TEXT("ARTSGameModeBase::SetupLoadingWidgetForPlayer: Setting config for player %s. Duration: %f, TriggerId: %d"), *NewPlayer->GetName(), WidgetDuration, NewTriggerId);
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: Setting config for player %s. Duration: %f, TriggerId: %d"), *NewPlayer->GetName(), WidgetDuration, NewTriggerId);
 
 			PC->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
 			PC->LoadingWidgetConfig.Duration = WidgetDuration;
@@ -320,7 +322,7 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 	}
 	else if (!LoadingWidgetClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ARTSGameModeBase::SetupLoadingWidgetForPlayer: LoadingWidgetClass is null!"));
+		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: LoadingWidgetClass is null!"));
 	}
 }
 

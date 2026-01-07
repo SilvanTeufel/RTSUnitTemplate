@@ -65,6 +65,8 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UFUNCTION(Client, Reliable)
 	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId);
 
+	void Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId, int32 RetryCount);
+
 	ACameraControllerBase();
 
 public:
