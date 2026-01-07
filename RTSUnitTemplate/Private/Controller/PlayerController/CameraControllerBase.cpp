@@ -20,10 +20,12 @@ void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 
 void ACameraControllerBase::OnRep_LoadingWidgetConfig()
 {
+	UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::OnRep_LoadingWidgetConfig: TriggerId=%d, Class=%s"), 
+		LoadingWidgetConfig.TriggerId, LoadingWidgetConfig.WidgetClass ? *LoadingWidgetConfig.WidgetClass->GetName() : TEXT("None"));
+
 	if (LoadingWidgetConfig.WidgetClass && LoadingWidgetConfig.Duration > 0.f)
 	{
-		Client_ShowLoadingWidget(LoadingWidgetConfig.WidgetClass, LoadingWidgetConfig.Duration);
-		UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase: LoadingWidget triggered via OnRep (TriggerId: %d)."), LoadingWidgetConfig.TriggerId);
+		Client_ShowLoadingWidget(LoadingWidgetConfig.WidgetClass, LoadingWidgetConfig.Duration, LoadingWidgetConfig.TriggerId);
 	}
 }
 
@@ -106,8 +108,19 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 	}
 }
 
-void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime)
+void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId)
 {
+	UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::Client_ShowLoadingWidget: InTriggerId=%d, LastProcessed=%d, IsLocal=%d"), 
+		InTriggerId, LastProcessedLoadingTriggerId, IsLocalPlayerController());
+
+	// If we've already processed this specific trigger, don't show it again
+	if (InTriggerId != 0 && InTriggerId == LastProcessedLoadingTriggerId)
+	{
+		return;
+	}
+	
+	LastProcessedLoadingTriggerId = InTriggerId;
+
 	GameTimerStartTime = InTargetTime;
 	if (InClass && InTargetTime > 0.f)
 	{
@@ -124,6 +137,11 @@ void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<
 			{
 				ActiveLoadingWidget->SetupLoadingWidget(InTargetTime);
 				ActiveLoadingWidget->AddToViewport(9999);
+				UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::Client_ShowLoadingWidget: Widget created and added to viewport."));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ACameraControllerBase::Client_ShowLoadingWidget: Failed to create widget!"));
 			}
 		}
 	}

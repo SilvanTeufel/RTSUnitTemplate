@@ -299,9 +299,17 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 	{
 		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
 		{
+			const float WidgetDuration = (float)GatherControllerTimer + 1.f;
+			const int32 NewTriggerId = FMath::RandRange(1, 2147483647); // Use a random ID to ensure OnRep fires across map travels
+
+			UE_LOG(LogTemp, Log, TEXT("ARTSGameModeBase::SetupLoadingWidgetForPlayer: Setting config for player %s. Duration: %f, TriggerId: %d"), *NewPlayer->GetName(), WidgetDuration, NewTriggerId);
+
 			PC->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
-			PC->LoadingWidgetConfig.Duration = (float)GatherControllerTimer + 1.f;
-			PC->LoadingWidgetConfig.TriggerId = ++LoadingWidgetTriggerId;
+			PC->LoadingWidgetConfig.Duration = WidgetDuration;
+			PC->LoadingWidgetConfig.TriggerId = NewTriggerId;
+
+			// Also send as a direct RPC to be sure it's received even if property replication is delayed
+			PC->Client_ShowLoadingWidget(LoadingWidgetClass, WidgetDuration, NewTriggerId);
 
 			// If it's a local controller (like the server/host), OnRep won't be called automatically
 			if (PC->IsLocalController())
@@ -309,6 +317,10 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 				PC->OnRep_LoadingWidgetConfig();
 			}
 		}
+	}
+	else if (!LoadingWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ARTSGameModeBase::SetupLoadingWidgetForPlayer: LoadingWidgetClass is null!"));
 	}
 }
 

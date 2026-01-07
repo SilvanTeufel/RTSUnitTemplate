@@ -345,6 +345,11 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 
 	DOREPLIFETIME(AProjectile, Niagara_A_Start_Transform);
 	DOREPLIFETIME(AProjectile, Niagara_B_Start_Transform);
+
+	DOREPLIFETIME(AProjectile, FlightDirection);
+	DOREPLIFETIME(AProjectile, bIsInitialized);
+	DOREPLIFETIME(AProjectile, ArcStartLocation);
+	DOREPLIFETIME(AProjectile, ArcTravelTime);
 }
 
 // Implement the new multicast function to update clients
@@ -410,11 +415,10 @@ void AProjectile::Tick(float DeltaTime)
 	
 	if(RotateMesh)
 	{
-		// We only want the server to calculate this and replicate it
-		if (HasAuthority())
+		// 1. Get the current transform of the instance. It already includes this frame's movement.
+		FTransform CurrentTransform;
+		if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
-			// 1. Get the current transform of the instance. It already includes this frame's movement.
-			FTransform CurrentTransform;
 			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/true);
 
 			// 2. Calculate the rotation amount (the delta) for this frame.
@@ -423,13 +427,13 @@ void AProjectile::Tick(float DeltaTime)
 			// 3. Add the rotation delta to the instance's current rotation.
 			CurrentTransform.ConcatenateRotation(RotationDelta.Quaternion());
 			
-			// 4. Replicate this final transform to all clients.
-			Multicast_UpdateISMTransform(CurrentTransform);
+			// 4. Update locally.
+			Multicast_UpdateISMTransform_Implementation(CurrentTransform);
 		}
 	}
 	if(LifeTime > MaxLifeTime && !FollowTarget)
 	{
-		if (Shooter && Target)
+		if (HasAuthority() && Shooter && Target)
 		{
 			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
@@ -441,10 +445,10 @@ void AProjectile::Tick(float DeltaTime)
 				return;
 			}
 		}
-		Destroy(true, false);
+		if (HasAuthority()) Destroy(true, false);
 	}else if(LifeTime > MaxLifeTime && FollowTarget)
 	{
-		if (Shooter && Target)
+		if (HasAuthority() && Shooter && Target)
 		{
 			AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 			AUnitBase* UnitToHit = Cast<AUnitBase>(Target);
@@ -455,7 +459,7 @@ void AProjectile::Tick(float DeltaTime)
 				return;
 			}
 		}
-		Destroy(true, false);
+		if (HasAuthority()) Destroy(true, false);
 	}
 	else if (ArcHeight > 0.f)
 	{
@@ -500,9 +504,7 @@ bool AProjectile::IsInViewport(FVector WorldPosition, float Offset)
 
 void AProjectile::FlyToUnitTarget(float DeltaSeconds)
 {
-    if (!HasAuthority()) return;
-
-    // --- 1. Get the INSTANCE'S current transform. This is the projectile's true location. ---
+    // --- 1. Get the INSTANCE'S current transform. ---
     FTransform CurrentTransform;
     if (!ISMComponent || !ISMComponent->IsValidInstance(InstanceIndex))
     {
@@ -515,47 +517,43 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     // --- 2. Update target's location and calculate flight direction ---
     if (FollowTarget)
     {
-        // This part is correct: you get the target's latest position.
         AUnitBase* UnitTarget = Cast<AUnitBase>(Target);
         if (UnitTarget && UnitTarget->GetUnitState() != UnitData::Dead)
         {
            TargetLocation =  UnitTarget->GetMassActorLocation();
         }
 
-        // ***** THE FIX IS HERE *****
-        // Calculate direction from the INSTANCE'S current location, not the actor's spawn point.
         FlightDirection  = (TargetLocation - CurrentLocation).GetSafeNormal();
     }
-    // If FollowTarget is false, FlightDirection remains the initial direction set on spawn.
 
 
     // --- 3. Calculate this frame's movement ---
-    const float FrameSpeed = MovementSpeed * DeltaSeconds * 10.f; // The * 10.f is very fast, ensure this is intended.
+    const float FrameSpeed = MovementSpeed * DeltaSeconds * 10.f;
     const FVector FrameMovement = FlightDirection * FrameSpeed;
 
 
-    // --- 4. Apply movement and replicate to clients ---
+    // --- 4. Apply movement locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
-    Multicast_UpdateISMTransform(NewTransform); // You don't need the "if valid instance" check here, we already did it at the top.
+    Multicast_UpdateISMTransform_Implementation(NewTransform);
 
 
-    // --- 5. Check for impact ---
-    const float Distance = FVector::Dist(NewTransform.GetLocation(), TargetLocation);
-    if (Distance <= FrameSpeed + CollisionRadius)
+    // --- 5. Check for impact (Authority Only) ---
+    if (HasAuthority())
     {
-       Impact(Target);
+        const float Distance = FVector::Dist(NewTransform.GetLocation(), TargetLocation);
+        if (Distance <= FrameSpeed + CollisionRadius)
+        {
+           Impact(Target);
+        }
     }
 }
 
 void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 {
 	if (!bIsInitialized) return;
-    if (!HasAuthority()) return;
 
-	OverlapCheckTimer += DeltaSeconds;
     // --- 1. Get current transform FROM THE INSTANCE ---
-    // This is the true current location of our projectile in the world.
     FTransform CurrentTransform;
     if (!ISMComponent || !ISMComponent->IsValidInstance(InstanceIndex))
     {
@@ -572,89 +570,77 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 		FlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
 	}
 	
-    const FVector FrameMovement = FlightDirection * MovementSpeed * GetWorld()->GetDeltaSeconds() * 10.f;
+    const FVector FrameMovement = FlightDirection * MovementSpeed * DeltaSeconds * 10.f;
     // The potential new location after this frame's movement
     const FVector EndLocation = CurrentLocation + FrameMovement;
 
-    // --- 3. Perform a Sphere Trace for Collision ---
-    FHitResult HitResult;
-	bool bHit = false;
-	TArray<AActor*> OutActors;
-    TArray<AActor*> ActorsToIgnore;
-    ActorsToIgnore.Add(this);
-    ActorsToIgnore.Add(Shooter);
-
-    TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
-    ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-
-	if (OverlapCheckTimer >= OverlapCheckInterval)
-	{
-		OverlapCheckTimer = 0.f;
-		/// THIS SHOULD HAPPEN ONLY ONCE EVERY 0.5sec
-		// 1. Visualize the overlap area first for debugging
-		if (DebugTargetLocation)
-			DrawDebugSphere(
-				GetWorld(),
-				EndLocation,         // Center of the sphere is at the end of the intended path
-				CollisionRadius,
-				24,                  // Segments for a smooth sphere
-				FColor::Red,      // A distinct color for the overlap check
-				true,
-				5.0f                 // Lifetime of 5 seconds
-			);
-
-		// 2. Perform the overlap check
-		UKismetSystemLibrary::SphereOverlapActors(
-			GetWorld(),
-			EndLocation,
-			CollisionRadius,
-			ObjectTypesToQuery,
-			nullptr,             // No specific actor class to filter
-			ActorsToIgnore,
-			OutActors            // Array to be filled with found actors
-		);
-
-
-		for (AActor* HitActor : OutActors)
-		{
-			// An overlap doesn't provide a detailed FHitResult, so we create one manually.
-			FHitResult ManualHitResult;
-			ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
-			ManualHitResult.bBlockingHit = true;   // Best guess for the component
-			// Call the overlap function for each actor found in the sphere
-			OnOverlapBegin_Implementation(
-				nullptr,          // We don't have an "OverlappedComp" from the projectile
-				HitActor,         // The actor we hit
-				nullptr, // The component we hit
-				-1,               // OtherBodyIndex, not available from an overlap
-				false,            // This was not from a sweep
-				ManualHitResult   // The manually created HitResult
-			);
-		}
-	}
-    // --- 4. Update Transform and Multicast ---
-    // Calculate the new final transform
+    // --- 3. Update Transform Locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
+    Multicast_UpdateISMTransform_Implementation(NewTransform);
 
-    // This is the key: We update the instance directly since we aren't using the Actor's transform as the source of truth.
-    // The next frame will correctly read the updated instance transform.
-    if (ISMComponent->IsValidInstance(InstanceIndex))
+    if (HasAuthority())
     {
-       // Update the ISM directly
-       ISMComponent->UpdateInstanceTransform(InstanceIndex, NewTransform, true, true, true);
-       
-       // You still need to tell clients to do the same! Your multicast function is essential here.
-       // The implementation of this function should call UpdateInstanceTransform on the clients.
-       Multicast_UpdateISMTransform(NewTransform); 
+        OverlapCheckTimer += DeltaSeconds;
+        if (OverlapCheckTimer >= OverlapCheckInterval)
+        {
+            OverlapCheckTimer = 0.f;
+
+            TArray<AActor*> OutActors;
+            TArray<AActor*> ActorsToIgnore;
+            ActorsToIgnore.Add(this);
+            ActorsToIgnore.Add(Shooter);
+
+            TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+            ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+
+            // 1. Visualize the overlap area first for debugging
+            if (DebugTargetLocation)
+                DrawDebugSphere(
+                    GetWorld(),
+                    EndLocation,         // Center of the sphere is at the end of the intended path
+                    CollisionRadius,
+                    24,                  // Segments for a smooth sphere
+                    FColor::Red,      // A distinct color for the overlap check
+                    true,
+                    5.0f                 // Lifetime of 5 seconds
+                );
+
+            // 2. Perform the overlap check
+            UKismetSystemLibrary::SphereOverlapActors(
+                GetWorld(),
+                EndLocation,
+                CollisionRadius,
+                ObjectTypesToQuery,
+                nullptr,             // No specific actor class to filter
+                ActorsToIgnore,
+                OutActors            // Array to be filled with found actors
+            );
+
+
+            for (AActor* HitActor : OutActors)
+            {
+                // An overlap doesn't provide a detailed FHitResult, so we create one manually.
+                FHitResult ManualHitResult;
+                ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
+                ManualHitResult.bBlockingHit = true;   // Best guess for the component
+                // Call the overlap function for each actor found in the sphere
+                OnOverlapBegin_Implementation(
+                    nullptr,          // We don't have an "OverlappedComp" from the projectile
+                    HitActor,         // The actor we hit
+                    nullptr, // The component we hit
+                    -1,               // OtherBodyIndex, not available from an overlap
+                    false,            // This was not from a sweep
+                    ManualHitResult   // The manually created HitResult
+                );
+            }
+        }
     }
 }
 
 
 void AProjectile::FlyInArc(float DeltaTime)
 {
-    if (!HasAuthority()) return;
-
     // --- 1. Get the current instance transform ---
     FTransform CurrentTransform;
     if (!ISMComponent || !ISMComponent->IsValidInstance(InstanceIndex))
@@ -707,45 +693,48 @@ void AProjectile::FlyInArc(float DeltaTime)
         }
     }
 
-	OverlapCheckTimer += DeltaTime;
-	if (OverlapCheckTimer >= OverlapCheckInterval)
-	{
-		OverlapCheckTimer = 0.f;
-		TArray<AActor*> ActorsToIgnore;
-		ActorsToIgnore.Add(this);
-		ActorsToIgnore.Add(Shooter);
+    // Update locally
+    Multicast_UpdateISMTransform_Implementation(NewTransform);
 
-		TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
-		ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-       
-		TArray<AActor*> OutActors;
-		UKismetSystemLibrary::SphereOverlapActors(
-		   GetWorld(),
-		   NewLocation, // Check at the new location
-		   CollisionRadius,
-		   ObjectTypesToQuery,
-		   nullptr,
-		   ActorsToIgnore,
-		   OutActors
-		);
-
-		for (AActor* HitActor : OutActors)
-		{
-			Impact(HitActor);
-			return; // Exit the function early since the projectile is destroyed.
-		}
-	}
-	
-    // --- 6. Update and Replicate Transform ---
-    Multicast_UpdateISMTransform(NewTransform);
-
-    // --- 7. Check for Impact ---
-    // Impact happens when the arc is complete (Alpha is 1.0)
-    if (Alpha >= 1.0f)
+    if (HasAuthority())
     {
-        // Play impact FX even if we didn't hit a unit (e.g., ground impact)
-        ImpactEvent();
-    	DestroyProjectileWithDelay();
+        OverlapCheckTimer += DeltaTime;
+        if (OverlapCheckTimer >= OverlapCheckInterval)
+        {
+            OverlapCheckTimer = 0.f;
+            TArray<AActor*> ActorsToIgnore;
+            ActorsToIgnore.Add(this);
+            ActorsToIgnore.Add(Shooter);
+
+            TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+            ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+           
+            TArray<AActor*> OutActors;
+            UKismetSystemLibrary::SphereOverlapActors(
+               GetWorld(),
+               NewLocation, // Check at the new location
+               CollisionRadius,
+               ObjectTypesToQuery,
+               nullptr,
+               ActorsToIgnore,
+               OutActors
+            );
+
+            for (AActor* HitActor : OutActors)
+            {
+                Impact(HitActor);
+                return; // Exit the function early since the projectile is destroyed.
+            }
+        }
+        
+        // --- 7. Check for Impact ---
+        // Impact happens when the arc is complete (Alpha is 1.0)
+        if (Alpha >= 1.0f)
+        {
+            // Play impact FX even if we didn't hit a unit (e.g., ground impact)
+            ImpactEvent();
+            DestroyProjectileWithDelay();
+        }
     }
 }
 

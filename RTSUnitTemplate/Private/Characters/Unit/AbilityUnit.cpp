@@ -656,7 +656,15 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 			bStartAbilitiesRetryScheduled = true;
 			if (UWorld* World = GetWorld())
 			{
-				const float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+				float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
+				if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+				{
+					if (World->GetTimeSeconds() <= static_cast<float>(GM->GatherControllerTimer))
+					{
+						RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay) + static_cast<float>(GM->GatherControllerTimer) + 2.f;
+					}
+				}
+				
 				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] No abilities activated; scheduling one retry in %.2fs for %s"), RetryDelay, *GetName());
 				FTimerDelegate Delegate;
 				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));

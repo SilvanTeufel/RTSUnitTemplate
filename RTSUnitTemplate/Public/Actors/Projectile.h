@@ -51,11 +51,11 @@ public:
 	USceneComponent* SceneRoot;
 
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FlightDirection;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool bIsInitialized = false;;
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsInitialized = false;
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
@@ -172,8 +172,10 @@ protected:
 	
 	void InitArc(FVector ArcBeginLocation);
 
+	UPROPERTY(Replicated)
 	FVector ArcStartLocation;
 	float ArcTotalDistance;
+	UPROPERTY(Replicated)
 	float ArcTravelTime = 0.f;
 	
 public:	

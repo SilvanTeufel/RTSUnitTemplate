@@ -40,6 +40,11 @@ static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_ExecInterval(
     0.1f,
     TEXT("Seconds between runs of UnitSignalingProcessor Execute."),
     ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_CreationStartDelay(
+    TEXT("net.RTS.UnitSignaling.CreationStartDelay"),
+    2.0f,
+    TEXT("Seconds to wait after world start before creating/linking Mass entities. If on server, also respects GameMode's GatherControllerTimer."),
+    ECVF_Default);
 
 UUnitSignalingProcessor::UUnitSignalingProcessor()
 {
@@ -215,15 +220,43 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 // This function is called by the delegate system at a safe time.
 void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 {
-
+    
     UWorld* World = GetWorld();
 
     if (!World) return;
     
     const float Now = World->GetTimeSeconds();
 
-    if (Now <= 2.f) return;
-    
+    float StartDelay = CVarRTS_UnitSignaling_CreationStartDelay.GetValueOnGameThread();
+
+    // On server, we can sync with GameMode's GatherControllerTimer
+    if (World->GetNetMode() != NM_Client)
+    {
+        if (const ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+        {
+            StartDelay = FMath::Max(StartDelay, static_cast<float>(GM->GatherControllerTimer));
+        }
+    }
+    else
+    {
+        // On client, as an additional safety, we can check if we've received the registry yet.
+        // This ensures we don't create local entities too far ahead of the server's authoritative registration.
+        if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+        {
+            if (CacheSub->GetRegistry(false) == nullptr)
+            {
+                // Registry not yet replicated; wait a bit longer unless we are past a hard timeout (e.g. 10s)
+                if (Now < 10.f)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    if (Now <= StartDelay) return;
+
+
     if (ActorsToCreateThisFrame.IsEmpty())
     {
         // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));

@@ -55,13 +55,15 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UPROPERTY()
 	class ULoadingWidget* ActiveLoadingWidget = nullptr;
 
+	int32 LastProcessedLoadingTriggerId = -1;
+
 	UFUNCTION(Client, Reliable)
 	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
 
 	FTimerHandle WinLoseTimerHandle;
 
 	UFUNCTION(Client, Reliable)
-	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime);
+	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId);
 
 	ACameraControllerBase();
 
