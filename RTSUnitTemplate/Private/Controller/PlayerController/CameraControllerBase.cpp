@@ -8,6 +8,24 @@
 #include "Widgets/LoadingWidget.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Blueprint/UserWidget.h"
+#include "Net/UnrealNetwork.h"
+
+
+void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ACameraControllerBase, LoadingWidgetConfig);
+}
+
+void ACameraControllerBase::OnRep_LoadingWidgetConfig()
+{
+	if (LoadingWidgetConfig.WidgetClass && LoadingWidgetConfig.Duration > 0.f)
+	{
+		Client_ShowLoadingWidget(LoadingWidgetConfig.WidgetClass, LoadingWidgetConfig.Duration);
+		UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase: LoadingWidget triggered via OnRep (TriggerId: %d)."), LoadingWidgetConfig.TriggerId);
+	}
+}
 
 
 bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(AUnitBase* Unit, const FVector& TargetLocation)
@@ -95,11 +113,17 @@ void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<
 	{
 		if (IsLocalPlayerController())
 		{
-			ULoadingWidget* LoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
-			if (LoadingWidget)
+			if (ActiveLoadingWidget)
 			{
-				LoadingWidget->SetupLoadingWidget(InTargetTime);
-				LoadingWidget->AddToViewport(9999);
+				ActiveLoadingWidget->RemoveFromParent();
+				ActiveLoadingWidget = nullptr;
+			}
+
+			ActiveLoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
+			if (ActiveLoadingWidget)
+			{
+				ActiveLoadingWidget->SetupLoadingWidget(InTargetTime);
+				ActiveLoadingWidget->AddToViewport(9999);
 			}
 		}
 	}
@@ -113,11 +137,17 @@ ACameraControllerBase::ACameraControllerBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
+	bReplicates = true;
 }
 
 void ACameraControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (IsLocalPlayerController())
+	{
+		OnRep_LoadingWidgetConfig();
+	}
 
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
 	CameraBase = Cast<ACameraBase>(GetPawn());

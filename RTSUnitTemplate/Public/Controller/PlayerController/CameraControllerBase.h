@@ -10,6 +10,21 @@
 
 class ULoadingWidget;
 
+USTRUCT(BlueprintType)
+struct FLoadingWidgetConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class ULoadingWidget> WidgetClass = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	float Duration = 0.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 TriggerId = 0;
+};
+
 /**
  * 
  */
@@ -19,6 +34,14 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	GENERATED_BODY()
 	
 	public:
+	UPROPERTY(ReplicatedUsing = OnRep_LoadingWidgetConfig)
+	FLoadingWidgetConfig LoadingWidgetConfig;
+
+	UFUNCTION()
+	void OnRep_LoadingWidgetConfig();
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UFUNCTION(Server, Reliable)
 	void Server_TravelToMap(const FString& MapName, FName TagToEnable = NAME_None);
 
@@ -29,6 +52,9 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 	
+	UPROPERTY()
+	class ULoadingWidget* ActiveLoadingWidget = nullptr;
+
 	UFUNCTION(Client, Reliable)
 	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
 

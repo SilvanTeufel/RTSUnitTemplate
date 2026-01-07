@@ -121,6 +121,10 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyOwnerAbilityKeyToggle(AUnitBase* Unit, const FString& Key, bool bEnable);
 
+	// Apply team-wide ability-key toggle on client and refresh UI
+	UFUNCTION(Client, Reliable)
+	void Client_ApplyTeamAbilityKeyToggle(int32 TeamId, const FString& Key, bool bEnable);
+
 	// Client-side prediction mirror for movement request
 	/*
 	UFUNCTION(Client, Reliable)

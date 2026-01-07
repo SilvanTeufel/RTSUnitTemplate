@@ -18,6 +18,9 @@
 #include "NavFilters/NavigationQueryFilter.h"
 #include "Navigation/CrowdAgentInterface.h"
 #include "Navigation/CrowdManager.h"
+#include "NavModifierComponent.h"
+#include "NavAreas/NavArea_Obstacle.h"
+#include "Components/BoxComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
@@ -1307,4 +1310,99 @@ int32 AUnitBase::GetAliveUnitsInDataSet()
 		}
 	}
 	return AliveCount;
+}
+
+void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
+{
+	if (IsValid(NavObstacleProxy))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// Try to find a capsule collision component first…
+	UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
+	FBox BoundsBox;
+
+	if (Capsule)
+	{
+		// Pull radius & half‑height (accounting for scale)
+		const float Radius = Capsule->GetScaledCapsuleRadius();
+		const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+		const FVector Center = Capsule->GetComponentLocation();
+
+		// Build an FBox from center±extent
+		const FVector Extents = FVector(Radius, Radius, HalfHeight);
+		BoundsBox = FBox(Center - Extents, Center + Extents);
+	}
+	else
+	{
+		// Fallback to component bounding box
+		FBox ComponentBB = GetComponentsBoundingBox();
+		if (!ComponentBB.IsValid)
+		{
+			return;
+		}
+
+		constexpr float BB_Padding = 10.0f;
+		BoundsBox = ComponentBB.ExpandBy(BB_Padding);
+	}
+
+	// 2. Pad the bounds slightly to ensure full coverage
+	constexpr float Final_Padding = 10.0f; // Small padding
+	const FBox PaddedBounds = BoundsBox.ExpandBy(FVector(Final_Padding));
+	const FVector Center = PaddedBounds.GetCenter();
+	const FVector Extent = PaddedBounds.GetExtent();
+
+	// 3. Spawn a dedicated, lightweight actor to hold the nav modifier
+	NavObstacleProxy = World->SpawnActor<AActor>();
+	if (!NavObstacleProxy)
+	{
+		return;
+	}
+
+	// 4. Create and configure the Box Component for the volume
+	UBoxComponent* BoxComp = NewObject<UBoxComponent>(NavObstacleProxy);
+	BoxComp->SetWorldLocation(Center);
+	BoxComp->SetBoxExtent(Extent, false);
+	BoxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	NavObstacleProxy->SetRootComponent(BoxComp);
+	BoxComp->RegisterComponent();
+
+	// 5. Create and configure the Nav Modifier Component
+	UNavModifierComponent* ModComp = NewObject<UNavModifierComponent>(NavObstacleProxy);
+	ModComp->SetAreaClass(UNavArea_Obstacle::StaticClass());
+	ModComp->FailsafeExtent = Extent;
+	ModComp->RegisterComponent();
+
+	// 6. Mark the area dirty to force a navmesh rebuild
+	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+	{
+		NavSys->AddDirtyArea(PaddedBounds, ENavigationDirtyFlag::All);
+	}
+}
+
+void AUnitBase::Multicast_UnregisterObstacle_Implementation()
+{
+	if (IsValid(NavObstacleProxy))
+	{
+		// Get the bounds *before* destroying the actor
+		const FBox BoundsToDirty = NavObstacleProxy->GetComponentsBoundingBox();
+
+		// Destroy our proxy actor
+		NavObstacleProxy->Destroy();
+		NavObstacleProxy = nullptr;
+
+		// Mark the area dirty again so the navmesh can reclaim the space
+		if (UWorld* World = GetWorld())
+		{
+			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+			{
+				NavSys->AddDirtyArea(BoundsToDirty, ENavigationDirtyFlag::All);
+			}
+		}
+	}
 }

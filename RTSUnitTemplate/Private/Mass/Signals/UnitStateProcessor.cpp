@@ -1096,17 +1096,17 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		AIStateFragment->CanMove = StrongUnitActor->CanMove;
         		bool bHasDeadTag = DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDeadTag::StaticStruct());
         		
-        		if (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDisableNavManipulationTag::StaticStruct()))
+        		if (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDisableNavManipulationTag::StaticStruct()) || bHasDeadTag)
         		{
-        			UnregisterObstacle(StrongUnitActor);
+        			if (StrongUnitActor->HasAuthority() && StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_UnregisterObstacle();
         		}else if (AIStateFragment->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
-        			UnregisterObstacle(StrongUnitActor);
+        			if (StrongUnitActor->HasAuthority() && StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_UnregisterObstacle();
         		}else if(!AIStateFragment->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
-        			RegisterBuildingAsObstacle(StrongUnitActor);
+        			if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
         		
@@ -1760,7 +1760,7 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
-                    	UnregisterObstacle(UnitBase);
+                    	if (UnitBase->HasAuthority() && UnitBase->NavObstacleProxy) UnitBase->Multicast_UnregisterObstacle();
                     	UnitBase->HideHealthWidget(); // Aus deinem Code
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
@@ -2062,142 +2062,6 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 }
 
 
-void UUnitStateProcessor::RegisterBuildingAsObstacle(AActor* BuildingActor)
-{
-    if (!IsValid(BuildingActor) || !World)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[NavObstacle] Invalid actor or world provided for registration."));
-        return;
-    }
-
-    // Prevent registering the same actor twice
-    if (RegisteredObstacles.Contains(BuildingActor))
-    {
-        // UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Actor %s is already registered."), *BuildingActor->GetName());
-        return;
-    }
-
-	// Try to find a capsule collision component first…
-	UCapsuleComponent* Capsule = BuildingActor->FindComponentByClass<UCapsuleComponent>();
-	FBox BoundsBox;
-
-	if (Capsule)
-	{
-		// Pull radius & half‑height (accounting for scale)
-		const float Radius     = Capsule->GetScaledCapsuleRadius();
-		const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
-		const FVector Center   = Capsule->GetComponentLocation();
-
-		// Build an FBox from center±extent
-		const FVector Extents = FVector(Radius, Radius, HalfHeight);
-		BoundsBox = FBox(Center - Extents, Center + Extents);
-
-		UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Using capsule bounds (R=%.1f H=%.1f) for %s."),
-			   Radius, HalfHeight, *BuildingActor->GetName());
-	}
-	else
-	{
-		// Fallback to component bounding box
-		FBox ComponentBB = BuildingActor->GetComponentsBoundingBox();
-		if (!ComponentBB.IsValid)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[NavObstacle] Could not calculate valid bounds for actor %s."),
-				   *BuildingActor->GetName());
-			return;
-		}
-
-		constexpr float Padding = 10.0f;
-		BoundsBox = ComponentBB.ExpandBy(Padding);
-	}
-    
-    // 2. Pad the bounds slightly to ensure full coverage
-    constexpr float Padding = 10.0f; // Small padding
-    const FBox PaddedBounds = BoundsBox.ExpandBy(FVector(Padding));
-    const FVector Center = PaddedBounds.GetCenter();
-    const FVector Extent = PaddedBounds.GetExtent();
-
-    // 3. Spawn a dedicated, lightweight actor to hold the nav modifier
-    AActor* NavObstacleActor = World->SpawnActor<AActor>();
-    if (!NavObstacleActor)
-    {
-        UE_LOG(LogTemp, Error, TEXT("[NavObstacle] Failed to spawn proxy actor for nav obstacle."));
-        return;
-    }
-    
-    // For easier debugging, give it a clear name
-    // NavObstacleActor->SetActorLabel(FString::Printf(TEXT("NavObstacle_for_%s"), *BuildingActor->GetName()));
-
-    // 4. Create and configure the Box Component for the volume
-	UBoxComponent* BoxComp = NewObject<UBoxComponent>(NavObstacleActor);
-    BoxComp->SetWorldLocation(Center);
-	BoxComp->SetBoxExtent(Extent, false);
-    BoxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-
-    // --- ADD THESE LINES FOR DEBUGGING ---
-    if(Debug)
-    {
-	    BoxComp->SetHiddenInGame(false);
-    	BoxComp->SetVisibility(true);
-    }
-    // ------------------------------------
-	
-    NavObstacleActor->SetRootComponent(BoxComp);
-    BoxComp->RegisterComponent();
-
-    // 5. Create and configure the Nav Modifier Component
-    UNavModifierComponent* ModComp = NewObject<UNavModifierComponent>(NavObstacleActor);
-    ModComp->SetAreaClass(UNavArea_Obstacle::StaticClass());
-	ModComp->FailsafeExtent = Extent;
-    ModComp->RegisterComponent();
-
-    // 6. Mark the area dirty to force a navmesh rebuild
-    if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
-    {
-        NavSys->AddDirtyArea(PaddedBounds, ENavigationDirtyFlag::All);
-        UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Registered %s and marked dirty area."), *BuildingActor->GetName());
-    }
-
-    // 7. Track the new obstacle and bind to the building's destruction event for auto-cleanup
-    RegisteredObstacles.Add(BuildingActor, NavObstacleActor);
-   // BuildingActor->OnDestroyed.AddDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
-}
-
-void UUnitStateProcessor::UnregisterObstacle(AActor* BuildingActor)
-{
-	if (!IsValid(BuildingActor))
-	{
-		return;
-	}
-    
-	// Unbind the delegate first, as we need the BuildingActor pointer to do it.
-	//BuildingActor->OnDestroyed.RemoveDynamic(this, &UUnitStateProcessor::OnRegisteredActorDestroyed);
-
-	TObjectPtr<AActor> NavObstacleActor = RegisteredObstacles.FindRef(BuildingActor);
-
-	if (IsValid(NavObstacleActor))
-	{
-		// Get the bounds *before* destroying the actor
-		const FBox BoundsToDirty = NavObstacleActor->GetComponentsBoundingBox();
-
-		// Destroy our proxy actor
-		NavObstacleActor->Destroy();
-		UE_LOG(LogTemp, Log, TEXT("[NavObstacle] Unregistered and destroyed nav obstacle for %s."), *BuildingActor->GetName());
-
-		// Mark the area dirty again so the navmesh can reclaim the space
-		if (World)
-		{
-			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
-			{
-				NavSys->AddDirtyArea(BoundsToDirty, ENavigationDirtyFlag::All);
-			}
-		}
-	}
-    
-	// Now it's safe to stop tracking it.
-	RegisteredObstacles.Remove(BuildingActor);
-}
-
 void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
@@ -2321,7 +2185,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									if (SpawnedBuilding && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 										UnitBase->BuildArea->Building = SpawnedBuilding;
 
-									RegisterBuildingAsObstacle(NewUnit);
+									if (NewUnit->HasAuthority() && !NewUnit->NavObstacleProxy) NewUnit->Multicast_RegisterBuildingAsObstacle();
 
 									if (NewUnit->bUseSkeletalMovement)
 									{

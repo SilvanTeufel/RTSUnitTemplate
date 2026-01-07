@@ -663,6 +663,10 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 						bOwnerKeyDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForOwner(ASC, RawKey);
 						bOwnerForceEnabled = UGameplayAbilityBase::IsAbilityKeyForceEnabledForOwner(ASC, RawKey);
 					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[UI] UpdateAbilityButtonsState: Missing ASC for Unit %s"), *GetNameSafe(Unit));
+					}
 				}
 
 				// Apply precedence: OwnerForce > OwnerDisable > TeamForce > (AssetDisabled or TeamDisable)

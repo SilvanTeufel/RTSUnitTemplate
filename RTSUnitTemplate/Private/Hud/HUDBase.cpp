@@ -89,40 +89,41 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 
 		// Trace to see if the line clips through the landscape
 		// We use an offset to avoid hitting the ground immediately at the start/end points
-		FVector TraceStart = Start; TraceStart.Z += WPLineZOffset;
-		FVector TraceEnd = End; TraceEnd.Z += WPLineZOffset;
+		const FVector TraceEnd = End + FVector(0.f, 0.f, WPLineZOffset);
 
-		FHitResult Hit;
 		FCollisionQueryParams Params;
 		Params.AddIgnoredActor(Building);
 		Params.AddIgnoredActor(WP);
 
-		// Trace against WorldStatic (landscape)
-		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
-		{
-			// If we hit something, draw two lines with a midpoint above the hit location
-			const FVector MidPoint = Hit.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
+		TArray<FVector> Points;
+		Points.Add(Start);
 
-			// Check for a second collision between the first midpoint and the end
-			FVector TraceStart2 = MidPoint; TraceStart2.Z += WPLineZOffset;
-			FHitResult Hit2;
-			if (World->LineTraceSingleByChannel(Hit2, TraceStart2, TraceEnd, ECC_WorldStatic, Params))
+		FVector CurrentTraceStart = Start + FVector(0.f, 0.f, WPLineZOffset);
+
+		for (int32 i = 0; i < WPLineMaxIterations; ++i)
+		{
+			FHitResult Hit;
+			if (World->LineTraceSingleByChannel(Hit, CurrentTraceStart, TraceEnd, ECC_WorldStatic, Params))
 			{
-				// If we hit something again, draw three lines with two midpoints
-				const FVector MidPoint2 = Hit2.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
-				DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
-				DrawDashedLine3D(MidPoint, MidPoint2, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
-				DrawDashedLine3D(MidPoint2, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+				// If we hit something, add a midpoint above the hit location
+				const FVector MidPoint = Hit.Location + FVector(0.f, 0.f, WPLineCollisionZOffset);
+				Points.Add(MidPoint);
+				
+				// Update next trace start point
+				CurrentTraceStart = MidPoint + FVector(0.f, 0.f, WPLineZOffset);
 			}
 			else
 			{
-				DrawDashedLine3D(Start, MidPoint, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
-				DrawDashedLine3D(MidPoint, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+				break;
 			}
 		}
-		else
+
+		Points.Add(End);
+
+		// Draw all segments
+		for (int32 i = 0; i < Points.Num() - 1; ++i)
 		{
-			DrawDashedLine3D(Start, End, WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			DrawDashedLine3D(Points[i], Points[i + 1], WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
 		}
 	}
 }

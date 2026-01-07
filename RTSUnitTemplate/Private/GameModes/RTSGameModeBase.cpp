@@ -63,10 +63,7 @@ void ARTSGameModeBase::BeginPlay()
 	{
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
-			if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
-			{
-				PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
-			}
+			SetupLoadingWidgetForPlayer(It->Get());
 		}
 	}
 	else
@@ -293,12 +290,24 @@ void ARTSGameModeBase::NavInitialisation()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+	SetupLoadingWidgetForPlayer(NewPlayer);
+}
 
-	if (LoadingWidgetClass)
+void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
+{
+	if (LoadingWidgetClass && NewPlayer)
 	{
 		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
 		{
-			PC->Client_ShowLoadingWidget(LoadingWidgetClass, (float)GatherControllerTimer + 1.f);
+			PC->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
+			PC->LoadingWidgetConfig.Duration = (float)GatherControllerTimer + 1.f;
+			PC->LoadingWidgetConfig.TriggerId = ++LoadingWidgetTriggerId;
+
+			// If it's a local controller (like the server/host), OnRep won't be called automatically
+			if (PC->IsLocalController())
+			{
+				PC->OnRep_LoadingWidgetConfig();
+			}
 		}
 	}
 }

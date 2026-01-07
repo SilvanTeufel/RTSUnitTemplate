@@ -137,6 +137,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static void ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystemComponent* OwnerASC, const FString& Key, bool bEnable);
 
+	// Apply team-scoped ability key toggle on the local machine (client/UI side)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void ApplyTeamAbilityKeyToggle_Local(int32 TeamId, const FString& Key, bool bEnable);
+
 	// Returns true if this exact ability BP class was ever executed in this play session
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool WasThisAbilityClassExecuted() const;

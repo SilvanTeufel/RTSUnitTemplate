@@ -1988,11 +1988,31 @@ void ACustomControllerBase::Client_ApplyOwnerAbilityKeyToggle_Implementation(AUn
 	UAbilitySystemComponent* ASC = Unit ? Unit->GetAbilitySystemComponent() : nullptr;
 	if (!ASC)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Missing ASC. Unit=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *Key, bEnable ? TEXT("true") : TEXT("false"));
+		UE_LOG(LogTemp, Log, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Missing ASC. Unit=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *Key, bEnable ? TEXT("true") : TEXT("false"));
 		return;
 	}
 	UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(ASC, Key, bEnable);
 	UE_LOG(LogTemp, Log, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Applied on client. Unit=%s ASC=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *GetNameSafe(ASC), *Key, bEnable ? TEXT("true") : TEXT("false"));
+
+	// Refresh the unit selector UI immediately
+	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))
+	{
+		if (ExtendedCameraBase->UnitSelectorWidget)
+		{
+			ExtendedCameraBase->UnitSelectorWidget->UpdateSelectedUnits();
+		}
+	}
+}
+
+void ACustomControllerBase::Client_ApplyTeamAbilityKeyToggle_Implementation(int32 TeamId, const FString& Key, bool bEnable)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UGameplayAbilityBase::ApplyTeamAbilityKeyToggle_Local(TeamId, Key, bEnable);
+	UE_LOG(LogTemp, Log, TEXT("[Client_ApplyTeamAbilityKeyToggle] Applied on client. TeamId=%d Key='%s' Enable=%s"), TeamId, *Key, bEnable ? TEXT("true") : TEXT("false"));
 
 	// Refresh the unit selector UI immediately
 	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))

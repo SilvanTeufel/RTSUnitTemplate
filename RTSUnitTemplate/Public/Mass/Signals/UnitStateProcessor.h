@@ -208,15 +208,6 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
-	UPROPERTY()
-	TMap<TObjectPtr<AActor>, TObjectPtr<AActor>> RegisteredObstacles;
-	
-	UFUNCTION()
-	void RegisterBuildingAsObstacle(AActor* BuildingActor);
-
-	UFUNCTION()
-	void UnregisterObstacle(AActor* BuildingActor);
-	
 	UFUNCTION()
 	void HandleSpawnBuildingRequest(
 		FName SignalName,

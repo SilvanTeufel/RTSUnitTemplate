@@ -88,6 +88,26 @@ namespace
 	};
 
 	static FAbilityKeyGateSessionReset GAbilityKeyGateSessionReset;
+
+	static void SyncTeamAbilityKeyToggle_Server(int32 TeamId, const FString& Key, bool bEnable)
+	{
+		if (!GEngine) return;
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			UWorld* World = Context.World();
+			if (World && (World->IsNetMode(NM_DedicatedServer) || World->IsNetMode(NM_ListenServer)))
+			{
+				for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+				{
+					ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+					if (CustomPC && CustomPC->SelectableTeamId == TeamId)
+					{
+						CustomPC->Client_ApplyTeamAbilityKeyToggle(TeamId, Key, bEnable);
+					}
+				}
+			}
+		}
+	}
 }
 
 UGameplayAbilityBase::UGameplayAbilityBase()
@@ -252,10 +272,15 @@ void UGameplayAbilityBase::SetAbilitiesEnabledForTeamByKey(const FString& Key, b
 		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesEnabledForTeamByKey called but ActorInfo/Owner invalid. Key='%s' Enable=%s"), *Key, bEnable ? TEXT("true") : TEXT("false"));
 		return;
 	}
-	const AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get());
+	AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get());
 	if (!Unit)
 	{
-		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesEnabledForTeamByKey owner is not AUnitBase. Key='%s'"), *Key);
+		Unit = Cast<AUnitBase>(Info->AvatarActor.Get());
+	}
+	
+	if (!Unit)
+	{
+		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesEnabledForTeamByKey owner/avatar is not AUnitBase. Key='%s'"), *Key);
 		return;
 	}
 	const FString NormalizedKey = NormalizeAbilityKey(Key);
@@ -335,6 +360,8 @@ void UGameplayAbilityBase::SetAbilitiesEnabledForTeamByKey_Static(const FString&
 	{
 		UE_LOG(LogAbilityKeyGate, Log, TEXT("[After] TeamId=%d ForceEnabledKeys={}"), TeamId);
 	}
+
+	SyncTeamAbilityKeyToggle_Server(TeamId, NormalizedKey, bEnable);
 }
 
 bool UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(const FString& Key, int32 TeamId)
@@ -366,10 +393,15 @@ void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey(const FString& K
 		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesForceEnabledForTeamByKey called but ActorInfo/Owner invalid. Key='%s' ForceEnable=%s"), *Key, bForceEnable ? TEXT("true") : TEXT("false"));
 		return;
 	}
-	const AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get());
+	AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get());
 	if (!Unit)
 	{
-		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesForceEnabledForTeamByKey owner is not AUnitBase. Key='%s'"), *Key);
+		Unit = Cast<AUnitBase>(Info->AvatarActor.Get());
+	}
+	
+	if (!Unit)
+	{
+		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilitiesForceEnabledForTeamByKey owner/avatar is not AUnitBase. Key='%s'"), *Key);
 		return;
 	}
 	const FString NormalizedKey = NormalizeAbilityKey(Key);
@@ -389,13 +421,10 @@ void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey(const FString& K
 		if (!ThisAbilityKey.IsEmpty() && ThisAbilityKey == NormalizedKey)
 		{
 			UE_LOG(LogAbilityKeyGate, Log, TEXT("SetAbilitiesForceEnabledForTeamByKey: self-disable triggered for Ability=%s Key='%s'"), *GetNameSafe(this), *NormalizedKey);
-			// Team-wide disable for this key
-			UGameplayAbilityBase::SetAbilitiesEnabledForTeamByKey_Static(NormalizedKey, Unit->TeamId, /*bEnable=*/false);
-			// Additionally apply owner-scoped disable locally to immediately reflect in UI and prediction flows
-			if (Info->AbilitySystemComponent.IsValid())
-			{
-				UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(Info->AbilitySystemComponent.Get(), NormalizedKey, /*bEnable=*/false);
-			}
+			// Team-wide disable for this key (synced via static function call inside)
+			SetAbilitiesEnabledForTeamByKey(NormalizedKey, false);
+			// Additionally apply owner-scoped disable (synced via SetAbilityEnabledByKey)
+			SetAbilityEnabledByKey(NormalizedKey, false);
 		}
 	}
 }
@@ -439,6 +468,8 @@ void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey_Static(const FSt
 	{
 		UE_LOG(LogAbilityKeyGate, Log, TEXT("[After] TeamId=%d ForceEnabledKeys={}"), TeamId);
 	}
+
+	SyncTeamAbilityKeyToggle_Server(TeamId, NormalizedKey, bForceEnable);
 }
 
 bool UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(const FString& Key, int32 TeamId)
@@ -552,6 +583,10 @@ void UGameplayAbilityBase::SetAbilityEnabledByKey(const FString& Key, bool bEnab
 	UAbilitySystemComponent* ASC = Info->AbilitySystemComponent.Get();
 	AActor* OwnerActor = Info->OwnerActor.Get();
 	AUnitBase* Unit = Cast<AUnitBase>(OwnerActor);
+	if (!Unit)
+	{
+		Unit = Cast<AUnitBase>(Info->AvatarActor.Get());
+	}
 
 	// Update per-owner registries instead of touching ability instances/CDOs
 	TSet<FString>& DisabledSet = GDisabledAbilityKeysByOwner.FindOrAdd(ASC);
@@ -621,6 +656,7 @@ void UGameplayAbilityBase::SetAbilityEnabledByKeyForUnit(AUnitBase* Unit, const 
 	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
 	if (!ASC)
 	{
+		UE_LOG(LogAbilityKeyGate, Warning, TEXT("SetAbilityEnabledByKeyForUnit: Unit %s has no ASC. Key='%s'"), *GetNameSafe(Unit), *NormalizedKey);
 		return;
 	}
 
@@ -739,7 +775,7 @@ void UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystem
 		{
 			ForceSet.Add(NormalizedKey);
 		}
-		UE_LOG(LogAbilityKeyGate, Verbose, TEXT("[ClientLocal] ApplyOwnerAbilityKeyToggle: OwnerASC=%s Key='%s' Enable=true (wasDisabled=%s, nowForce=%s)"),
+		UE_LOG(LogAbilityKeyGate, Log, TEXT("[ClientLocal] ApplyOwnerAbilityKeyToggle: OwnerASC=%s Key='%s' Enable=true (wasDisabled=%s, nowForce=%s)"),
 			*GetNameSafe(OwnerASC), *NormalizedKey, bWasDisabled ? TEXT("true") : TEXT("false"), bAlreadyForced ? TEXT("true") : TEXT("false"));
 	}
 	else
@@ -747,7 +783,7 @@ void UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystem
 		const bool bWasInDisabled = DisabledSet.Contains(NormalizedKey);
 		DisabledSet.Add(NormalizedKey);
 		const bool bRemovedForce = ForceSet.Remove(NormalizedKey) > 0;
-		UE_LOG(LogAbilityKeyGate, Verbose, TEXT("[ClientLocal] ApplyOwnerAbilityKeyToggle: OwnerASC=%s Key='%s' Enable=false (wasInDisabled=%s, removedForce=%s)"),
+		UE_LOG(LogAbilityKeyGate, Log, TEXT("[ClientLocal] ApplyOwnerAbilityKeyToggle: OwnerASC=%s Key='%s' Enable=false (wasInDisabled=%s, removedForce=%s)"),
 			*GetNameSafe(OwnerASC), *NormalizedKey, bWasInDisabled ? TEXT("true") : TEXT("false"), bRemovedForce ? TEXT("true") : TEXT("false"));
 	}
 
@@ -759,6 +795,41 @@ void UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(class UAbilitySystem
 	{
 		GForceEnabledAbilityKeysByOwner.Remove(OwnerASC);
 	}
+}
+
+void UGameplayAbilityBase::ApplyTeamAbilityKeyToggle_Local(int32 TeamId, const FString& Key, bool bEnable)
+{
+	if (TeamId == INDEX_NONE)
+	{
+		return;
+	}
+	const FString NormalizedKey = NormalizeAbilityKey(Key);
+	if (NormalizedKey.IsEmpty())
+	{
+		return;
+	}
+
+	TSet<FString>& DisabledRef = GDisabledAbilityKeysByTeam.FindOrAdd(TeamId);
+	TSet<FString>& ForceRef = GForceEnabledAbilityKeysByTeam.FindOrAdd(TeamId);
+
+	if (bEnable)
+	{
+		DisabledRef.Remove(NormalizedKey);
+		if (!ForceRef.Contains(NormalizedKey))
+		{
+			ForceRef.Add(NormalizedKey);
+		}
+		UE_LOG(LogAbilityKeyGate, Log, TEXT("[ClientLocal] ApplyTeamAbilityKeyToggle: TeamId=%d Key='%s' Enable=true"), TeamId, *NormalizedKey);
+	}
+	else
+	{
+		DisabledRef.Add(NormalizedKey);
+		ForceRef.Remove(NormalizedKey);
+		UE_LOG(LogAbilityKeyGate, Log, TEXT("[ClientLocal] ApplyTeamAbilityKeyToggle: TeamId=%d Key='%s' Enable=false"), TeamId, *NormalizedKey);
+	}
+
+	if (DisabledRef.Num() == 0) GDisabledAbilityKeysByTeam.Remove(TeamId);
+	if (ForceRef.Num() == 0) GForceEnabledAbilityKeysByTeam.Remove(TeamId);
 }
 
 

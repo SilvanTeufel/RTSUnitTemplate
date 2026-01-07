@@ -30,6 +30,15 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 
+	UPROPERTY()
+	TObjectPtr<AActor> NavObstacleProxy;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_RegisterBuildingAsObstacle();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_UnregisterObstacle();
+
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bIsMassUnit = false;
 	

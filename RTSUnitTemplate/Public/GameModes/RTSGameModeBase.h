@@ -83,6 +83,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	TSubclassOf<class ULoadingWidget> LoadingWidgetClass;
 
+	UPROPERTY()
+	int32 LoadingWidgetTriggerId = 0;
+
 	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
 	AWinLoseConfigActor* WinLoseConfigActor;
 
@@ -109,6 +112,8 @@ public:
 	void NavInitialisation();
 	
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+
+	void SetupLoadingWidgetForPlayer(APlayerController* NewPlayer);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTeamIdAndDefaultWaypoint(int Id, AWaypoint* Waypoint, ACameraControllerBase* CameraControllerBase);
