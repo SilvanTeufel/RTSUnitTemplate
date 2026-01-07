@@ -111,9 +111,9 @@ void AAbilityUnit::BeginPlay()
 							WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
 					}
 				}
-				else if (WorldSeconds < 5.f)
+				else if (WorldSeconds < 15.f)
 				{
-					EffectiveDelay += 10.f;
+					EffectiveDelay += 20.f;
 					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using 10s delay %.2f for %s"), EffectiveDelay, *GetName());
 				}else
 				{

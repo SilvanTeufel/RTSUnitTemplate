@@ -7,6 +7,7 @@
 #include "Widgets/WinLoseWidget.h"
 #include "Widgets/LoadingWidget.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "GameStates/ResourceGameState.h"
 #include "Blueprint/UserWidget.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -15,19 +16,6 @@
 void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ACameraControllerBase, LoadingWidgetConfig);
-}
-
-void ACameraControllerBase::OnRep_LoadingWidgetConfig()
-{
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::OnRep_LoadingWidgetConfig: TriggerId=%d, Class=%s, IsLocal=%d"), 
-		LoadingWidgetConfig.TriggerId, LoadingWidgetConfig.WidgetClass ? *LoadingWidgetConfig.WidgetClass->GetName() : TEXT("None"), IsLocalPlayerController());
-
-	if (LoadingWidgetConfig.WidgetClass && LoadingWidgetConfig.Duration > 0.f)
-	{
-		Client_ShowLoadingWidget(LoadingWidgetConfig.WidgetClass, LoadingWidgetConfig.Duration, LoadingWidgetConfig.TriggerId);
-	}
 }
 
 
@@ -111,25 +99,77 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 
 void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: InTriggerId=%d, LastProcessed=%d, IsLocal=%d"), 
-		InTriggerId, LastProcessedLoadingTriggerId, IsLocalPlayerController());
+	bool bIsLocal = IsLocalPlayerController();
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: InTriggerId=%d, LastProcessed=%d, IsLocal=%d, TargetTime=%f"), 
+		InTriggerId, LastProcessedLoadingTriggerId, bIsLocal, InTargetTime);
 
 	// If we've already processed this specific trigger, don't show it again
 	if (InTriggerId != 0 && InTriggerId == LastProcessedLoadingTriggerId)
 	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: TriggerId %d already processed. Skipping."), InTriggerId);
 		return;
 	}
 	
 	LastProcessedLoadingTriggerId = InTriggerId;
-	GameTimerStartTime = InTargetTime;
 
-	if (InClass && InTargetTime > 0.f && IsLocalPlayerController())
+	if (InClass && InTargetTime > 0.05f && bIsLocal)
 	{
 		Retry_ShowLoadingWidget(InClass, InTargetTime, InTriggerId, 0);
 	}
 	else if (!InClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: LoadingWidgetClass is null!"));
+	}
+	else if (InTargetTime <= 0.05f)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: TargetTime %f too small."), InTargetTime);
+	}
+	else if (!bIsLocal)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: Not local player controller."));
+	}
+}
+
+void ACameraControllerBase::CheckForLoadingWidget()
+{
+	if (!IsLocalPlayerController()) return;
+
+	AResourceGameState* GS = GetWorld()->GetGameState<AResourceGameState>();
+	if (!GS)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: GameState not ready. Retrying in 0.2s..."));
+		FTimerHandle RetryGameStateTimer;
+		GetWorldTimerManager().SetTimer(RetryGameStateTimer, this, &ACameraControllerBase::CheckForLoadingWidget, 0.2f, false);
+		return;
+	}
+
+	const FLoadingWidgetConfig& Config = GS->LoadingWidgetConfig;
+	
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: Config TriggerId=%d, Class=%s, StartTime=%f"), 
+		Config.TriggerId, Config.WidgetClass ? *Config.WidgetClass->GetName() : TEXT("None"), Config.ServerWorldTimeStart);
+
+	if (Config.WidgetClass && Config.Duration > 0.f && Config.ServerWorldTimeStart >= 0.f)
+	{
+		if (Config.TriggerId != 0 && Config.TriggerId == LastProcessedLoadingTriggerId)
+		{
+			return;
+		}
+
+		float CurrentServerTime = GS->GetServerWorldTimeSeconds();
+		float Elapsed = CurrentServerTime - Config.ServerWorldTimeStart;
+		float Remaining = Config.Duration - Elapsed;
+
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: CurrentServerTime=%f, Elapsed=%f, Remaining=%f"), 
+			CurrentServerTime, Elapsed, Remaining);
+
+		if (Remaining > 0.05f)
+		{
+			Client_ShowLoadingWidget(Config.WidgetClass, Remaining, Config.TriggerId);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: Remaining time too small or expired."));
+		}
 	}
 }
 
@@ -186,9 +226,10 @@ void ACameraControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Check GameState for any active loading widget (useful if we join late)
 	if (IsLocalPlayerController())
 	{
-		OnRep_LoadingWidgetConfig();
+		CheckForLoadingWidget();
 	}
 
 	HUDBase = Cast<APathProviderHUD>(GetHUD());

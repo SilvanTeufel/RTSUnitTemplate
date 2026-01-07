@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
 #include "Core/WorkerData.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "ResourceGameState.generated.h"
 
 /**
@@ -17,10 +18,10 @@ class RTSUNITTEMPLATE_API AResourceGameState : public AGameStateBase
 
 public:
 	// Use replicated properties to share data with clients
-	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	TArray<FResourceArray> TeamResources;
 
-	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	TArray<bool> IsSupplyLike;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -29,6 +30,12 @@ public:
 	UFUNCTION()
 	void OnRep_TeamResources();
 
-	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SetTeamResources(TArray<FResourceArray> Resources);
+
+	UPROPERTY(ReplicatedUsing = OnRep_LoadingWidgetConfig, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
+	FLoadingWidgetConfig LoadingWidgetConfig;
+
+	UFUNCTION()
+	void OnRep_LoadingWidgetConfig();
 };

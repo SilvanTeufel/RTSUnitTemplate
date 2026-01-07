@@ -15,14 +15,17 @@ struct FLoadingWidgetConfig
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSubclassOf<class ULoadingWidget> WidgetClass = nullptr;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float Duration = 0.f;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int32 TriggerId = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float ServerWorldTimeStart = -1.f;
 };
 
 /**
@@ -34,12 +37,6 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	GENERATED_BODY()
 	
 	public:
-	UPROPERTY(ReplicatedUsing = OnRep_LoadingWidgetConfig)
-	FLoadingWidgetConfig LoadingWidgetConfig;
-
-	UFUNCTION()
-	void OnRep_LoadingWidgetConfig();
-
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(Server, Reliable)
@@ -49,7 +46,7 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_UpdateCameraUnitMovement(AUnitBase* Unit, const FVector& TargetLocation);
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 	
 	UPROPERTY()
@@ -64,6 +61,9 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 
 	UFUNCTION(Client, Reliable)
 	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void CheckForLoadingWidget();
 
 	void Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId, int32 RetryCount);
 
@@ -107,13 +107,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetAutoCamWaypoints();
 	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int UnitCountInRange;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int UnitCountToZoomOut = 20;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int UnitZoomScaler = 10;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

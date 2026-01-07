@@ -2,6 +2,7 @@
 
 
 #include "GameModes/RTSGameModeBase.h"
+#include "GameStates/ResourceGameState.h"
 #include "Actors/WinLoseConfigActor.h"
 #include "PlayerStart/PlayerStartBase.h"
 #include "Characters/Camera/CameraBase.h"
@@ -58,13 +59,30 @@ void ARTSGameModeBase::BeginPlay()
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
 
-	// Show loading widget for all connected players (especially Host)
+	// Show loading widget via GameState (robust for late joiners)
 	if (LoadingWidgetClass)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Triggering loading widget for all players."));
-		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Triggering loading widget in GameState."));
+		if (AResourceGameState* GS = GetGameState<AResourceGameState>())
 		{
-			SetupLoadingWidgetForPlayer(It->Get());
+			const float WidgetDuration = FMath::Max(5.f, (float)GatherControllerTimer + 1.f);
+			const int32 NewTriggerId = FMath::RandRange(1, 2147483647);
+
+			GS->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
+			GS->LoadingWidgetConfig.Duration = WidgetDuration;
+			GS->LoadingWidgetConfig.TriggerId = NewTriggerId;
+			GS->LoadingWidgetConfig.ServerWorldTimeStart = GS->GetServerWorldTimeSeconds();
+
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: GameState config set. Duration: %f, TriggerId: %d, StartTime: %f"), 
+				WidgetDuration, NewTriggerId, GS->LoadingWidgetConfig.ServerWorldTimeStart);
+
+			// Trigger for local host immediately
+			GS->OnRep_LoadingWidgetConfig();
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Failed to get AResourceGameState! Current GameState is %s"), 
+				GetWorld()->GetGameState() ? *GetWorld()->GetGameState()->GetClass()->GetName() : TEXT("Null"));
 		}
 	}
 	else
@@ -292,37 +310,32 @@ void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::PostLogin: %s"), NewPlayer ? *NewPlayer->GetName() : TEXT("None"));
-	SetupLoadingWidgetForPlayer(NewPlayer);
+	
+	if (NewPlayer)
+	{
+		SetupLoadingWidgetForPlayer(NewPlayer);
+	}
 }
 
 void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 {
-	if (LoadingWidgetClass && NewPlayer)
+	if (AResourceGameState* GS = GetGameState<AResourceGameState>())
 	{
-		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(NewPlayer))
+		if (GS->LoadingWidgetConfig.WidgetClass && GS->LoadingWidgetConfig.Duration > 0.f && GS->LoadingWidgetConfig.ServerWorldTimeStart >= 0.f)
 		{
-			const float WidgetDuration = FMath::Max(5.f, (float)GatherControllerTimer + 1.f);
-			const int32 NewTriggerId = FMath::RandRange(1, 2147483647); // Use a random ID to ensure OnRep fires across map travels
-
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: Setting config for player %s. Duration: %f, TriggerId: %d"), *NewPlayer->GetName(), WidgetDuration, NewTriggerId);
-
-			PC->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
-			PC->LoadingWidgetConfig.Duration = WidgetDuration;
-			PC->LoadingWidgetConfig.TriggerId = NewTriggerId;
-
-			// Also send as a direct RPC to be sure it's received even if property replication is delayed
-			PC->Client_ShowLoadingWidget(LoadingWidgetClass, WidgetDuration, NewTriggerId);
-
-			// If it's a local controller (like the server/host), OnRep won't be called automatically
-			if (PC->IsLocalController())
+			if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(NewPlayer))
 			{
-				PC->OnRep_LoadingWidgetConfig();
+				float CurrentServerTime = GS->GetServerWorldTimeSeconds();
+				float Elapsed = CurrentServerTime - GS->LoadingWidgetConfig.ServerWorldTimeStart;
+				float Remaining = GS->LoadingWidgetConfig.Duration - Elapsed;
+
+				if (Remaining > 0.05f)
+				{
+					UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: Triggering for %s. Remaining: %f"), *NewPlayer->GetName(), Remaining);
+					CameraPC->Client_ShowLoadingWidget(GS->LoadingWidgetConfig.WidgetClass, Remaining, GS->LoadingWidgetConfig.TriggerId);
+				}
 			}
 		}
-	}
-	else if (!LoadingWidgetClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: LoadingWidgetClass is null!"));
 	}
 }
 

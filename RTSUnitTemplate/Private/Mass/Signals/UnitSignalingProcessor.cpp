@@ -42,7 +42,7 @@ static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_ExecInterval(
     ECVF_Default);
 static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_CreationStartDelay(
     TEXT("net.RTS.UnitSignaling.CreationStartDelay"),
-    2.0f,
+    10.0f,
     TEXT("Seconds to wait after world start before creating/linking Mass entities. If on server, also respects GameMode's GatherControllerTimer."),
     ECVF_Default);
 
