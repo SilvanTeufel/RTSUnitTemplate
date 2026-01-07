@@ -2,6 +2,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 
+#include "GameStates/ResourceGameState.h"
+
 void UGameTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -9,12 +11,23 @@ void UGameTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	if (GameTime)
 	{
 		float StartTime = 0.f;
-		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer()))
+		float TotalGameTime = 0.f;
+
+		if (GetWorld() && GetWorld()->GetGameState())
 		{
-			StartTime = PC->GameTimerStartTime;
+			TotalGameTime = GetWorld()->GetGameState()->GetServerWorldTimeSeconds();
+			if (AResourceGameState* GS = Cast<AResourceGameState>(GetWorld()->GetGameState()))
+			{
+				StartTime = GS->MatchStartTime;
+			}
 		}
 
-		float TotalGameTime = GetWorld()->GetTimeSeconds();
+		if (StartTime < 0.f)
+		{
+			GameTime->SetText(FText::FromString(TEXT("00:00")));
+			return;
+		}
+
 		float DisplayTime = FMath::Max(0.f, TotalGameTime - StartTime);
 
 		int32 Minutes = FMath::FloorToInt(DisplayTime / 60.f);

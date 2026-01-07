@@ -36,6 +36,9 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_LoadingWidgetConfig, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	FLoadingWidgetConfig LoadingWidgetConfig;
 
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
+	float MatchStartTime = -1.f;
+
 	UFUNCTION()
 	void OnRep_LoadingWidgetConfig();
 };

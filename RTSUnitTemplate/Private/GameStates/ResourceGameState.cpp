@@ -12,6 +12,7 @@ void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AResourceGameState, TeamResources);
 	DOREPLIFETIME(AResourceGameState, IsSupplyLike);
 	DOREPLIFETIME(AResourceGameState, LoadingWidgetConfig);
+	DOREPLIFETIME(AResourceGameState, MatchStartTime);
 }
 
 void AResourceGameState::OnRep_LoadingWidgetConfig()

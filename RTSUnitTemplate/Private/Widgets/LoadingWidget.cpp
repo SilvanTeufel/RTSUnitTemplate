@@ -2,30 +2,38 @@
 #include "Components/ProgressBar.h"
 #include "Kismet/GameplayStatics.h"
 
-void ULoadingWidget::SetupLoadingWidget(float InDuration)
+#include "GameFramework/GameStateBase.h"
+
+void ULoadingWidget::SetupLoadingWidget(float InTotalDuration, float InServerWorldTimeStart)
 {
-	Duration = InDuration;
-	ElapsedTime = 0.f;
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget::SetupLoadingWidget: Duration=%f"), InDuration);
+	TotalDuration = InTotalDuration;
+	ServerWorldTimeStart = InServerWorldTimeStart;
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget::SetupLoadingWidget: TotalDuration=%f, ServerStartTime=%f"), InTotalDuration, InServerWorldTimeStart);
 }
 
 void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (Duration > 0.f)
+	if (TotalDuration > 0.f)
 	{
-		ElapsedTime += InDeltaTime;
-		float Progress = FMath::Clamp(ElapsedTime / Duration, 0.f, 1.f);
+		float CurrentServerTime = 0.f;
+		if (GetWorld() && GetWorld()->GetGameState())
+		{
+			CurrentServerTime = GetWorld()->GetGameState()->GetServerWorldTimeSeconds();
+		}
+
+		float Elapsed = CurrentServerTime - ServerWorldTimeStart;
+		float Progress = FMath::Clamp(Elapsed / TotalDuration, 0.f, 1.f);
 
 		if (LoadingBar)
 		{
 			LoadingBar->SetPercent(Progress);
 		}
 
-		if (ElapsedTime >= Duration)
+		if (Elapsed >= TotalDuration)
 		{
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget: Duration reached, removing from parent."));
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget: Total duration reached (ServerTime), removing from parent."));
 			RemoveFromParent();
 		}
 	}

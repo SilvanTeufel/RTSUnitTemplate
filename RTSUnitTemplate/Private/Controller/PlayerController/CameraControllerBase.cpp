@@ -97,11 +97,11 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 	}
 }
 
-void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId)
+void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId)
 {
 	bool bIsLocal = IsLocalPlayerController();
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: InTriggerId=%d, LastProcessed=%d, IsLocal=%d, TargetTime=%f"), 
-		InTriggerId, LastProcessedLoadingTriggerId, bIsLocal, InTargetTime);
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: InTriggerId=%d, LastProcessed=%d, IsLocal=%d, TotalDuration=%f, StartTime=%f"), 
+		InTriggerId, LastProcessedLoadingTriggerId, bIsLocal, InTotalDuration, InServerWorldTimeStart);
 
 	// If we've already processed this specific trigger, don't show it again
 	if (InTriggerId != 0 && InTriggerId == LastProcessedLoadingTriggerId)
@@ -112,17 +112,13 @@ void ACameraControllerBase::Client_ShowLoadingWidget_Implementation(TSubclassOf<
 	
 	LastProcessedLoadingTriggerId = InTriggerId;
 
-	if (InClass && InTargetTime > 0.05f && bIsLocal)
+	if (InClass && bIsLocal)
 	{
-		Retry_ShowLoadingWidget(InClass, InTargetTime, InTriggerId, 0);
+		Retry_ShowLoadingWidget(InClass, InTotalDuration, InServerWorldTimeStart, InTriggerId, 0);
 	}
 	else if (!InClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: LoadingWidgetClass is null!"));
-	}
-	else if (InTargetTime <= 0.05f)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Client_ShowLoadingWidget: TargetTime %f too small."), InTargetTime);
 	}
 	else if (!bIsLocal)
 	{
@@ -157,23 +153,19 @@ void ACameraControllerBase::CheckForLoadingWidget()
 
 		float CurrentServerTime = GS->GetServerWorldTimeSeconds();
 		float Elapsed = CurrentServerTime - Config.ServerWorldTimeStart;
-		float Remaining = Config.Duration - Elapsed;
 
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: CurrentServerTime=%f, Elapsed=%f, Remaining=%f"), 
-			CurrentServerTime, Elapsed, Remaining);
-
-		if (Remaining > 0.05f)
+		if (Elapsed < Config.Duration)
 		{
-			Client_ShowLoadingWidget(Config.WidgetClass, Remaining, Config.TriggerId);
+			Client_ShowLoadingWidget(Config.WidgetClass, Config.Duration, Config.ServerWorldTimeStart, Config.TriggerId);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: Remaining time too small or expired."));
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::CheckForLoadingWidget: Loading period already expired (Elapsed=%f, Duration=%f)."), Elapsed, Config.Duration);
 		}
 	}
 }
 
-void ACameraControllerBase::Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId, int32 RetryCount)
+void ACameraControllerBase::Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId, int32 RetryCount)
 {
 	if (!IsLocalPlayerController() || !InClass) return;
 
@@ -186,7 +178,7 @@ void ACameraControllerBase::Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWi
 			UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ACameraControllerBase::Retry_ShowLoadingWidget: LocalPlayer or Viewport not ready. Retry %d..."), RetryCount + 1);
 			FTimerHandle RetryTimerHandle;
 			FTimerDelegate RetryDelegate;
-			RetryDelegate.BindUObject(this, &ACameraControllerBase::Retry_ShowLoadingWidget, InClass, InTargetTime, InTriggerId, RetryCount + 1);
+			RetryDelegate.BindUObject(this, &ACameraControllerBase::Retry_ShowLoadingWidget, InClass, InTotalDuration, InServerWorldTimeStart, InTriggerId, RetryCount + 1);
 			GetWorldTimerManager().SetTimer(RetryTimerHandle, RetryDelegate, 0.2f, false);
 		}
 		else
@@ -205,9 +197,9 @@ void ACameraControllerBase::Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWi
 	ActiveLoadingWidget = CreateWidget<ULoadingWidget>(this, InClass);
 	if (ActiveLoadingWidget)
 	{
-		ActiveLoadingWidget->SetupLoadingWidget(InTargetTime);
+		ActiveLoadingWidget->SetupLoadingWidget(InTotalDuration, InServerWorldTimeStart);
 		ActiveLoadingWidget->AddToViewport(9999);
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Retry_ShowLoadingWidget: Widget created and added to viewport. TriggerId=%d, Duration=%f"), InTriggerId, InTargetTime);
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ACameraControllerBase::Retry_ShowLoadingWidget: Widget created and added to viewport. TriggerId=%d, StartTime=%f"), InTriggerId, InServerWorldTimeStart);
 	}
 	else
 	{

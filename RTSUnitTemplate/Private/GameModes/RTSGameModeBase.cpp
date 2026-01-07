@@ -72,9 +72,10 @@ void ARTSGameModeBase::BeginPlay()
 			GS->LoadingWidgetConfig.Duration = WidgetDuration;
 			GS->LoadingWidgetConfig.TriggerId = NewTriggerId;
 			GS->LoadingWidgetConfig.ServerWorldTimeStart = GS->GetServerWorldTimeSeconds();
+			GS->MatchStartTime = GS->LoadingWidgetConfig.ServerWorldTimeStart + WidgetDuration;
 
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: GameState config set. Duration: %f, TriggerId: %d, StartTime: %f"), 
-				WidgetDuration, NewTriggerId, GS->LoadingWidgetConfig.ServerWorldTimeStart);
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: GameState config set. Duration: %f, TriggerId: %d, StartTime: %f, MatchStartTime: %f"), 
+				WidgetDuration, NewTriggerId, GS->LoadingWidgetConfig.ServerWorldTimeStart, GS->MatchStartTime);
 
 			// Trigger for local host immediately
 			GS->OnRep_LoadingWidgetConfig();
@@ -332,7 +333,7 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 				if (Remaining > 0.05f)
 				{
 					UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: Triggering for %s. Remaining: %f"), *NewPlayer->GetName(), Remaining);
-					CameraPC->Client_ShowLoadingWidget(GS->LoadingWidgetConfig.WidgetClass, Remaining, GS->LoadingWidgetConfig.TriggerId);
+					CameraPC->Client_ShowLoadingWidget(GS->LoadingWidgetConfig.WidgetClass, GS->LoadingWidgetConfig.Duration, GS->LoadingWidgetConfig.ServerWorldTimeStart, GS->LoadingWidgetConfig.TriggerId);
 				}
 			}
 		}

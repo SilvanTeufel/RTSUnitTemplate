@@ -60,12 +60,12 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	FTimerHandle WinLoseTimerHandle;
 
 	UFUNCTION(Client, Reliable)
-	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId);
+	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void CheckForLoadingWidget();
 
-	void Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTargetTime, int32 InTriggerId, int32 RetryCount);
+	void Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId, int32 RetryCount);
 
 	ACameraControllerBase();
 
@@ -121,9 +121,6 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CalcControlTimer;
-
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	float GameTimerStartTime = 0.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float OrbitAndMovePauseTime = 5.f;
