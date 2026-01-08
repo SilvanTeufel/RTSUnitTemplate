@@ -123,52 +123,55 @@ namespace UE::UnitMassAvoidance
 
 			Cells.Sort([](const FSortingCell& A, const FSortingCell& B) { return A.SqDist < B.SqDist; });
 
-			// Defensive: cache reference to items once
-			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
-			const int32 MaxIdx = Items.GetMaxIndex();
-			for (const FSortingCell& SortedCell : Cells)
-			{
-				
-				if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
-				{
-					continue;
-				}
+ 		// Defensive: cache reference to items once
+ 		const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
+ 		for (const FSortingCell& SortedCell : Cells)
+ 		{
+			
+ 			if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
+ 			{
+ 				continue;
+ 			}
 
-				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
-				{
-					// Validate starting index
-					int32 Idx = Cell->First;
-					// Put a hard cap to avoid potential infinite loops if data is corrupted
-					int32 SafetyCounter = 0;
-					constexpr int32 MaxSafetyIterations = 1024;
-					while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
-					{
-						// Hard range check first to avoid TSparseArray assert inside IsValidIndex
-						if (Idx < 0 || Idx >= MaxIdx)
-						{
-							break; // Out-of-range index, stop scanning this cell
-						}
-						// Within range: now check allocation flag in the sparse array
-						if (!Items.IsValidIndex(Idx))
-						{
-							break; // Unallocated or stale slot
-						}
-						const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
-						OutCloseEntities.Add(It.ID);
-						if (OutCloseEntities.Num() >= MaxResults)
-						{
-							return;
-						}
-						const int32 NextIdx = It.Next;
-						if (NextIdx == Idx)
-						{
-							break; // Self-loop guard
-						}
-						Idx = NextIdx;
-					}
-				}
-			}
-		}
+ 			if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
+ 			{
+ 				// Validate starting index
+ 				int32 Idx = Cell->First;
+ 				// Put a hard cap to avoid potential infinite loops if data is corrupted
+ 				int32 SafetyCounter = 0;
+ 				constexpr int32 MaxSafetyIterations = 1024;
+ 				while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
+ 				{
+ 					// Get fresh MaxIndex each iteration to handle potential concurrent modifications
+ 					// This prevents the BitArray assertion in IsValidIndex when the sparse array changes
+ 					const int32 CurrentMaxIdx = Items.GetMaxIndex();
+					
+ 					// Hard range check first to avoid TSparseArray assert inside IsValidIndex
+ 					if (Idx < 0 || Idx >= CurrentMaxIdx)
+ 					{
+ 						break; // Out-of-range index, stop scanning this cell
+ 					}
+ 					// Within range: now check allocation flag in the sparse array
+ 					if (!Items.IsValidIndex(Idx))
+ 					{
+ 						break; // Unallocated or stale slot
+ 					}
+ 					const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
+ 					OutCloseEntities.Add(It.ID);
+ 					if (OutCloseEntities.Num() >= MaxResults)
+ 					{
+ 						return;
+ 					}
+ 					const int32 NextIdx = It.Next;
+ 					if (NextIdx == Idx)
+ 					{
+ 						break; // Self-loop guard
+ 					}
+ 					Idx = NextIdx;
+ 				}
+ 			}
+ 		}
+ 	}
 
 	// Adapted from ray-capsule intersection: https://iquilezles.org/www/articles/intersectors/intersectors.htm
 	static FVector::FReal ComputeClosestPointOfApproach(const FVector2D Pos, const FVector2D Vel, const FVector::FReal Rad, const FVector2D SegStart, const FVector2D SegEnd, const FVector::FReal TimeHoriz)
