@@ -23,24 +23,43 @@ void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 }
 
 
-bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(AUnitBase* Unit, const FVector& TargetLocation)
+bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(const FVector& TargetLocation)
 {
-	return Unit != nullptr;
+	return CameraUnitWithTag != nullptr;
 }
 
-void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(AUnitBase* Unit, const FVector& TargetLocation)
+void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const FVector& TargetLocation)
 {
-	if (!Unit || !Unit->Attributes) return;
+	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes) return;
 
 	if (CameraUnitWithTag)
 	{
-		if (TargetLocation.Equals(Unit->GetActorLocation(), 10.0f))
+		if (TargetLocation.Equals(CameraUnitWithTag->GetActorLocation(), 10.0f))
 		{
-			Unit->AddStopMovementTagToEntity();
+			FMassEntityManager* EntityManager = nullptr;
+			FMassEntityHandle EntityHandle;
+			if (CameraUnitWithTag->GetMassEntityData(EntityManager, EntityHandle) && EntityManager)
+			{
+				if (HasAuthority())
+				{
+					if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+					{
+						UpdateMoveTarget(*MoveTargetFragmentPtr, CameraUnitWithTag->GetMassActorLocation(), CameraUnitWithTag->Attributes->GetBaseRunSpeed(), GetWorld());
+					}
+				}
+				else if (FMassClientPredictionFragment* PredFrag = EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle))
+				{
+					PredFrag->Location = CameraUnitWithTag->GetMassActorLocation();
+					PredFrag->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+					PredFrag->PredAcceptanceRadius = 50.f;
+					PredFrag->bHasData = true;
+				}
+			}
+			CameraUnitWithTag->AddStopMovementTagToEntity();
 			return;
 		}
 
-		if (Unit->GetUnitState() == UnitData::Casting || Unit->ActivatedAbilityInstance != nullptr)
+		if (CameraUnitWithTag->GetUnitState() == UnitData::Casting || CameraUnitWithTag->ActivatedAbilityInstance != nullptr)
 		{
 			return;
 		}
@@ -55,8 +74,8 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(AUnit
 		}
 
 		//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
-		const float Speed = Unit->Attributes->GetBaseRunSpeed();
-		CorrectSetUnitMoveTarget(GetWorld(), Unit, ValidatedLocation, Speed, 40.f);
+		const float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+		CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, ValidatedLocation, Speed, 40.f);
 	}
 }
 
@@ -1866,7 +1885,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         			if (!CameraUnitMouseFollow || bIsLocal || !bCanMove)
         			{
         				LastCameraUnitMovementLocation = MoveTargetLocation;
-        				Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);
+        				Server_UpdateCameraUnitMovement(MoveTargetLocation);
         			}
         		}
         	}
