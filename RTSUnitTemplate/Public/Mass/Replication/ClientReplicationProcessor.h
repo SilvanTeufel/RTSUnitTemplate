@@ -26,11 +26,11 @@ public:
 	const float ExecutionInterval = 0.1f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MinErrorForCorrectionSq = FMath::Square(1.f); // 5 cm
+	float MinErrorForCorrectionSq = FMath::Square(25.f); // 5 cm
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MaxCorrectionAccel = 1000.f; // cm/s^2
+	float MaxCorrectionAccel = 5000.f; // cm/s^2 // 1000.f
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float Kp = 6.0f; // proportional gain to turn error into desired velocity/accel
+	float Kp = 15.0f; // proportional gain to turn error into desired velocity/accel // 6.0f
 	// If reconciliation error exceeds this distance (cm), perform a one-time full replication (snap) on that tick
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float FullReplicationDistance = 2000.f; // cm

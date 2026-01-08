@@ -103,6 +103,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 		
 }
@@ -1095,6 +1096,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 				else
 				{
+					// Skip reconciliation if the unit is dead
+					if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
+					{
+						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+						{
+							UE_LOG(LogTemp, Verbose, TEXT("ClientReconcile: Skipped (dead) NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+						}
+						continue;
+					}
+
 					// Skip reconciliation entirely while client-side prediction is active
 					bool bPredicting = false;
 					if (PredList.Num() > 0)

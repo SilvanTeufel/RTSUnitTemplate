@@ -61,11 +61,14 @@ namespace UE::UnitMassAvoidance
 			{
 				return;
 			}
+
+			const FVector::FReal CappedSearchRadius = FMath::Min(SearchRadius, 10000.0); // Cap at 100 meters
+			
 			if (AvoidanceObstacleGrid.NumLevels <= 0)
 			{
 				return;
 			}
-			const FVector Extent(SearchRadius, SearchRadius, 0.);
+			const FVector Extent(CappedSearchRadius, CappedSearchRadius, 0.);
 			const FBox QueryBox = FBox(Center - Extent, Center + Extent);
 
 			struct FSortingCell
@@ -102,7 +105,19 @@ namespace UE::UnitMassAvoidance
 						SortCell.Level = Level;
 						SortCell.SqDist = SqDist;
 						Cells.Add(SortCell);
+						if (Cells.Num() >= 512)
+						{
+							break;
+						}
 					}
+					if (Cells.Num() >= 512)
+					{
+						break;
+					}
+				}
+				if (Cells.Num() >= 512)
+				{
+					break;
 				}
 			}
 
@@ -113,6 +128,7 @@ namespace UE::UnitMassAvoidance
 			const int32 MaxIdx = Items.GetMaxIndex();
 			for (const FSortingCell& SortedCell : Cells)
 			{
+				
 				if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
 				{
 					continue;
@@ -373,6 +389,11 @@ void UUnitMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, F
 QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 	if (!World || !NavigationSubsystem)
+	{
+		return;
+	}
+
+	if (World->GetTimeSeconds() < AvoidanceStartDelay)
 	{
 		return;
 	}
