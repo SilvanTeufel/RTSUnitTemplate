@@ -42,6 +42,7 @@ namespace UnitSignals
 	const FName PISwitcher(TEXT("PISwitcher"));
 
 	const FName SetUnitStatePlaceholder(TEXT("IdlePatrolSwitcher"));
+	const FName ClientSetToPlaceholder(TEXT("ClientSetToPlaceholder"));
 	
 	const FName SyncCastTime(TEXT("SyncCastTime"));
 	const FName EndCast(TEXT("EndCast"));

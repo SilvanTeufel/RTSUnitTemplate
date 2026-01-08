@@ -8,6 +8,8 @@
 #include "Mass/Replication/ReplicationSettings.h"
 #include "EngineUtils.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "MassSignalSubsystem.h"
+#include "Mass/Signals/MySignals.h"
 
 UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	: EntityQuery(*this)
@@ -49,6 +51,9 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	{
 		UE_LOG(LogTemp, Log, TEXT("UnitClientTagSyncProcessor: Execute (World=%s Time=%.2f)"), *World->GetName(), World->GetTimeSeconds());
 	}
+
+	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+
 	for (TActorIterator<AAbilityUnit> It(World); It; ++It)
 	{
 		AAbilityUnit* Ability = *It;
@@ -59,6 +64,17 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			if (Entity.IsValid())
 			{
 				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
+
+				if (NewState == UnitData::Casting && SignalSubsystem)
+				{
+					const FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+					const FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+					if (StateFrag && StatsFrag && StateFrag->StateTimer >= StatsFrag->CastTime)
+					{
+						SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ClientSetToPlaceholder, Entity);
+					}
+				}
+
 				ApplyStateToActor(Ability, NewState);
 			}
 		}

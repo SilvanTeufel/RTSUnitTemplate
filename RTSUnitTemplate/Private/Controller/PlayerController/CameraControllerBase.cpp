@@ -11,6 +11,10 @@
 #include "Blueprint/UserWidget.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "MassEntityManager.h"
+#include "MassEntityTypes.h"
+#include "Mass/UnitMassTag.h"
+#include "GAS/GameplayAbilityBase.h"
 
 
 void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -28,26 +32,31 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(AUnit
 {
 	if (!Unit || !Unit->Attributes) return;
 
-
-	if (Unit->GetUnitState() != UnitData::Casting)
+	if (CameraUnitWithTag)
 	{
-
-        	
-		if (CameraUnitWithTag)
+		if (TargetLocation.Equals(Unit->GetActorLocation(), 10.0f))
 		{
-			bool bNavMod = false;
-			FVector ValidatedLocation = TraceRunLocation(TargetLocation, bNavMod); // Projiziert die Position auf das Navmesh/den Boden.
-
-			if (bNavMod)
-			{
-				// Position ist ungültig, keine Bewegung ausführen.
-				return;
-			}
-
-			//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
-			const float Speed = Unit->Attributes->GetBaseRunSpeed();
-			CorrectSetUnitMoveTarget(GetWorld(), Unit, ValidatedLocation, Speed, 40.f);
+			Unit->AddStopMovementTagToEntity();
+			return;
 		}
+
+		if (Unit->GetUnitState() == UnitData::Casting || Unit->ActivatedAbilityInstance != nullptr)
+		{
+			return;
+		}
+
+		bool bNavMod = false;
+		FVector ValidatedLocation = TraceRunLocation(TargetLocation, bNavMod); // Projiziert die Position auf das Navmesh/den Boden.
+
+		if (bNavMod)
+		{
+			// Position ist ungültig, keine Bewegung ausführen.
+			return;
+		}
+
+		//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
+		const float Speed = Unit->Attributes->GetBaseRunSpeed();
+		CorrectSetUnitMoveTarget(GetWorld(), Unit, ValidatedLocation, Speed, 40.f);
 	}
 }
 
@@ -1771,25 +1780,45 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
         if (CameraUnitWithTag)
         {
+        	bool bCanMove = true;
+        	FMassEntityManager* EntityManager = nullptr;
+        	FMassEntityHandle EntityHandle;
+        	bool bHasCastingTag = false;
+        	if (CameraUnitWithTag->GetMassEntityData(EntityManager, EntityHandle) && EntityManager)
+        	{
+        		bHasCastingTag = DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStateCastingTag::StaticStruct());
+        	}
+
+        	if (bHasCastingTag || 
+				CameraUnitWithTag->GetUnitState() == UnitData::Casting ||
+				CameraUnitWithTag->ActivatedAbilityInstance != nullptr ||
+				CameraUnitWithTag->CurrentDraggedAbilityIndicator != nullptr)
+        	{
+        		bCanMove = false;
+        	}
+        	
         	// Calculate movement direction based on input states
         	// Only add direction when state is 1 (active press), not 2 (decelerate)
         	FVector MoveDirection = FVector::ZeroVector;
 
-        	if(WIsPressedState == 1)
+        	if(bCanMove)
         	{
-        		MoveDirection.X += 1.0f; // Forward
-        	}
-        	if(SIsPressedState == 1)
-        	{
-        		MoveDirection.X -= 1.0f; // Backward
-        	}
-        	if(AIsPressedState == 1)
-        	{
-        		MoveDirection.Y -= 1.0f; // Left
-        	}
-        	if(DIsPressedState == 1)
-        	{
-        		MoveDirection.Y += 1.0f; // Right
+	        	if(WIsPressedState == 1)
+	        	{
+	        		MoveDirection.X += 1.0f; // Forward
+	        	}
+	        	if(SIsPressedState == 1)
+	        	{
+	        		MoveDirection.X -= 1.0f; // Backward
+	        	}
+	        	if(AIsPressedState == 1)
+	        	{
+	        		MoveDirection.Y -= 1.0f; // Left
+	        	}
+	        	if(DIsPressedState == 1)
+	        	{
+	        		MoveDirection.Y += 1.0f; // Right
+	        	}
         	}
 
         	// Execute movement locally for immediate response (Client-Side Prediction)
@@ -1811,21 +1840,30 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	APawn* ControlledPawn = GetPawn();
         	if (ControlledPawn)
         	{
-        		FVector MoveTargetLocation = ControlledPawn->GetActorLocation();
         		const bool bIsLocal = IsLocalController();
-
-        		if (CameraUnitMouseFollow && bIsLocal)
+        		FVector MoveTargetLocation;
+        		
+        		if (bCanMove)
         		{
-        			FHitResult Hit;
-        			if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        			MoveTargetLocation = ControlledPawn->GetActorLocation();
+        			if (CameraUnitMouseFollow && bIsLocal)
         			{
-        				MoveTargetLocation = Hit.Location;
+        				FHitResult Hit;
+        				if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        				{
+        					MoveTargetLocation = Hit.Location;
+        				}
         			}
+        		}
+        		else
+        		{
+        			// STOP: Use current unit location
+        			MoveTargetLocation = CameraUnitWithTag->GetActorLocation();
         		}
 
         		if (!MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
         		{
-        			if (!CameraUnitMouseFollow || bIsLocal)
+        			if (!CameraUnitMouseFollow || bIsLocal || !bCanMove)
         			{
         				LastCameraUnitMovementLocation = MoveTargetLocation;
         				Server_UpdateCameraUnitMovement(CameraUnitWithTag, MoveTargetLocation);

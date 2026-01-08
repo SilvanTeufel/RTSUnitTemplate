@@ -196,14 +196,19 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     	IdlePatrolSwitcherDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::PISwitcher)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, IdlePatrolSwitcher));
 
+
     	UnitStatePlaceholderDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SetToUnitStatePlaceholder));
+                    .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SetToUnitStatePlaceholder));
+    	
+    
+    	EndCastDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
+                    .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, EndCast));
+        
     	
     	SyncCastTimeDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncCastTime)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncCastTime));
 
-     EndCastDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast)
-                .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, EndCast));
+     
     
     // Repair time sync
     if (SignalSubsystem)
@@ -344,6 +349,13 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SetUnitStatePlaceholder);
 			Delegate.Remove(UnitStatePlaceholderDelegateHandle);
 			UnitStatePlaceholderDelegateHandle.Reset();
+		}
+
+		if (EndCastDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::EndCast);
+			Delegate.Remove(EndCastDelegateHandle);
+			EndCastDelegateHandle.Reset();
 		}
 		
 		if (SyncCastTimeDelegateHandle.IsValid())

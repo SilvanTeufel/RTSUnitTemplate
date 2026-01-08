@@ -665,7 +665,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 					}
 					else
 					{
-						UE_LOG(LogTemp, Warning, TEXT("[UI] UpdateAbilityButtonsState: Missing ASC for Unit %s"), *GetNameSafe(Unit));
+						//UE_LOG(LogTemp, Warning, TEXT("[UI] UpdateAbilityButtonsState: Missing ASC for Unit %s"), *GetNameSafe(Unit));
 					}
 				}
 
@@ -690,7 +690,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 				{
 					bEnable = true;
 				}
-
+				/*
 				UE_LOG(LogTemp, Log, TEXT("[UI] AbilityBtnIndex=%d TeamId=%d RawKey='%s' NormKey='%s' bCDO_Disabled=%s bTeamKeyDisabled=%s bOwnerKeyDisabled=%s bTeamForce=%s bOwnerForce=%s -> SetEnabled=%s"),
 					i,
 					TeamId,
@@ -702,6 +702,7 @@ void UUnitWidgetSelector::UpdateAbilityButtonsState()
 					bTeamForceEnabled ? TEXT("true") : TEXT("false"),
 					bOwnerForceEnabled ? TEXT("true") : TEXT("false"),
 					bEnable ? TEXT("true") : TEXT("false"));
+					*/
 			}
 		}
 
