@@ -70,7 +70,7 @@ void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkA
 
 			// Raycast from the mouse position into the scene to find the ground
 			FVector Start = MousePosition;
-			FVector End = Start + MouseDirection * 5000.f; // Extend to a maximum reasonable distance
+			FVector End = Start + MouseDirection * 100000.f; // Extend to a maximum reasonable distance
 
 			FHitResult HitResult;
 			FCollisionQueryParams CollisionParams;
@@ -217,7 +217,7 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 
 		// Raycast from the mouse position into the scene to find the ground
 		FVector Start = MousePosition;
-		FVector End = Start + MouseDirection * 5000.f; // Extend to a maximum reasonable distance
+		FVector End = Start + MouseDirection * 1000000.f; // Extend to a maximum reasonable distance
 
 		FHitResult HitResult;
 		FCollisionQueryParams CollisionParams;

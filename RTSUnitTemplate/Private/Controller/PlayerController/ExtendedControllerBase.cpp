@@ -554,7 +554,7 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
     // 3) LineTrace von etwas über dem Bodensatz des Meshes nach unten
     FVector MeshBottomWorld = MeshBounds.Origin - FVector(0.f, 0.f, HalfHeight);
     FVector TraceStart = MeshBottomWorld + FVector(0.f, 0.f, 1000.f);
-    FVector TraceEnd   = MeshBottomWorld - FVector(0.f, 0.f, 5000.f);
+    FVector TraceEnd   = MeshBottomWorld - FVector(0.f, 0.f, 100000.f);
 
     FHitResult HitResult;
     FCollisionQueryParams TraceParams(FName(TEXT("WorkAreaGroundTrace")), true, DraggedArea);
@@ -826,7 +826,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
             if (DeprojectMousePositionToWorld(MousePos, MouseDir))
             {
                 const FVector TraceStart = MousePos;
-                const FVector TraceEnd = TraceStart + MouseDir * 5000.f;
+                const FVector TraceEnd = TraceStart + MouseDir * 1000000.f;
                 FCollisionQueryParams Params;
                 for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
                 {
@@ -1075,7 +1075,7 @@ bool AExtendedControllerBase::TraceMouseToGround(FVector& OutMouseGround, FHitRe
     }
 
     const FVector Start = MousePosition;
-    const FVector End = Start + MouseDirection * 5000.f;
+    const FVector End = Start + MouseDirection * 1000000.f;
 
     FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveWorkAreaTrace), true);
     Params.bTraceComplex = true;
@@ -1850,7 +1850,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 
     // Raycast from the mouse into the scene
     FVector Start = MousePosition;
-    FVector End   = Start + MouseDirection * 5000.f;
+    FVector End   = Start + MouseDirection * 1000000.f;
 
     FHitResult HitResult;
     FCollisionQueryParams CollisionParams;
@@ -3258,7 +3258,7 @@ void AExtendedControllerBase::MoveDraggedUnit_Implementation(float DeltaSeconds)
 
 		// Raycast from the mouse position into the scene to find the ground
 		FVector Start = MousePosition;
-		FVector End = Start + MouseDirection * 5000; // Extend to a maximum reasonable distance
+		FVector End = Start + MouseDirection * 1000000.f; // Extend to a maximum reasonable distance
 
 		FHitResult HitResult;
 		FCollisionQueryParams CollisionParams;
