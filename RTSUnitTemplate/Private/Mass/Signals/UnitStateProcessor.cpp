@@ -1283,9 +1283,10 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				CapturedEntitys.Emplace(CapturedEntity);
     	
     			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
-						   && StrongUnitActor->GetUnitState() == UnitData::Idle
 						   && !StrongUnitActor->FollowUnit
-						   && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
+						   && !StrongUnitActor->bHoldPosition
+						   && ((DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())
+						   && StrongUnitActor->GetUnitState() == UnitData::Idle) || (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())))){
     				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
 				}
     	
@@ -2833,7 +2834,10 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				{
 					FMassWorkerStatsFragment* WorkerStatsFrag = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(E);
 					ResourceGameMode->AssignWorkAreasToWorker(Unit);
-					if (Unit->ResourcePlace)
+					if (Unit->GetUnitState() == UnitData::PatrolRandom)
+					{
+					}
+					else if (Unit->ResourcePlace)
 					{
 						FVector ResourcePosition = FindGroundLocationForActor(this, Unit->ResourcePlace, {Unit, Unit->ResourcePlace});
 						WorkerStatsFrag->ResourcePosition = ResourcePosition;

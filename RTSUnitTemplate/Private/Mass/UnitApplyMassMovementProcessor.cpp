@@ -9,6 +9,8 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/UnitNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
 
 UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery()
 {
@@ -123,7 +125,20 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
    
-    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    UWorld* World = GetWorld();
+    if (!World) return;
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+    
+    FSharedConstNavQueryFilter QueryFilter = nullptr;
+    if (NavSystem)
+    {
+        if (ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate))
+        {
+            QueryFilter = NavData->GetQueryFilter(FilterClass ? *FilterClass : UNavigationQueryFilter::StaticClass());
+        }
+    }
+
+    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, NavSystem, QueryFilter](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -179,7 +194,17 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+
+            if (NavSystem)
+            {
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(NewLocation, ProjectedLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
+                {
+                    NewLocation = ProjectedLocation.Location;
+                }
+            }
+            
             CurrentTransform.SetTranslation(NewLocation);
 
             Force.Value = FVector::ZeroVector;
@@ -191,7 +216,20 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
 
-    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    UWorld* World = GetWorld();
+    if (!World) return;
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+
+    FSharedConstNavQueryFilter QueryFilter = nullptr;
+    if (NavSystem)
+    {
+        if (ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate))
+        {
+            QueryFilter = NavData->GetQueryFilter(FilterClass ? *FilterClass : UNavigationQueryFilter::StaticClass());
+        }
+    }
+
+    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, NavSystem, QueryFilter](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -238,7 +276,17 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+
+            if (NavSystem)
+            {
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(NewLocation, ProjectedLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
+                {
+                    NewLocation = ProjectedLocation.Location;
+                }
+            }
+            
             CurrentTransform.SetTranslation(NewLocation);
 
             Force.Value = FVector::ZeroVector;

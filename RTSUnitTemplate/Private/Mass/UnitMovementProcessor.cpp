@@ -155,6 +155,15 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     const bool bHasNavSystem = (NavSystem != nullptr);
 
+    FSharedConstNavQueryFilter QueryFilter = nullptr;
+    if (bHasNavSystem)
+    {
+        if (ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate))
+        {
+            QueryFilter = NavData->GetQueryFilter(FilterClass ? *FilterClass : UNavigationQueryFilter::StaticClass());
+        }
+    }
+
     ClientEntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
     {
@@ -301,7 +310,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     PathFrag.bIsPathfindingInProgress = true;
 
                     FNavLocation ProjectedDestinationLocation;
-                    if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
+                    if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
                     {
                         // Store the projected destination as our target to keep consistent with async result
                         PathFrag.PathTargetLocation = ProjectedDestinationLocation.Location;
@@ -312,7 +321,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                         }
 
                         FNavLocation ProjectedStartLocation;
-                        if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
+                        if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
                         {
                             if (bShowLogs)
                             {
@@ -373,6 +382,14 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             else if (PathFrag.HasValidPath())
             {
                 ++FollowingPath;
+
+                // Project current location to ensure we stay on the allowed NavArea
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
+                {
+                    CurrentLocation = ProjectedLocation.Location;
+                }
+                
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
@@ -423,6 +440,12 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
     if (!World) return;
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     if (!NavSystem) return;
+
+    FSharedConstNavQueryFilter QueryFilter = nullptr;
+    if (ANavigationData* NavData = NavSystem->GetDefaultNavDataInstance(FNavigationSystem::ECreateIfEmpty::DontCreate))
+    {
+        QueryFilter = NavData->GetQueryFilter(FilterClass ? *FilterClass : UNavigationQueryFilter::StaticClass());
+    }
 
     EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
@@ -491,10 +514,10 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 PathFrag.PathTargetLocation = FinalDestination;
 
                 FNavLocation ProjectedDestinationLocation;
-                if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
+                if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
                 {
                     FNavLocation ProjectedStartLocation;
-                    if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
+                    if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
                     {
                         RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
                     }
@@ -517,6 +540,13 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             }
             else if (PathFrag.HasValidPath())
             {
+                // Project current location to ensure we stay on the allowed NavArea
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedLocation, NavMeshProjectionExtent, nullptr, QueryFilter))
+                {
+                    CurrentLocation = ProjectedLocation.Location;
+                }
+
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
@@ -569,7 +599,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         return;
     }
     
-    FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
+    FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(FilterClass ? *FilterClass : UNavigationQueryFilter::StaticClass());
 
     const bool bClientWorld = World->IsNetMode(NM_Client);
     const bool bLog = bShowLogs;
