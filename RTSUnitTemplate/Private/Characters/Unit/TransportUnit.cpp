@@ -23,13 +23,24 @@ void ATransportUnit::BindTransportOverlap()
 
 void ATransportUnit::KillLoadedUnits()
 {
-	if (IsATransporter)
+	// KillLoadedUnitsIfDestroyed
+	if (IsATransporter && KillLoadedUnitsIfDestroyed)
 	{
 		for (ATransportUnit* LoadedUnit : LoadedUnits)
 		{
 			if (LoadedUnit)
 			{
-				SetUnitState(UnitData::Dead);
+				LoadedUnit->SetHealth(0);
+				
+			}
+		}
+	}else if (IsATransporter)
+	{
+		for (ATransportUnit* LoadedUnit : LoadedUnits)
+		{
+			if (LoadedUnit)
+			{
+				UnloadNextUnit();
 			}
 		}
 	}

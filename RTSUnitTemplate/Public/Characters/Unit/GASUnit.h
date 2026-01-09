@@ -106,6 +106,14 @@ public:
 	
 	virtual void OnRep_PlayerState() override;
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
+	void SetHealth(float NewHealth);
+	virtual void SetHealth_Implementation(float NewHealth);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetShield", Keywords = "RTSUnitTemplate SetShield"), Category = RTSUnitTemplate)
+	void SetShield(float NewShield);
+	virtual void SetShield_Implementation(float NewShield);
+
 	UPROPERTY(ReplicatedUsing = OnRep_ToggleUnitDetection, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;
 

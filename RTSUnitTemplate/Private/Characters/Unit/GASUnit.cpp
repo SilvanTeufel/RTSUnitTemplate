@@ -189,6 +189,22 @@ void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
 }
 
+void AGASUnit::SetHealth_Implementation(float NewHealth)
+{
+	if (Attributes)
+	{
+		Attributes->SetAttributeHealth(NewHealth);
+	}
+}
+
+void AGASUnit::SetShield_Implementation(float NewShield)
+{
+	if (Attributes)
+	{
+		Attributes->SetAttributeShield(NewShield);
+	}
+}
+
 void AGASUnit::SetToggleUnitDetection_Implementation(bool ToggleTo)
 {
 	ToggleUnitDetection = ToggleTo;

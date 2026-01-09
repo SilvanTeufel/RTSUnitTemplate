@@ -110,7 +110,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
 	int MaxSpacePerUnitAllowed = 4;
-	
+
+	UPROPERTY(BlueprintReadWrite,  EditAnywhere, Replicated, Category = Transport)
+	bool KillLoadedUnitsIfDestroyed = true;
 	// Maximum number of units this transport can hold.
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	int MaxTransportUnits = 4;

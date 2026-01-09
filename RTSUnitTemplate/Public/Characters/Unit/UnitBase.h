@@ -222,8 +222,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DeadEffectsExecuted = false;
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
-	void SetHealth(float NewHealth);
+	virtual void SetHealth_Implementation(float NewHealth) override;
 
 	// Fires when health crosses 25% or 50% thresholds either upwards or downwards.
 	// DidIncrease: true if health rose above the threshold, false if it dropped below it.
@@ -242,8 +241,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DeadEffectsAndEvents();
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetHealth", Keywords = "RTSUnitTemplate SetHealth"), Category = RTSUnitTemplate)
-	void SetShield(float NewHealth);
+	virtual void SetShield_Implementation(float NewShield) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitHealthbarOwner();
