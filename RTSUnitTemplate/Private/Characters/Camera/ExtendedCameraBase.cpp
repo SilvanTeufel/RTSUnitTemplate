@@ -14,6 +14,7 @@
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
 #include "Widgets/SoundControlWidget.h"
+#include "Widgets/WinConditionWidget.h"
 #include "Blueprint/UserWidget.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
@@ -67,8 +68,70 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
+	TabMode = 1;
+	UpdateTabModeUI();
+}
+
+void AExtendedCameraBase::UpdateTabModeUI()
+{
+	if (ResourceWidget)
+	{
+		ResourceWidget->StopTimer();
+		ResourceWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (WinConditionWidget)
+	{
+		WinConditionWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	HideControlWidget();
-	TabToggled = false;
+	SetUserWidget(nullptr);
+
+	
+	switch (TabMode)
+	{
+	case 1: // ResourceWidget
+		if (ResourceWidget)
+		{
+			ResourceWidget->StartUpdateTimer();
+			ResourceWidget->SetVisibility(ESlateVisibility::Visible);
+			TabToggled = false;
+		}
+		break;
+	case 2: // ControlWidget
+		{
+			ShowControlWidget();
+			TabToggled = true;
+
+			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
+			{
+				AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
+				SetUserWidget(SelectedUnit);
+			}
+		}
+		break;
+	case 3:
+		{
+			// WinConditionWidget
+			if (WinConditionWidget)
+			{
+				WinConditionWidget->SetVisibility(ESlateVisibility::Visible);
+			}
+
+			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
+			{
+				AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
+				SetUserWidget(SelectedUnit);
+			}
+			TabToggled = true;
+		}
+		break;
+	default:{
+			TabToggled = false;
+		}
+		break;
+	}
 }
 
 void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelector* NewWidgetSelector, UTaggedUnitSelector* NewTaggedSelector, UResourceWidget* NewResourceWidget)
@@ -90,6 +153,8 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelecto
 	{
 		ResourceWidget = NewResourceWidget;
 	}
+
+	UpdateTabModeUI();
 }
 
 void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
@@ -434,58 +499,18 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 {
 	if(BlockControls) return;
 	
-	TabToggled = !TabToggled;
-	if(TabToggled)
-	{
-		ShowControlWidget();
-		
-		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
-		if(!CameraControllerBase || !CameraControllerBase->HUDBase) return;
+	TabMode = (TabMode + 1) % 4;
 
-		if(CameraControllerBase->HUDBase->SelectedUnits.Num())
-		{ 
-			AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
-			SetUserWidget(SelectedUnit);
-		}
-		
-		if (ResourceWidget)
-		{
-			ResourceWidget->StartUpdateTimer();
-			ResourceWidget->SetVisibility(ESlateVisibility::Visible);
-		}
-
-
-	}
+	UpdateTabModeUI();
 }
 
 void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState)
 {
-	if(BlockControls) return;
-	
-	if(!TabToggled)
-	{
-		HideControlWidget();
-		
-		SetUserWidget(nullptr);
-	}
+
 }
 
 void AExtendedCameraBase::Input_Tab_Released_BP(int32 CamState)
 {
-	if(BlockControls) return;
-	
-	if(!TabToggled)
-	{
-		HideControlWidget();
-		
-		SetUserWidget(nullptr);
-
-		if (ResourceWidget)
-		{
-			ResourceWidget->StopTimer();
-			ResourceWidget->SetVisibility(ESlateVisibility::Collapsed);
-		}
-	}
 }
 
 void AExtendedCameraBase::Input_Shift_Pressed(const FInputActionValue& InputActionValue, int32 CamState)

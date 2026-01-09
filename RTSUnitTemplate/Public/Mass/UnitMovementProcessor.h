@@ -37,9 +37,6 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Navigation")
     FVector NavMeshProjectionExtent = FVector(100.0f, 100.0f, 500.0f);
-
-    UPROPERTY(EditAnywhere, Category = "Navigation")
-    TSubclassOf<UNavigationQueryFilter> FilterClass;
     
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;

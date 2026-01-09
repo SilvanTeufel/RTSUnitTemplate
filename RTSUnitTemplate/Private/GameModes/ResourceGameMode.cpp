@@ -52,7 +52,7 @@ void AResourceGameMode::CheckWinLoseConditionTimer()
 
 void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 5.f) return;
+	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
 	if (bWinLoseTriggered) return;
 	Super::CheckWinLoseCondition(DestroyedUnit);
 	if (bWinLoseTriggered) return;

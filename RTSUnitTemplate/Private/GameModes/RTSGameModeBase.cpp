@@ -102,11 +102,12 @@ void ARTSGameModeBase::BeginPlay()
 void ARTSGameModeBase::DataTableTimerStart()
 {
 	if(!DisableSpawn)SetupTimerFromDataTable_Implementation(FVector(0.f), nullptr);
+	bInitialSpawnFinished = true;
 }
 
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 5.f) return;
+	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
 	if (bWinLoseTriggered) return;
 	if (!WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None) return;
 
@@ -121,6 +122,13 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				AllBuildings.Add(Building);
 			}
 		}
+
+		if (!bBuildingsEverExisted && AllBuildings.Num() > 0)
+		{
+			bBuildingsEverExisted = true;
+		}
+
+		if (!bBuildingsEverExisted) return; // Wait until at least one building is detected
 	}
 
 	FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();

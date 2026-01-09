@@ -3,7 +3,6 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
-#include "NavFilters/NavigationQueryFilter.h"
 #include "UnitApplyMassMovementProcessor.generated.h"
 
 // Forward declarations
@@ -24,12 +23,6 @@ public:
 	bool bShowLogs = false;
 
 protected:
-    UPROPERTY(EditAnywhere, Category = "Navigation")
-    FVector NavMeshProjectionExtent = FVector(100.0f, 100.0f, 500.0f);
-
-    UPROPERTY(EditAnywhere, Category = "Navigation")
-    TSubclassOf<UNavigationQueryFilter> FilterClass;
-
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 

@@ -90,6 +90,8 @@ public:
 	AWinLoseConfigActor* WinLoseConfigActor;
 
 	bool bWinLoseTriggered = false;
+	bool bInitialSpawnFinished = false;
+	bool bBuildingsEverExisted = false;
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
 	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);

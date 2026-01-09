@@ -10,6 +10,7 @@
 #include "Widgets/TaggedUnitSelector.h"
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
+#include "Widgets/WinConditionWidget.h"
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -115,7 +116,15 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UResourceWidget* ResourceWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UWinConditionWidget* WinConditionWidget;
+
+	int32 TabMode = 1;
 	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateTabModeUI();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);
 
