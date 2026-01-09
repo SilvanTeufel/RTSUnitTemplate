@@ -52,13 +52,13 @@ protected:
     UPROPERTY(EditAnywhere, Category = "UI")
     FText MarkerDisplayText;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MakeEditWidget = true))
+    UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MakeEditWidget = true))
     FVector CenterPoint;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     float RotationRadius = 500.f;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     float RotationSpeed = 0.f;
     
     UFUNCTION()
@@ -71,5 +71,6 @@ private:
     UPROPERTY()
     UMapSwitchWidget* ActiveWidget;
 
+    UPROPERTY(Replicated)
     float CurrentAngle = 0.f;
 };

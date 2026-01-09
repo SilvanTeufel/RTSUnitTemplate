@@ -19,6 +19,10 @@ void AMapSwitchActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AMapSwitchActor, bIsEnabled);
+    DOREPLIFETIME(AMapSwitchActor, CenterPoint);
+    DOREPLIFETIME(AMapSwitchActor, RotationRadius);
+    DOREPLIFETIME(AMapSwitchActor, RotationSpeed);
+    DOREPLIFETIME(AMapSwitchActor, CurrentAngle);
 }
 
 AMapSwitchActor::AMapSwitchActor()
@@ -37,6 +41,7 @@ AMapSwitchActor::AMapSwitchActor()
     MarkerWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 150.f));
 
     bReplicates = true;
+    SetReplicateMovement(true);
 
     MarkerDisplayText = LOCTEXT("DefaultMarkerName", "Default Marker Name");
 }
@@ -58,7 +63,7 @@ void AMapSwitchActor::BeginPlay()
         MarkerWidget->SetMarkerText(MarkerDisplayText);
     }
     
-    if (SwitchTag != NAME_None)
+    if (HasAuthority() && SwitchTag != NAME_None)
     {
         if (UWorld* World = GetWorld())
         {
@@ -78,7 +83,7 @@ void AMapSwitchActor::BeginPlay()
     }
 
 
-    if (!FMath::IsNearlyZero(RotationSpeed))
+    if (HasAuthority() && !FMath::IsNearlyZero(RotationSpeed))
     {
         CurrentAngle = FMath::RandRange(0.f, 2.f * PI);
         
@@ -95,18 +100,16 @@ void AMapSwitchActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    if (FMath::IsNearlyZero(RotationSpeed))
+    if (HasAuthority() && !FMath::IsNearlyZero(RotationSpeed))
     {
-        return;
+        CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f);
+
+        FVector NewLocation = CenterPoint;
+        NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
+        NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
+
+        SetActorLocation(NewLocation);
     }
-
-    CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f);
-
-    FVector NewLocation = CenterPoint;
-    NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
-    NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
-
-    SetActorLocation(NewLocation);
 }
 void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
