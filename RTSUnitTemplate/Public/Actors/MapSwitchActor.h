@@ -23,6 +23,9 @@ public:
     UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
     FName GetDestinationSwitchTagToEnable() const;
 
+    UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+    void StartMapSwitch();
+
 protected:
     virtual void BeginPlay() override;
 

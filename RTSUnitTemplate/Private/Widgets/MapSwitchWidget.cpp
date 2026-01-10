@@ -79,6 +79,11 @@ void UMapSwitchWidget::OnYesClicked()
     ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer());
     if (PC)
     {
+        if (OwningActor)
+        {
+            OwningActor->StartMapSwitch();
+        }
+        
         // Call the RPC on the player controller, which is owned by the client
         FName Tag = OwningActor ? OwningActor->GetDestinationSwitchTagToEnable() : NAME_None;
         PC->Server_TravelToMap(TargetMapName, Tag);
