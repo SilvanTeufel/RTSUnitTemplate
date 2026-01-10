@@ -80,6 +80,7 @@ public:
 	FGameplayTag InputTag_F4_Pressed;
 	FGameplayTag InputTag_F5_Pressed;
 	FGameplayTag InputTag_F6_Pressed;
+	FGameplayTag InputTag_Esc_Pressed;
 protected:
 	//Registers all of the tags with the GameplayTags Manager
 	void AddAllTags(UGameplayTagsManager& Manager);

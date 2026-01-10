@@ -113,6 +113,7 @@ private:
 	TObjectPtr<UStoryWidgetBase> ActiveWidget = nullptr;
 
 	FTimerHandle ActiveTimerHandle;
+	FTimerHandle NextStoryTimerHandle;
 
 	void TryPlayNext();
 	void OnActiveLifetimeFinished();

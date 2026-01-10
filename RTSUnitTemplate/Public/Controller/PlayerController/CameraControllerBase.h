@@ -147,6 +147,9 @@ public:
 	void CameraBaseMachine(float DeltaTime);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopAllCameraMovement();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CameraState_UseScreenEdges();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -1029,7 +1029,7 @@ void ACustomControllerBase::RightClickPressedMass()
 			return;
 		}
 		
-		if (!SelectedUnits.Num() || !SelectedUnits[0]->CurrentDraggedWorkArea)
+		if (!SelectedUnits.Num() || !SelectedUnits[0] || !SelectedUnits[0]->CurrentDraggedWorkArea)
 		{
 			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 			if (!CheckClickOnWorkArea(Hit))
@@ -1285,6 +1285,7 @@ void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
 {
 	for (AUnitBase* U : SelectedUnits)
 	{
+		if (!U) continue;
 		if (!U->bHoldPosition)
 			SetHoldPositionOnUnit(U);
 	}
@@ -1313,6 +1314,8 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     TMap<AUnitBase*, FVector> Finals;
     for (AUnitBase* U : SelectedUnits)
     {
+    	if (!U) continue;
+    	
 		bool UnitIsValid = true;
     	
     	if (!U->IsInitialized) UnitIsValid = false;

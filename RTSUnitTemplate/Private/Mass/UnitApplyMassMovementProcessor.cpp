@@ -9,6 +9,11 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/UnitNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "MassActorSubsystem.h"
+#include "Components/CapsuleComponent.h"
+#include "Characters/Unit/UnitBase.h"
 
 UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery()
 {
@@ -32,6 +37,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); 
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any); 
 	EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::Any);
@@ -63,6 +70,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	//ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	ClientEntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
 	// Mirror relevant state tags on client to limit work to moving entities
 	ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
@@ -122,8 +131,11 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
+    UWorld* World = GetWorld();
+    if (!World) return;
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
    
-    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, NavSystem](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -133,6 +145,8 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
@@ -144,17 +158,46 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 UE_LOG(LogTemp, Warning, TEXT("[Client][ApplyMassMovement] ExecuteClient: Entities=%d"), NumEntities);
             }
         }
-        
+
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
             FMassVelocityFragment& Velocity = VelocityList[EntityIndex];
             const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIndex];
 
             const float OriginalZVelocity = Velocity.Value.Z;
             const FVector DesiredVelocity = Steering.DesiredVelocity;
-            const FVector AvoidanceForce = Force.Value;
+            FVector AvoidanceForce = Force.Value;
+            
+            FVector CurrentLocation = CurrentTransform.GetLocation();
+            float CapsuleHalfHeight = 0.f;
+            if (const AActor* Actor = ActorList[EntityIndex].Get())
+            {
+                if (const AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+                {
+                    if (const UCapsuleComponent* Capsule = UnitBase->GetCapsuleComponent())
+                    {
+                        CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+                    }
+                }
+            }
+
+            // --- NavMesh Guard for Avoidance ---
+            if (NavSystem && !CharFrag.bIsFlying)
+            {
+                FVector CheckLocation = CurrentLocation;
+                CheckLocation.Z -= CapsuleHalfHeight;
+                 
+                FNavLocation OutLocation;
+                // If NOT on NavMesh (with small tolerance), stop receiving avoidance forces
+                if (!NavSystem->ProjectPointToNavigation(CheckLocation, OutLocation, FVector(50.f, 50.f, 100.f)))
+                {
+                    AvoidanceForce = FVector::ZeroVector;
+                }
+            }
+
             const float MaxSpeed = MovementParams.MaxSpeed;
             const float Acceleration = MovementParams.MaxAcceleration;
 
@@ -178,10 +221,43 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
             }
 
-            const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
-            CurrentTransform.SetTranslation(NewLocation);
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
 
+            // --- NavMesh Clamping to prevent jumping ---
+            if (NavSystem && !CharFrag.bIsFlying)
+            {
+                FVector ProjectLocation = NewLocation;
+                ProjectLocation.Z -= CapsuleHalfHeight;
+
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(ProjectLocation, ProjectedLocation, NavMeshProjectionExtent))
+                {
+                    // Check for vertical jump (e.g. snapping to cliff top)
+                    const float ZDiff = FMath::Abs(ProjectedLocation.Location.Z - ProjectLocation.Z);
+                    if (ZDiff < 100.f) // Max step height
+                    {
+                        NewLocation.X = ProjectedLocation.Location.X;
+                        NewLocation.Y = ProjectedLocation.Location.Y;
+                        NewLocation.Z = ProjectedLocation.Location.Z + CapsuleHalfHeight;
+                    }
+                    else
+                    {
+                        // Jump detected! Stay on the current NavMesh level.
+                        FNavLocation CurrentOnNav;
+                        FVector CurrentFeet = CurrentLocation;
+                        CurrentFeet.Z -= CapsuleHalfHeight;
+                        if (NavSystem->ProjectPointToNavigation(CurrentFeet, CurrentOnNav, FVector(50.f, 50.f, 100.f)))
+                        {
+                            NewLocation.X = CurrentOnNav.Location.X;
+                            NewLocation.Y = CurrentOnNav.Location.Y;
+                            NewLocation.Z = CurrentOnNav.Location.Z + CapsuleHalfHeight;
+                            Velocity.Value = FVector(0.f, 0.f, OriginalZVelocity); // Stop horizontal movement
+                        }
+                    }
+                }
+            }
+
+            CurrentTransform.SetTranslation(NewLocation);
             Force.Value = FVector::ZeroVector;
         }
     });
@@ -190,8 +266,11 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
+    UWorld* World = GetWorld();
+    if (!World) return;
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
 
-    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    EntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, NavSystem](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -201,6 +280,8 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
@@ -210,10 +291,39 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIndex];
 
             const float OriginalZVelocity = Velocity.Value.Z;
             const FVector DesiredVelocity = Steering.DesiredVelocity;
-            const FVector AvoidanceForce = Force.Value;
+            FVector AvoidanceForce = Force.Value;
+            
+            FVector CurrentLocation = CurrentTransform.GetLocation();
+            float CapsuleHalfHeight = 0.f;
+            if (const AActor* Actor = ActorList[EntityIndex].Get())
+            {
+                if (const AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+                {
+                    if (const UCapsuleComponent* Capsule = UnitBase->GetCapsuleComponent())
+                    {
+                        CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+                    }
+                }
+            }
+
+            // --- NavMesh Guard for Avoidance ---
+            if (NavSystem && !CharFrag.bIsFlying)
+            {
+                FVector CheckLocation = CurrentLocation;
+                CheckLocation.Z -= CapsuleHalfHeight;
+                 
+                FNavLocation OutLocation;
+                // If NOT on NavMesh (with small tolerance), stop receiving avoidance forces
+                if (!NavSystem->ProjectPointToNavigation(CheckLocation, OutLocation, FVector(50.f, 50.f, 100.f)))
+                {
+                    AvoidanceForce = FVector::ZeroVector;
+                }
+            }
+
             const float MaxSpeed = MovementParams.MaxSpeed;
             const float Acceleration = MovementParams.MaxAcceleration;
 
@@ -237,10 +347,43 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
                 Velocity.Value = FVector(NewHorizontalVelocity.X, NewHorizontalVelocity.Y, OriginalZVelocity);
             }
 
-            const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
-            CurrentTransform.SetTranslation(NewLocation);
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
 
+            // --- NavMesh Clamping to prevent jumping ---
+            if (NavSystem && !CharFrag.bIsFlying)
+            {
+                FVector ProjectLocation = NewLocation;
+                ProjectLocation.Z -= CapsuleHalfHeight;
+
+                FNavLocation ProjectedLocation;
+                if (NavSystem->ProjectPointToNavigation(ProjectLocation, ProjectedLocation, NavMeshProjectionExtent))
+                {
+                    // Check for vertical jump (e.g. snapping to cliff top)
+                    const float ZDiff = FMath::Abs(ProjectedLocation.Location.Z - ProjectLocation.Z);
+                    if (ZDiff < 100.f) // Max step height
+                    {
+                        NewLocation.X = ProjectedLocation.Location.X;
+                        NewLocation.Y = ProjectedLocation.Location.Y;
+                        NewLocation.Z = ProjectedLocation.Location.Z + CapsuleHalfHeight;
+                    }
+                    else
+                    {
+                        // Jump detected! Stay on the current NavMesh level.
+                        FNavLocation CurrentOnNav;
+                        FVector CurrentFeet = CurrentLocation;
+                        CurrentFeet.Z -= CapsuleHalfHeight;
+                        if (NavSystem->ProjectPointToNavigation(CurrentFeet, CurrentOnNav, FVector(50.f, 50.f, 100.f)))
+                        {
+                            NewLocation.X = CurrentOnNav.Location.X;
+                            NewLocation.Y = CurrentOnNav.Location.Y;
+                            NewLocation.Z = CurrentOnNav.Location.Z + CapsuleHalfHeight;
+                            Velocity.Value = FVector(0.f, 0.f, OriginalZVelocity); // Stop horizontal movement
+                        }
+                    }
+                }
+            }
+
+            CurrentTransform.SetTranslation(NewLocation);
             Force.Value = FVector::ZeroVector;
         }
     });

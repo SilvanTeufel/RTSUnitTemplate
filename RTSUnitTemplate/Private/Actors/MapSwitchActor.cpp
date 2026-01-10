@@ -86,7 +86,10 @@ void AMapSwitchActor::BeginPlay()
     if (HasAuthority() && !FMath::IsNearlyZero(RotationSpeed))
     {
         CurrentAngle = FMath::RandRange(0.f, 2.f * PI);
-        
+    }
+
+    if (!FMath::IsNearlyZero(RotationSpeed))
+    {
         FVector NewLocation = CenterPoint;
         NewLocation.X += RotationRadius * FMath::Cos(CurrentAngle);
         NewLocation.Y += RotationRadius * FMath::Sin(CurrentAngle);
@@ -100,7 +103,7 @@ void AMapSwitchActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    if (HasAuthority() && !FMath::IsNearlyZero(RotationSpeed))
+    if (!FMath::IsNearlyZero(RotationSpeed))
     {
         CurrentAngle += RotationSpeed * DeltaTime * (PI / 180.f);
 

@@ -97,6 +97,16 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 {
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->SetUEPathfinding = true;
+	UnitBase->Base = this;
+
+	// Remove from current resource place while at base to allow better redistribution
+	if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+	{
+		if (IsValid(WorkingUnit->ResourcePlace))
+		{
+			WorkingUnit->ResourcePlace->RemoveWorkerFromArray(WorkingUnit);
+		}
+	}
 	
 	if(UnitBase->WorkResource)
 	{
@@ -115,14 +125,144 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 
 void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, int32 RecursionCount)
 {
-	// Log initial state
-
 	if (!ResourceGameMode) return;
 
-	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
+	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
 	
+	if (AllWorkPlaces.Num() == 0)
+	{
+		UnitBase->SetUEPathfinding = true;
+		UnitBase->SetUnitState(UnitData::Idle);
+		return;
+	}
+	
+	// Use Base location for distance calculation (worker is at base when this is called)
+	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetActorLocation();
+	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(UnitBase->TeamId);
+	
+	// Calculate distance threshold based on the closest resource (multiplier of closest distance)
+	const float ClosestDistance = FVector::Dist(BaseLocation, AllWorkPlaces[0]->GetActorLocation());
+	const float DistanceThreshold = ClosestDistance * ResourceGameMode->ResourceDistanceMultiplier;
+	
+	// Filter all work places to only include those within threshold distance
+	TArray<AWorkArea*> WorkPlaces;
+	for (AWorkArea* WorkPlace : AllWorkPlaces)
+	{
+		if (!IsValid(WorkPlace))
+		{
+			continue;
+		}
+		
+		const float WorkPlaceDistance = FVector::Dist(BaseLocation, WorkPlace->GetActorLocation());
+		if (WorkPlaceDistance <= DistanceThreshold)
+		{
+			WorkPlaces.Add(WorkPlace);
+		}
+	}
+	
+	// If no work places within threshold, use the closest one as fallback
+	if (WorkPlaces.Num() == 0 && AllWorkPlaces.Num() > 0)
+	{
+		WorkPlaces.Add(AllWorkPlaces[0]);
+	}
+	
+	// Get suitable work area considering worker distribution
 	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
 
+	// Check if worker should switch to a closer resource area with fewer workers
+	// This ensures even distribution within the threshold
+	if (IsValid(UnitBase->ResourcePlace) && WorkPlaces.Num() > 0)
+	{
+		const float CurrentDistance = FVector::Dist(BaseLocation, UnitBase->ResourcePlace->GetActorLocation());
+		const float SwitchThreshold = CurrentDistance / ResourceGameMode->ResourceDistanceMultiplier;
+		
+		// Collect all suitable work places that are significantly closer
+		TArray<AWorkArea*> SuitableCloserAreas;
+		
+		for (AWorkArea* WorkPlace : WorkPlaces)
+		{
+			if (!IsValid(WorkPlace) || WorkPlace == UnitBase->ResourcePlace)
+			{
+				continue;
+			}
+			
+			const float WorkPlaceDistance = FVector::Dist(BaseLocation, WorkPlace->GetActorLocation());
+			
+			// Check if this work place is significantly closer (within multiplier threshold of current)
+			if (WorkPlaceDistance <= SwitchThreshold)
+			{
+				const bool bSameType = (WorkPlace->Type == UnitBase->ResourcePlace->Type);
+				
+				// Same type: always allow the switch
+				// Different type: check if distribution allows it
+				if (bSameType)
+				{
+					SuitableCloserAreas.Add(WorkPlace);
+				}
+				else
+				{
+					// Different type - check distribution if set
+					if (bWorkerDistributionSet)
+					{
+						const EResourceType WorkPlaceResourceType = ConvertToResourceType(WorkPlace->Type);
+						const int32 CurrentWorkers = ResourceGameMode->GetCurrentWorkersForResourceType(UnitBase->TeamId, WorkPlaceResourceType);
+						const int32 MaxWorkers = ResourceGameMode->GetMaxWorkersForResourceType(UnitBase->TeamId, WorkPlaceResourceType);
+						
+						// Skip this closer area if distribution doesn't allow more workers of this type
+						if (CurrentWorkers >= MaxWorkers)
+						{
+							continue;
+						}
+					}
+					SuitableCloserAreas.Add(WorkPlace);
+				}
+			}
+		}
+		
+		// If we found suitable closer areas, pick the one with the fewest workers for even distribution
+		if (SuitableCloserAreas.Num() > 0)
+		{
+			AWorkArea* BestWorkPlace = nullptr;
+			int32 LowestWorkerCount = INT_MAX;
+			
+			for (AWorkArea* WorkPlace : SuitableCloserAreas)
+			{
+				const int32 WorkerCount = WorkPlace->Workers.Num();
+				if (WorkerCount < LowestWorkerCount)
+				{
+					LowestWorkerCount = WorkerCount;
+					BestWorkPlace = WorkPlace;
+				}
+			}
+			
+			if (BestWorkPlace)
+			{
+				const bool bSameType = (BestWorkPlace->Type == UnitBase->ResourcePlace->Type);
+				
+				if (!bSameType)
+				{
+					// Different type - update worker counts
+					ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+					ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestWorkPlace->Type), +1.0f);
+				}
+				
+				UnitBase->ResourcePlace = BestWorkPlace;
+				
+				// Register worker at the new location immediately
+				if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+				{
+					UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
+				}
+				
+				UnitBase->SetUEPathfinding = true;
+				UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
+				UnitBase->SwitchEntityTagByState(UnitData::GoToResourceExtraction, UnitBase->UnitStatePlaceholder);
+				return;
+			}
+		}
+	}
+
+	// Assign new resource place if suitable one found (already filtered by 1.5x threshold)
 	if (IsValid(NewResourcePlace))
 	{
 		if(IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
@@ -135,29 +275,58 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
 		UnitBase->ResourcePlace = NewResourcePlace;
+
+		// Register worker at the new location immediately
+		if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+		{
+			UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
+		}
 	}
 	else if (!IsValid(UnitBase->ResourcePlace))
 	{
-		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
+		// Fallback: pick the one with fewest workers from filtered list
+		AWorkArea* BestFallback = nullptr;
+		int32 LowestWorkerCount = INT_MAX;
 		
-		if (NewResourcePlace)
+		for (AWorkArea* WorkPlace : WorkPlaces)
 		{
-			if(IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
+			if (!IsValid(WorkPlace))
 			{
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+				continue;
 			}
-			else if(!IsValid(UnitBase->ResourcePlace))
+			
+			const int32 WorkerCount = WorkPlace->Workers.Num();
+			if (WorkerCount < LowestWorkerCount)
 			{
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
+				LowestWorkerCount = WorkerCount;
+				BestFallback = WorkPlace;
 			}
-			UnitBase->ResourcePlace = NewResourcePlace;
-		}else
+		}
+		
+		if (BestFallback)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("No WorkAreas, set to Idle!"));
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestFallback->Type), +1.0f);
+			UnitBase->ResourcePlace = BestFallback;
+
+			// Register worker at the fallback location immediately
+			if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+			{
+				UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
+			}
+		}
+		else
+		{
 			UnitBase->SetUEPathfinding = true;
 			UnitBase->SetUnitState(UnitData::Idle);
 			return;
+		}
+	}
+	else
+	{
+		// Even if keeping the same resource, re-register it since we removed it in HandleBaseArea
+		if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+		{
+			UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
 		}
 	}
 

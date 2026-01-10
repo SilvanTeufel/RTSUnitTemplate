@@ -261,6 +261,12 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 	
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
+
+			// Remove from current resource place while at base to allow better redistribution
+			if (IsValid(Worker->ResourcePlace))
+			{
+				Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+			}
 	
 			if(Worker->WorkResource)
 			{
@@ -296,6 +302,9 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
 		UnitBase->ResourcePlace = NewResourcePlace;
+		
+		// Register worker at the new location immediately
+		UnitBase->ResourcePlace->AddWorkerToArray(Worker);
 	}
 	else if (!UnitBase->ResourcePlace)
 	{
@@ -313,6 +322,17 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 			}
 			UnitBase->ResourcePlace = NewResourcePlace;
+
+			// Register worker at the fallback location immediately
+			UnitBase->ResourcePlace->AddWorkerToArray(Worker);
+		}
+	}
+	else
+	{
+		// Even if keeping the same resource, re-register it since we removed it in HandleBaseArea
+		if (IsValid(UnitBase->ResourcePlace))
+		{
+			UnitBase->ResourcePlace->AddWorkerToArray(Worker);
 		}
 	}
 

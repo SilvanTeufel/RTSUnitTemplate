@@ -106,6 +106,7 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 	}
 }
 #include "AIController.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Actors/AutoCamWaypoint.h"
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
 #include "Engine/Engine.h"      
@@ -114,6 +115,7 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 
 void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)
 {
+	StopAllCameraMovement();
 	if (InWidgetClass)
 	{
 		UWinLoseWidget* WinLoseWidget = CreateWidget<UWinLoseWidget>(this, InWidgetClass);
@@ -445,6 +447,7 @@ void ACameraControllerBase::SetCameraZDistance(int Index)
 
 void ACameraControllerBase::RotateCam(float DeltaTime)
 {
+	if (!CameraBase || CameraBase->BlockControls) return;
 	if(!MiddleMouseIsPressed) return;
 	
 	//FHitResult Hit;
@@ -559,6 +562,31 @@ void ACameraControllerBase::SetCameraAveragePosition(ACameraBase* Camera, float 
 	FVector CameraPosition = CalculateUnitsAverage(DeltaTime);
 
 	Camera->SetActorLocation(FVector(CameraPosition.X, CameraPosition.Y, Camera->GetActorLocation().Z)); // Z-Koordinate bleibt unverändert
+}
+
+void ACameraControllerBase::StopAllCameraMovement()
+{
+	WIsPressedState = 0;
+	SIsPressedState = 0;
+	AIsPressedState = 0;
+	DIsPressedState = 0;
+	CamIsRotatingLeft = false;
+	CamIsRotatingRight = false;
+	CamIsZoomingInState = 0;
+	CamIsZoomingOutState = 0;
+	ZoomOutToPosition = false;
+	ZoomInToPosition = false;
+	ScrollZoomCount = 0.f;
+	MiddleMouseIsPressed = false;
+
+	if (CameraBase)
+	{
+		CameraBase->BlockControls = true;
+		if (CameraBase->GetCharacterMovement())
+		{
+			CameraBase->GetCharacterMovement()->StopMovementImmediately();
+		}
+	}
 }
 
 void ACameraControllerBase::CameraBaseMachine(float DeltaTime)

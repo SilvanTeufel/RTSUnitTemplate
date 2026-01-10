@@ -60,6 +60,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputConfig* InputConfig;
 
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool BlockControls = true;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

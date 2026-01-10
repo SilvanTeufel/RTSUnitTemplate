@@ -11,6 +11,7 @@
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
 #include "Widgets/WinConditionWidget.h"
+#include "Widgets/MapMenuWidget.h"
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -85,6 +86,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Shift_Released(const FInputActionValue& InputActionValue, int32 CamState);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Input_Esc_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	/** Handles Enhanced Keyboard Inputs */
 
 	bool IsOwnedByLocalPlayer();
@@ -119,6 +123,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UWinConditionWidget* WinConditionWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMapMenuWidget* MapMenuWidget;
 
 	int32 TabMode = 1;
 	

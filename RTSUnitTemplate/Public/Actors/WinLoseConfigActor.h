@@ -32,6 +32,9 @@ public:
 	EWinLoseCondition WinLoseCondition = EWinLoseCondition::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	EWinLoseCondition LoseCondition = EWinLoseCondition::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	int32 TeamId = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")

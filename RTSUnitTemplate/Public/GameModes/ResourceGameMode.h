@@ -91,6 +91,9 @@ protected:
 	void AssignWorkAreasToWorkers();
 
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
+	float ResourceDistanceMultiplier = 2.0f;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	ABuildingBase* GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases);
 	
@@ -160,6 +163,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 GetMaxWorkersForResourceType(int TeamId, EResourceType ResourceType) const;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsWorkerDistributionSet(int TeamId) const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);

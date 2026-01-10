@@ -109,10 +109,11 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
 	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
 	if (bWinLoseTriggered) return;
-	if (!WinLoseConfigActor || WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None) return;
+	if (!WinLoseConfigActor || (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::None && WinLoseConfigActor->LoseCondition == EWinLoseCondition::None)) return;
 
 	TArray<ABuildingBase*> AllBuildings;
-	if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
+	if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed || 
+		WinLoseConfigActor->LoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 	{
 		for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
 		{
@@ -155,6 +156,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		bool bLocalTriggered = false;
 		bool bWon = false;
 
+		// 1. Check Win Condition
 		if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 		{
 			bool bFriendlyBuildingsExist = false;
@@ -188,22 +190,83 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
 			{
 				bLocalTriggered = true;
-				if (DestroyedUnit->TeamId == PlayerTeamId)
-				{
-					bWon = false;
-				}
-				else
-				{
-					bWon = true;
-				}
+				bWon = (DestroyedUnit->TeamId != PlayerTeamId);
 			}
 		}
 		else if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TeamReachedGameTime)
 		{
-			if (GetWorld()->GetTimeSeconds() >= WinLoseConfigActor->TargetGameTime)
+			float CurrentTime = GetWorld()->GetTimeSeconds();
+			if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+			{
+				if (GS->MatchStartTime > 0)
+				{
+					CurrentTime = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+				}
+			}
+
+			if (CurrentTime >= WinLoseConfigActor->TargetGameTime)
 			{
 				bLocalTriggered = true;
 				bWon = (PlayerTeamId == WinLoseConfigActor->TeamId);
+			}
+		}
+
+		// 2. Check Lose Condition (if Win Condition didn't trigger)
+		if (!bLocalTriggered && WinLoseConfigActor->LoseCondition != EWinLoseCondition::None)
+		{
+			if (WinLoseConfigActor->LoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
+			{
+				bool bPrimaryTeamBuildingsExist = false;
+				for (ABuildingBase* Building : AllBuildings)
+				{
+					if (Building->TeamId == WinLoseConfigActor->TeamId)
+					{
+						bPrimaryTeamBuildingsExist = true;
+						break;
+					}
+				}
+
+				if (!bPrimaryTeamBuildingsExist)
+				{
+					bLocalTriggered = true;
+					bWon = (PlayerTeamId != WinLoseConfigActor->TeamId);
+				}
+			}
+			else if (WinLoseConfigActor->LoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
+			{
+				if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(WinLoseConfigActor->WinLoseTargetTag))
+				{
+					if (DestroyedUnit->TeamId == WinLoseConfigActor->TeamId)
+					{
+						bLocalTriggered = true;
+						bWon = (PlayerTeamId != WinLoseConfigActor->TeamId);
+					}
+				}
+			}
+			else if (WinLoseConfigActor->LoseCondition == EWinLoseCondition::TeamReachedGameTime)
+			{
+				float CurrentTime = GetWorld()->GetTimeSeconds();
+				if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+				{
+					if (GS->MatchStartTime > 0)
+					{
+						CurrentTime = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+					}
+				}
+
+				if (CurrentTime >= WinLoseConfigActor->TargetGameTime)
+				{
+					if (WinLoseConfigActor->TeamId == PlayerTeamId)
+					{
+						bLocalTriggered = true;
+						bWon = false;
+					}
+					else
+					{
+						bLocalTriggered = true;
+						bWon = true;
+					}
+				}
 			}
 		}
 

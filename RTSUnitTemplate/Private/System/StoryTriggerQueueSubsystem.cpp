@@ -16,6 +16,10 @@ UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 void UStoryTriggerQueueSubsystem::Deinitialize()
 {
 	ClearActive();
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(NextStoryTimerHandle);
+	}
 	Pending.Empty();
 	Super::Deinitialize();
 }
@@ -86,6 +90,18 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	{
 		return; // Already showing something
 	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (World->GetTimerManager().IsTimerActive(NextStoryTimerHandle))
+	{
+		return; // Waiting for delay
+	}
+
 	if (Pending.Num() == 0)
 	{
 		return;
@@ -100,12 +116,6 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	if (!Item.WidgetClass)
 	{
 		Item.WidgetClass = UStoryWidgetBase::StaticClass();
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
 	}
 
 	bIsStoryActive = true;
@@ -175,6 +185,10 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()
 {
 	ClearActive();
-	// Proceed to next item
-	TryPlayNext();
+
+	// Add 3s delay before proceeding to next item
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(NextStoryTimerHandle, this, &UStoryTriggerQueueSubsystem::TryPlayNext, 3.0f, false);
+	}
 }

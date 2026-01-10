@@ -22,6 +22,7 @@
 void ACameraBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ACameraBase, BlockControls);
 }
 
 // Called when the game starts or when spawned

@@ -91,6 +91,7 @@ void FGameplayTags::AddAllTags(UGameplayTagsManager& Manager)
 	AddTag(InputTag_F5_Pressed, "InputTag.F5_Pressed", "F5_Pressed");
 	AddTag(InputTag_F6_Pressed, "InputTag.F6_Pressed", "F6_Pressed");
 	
+	AddTag(InputTag_Esc_Pressed, "InputTag.Esc_Pressed", "Esc_Pressed");
 }
 
 void FGameplayTags::AddTag(FGameplayTag& OutTag, const ANSICHAR* TagName, const ANSICHAR* TagComment)

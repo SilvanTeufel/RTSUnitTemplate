@@ -83,6 +83,10 @@ void AExtendedCameraBase::UpdateTabModeUI()
 	{
 		WinConditionWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	if (MapMenuWidget)
+	{
+		MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	HideControlWidget();
 	SetUserWidget(nullptr);
 
@@ -266,9 +270,8 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Pressed, 0);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Released, 0);
 		
-
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Esc_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Esc_Pressed, 0);
 	}
-
 }
 
 void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
@@ -534,6 +537,37 @@ void AExtendedCameraBase::Input_Shift_Released(const FInputActionValue& InputAct
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->ShiftReleased();
+	}
+}
+
+void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
+{
+	if (MapMenuWidget)
+	{
+		if (MapMenuWidget->GetVisibility() == ESlateVisibility::Visible)
+		{
+			MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+			BlockControls = false;
+
+			APlayerController* PC = Cast<APlayerController>(GetController());
+			if (PC)
+			{
+				PC->SetShowMouseCursor(false);
+				PC->SetInputMode(FInputModeGameOnly());
+			}
+		}
+		else
+		{
+			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
+			BlockControls = true;
+
+			APlayerController* PC = Cast<APlayerController>(GetController());
+			if (PC)
+			{
+				PC->SetShowMouseCursor(true);
+				PC->SetInputMode(FInputModeGameAndUI());
+			}
+		}
 	}
 }
 
