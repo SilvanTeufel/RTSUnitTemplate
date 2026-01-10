@@ -831,6 +831,20 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 		return;
 	}
 
+	for (AUnitBase* Unit : Units)
+	{
+		if (Unit && Unit->IsWorker && FollowTarget)
+		{
+			if (ABuildingBase* Building = Cast<ABuildingBase>(FollowTarget))
+			{
+				if (Building->IsBase)
+				{
+					Unit->Base = Building;
+				}
+			}
+		}
+	}
+
 	if (IsFollowCommandReady(Units))
 	{
 		ExecuteFollowCommand(Units, FollowTarget, AttackT);
@@ -919,6 +933,20 @@ void ACustomControllerBase::Retry_Server_SetUnitsFollowTarget()
 	}
 	AUnitBase* StrongTarget = PendingFollowTarget.Get();
 
+	for (AUnitBase* Unit : StrongUnits)
+	{
+		if (Unit && Unit->IsWorker && StrongTarget)
+		{
+			if (ABuildingBase* Building = Cast<ABuildingBase>(StrongTarget))
+			{
+				if (Building->IsBase)
+				{
+					Unit->Base = Building;
+				}
+			}
+		}
+	}
+
 	if (IsFollowCommandReady(StrongUnits))
 	{
 		ExecuteFollowCommand(StrongUnits, StrongTarget, PendingFollowAttackT);
@@ -949,6 +977,17 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 	{
 		if (!Unit) continue;
 		Unit->ApplyFollowTarget(FollowTarget);
+
+		if (Unit->IsWorker && FollowTarget)
+		{
+			if (ABuildingBase* Building = Cast<ABuildingBase>(FollowTarget))
+			{
+				if (Building->IsBase)
+				{
+					Unit->Base = Building;
+				}
+			}
+		}
 	}
 
 	if (FollowTarget)
