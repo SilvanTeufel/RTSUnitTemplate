@@ -48,7 +48,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerChunk(
 	ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		TEXT("net.RTS.ServerReplicationKick.MaxPerTick"),
-		64, // 16
+		16, // 16
 		TEXT("Max total entities processed by this processor per tick; extra chunks are skipped. Default 16."),
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
