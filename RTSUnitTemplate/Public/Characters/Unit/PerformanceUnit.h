@@ -18,6 +18,8 @@
 class UNiagaraComponent;
 class UAudioComponent;
 struct FTimerHandle;
+class UUnitBaseHealthBar;
+class UUnitTimerWidget;
 
 USTRUCT(BlueprintType)
 struct FActiveNiagaraEffect
@@ -126,6 +128,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = 150.f;
 
+	// Timer accumulator for CheckTeamVisibility (runs every 5 seconds)
+	float TeamVisibilityCheckTimer = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TeamVisibilityCheckInterval = 5.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HealthCompCreated = false;
 
@@ -208,8 +216,15 @@ public:
 		UPROPERTY(Transient)
 		TArray<TWeakObjectPtr<UAudioComponent>> ActiveAudio;
 		
-		UPROPERTY(Transient)
+ 	UPROPERTY(Transient)
 		TArray<FTimerHandle> PendingEffectTimers;
+
+		// Cached widget pointers to avoid repeated casting every tick
+		UPROPERTY(Transient)
+		UUnitBaseHealthBar* CachedHealthBarWidget = nullptr;
+		
+		UPROPERTY(Transient)
+		UUnitTimerWidget* CachedTimerWidget = nullptr;
 
 		void StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime);
 		void StopAudioComponent(UAudioComponent* AC, bool bFade, float FadeTime);

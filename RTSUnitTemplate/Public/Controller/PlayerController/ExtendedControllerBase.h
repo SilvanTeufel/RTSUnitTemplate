@@ -70,6 +70,9 @@ public:
 	void SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable);
 	// New variant that operates on a specific unit (no UFUNCTION to avoid UHT overloading conflicts)
 	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
+
+	UFUNCTION(Server, Reliable)
+	void Server_DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, FTransform ClientWorkAreaTransform);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagF1;
@@ -232,24 +235,28 @@ public:
 	UPROPERTY(Transient)
 	float WorkAreaStreamAccumulator = 0.f;
 
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SetWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+	void SetWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea_Local(float DeltaSeconds);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void Server_FinalizeWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+	void Server_FinalizeWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ApplyWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+	void Multicast_ApplyWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
 	// Update WorkArea location on client, used for clients with same TeamId on drop
 	UFUNCTION(Client, Reliable)
-	void Client_UpdateWorkAreaPosition(AWorkArea* DraggedArea, FVector NewActorPosition);
+	void Client_UpdateWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
 	// Helper to compute a grounded location so the mesh bottom rests on the ground
 	FVector ComputeGroundedLocation(AWorkArea* DraggedArea, const FVector& DesiredLocation) const;
+
+	// Helper to broadcast WorkArea position update to all team members
+	void BroadcastWorkAreaPositionToTeam(AWorkArea* DraggedArea, const FTransform& FinalTransform, AUnitBase* UnitBase);
 
 	// Internal helpers to simplify MoveWorkArea_Local logic (non-UFUNCTION)
 	bool TraceMouseToGround(FVector& OutMouseGround, FHitResult& OutHit) const;
@@ -267,7 +274,7 @@ public:
 	
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetWorkArea(FVector AreaLocation);
+	void SetWorkArea(FTransform AreaTransform);
 	
 	// Local, client-side variant used by Tick; mirrors WorkArea distance/pushback behavior for AbilityIndicator
 	void MoveAbilityIndicator_Local(float DeltaSeconds);

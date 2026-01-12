@@ -3285,22 +3285,33 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 {
 	if (!UnitBase || !StateFrag) return;
 
-	if (!UnitBase->BuildArea || !UnitBase->BuildArea->AllowAddingWorkers)
+	if (!UnitBase->BuildArea || (!UnitBase->BuildArea->AllowAddingWorkers && UnitBase->BuildArea->Origin != UnitBase))
 	{
 		UnitBase->SwitchEntityTag(FMassStateGoToBaseTag::StaticStruct());
 		return;
 	}
+
+	//if (UnitBase->BuildArea->IsExtensionArea && UnitBase->BuildArea->Origin == UnitBase)
+	//{
+		// For extension areas, the Origin building does NOT progress the build itself.
+		// The spawned ConstructionUnit handles the build progress via HandleExtensionCastForConstructionUnit.
+		// We only need to keep the Origin's state timer at 0 so it doesn't interfere with future actions (like building workers).
+		//StateFrag->StateTimer = 0.f;
+		//UnitBase->UnitControlTimer = 0.f;
+		//return;
+	//}
+
 	// Ensure worker is registered in the WorkArea while building
 	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
 	{
-		if (Worker->BuildArea)
+		if (Worker->BuildArea && Worker->IsWorker)
 		{
 			Worker->BuildArea->AddWorkerToArray(Worker);
 		}
 	}
 	// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
 	// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
-	if (UnitBase->BuildArea)
+	if (UnitBase->BuildArea && !UnitBase->BuildArea->IsExtensionArea)
 	{
 		const int32 MaxAllowed = UnitBase->BuildArea->MaxWorkerCount > 0 ? UnitBase->BuildArea->MaxWorkerCount : UnitBase->BuildArea->Workers.Num();
 		const int32 EffectiveWorkers = FMath::Min(UnitBase->BuildArea->Workers.Num(), MaxAllowed);
@@ -3310,18 +3321,18 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			UnitBase->UnitControlTimer = StateFrag->StateTimer;
 		}
 	}
-	if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer)
+	if (UnitBase->BuildArea->CurrentBuildTime > UnitBase->UnitControlTimer && !UnitBase->BuildArea->IsExtensionArea)
 	{
 		StateFrag->StateTimer = UnitBase->BuildArea->CurrentBuildTime;
 		UnitBase->UnitControlTimer = UnitBase->BuildArea->CurrentBuildTime;
 	}
-	else
+	else if (!UnitBase->BuildArea->IsExtensionArea)
 	{
 		UnitBase->BuildArea->CurrentBuildTime = UnitBase->UnitControlTimer;
 	}
 
 	// Construction site handling (optional)
-	if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass)
+	if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnitClass && !UnitBase->BuildArea->IsExtensionArea)
 	{
 		const float Progress = FMath::Clamp(UnitBase->UnitControlTimer / UnitBase->BuildArea->BuildTime, 0.f, 1.f);
 		// Early safeguard: if a construction unit exists but is dead, hide and prevent any respawn
@@ -3343,8 +3354,21 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 			if (NewConstruction)
 			{
+				// Ground trace at the area center to find floor Z
+				FHitResult Hit;
+				const FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
+				const FVector AreaCenter = AreaBox.GetCenter();
+				const FVector AreaSize = AreaBox.GetSize();
+				FVector Start = AreaCenter + FVector(0, 0, 10000.f);
+				FVector End   = AreaCenter - FVector(0, 0, 10000.f);
+				FCollisionQueryParams Params;
+				Params.AddIgnoredActor(UnitBase->BuildArea);
+				Params.AddIgnoredActor(NewConstruction);
+				const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+				const float GroundZ = bHit ? Hit.Location.Z : BaseLoc.Z;
+
 				// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
-				NewConstruction->FlyHeight = BaseLoc.Z;
+				NewConstruction->FlyHeight = BaseLoc.Z - GroundZ; 
 				NewConstruction->TeamId = UnitBase->TeamId;
 				// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
 				if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
@@ -3370,18 +3394,6 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 
 				// Fit, center, and ground-align construction unit to WorkArea footprint
 				{
-					FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
-					const FVector AreaCenter = AreaBox.GetCenter();
-					const FVector AreaSize = AreaBox.GetSize();
-					// Ground trace at the area center to find floor Z
-					FHitResult Hit;
-					FVector Start = AreaCenter + FVector(0, 0, 10000.f);
-					FVector End   = AreaCenter - FVector(0, 0, 10000.f);
-					FCollisionQueryParams Params;
-					Params.AddIgnoredActor(UnitBase->BuildArea);
-					Params.AddIgnoredActor(NewConstruction);
-					bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
-					float GroundZ = bHit ? Hit.Location.Z : NewConstruction->GetActorLocation().Z;
 					// Compute uniform scale to fit XY footprint
 					FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
 					FVector UnitSize = PreBox.GetSize();

@@ -65,7 +65,14 @@ void APerformanceUnit::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	
 	CheckViewport();
-	CheckTeamVisibility();
+	
+	// Only check team visibility every TeamVisibilityCheckInterval seconds (default 5s)
+	TeamVisibilityCheckTimer += DeltaTime;
+	if (TeamVisibilityCheckTimer >= TeamVisibilityCheckInterval)
+	{
+		CheckTeamVisibility();
+		TeamVisibilityCheckTimer = 0.f;
+	}
 	
 	if (StopVisibilityTick) return;
 		
@@ -229,11 +236,15 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
 
-	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-	if (!HealthBarWidget)
+	// Use cached health bar widget pointer to avoid casting every tick
+	if (!CachedHealthBarWidget)
 	{
-		HealthWidgetComp->InitWidget();
-		HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		CachedHealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		if (!CachedHealthBarWidget)
+		{
+			HealthWidgetComp->InitWidget();
+			CachedHealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		}
 	}
 
 	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
@@ -281,20 +292,21 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 		{
 			HealthWidgetComp->SetWidgetClass(USquadHealthBar::StaticClass());
 			HealthWidgetComp->InitWidget();
-			HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+			// Invalidate cache and re-cache after widget class switch
+			CachedHealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
 		}
 	}
-	if (HealthBarWidget)
+	if (CachedHealthBarWidget)
 	{
-		if (HealthBarWidget->GetOwnerActor() != ThisAsUnit)
+		if (CachedHealthBarWidget->GetOwnerActor() != ThisAsUnit)
 		{
-			HealthBarWidget->SetOwnerActor(ThisAsUnit);
+			CachedHealthBarWidget->SetOwnerActor(ThisAsUnit);
 		}
 	}
 
 	HealthWidgetComp->SetVisibility(true);
 
-	USquadHealthBar* SquadHB = Cast<USquadHealthBar>(HealthBarWidget);
+	USquadHealthBar* SquadHB = Cast<USquadHealthBar>(CachedHealthBarWidget);
 	if (SquadHB)
 	{
 		const bool bShouldShowSquad = IsOnViewport && bFogAllows && SquadHB->bAlwaysShowSquadHealthbar;
@@ -305,8 +317,8 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 			{
 				HealthBarUpdateTriggered = true;
 			}
-			HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
-			HealthBarWidget->UpdateWidget();
+			CachedHealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			CachedHealthBarWidget->UpdateWidget();
 			if (!bUseSkeletalMovement)
 			{
 				FVector ALocation = GetMassActorLocation() + HealthWidgetRelativeOffset;
@@ -319,7 +331,7 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 			{
 				HealthBarUpdateTriggered = false;
 			}
-			HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+			CachedHealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }
@@ -328,13 +340,17 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
 
-	UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
-	if (!HealthBarWidget)
+	// Use cached health bar widget pointer to avoid casting every tick
+	if (!CachedHealthBarWidget)
 	{
-		HealthWidgetComp->InitWidget();
-		HealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		CachedHealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		if (!CachedHealthBarWidget)
+		{
+			HealthWidgetComp->InitWidget();
+			CachedHealthBarWidget = Cast<UUnitBaseHealthBar>(HealthWidgetComp->GetUserWidgetObject());
+		}
 	}
-	if (!HealthBarWidget)
+	if (!CachedHealthBarWidget)
 	{
 		return;
 	}
@@ -343,19 +359,19 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 
 	if (IsOnViewport && (OpenHealthWidget || bShowLevelOnly) && !HealthBarUpdateTriggered && bFogAllows)
 	{
-		HealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+		CachedHealthBarWidget->SetVisibility(ESlateVisibility::Visible);
 		HealthBarUpdateTriggered = true;
 	}
 	else if (HealthBarUpdateTriggered && !OpenHealthWidget && !bShowLevelOnly)
 	{
-		HealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
+		CachedHealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 		HealthBarUpdateTriggered = false;
 	}
 
 	if (HealthBarUpdateTriggered)
 	{
-		HealthBarWidget->bShowLevelOnly = bShowLevelOnly;
-		HealthBarWidget->UpdateWidget();
+		CachedHealthBarWidget->bShowLevelOnly = bShowLevelOnly;
+		CachedHealthBarWidget->UpdateWidget();
 	}
 
 	if (!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)
@@ -647,12 +663,19 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
 
 void APerformanceUnit::CheckTimerVisibility()
 {
-	if (UUnitTimerWidget* TimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject())) // Assuming you have a UUnitBaseTimer class for the timer widget
-	{
+	if (!TimerWidgetComp) return;
 
+	// Use cached timer widget pointer to avoid casting every tick
+	if (!CachedTimerWidget)
+	{
+		CachedTimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject());
+	}
+
+	if (CachedTimerWidget)
+	{
 		if (IsOnViewport && IsMyTeam)
 		{
-			TimerWidget->SetVisibility(ESlateVisibility::Visible);
+			CachedTimerWidget->SetVisibility(ESlateVisibility::Visible);
 
 			if(!bUseSkeletalMovement)
 			{
@@ -662,7 +685,7 @@ void APerformanceUnit::CheckTimerVisibility()
 		}
 		else
 		{
-			TimerWidget->SetVisibility(ESlateVisibility::Collapsed);
+			CachedTimerWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }

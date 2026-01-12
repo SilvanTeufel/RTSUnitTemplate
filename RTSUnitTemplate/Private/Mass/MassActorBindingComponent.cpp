@@ -186,6 +186,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			bNeedsMassUnitSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
+			UnitBase->CheckTeamVisibility();
 			UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
 			UnitBase->SyncTranslation();
 			// Server: assign NetID and update authoritative registry so clients can reconcile
@@ -627,7 +628,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			bNeedsMassBuildingSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
-
+			UnitBase->CheckTeamVisibility();
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
 			{

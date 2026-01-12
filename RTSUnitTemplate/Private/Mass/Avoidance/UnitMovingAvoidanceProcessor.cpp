@@ -125,6 +125,13 @@ namespace UE::UnitMassAvoidance
 
  		// Defensive: cache reference to items once
  		const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
+ 		
+ 		// Early exit if the sparse array is empty - prevents issues with uninitialized/cleared arrays
+ 		if (Items.Num() == 0)
+ 		{
+ 			return;
+ 		}
+ 		
  		for (const FSortingCell& SortedCell : Cells)
  		{
 			
@@ -142,16 +149,30 @@ namespace UE::UnitMassAvoidance
  				constexpr int32 MaxSafetyIterations = 1024;
  				while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
  				{
- 					// Get fresh MaxIndex each iteration to handle potential concurrent modifications
+ 					// Get fresh counts each iteration to handle potential concurrent modifications
  					// This prevents the BitArray assertion in IsValidIndex when the sparse array changes
  					const int32 CurrentMaxIdx = Items.GetMaxIndex();
+ 					const int32 CurrentNum = Items.Num();
+ 					
+ 					// If array became empty or MaxIndex is invalid during iteration, stop
+ 					// Check these first before any index comparisons
+ 					if (CurrentNum == 0 || CurrentMaxIdx <= 0)
+ 					{
+ 						break;
+ 					}
 					
- 					// Hard range check first to avoid TSparseArray assert inside IsValidIndex
+ 					// Hard range check to avoid TSparseArray assert inside IsValidIndex
+ 					// The BitArray inside TSparseArray may have fewer bits than GetMaxIndex() in edge cases
+ 					// when the array is being modified concurrently or has been cleared
  					if (Idx < 0 || Idx >= CurrentMaxIdx)
  					{
  						break; // Out-of-range index, stop scanning this cell
  					}
+ 					
  					// Within range: now check allocation flag in the sparse array
+ 					// Note: IsValidIndex internally accesses AllocationFlags[Idx] which can assert
+ 					// if the BitArray's NumBits < Idx. Our bounds checks above should prevent this
+ 					// by ensuring we don't access indices beyond the current valid range.
  					if (!Items.IsValidIndex(Idx))
  					{
  						break; // Unallocated or stale slot

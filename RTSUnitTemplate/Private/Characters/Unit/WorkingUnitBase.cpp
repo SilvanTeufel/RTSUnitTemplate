@@ -16,6 +16,8 @@
 #include "Actors/Projectile.h"
 #include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
 
@@ -143,19 +145,118 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 	
 	if (WorkAreaClass)
 	{
+		FVector TargetLocation = SpawnLocation;
+		FRotator TargetRotation = FRotator::ZeroRotator;
 
+		if (IsExtensionArea)
+		{
+			ABuildingBase* Unit = Cast<ABuildingBase>(this);
+			if (!Unit)
+			{
+				Unit = Base;
+			}
+
+			if (Unit)
+			{
+				const FVector UnitLoc = Unit->GetMassActorLocation();
+				FVector UnitExtentBounds(100.f, 100.f, 100.f);
+
+				if (UCapsuleComponent* Capsule = Unit->FindComponentByClass<UCapsuleComponent>())
+				{
+					const float R = Capsule->GetScaledCapsuleRadius();
+					UnitExtentBounds.X = R;
+					UnitExtentBounds.Y = R;
+					UnitExtentBounds.Z = Capsule->GetScaledCapsuleHalfHeight();
+				}
+
+				if (Unit->ExtensionDominantSideSelection)
+				{
+					const FVector2D Delta2D(SpawnLocation.X - UnitLoc.X, SpawnLocation.Y - UnitLoc.Y);
+					const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
+					const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+
+					TargetLocation = UnitLoc;
+					float DesiredYaw = 0.f;
+					if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
+					{
+						const float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
+						TargetLocation.X += SignX * AbsX;
+						DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
+					}
+					else
+					{
+						const float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
+						TargetLocation.Y += SignY * AbsY;
+						DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
+					}
+					TargetRotation = FRotator(0.f, DesiredYaw, 0.f);
+				}
+				else
+				{
+					TargetLocation = UnitLoc;
+					TargetLocation.X += Unit->ExtensionOffset.X;
+					TargetLocation.Y += Unit->ExtensionOffset.Y;
+				}
+
+				if (Unit->ExtensionGroundTrace)
+				{
+					const FVector TraceStart = TargetLocation + FVector(0, 0, 2000.f);
+					const FVector TraceEnd = TargetLocation - FVector(0, 0, 2000.f);
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(SpawnExtensionAreaGround), true);
+					Params.AddIgnoredActor(Unit);
+
+					FHitResult GroundHit;
+					bool bFoundValidGround = false;
+					const int32 MaxTries = 8;
+					for (int32 Try = 0; Try < MaxTries; ++Try)
+					{
+						if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+						{
+							break;
+						}
+						AActor* HitActor = GroundHit.GetActor();
+						if (HitActor && (HitActor->IsA(AWorkArea::StaticClass()) || HitActor->IsA(ABuildingBase::StaticClass())))
+						{
+							Params.AddIgnoredActor(HitActor);
+							continue;
+						}
+						bFoundValidGround = true;
+						break;
+					}
+					if (bFoundValidGround)
+					{
+						TargetLocation.Z = GroundHit.Location.Z;
+					}
+				}
+				else
+				{
+					TargetLocation.Z = UnitLoc.Z + Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
+				}
+
+				// Adjust Z for mesh bottom
+				if (AWorkArea* DefaultWorkArea = WorkAreaClass->GetDefaultObject<AWorkArea>())
+				{
+					if (UStaticMeshComponent* MeshComp = DefaultWorkArea->FindComponentByClass<UStaticMeshComponent>())
+					{
+						const FBoxSphereBounds Bounds = MeshComp->CalcBounds(MeshComp->GetRelativeTransform());
+						const float RelativeBottomZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+						const float Clearance = 2.f;
+						TargetLocation.Z += (Clearance - RelativeBottomZ);
+					}
+				}
+			}
+		}
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		FRotator SpawnRotation = FRotator::ZeroRotator;
 
 		// Spawn the replicated WorkArea on the server
 		AWorkArea* SpawnedWorkArea = GetWorld()->SpawnActor<AWorkArea>(
 			WorkAreaClass,
-			SpawnLocation,
-			SpawnRotation,
+			TargetLocation,
+			TargetRotation,
 			SpawnParams
 		);
 
@@ -174,10 +275,11 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 			if (SpawnedWorkArea->IsExtensionArea)
 			{
 				SpawnedWorkArea->AllowAddingWorkers = false;
+				SpawnedWorkArea->ServerMeshRotationBuilding = TargetRotation;
 			}
 			
 			CurrentDraggedWorkArea = SpawnedWorkArea;
-			CurrentDraggedWorkArea->SetReplicateMovement(true);
+			//CurrentDraggedWorkArea->SetReplicateMovement(true);
 
 			// Store optional construction site class
 			if (CurrentDraggedWorkArea && ConstructionUnitClass)
@@ -185,7 +287,7 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 				CurrentDraggedWorkArea->ConstructionUnitClass = ConstructionUnitClass;
 				CurrentDraggedWorkArea->Origin = this;
 			}
-
+			
 			return CurrentDraggedWorkArea;
 		}
 	}

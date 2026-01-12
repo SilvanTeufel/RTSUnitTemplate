@@ -56,11 +56,11 @@ AWorkArea::AWorkArea()
 	//if (HasAuthority())
 	//{
 		bReplicates = true;
-		bAlwaysRelevant = true;
+		//bAlwaysRelevant = true;
 		//SetReplicateMovement(true);
 	//}
 
-	Mesh->SetIsReplicated(true); // was false
+	Mesh->SetIsReplicated(false); // was false
 	MaxAvailableResourceAmount = AvailableResourceAmount;
 }
 

@@ -125,11 +125,9 @@ void UCastingStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
 
             // Increase the timer by the processor interval
             StateFrag.StateTimer += ExecutionInterval;
-            UE_LOG(LogTemp, Log, TEXT("!!!Casting on Client!!!"));
             // End of cast on client: clear rotation flag
             if (StateFrag.StateTimer >= StatsFrag.CastTime)
             {
-                UE_LOG(LogTemp, Log, TEXT("!!!Cast END Client!!!"));
                 //TargetFrag.bRotateTowardsAbility = false;
                 // No signals on client; server will drive authoritative transitions
                 if (SignalSubsystem)
@@ -276,7 +274,6 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             
             if (StateFrag.StateTimer >= StatsFrag.CastTime) // Use >= for safety
             {
-                UE_LOG(LogTemp, Log, TEXT("!!!Casting finished!!!!"));
                 // Clear rotate flag at end of cast
                 //TargetFrag.bRotateTowardsAbility = false;
                 if (SignalSubsystem)

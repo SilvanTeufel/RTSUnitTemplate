@@ -248,4 +248,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ResultCanBeSelected = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool InstantDrop = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool AreaDropped = false;
 };

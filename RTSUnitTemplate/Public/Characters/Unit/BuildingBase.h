@@ -44,6 +44,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector ExtensionOffset = FVector(20.f, 20.f, 0.f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ExtensionGroundTrace = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ExtensionDominantSideSelection = true;
+	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Extension = nullptr;
 

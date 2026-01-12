@@ -138,6 +138,9 @@ public:
 	bool SyncTranslation();
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SyncRotation();
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SetTranslationLocation(FVector NewLocation);
 	
 	// Updates MoveTarget and ClientPrediction fragments to reflect a new location and desired speed
@@ -211,6 +214,16 @@ public:
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateActorYawToChase(UStaticMeshComponent* MeshToRotate, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
+
+	// Continuously rotate the whole unit's Yaw to face UnitToChase (runs on server and clients)
+	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateUnitYawToChase(float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
+
+	// Continuously rotate the whole unit's Yaw at a constant rate (runs on server and clients)
+	// YawRate is in degrees per second.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastContinuousUnitRotation(float YawRate, bool bEnable);
 
 protected:
 	virtual void BeginPlay() override;
@@ -293,6 +306,23 @@ protected:
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FYawFollowData> ActiveYawFollows;
 	FTimerHandle StaticMeshYawFollowTimerHandle;
 	void StaticMeshYawFollow_Step();
+
+	// Continuous yaw-follow state for the unit itself
+	FYawFollowData UnitYawFollowData;
+	bool bUnitYawFollowEnabled = false;
+	FTimerHandle UnitYawFollowTimerHandle;
+	void UnitYawFollow_Step();
+
+	// Smooth rotation tween for the unit itself
+	FStaticMeshRotateTween UnitRotateTween;
+	FTimerHandle UnitRotateTimerHandle;
+	void UnitRotation_Step();
+
+	// Continuous constant rotation state for the unit itself
+	bool bContinuousUnitRotationEnabled = false;
+	float ContinuousUnitYawRate = 0.f;
+	FTimerHandle ContinuousUnitRotationTimerHandle;
+	void ContinuousUnitRotation_Step();
 
 	// Lightweight tween state for moving arbitrary static mesh components
 	struct FStaticMeshMoveTween

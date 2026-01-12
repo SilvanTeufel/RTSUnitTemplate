@@ -339,7 +339,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 if (ActionName.StartsWith("switch_camera_state_ability"))
                 {
                     UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
-                    ExtendedController->SetWorkArea(GetActorLocation());
+                    ExtendedController->SetWorkArea(GetActorTransform());
                     ExtendedController->DropWorkAreaForUnit(ExtendedController->SelectedUnits[0], false, ExtendedController->DropWorkAreaFailedSound);
                 }
             }

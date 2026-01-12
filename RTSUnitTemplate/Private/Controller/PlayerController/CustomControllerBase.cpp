@@ -1610,9 +1610,9 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
         Units[0]->CurrentDraggedWorkArea->SetActorTransform(ClientWorkAreaTransform);
     }
     // Try to drop any active work area for the first unit using the new parameterized variant
-    if (Units.Num() > 0 && Units[0])
+    if (Units.Num() > 0 && Units[0] && Units[0]->CurrentDraggedWorkArea)
     {
-        DropWorkAreaForUnit(Units[0], bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
+        if (!Units[0]->CurrentDraggedWorkArea->InstantDrop) DropWorkAreaForUnit(Units[0], bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
     }
 
     bool AbilityFired = false;
