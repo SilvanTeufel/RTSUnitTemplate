@@ -43,6 +43,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
+        EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
         
         EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
@@ -56,7 +57,6 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     
-        EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None); 
         EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 		EntityQuery.RegisterWithProcessor(*this);
 
@@ -78,6 +78,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
+        ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
             
         ClientEntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
@@ -91,7 +92,6 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     
-        ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None); 
         ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 
     /*
@@ -545,8 +545,13 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+            const bool bIsFrozen = DoesEntityHaveTag(EntityManager, Entity, FMassStateStopMovementTag::StaticStruct());
 
-            if (TargetList[i].bRotateTowardsAbility)
+            if (bIsFrozen)
+            {
+                // Skip rotation logic for frozen units; they maintain current Mass rotation
+            }
+            else if (TargetList[i].bRotateTowardsAbility)
             {
                 const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
                 if (bReached)
@@ -681,8 +686,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+            const bool bIsFrozen = DoesEntityHaveTag(EntityManager, Entity, FMassStateStopMovementTag::StaticStruct());
 
-            if (TargetList[i].bRotateTowardsAbility)
+            if (bIsFrozen)
+            {
+                // Skip rotation logic for frozen units; they maintain current Mass rotation
+            }
+            else if (TargetList[i].bRotateTowardsAbility)
             {
                 // Pass the consolidated AI Target fragment.
                 const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);

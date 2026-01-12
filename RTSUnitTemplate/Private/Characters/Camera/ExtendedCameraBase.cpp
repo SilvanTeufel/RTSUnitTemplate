@@ -548,25 +548,11 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 		{
 			MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 			BlockControls = false;
-
-			APlayerController* PC = Cast<APlayerController>(GetController());
-			if (PC)
-			{
-				PC->SetShowMouseCursor(false);
-				PC->SetInputMode(FInputModeGameOnly());
-			}
 		}
 		else
 		{
 			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
 			BlockControls = true;
-
-			APlayerController* PC = Cast<APlayerController>(GetController());
-			if (PC)
-			{
-				PC->SetShowMouseCursor(true);
-				PC->SetInputMode(FInputModeGameAndUI());
-			}
 		}
 	}
 }

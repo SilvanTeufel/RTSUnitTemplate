@@ -44,6 +44,56 @@
 #include "EngineUtils.h"
 #include "Mass/Replication/MassUnitReplicatorBase.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
+#include "GameStates/ResourceGameState.h"
+
+// CVAR for startup freeze
+static TAutoConsoleVariable<int32> CVarRTS_StartupFreeze_Enable(
+	TEXT("net.RTS.StartupFreeze.Enable"),
+	1,
+	TEXT("When 1, units are frozen with FMassStateStopMovementTag until registration and loading phase are complete."),
+	ECVF_Default);
+
+static void ApplyInitialStartupFreeze(UWorld* World, FMassEntityManager& EM, FMassEntityHandle Entity)
+{
+	if (!World || World->GetNetMode() == NM_Client || CVarRTS_StartupFreeze_Enable.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	bool bShouldFreeze = false;
+	AResourceGameState* GS = World->GetGameState<AResourceGameState>();
+	
+	if (GS)
+	{
+		// If MatchStartTime hasn't been set yet (-1.f) or hasn't been reached, we freeze.
+		if (GS->MatchStartTime < 0.f || World->GetTimeSeconds() < GS->MatchStartTime)
+		{
+			bShouldFreeze = true;
+		}
+	}
+	else
+	{
+		// No GameState yet? Definitely freeze as we are very early in the startup.
+		bShouldFreeze = true;
+	}
+
+	if (!bShouldFreeze)
+	{
+		// Registration not complete?
+		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+		{
+			if (!Reg->AreAllUnitsRegistered())
+			{
+				bShouldFreeze = true;
+			}
+		}
+	}
+
+	if (bShouldFreeze)
+	{
+		EM.AddTagToEntity(Entity, FMassStateStopMovementTag::StaticStruct());
+	}
+}
 
 
 UMassActorBindingComponent::UMassActorBindingComponent()
@@ -179,6 +229,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		{
 			// Perform synchronous initializations
 			MassEntityHandle = NewMassEntityHandle;
+			ApplyInitialStartupFreeze(World, EM, NewMassEntityHandle);
 			InitTransform(EM, NewMassEntityHandle);
 			InitMovementFragments(EM, NewMassEntityHandle);
 			InitAIFragments(EM, NewMassEntityHandle);
@@ -617,6 +668,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 		{
 			
 			MassEntityHandle = NewMassEntityHandle;
+			ApplyInitialStartupFreeze(World, EM, NewMassEntityHandle);
 			InitTransform(EM, NewMassEntityHandle);
 
 			if (AUnitBase* Unit = Cast<AUnitBase>(MyOwner))

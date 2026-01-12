@@ -20,6 +20,7 @@
 #include "EngineUtils.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "GameStates/ResourceGameState.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
@@ -189,6 +190,10 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	// Do NOT require FMassReplicationSharedFragment here. We want to include entities that are missing it,
 	// so the replicator fallback below can still process them and populate the bubble.
 	EntityQuery.RegisterWithProcessor(*this);
+
+	StartupFreezeQuery.Initialize(EntityManager);
+	StartupFreezeQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::All);
+	StartupFreezeQuery.RegisterWithProcessor(*this);
 }
 
 void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -203,11 +208,40 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	}
 	TimeSinceLastRun = 0.f;
 
-			
 	UWorld* World = GetWorld();
 	if (!World || World->GetNetMode() == NM_Client)
 	{
 		return;
+	}
+
+	// Handle global startup freeze release
+	static TMap<const UWorld*, bool> GStartupFreezeReleased;
+	if (!GStartupFreezeReleased.FindRef(World))
+	{
+		if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
+		{
+			// Release freeze if MatchStartTime is set AND reached AND all units are registered
+			if (GS->MatchStartTime > 0.f && World->GetTimeSeconds() >= GS->MatchStartTime)
+			{
+				if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+				{
+					if (Reg->AreAllUnitsRegistered())
+					{
+						StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager](FMassExecutionContext& FreezeCtx)
+						{
+							const int32 Num = FreezeCtx.GetNumEntities();
+							for (int32 i = 0; i < Num; ++i)
+							{
+								EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(FreezeCtx.GetEntity(i));
+							}
+						});
+
+						GStartupFreezeReleased.Add(World, true);
+						UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup freeze released for all units (MatchStartTime reached and AllUnitsRegistered)."));
+					}
+				}
+			}
+		}
 	}
 	// Respect global replication mode: only run in custom Mass mode
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
