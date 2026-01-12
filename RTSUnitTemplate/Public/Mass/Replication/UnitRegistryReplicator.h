@@ -34,6 +34,20 @@ public:
 	int32 ClientOnRepCounter = 0;
 	double ClientLastOnRepTime = 0.0;
 	
+	// Check if all live units in the world are registered (useful for startup validation)
+	// Returns true if all non-dead units have a corresponding registry entry
+	UFUNCTION(BlueprintCallable, Category = "RTS|Replication")
+	bool AreAllUnitsRegistered() const;
+	
+	// Get registration progress as a ratio (0.0 to 1.0)
+	// Returns the number of registered units divided by total live units
+	UFUNCTION(BlueprintCallable, Category = "RTS|Replication")
+	float GetRegistrationProgress() const;
+	
+	// Get counts for diagnostics: OutRegistered = units in registry, OutTotal = live units in world
+	UFUNCTION(BlueprintCallable, Category = "RTS|Replication")
+	void GetRegistrationCounts(int32& OutRegistered, int32& OutTotal) const;
+	
 protected:
 	virtual void BeginPlay() override;
 	

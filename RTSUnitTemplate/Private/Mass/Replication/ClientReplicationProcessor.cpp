@@ -714,12 +714,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								AC.RotatesToMovement = TagItem->AC_RotatesToMovement;
     								AC.RotatesToEnemy = TagItem->AC_RotatesToEnemy;
     								AC.RotationSpeed = TagItem->AC_RotationSpeed;
-    								// Rebuild PositionedTransform from quantized pieces
-    								const float PPitch = (static_cast<float>(TagItem->AC_PosPitch) / 65535.0f) * 360.0f;
-    								const float PYaw   = (static_cast<float>(TagItem->AC_PosYaw)   / 65535.0f) * 360.0f;
-    								const float PRoll  = (static_cast<float>(TagItem->AC_PosRoll)  / 65535.0f) * 360.0f;
-    								const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
-    								AC.PositionedTransform = FTransform(PRot, FVector(TagItem->AC_PosPosition), FVector(TagItem->AC_PosScale));
+    								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
+    								const float LPitch = (static_cast<float>(TagItem->PitchQuantized) / 65535.0f) * 360.0f;
+    								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
+    								const float LRoll  = (static_cast<float>(TagItem->RollQuantized)  / 65535.0f) * 360.0f;
+    								AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
     								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
     								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
@@ -958,12 +957,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AC.RotatesToMovement = UseItem->AC_RotatesToMovement;
  								AC.RotatesToEnemy = UseItem->AC_RotatesToEnemy;
  								AC.RotationSpeed = UseItem->AC_RotationSpeed;
- 								// Rebuild PositionedTransform from quantized pieces
- 								const float PPitch = (static_cast<float>(UseItem->AC_PosPitch) / 65535.0f) * 360.0f;
- 								const float PYaw   = (static_cast<float>(UseItem->AC_PosYaw)   / 65535.0f) * 360.0f;
- 								const float PRoll  = (static_cast<float>(UseItem->AC_PosRoll)  / 65535.0f) * 360.0f;
- 								const FQuat PRot   = FQuat(FRotator(PPitch, PYaw, PRoll));
- 								AC.PositionedTransform = FTransform(PRot, FVector(UseItem->AC_PosPosition), FVector(UseItem->AC_PosScale));
+ 								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
+ 								const float LPitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
+ 								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
+ 								const float LRoll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
+ 								AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
  								AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
  								AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
  							}

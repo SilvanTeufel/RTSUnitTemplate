@@ -14,6 +14,11 @@ static TAutoConsoleVariable<int32> CVarRTS_Bubble_LogLevel(
 	0,
 	TEXT("Logging level for UnitClientBubbleInfo: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_Bubble_NetUpdateHz(
+	TEXT("net.RTS.Bubble.NetUpdateHz"),
+	5.0f,
+	TEXT("Replication frequency (Hz) for the unit bubble. Default 5.0f to save bandwidth."),
+	ECVF_Default);
 
 // Implementierung der Fast Array Item Callbacks
 static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
@@ -59,12 +64,9 @@ AUnitClientBubbleInfo::AUnitClientBubbleInfo(const FObjectInitializer& ObjectIni
 	// Aktiviere Replikation für diesen Actor
 	bReplicates = true;
 	bAlwaysRelevant = true;
-	// Read desired replication rate (Hz) from CVAR; default 10
-	float Hz = 10.0f;
-	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.Bubble.NetUpdateHz")))
-	{
-		Hz = FMath::Max(0.1f, Var->GetFloat());
-	}
+	NetPriority = 0.5f; // Lower priority to allow important RPCs (like work area updates) to pass through first
+	// Read desired replication rate (Hz) from CVAR; default 5
+	float Hz = CVarRTS_Bubble_NetUpdateHz.GetValueOnGameThread();
 	SetNetUpdateFrequency(Hz);
 
 	// Setze Owner Pointer für Fast Array

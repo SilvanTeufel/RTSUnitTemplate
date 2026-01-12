@@ -17,32 +17,32 @@
 // CVARs for tuning client registration throughput
 static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_BudgetPerTick(
     TEXT("net.RTS.UnitSignaling.BudgetPerTick"),
-    64,
+    64, // Reduced from 128 to save bandwidth
     TEXT("Max registry items processed per tick (rolling)."),
     ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_InitialBurstBudget(
     TEXT("net.RTS.UnitSignaling.InitialBurstBudget"),
-    256,
+    128, // Reduced from 512 to save bandwidth during startup
     TEXT("Startup burst budget per tick for the first N seconds."),
     ECVF_Default);
 static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_InitialBurstDuration(
     TEXT("net.RTS.UnitSignaling.InitialBurstDuration"),
-    3.0f,
+    10.0f, // Increased from 3.0f to cover full startup phase
     TEXT("Seconds to use the higher initial burst budget after world start."),
     ECVF_Default);
 static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_CacheRebuildSeconds(
     TEXT("net.RTS.UnitSignaling.CacheRebuildSeconds"),
-    0.25f,
+    0.1f, // Reduced from 0.25f for faster cache updates during startup
     TEXT("Seconds between cache rebuilds for OwnerName/UnitIndex -> Binding map."),
     ECVF_Default);
 static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_ExecInterval(
     TEXT("net.RTS.UnitSignaling.ExecInterval"),
-    0.1f,
+    0.05f, // Reduced from 0.1f for faster processing (20Hz instead of 10Hz)
     TEXT("Seconds between runs of UnitSignalingProcessor Execute."),
     ECVF_Default);
 static TAutoConsoleVariable<float> CVarRTS_UnitSignaling_CreationStartDelay(
     TEXT("net.RTS.UnitSignaling.CreationStartDelay"),
-    10.0f,
+    3.0f, // Reduced from 10.0f for faster entity creation
     TEXT("Seconds to wait after world start before creating/linking Mass entities. If on server, also respects GameMode's GatherControllerTimer."),
     ECVF_Default);
 

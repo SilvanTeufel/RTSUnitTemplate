@@ -112,12 +112,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() bool AC_RotatesToMovement = true;
 	UPROPERTY() bool AC_RotatesToEnemy = true;
 	UPROPERTY() float AC_RotationSpeed = 0.f;
-	// Quantized positioned transform from AgentCharacteristics
-	UPROPERTY() FVector_NetQuantize10 AC_PosPosition = FVector::ZeroVector;
-	UPROPERTY() FVector_NetQuantize10 AC_PosScale = FVector(1.f,1.f,1.f);
-	UPROPERTY() uint16 AC_PosPitch = 0;
-	UPROPERTY() uint16 AC_PosYaw = 0;
-	UPROPERTY() uint16 AC_PosRoll = 0;
+	// REMOVED redundant PositionedTransform fields to save bandwidth
 	UPROPERTY() float AC_CapsuleHeight = 0.f;
 	UPROPERTY() float AC_CapsuleRadius = 0.f;
 
