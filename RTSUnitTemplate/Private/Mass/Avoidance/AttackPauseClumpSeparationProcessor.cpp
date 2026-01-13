@@ -49,6 +49,7 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	// We don't want dead or stopped entities
 	AttackQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	AttackQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	AttackQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	AttackQuery.RegisterWithProcessor(*this);
 
 	PauseQuery.Initialize(EntityManager);
@@ -61,6 +62,7 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	PauseQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	PauseQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	PauseQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	PauseQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	PauseQuery.RegisterWithProcessor(*this);
 
 	BuildQuery.Initialize(EntityManager);
@@ -73,6 +75,7 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	BuildQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	BuildQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	BuildQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	BuildQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	BuildQuery.RegisterWithProcessor(*this);
 
 	RepairQuery.Initialize(EntityManager);
@@ -85,6 +88,7 @@ void UAttackPauseClumpSeparationProcessor::ConfigureQueries(const TSharedRef<FMa
 	RepairQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	RepairQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	RepairQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	RepairQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	RepairQuery.RegisterWithProcessor(*this);
 }
 

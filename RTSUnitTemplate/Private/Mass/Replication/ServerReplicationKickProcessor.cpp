@@ -17,10 +17,13 @@
 #include "Mass/Replication/ReplicationSettings.h"
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
+#include "MassActorSubsystem.h"
 #include "EngineUtils.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "GameStates/ResourceGameState.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
@@ -192,7 +195,9 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.RegisterWithProcessor(*this);
 
 	StartupFreezeQuery.Initialize(EntityManager);
-	StartupFreezeQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::All);
+	StartupFreezeQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::All);
+	StartupFreezeQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	StartupFreezeQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	StartupFreezeQuery.RegisterWithProcessor(*this);
 }
 
@@ -230,9 +235,18 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 						StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager](FMassExecutionContext& FreezeCtx)
 						{
 							const int32 Num = FreezeCtx.GetNumEntities();
+							TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();
+							const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = FreezeCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
 							for (int32 i = 0; i < Num; ++i)
 							{
-								EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(FreezeCtx.GetEntity(i));
+								EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(FreezeCtx.GetEntity(i));
+								if (ACharacter* Character = Cast<ACharacter>(ActorList[i].GetMutable()))
+								{
+									if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+									{
+										MoveComp->SetMovementMode(CharList[i].bIsFlying ? MOVE_Flying : MOVE_Walking);
+									}
+								}
 							}
 						});
 

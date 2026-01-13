@@ -31,6 +31,7 @@ USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateFrozenTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableObstacleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableNavManipulationTag : public FMassTag { GENERATED_BODY() };
 // New tag to freeze only horizontal (X/Y) movement while allowing Z updates (e.g., landing)
@@ -760,6 +761,8 @@ namespace UnitTagBits
 	static constexpr uint32 Repair              = 1u << 22;
 	// Control: stop only horizontal motion while allowing vertical updates
 	static constexpr uint32 StopXYMovement      = 1u << 23;
+	// Startup freeze state
+	static constexpr uint32 Frozen              = 1u << 24;
 }
 
 
@@ -789,6 +792,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
 	// Always replicated control bits
 	if (H(FMassStateStopMovementTag::StaticStruct()))         Bits |= UnitTagBits::StopMovement;
+	if (H(FMassStateFrozenTag::StaticStruct()))               Bits |= UnitTagBits::Frozen;
 	if (H(FMassStateDisableObstacleTag::StaticStruct()))      Bits |= UnitTagBits::DisableObstacle;
 	if (H(FMassStateStopXYMovementTag::StaticStruct()))       Bits |= UnitTagBits::StopXYMovement;
 	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
@@ -817,6 +821,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 
 	// Always replicate/control these tags regardless of death state
 	SetTag(UnitTagBits::StopMovement,        FMassStateStopMovementTag());
+	SetTag(UnitTagBits::Frozen,              FMassStateFrozenTag());
 	SetTag(UnitTagBits::DisableObstacle,     FMassStateDisableObstacleTag());
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 

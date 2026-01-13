@@ -43,7 +43,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
-        EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
+        //EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
         
         EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
         EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
@@ -58,6 +58,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     
         EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+        EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+        EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 		EntityQuery.RegisterWithProcessor(*this);
 
 		ClientEntityQuery.Initialize(EntityManager);
@@ -78,7 +80,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStatePatrolTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStatePatrolIdleTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);
-        ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
+        //ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Any); // Added to any group
             
         ClientEntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::Any);
         ClientEntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::Any);
@@ -93,7 +95,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::Any);
     
         ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
-
+        ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None); 
+        ClientEntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None); 
     /*
 		ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 		ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
@@ -530,7 +533,10 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
-
+            
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
+            
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = MassTransform.GetRotation();
             FVector FinalLocation = MassTransform.GetLocation();
@@ -542,16 +548,11 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation);
             
             // 2. Adjust rotation based on state (moving vs. attacking)
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
-            const bool bIsFrozen = DoesEntityHaveTag(EntityManager, Entity, FMassStateStopMovementTag::StaticStruct());
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());;
 
-            if (bIsFrozen)
-            {
-                // Skip rotation logic for frozen units; they maintain current Mass rotation
-            }
-            else if (TargetList[i].bRotateTowardsAbility)
+         
+            if (TargetList[i].bRotateTowardsAbility)
             {
                 const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
                 if (bReached)
@@ -622,7 +623,7 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
-
+        
             const FTransform& ReplicatedTransform = TransformFragments[i].GetTransform();
 
             // Adjust with ground/height logic on client too
@@ -668,9 +669,12 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
+            
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
 
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = MassTransform.GetRotation();
@@ -683,16 +687,10 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation);
             
             // 2. Adjust rotation based on state (moving vs. attacking)
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
-            const bool bIsFrozen = DoesEntityHaveTag(EntityManager, Entity, FMassStateStopMovementTag::StaticStruct());
-
-            if (bIsFrozen)
-            {
-                // Skip rotation logic for frozen units; they maintain current Mass rotation
-            }
-            else if (TargetList[i].bRotateTowardsAbility)
+     
+            if (TargetList[i].bRotateTowardsAbility)
             {
                 // Pass the consolidated AI Target fragment.
                 const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);

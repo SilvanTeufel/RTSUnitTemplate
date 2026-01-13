@@ -53,8 +53,9 @@ static TAutoConsoleVariable<int32> CVarRTS_StartupFreeze_Enable(
 	TEXT("When 1, units are frozen with FMassStateStopMovementTag until registration and loading phase are complete."),
 	ECVF_Default);
 
-static void ApplyInitialStartupFreeze(UWorld* World, FMassEntityManager& EM, FMassEntityHandle Entity)
+static void ApplyInitialStartupFreeze(AActor* Owner, FMassEntityManager& EM, FMassEntityHandle Entity)
 {
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
 	if (!World || World->GetNetMode() == NM_Client || CVarRTS_StartupFreeze_Enable.GetValueOnGameThread() == 0)
 	{
 		return;
@@ -91,7 +92,14 @@ static void ApplyInitialStartupFreeze(UWorld* World, FMassEntityManager& EM, FMa
 
 	if (bShouldFreeze)
 	{
-		EM.AddTagToEntity(Entity, FMassStateStopMovementTag::StaticStruct());
+		EM.AddTagToEntity(Entity, FMassStateFrozenTag::StaticStruct());
+		if (ACharacter* Character = Cast<ACharacter>(Owner))
+		{
+			if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+			{
+				MoveComp->SetMovementMode(MOVE_None);
+			}
+		}
 	}
 }
 
@@ -229,7 +237,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		{
 			// Perform synchronous initializations
 			MassEntityHandle = NewMassEntityHandle;
-			ApplyInitialStartupFreeze(World, EM, NewMassEntityHandle);
+			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
 			InitTransform(EM, NewMassEntityHandle);
 			InitMovementFragments(EM, NewMassEntityHandle);
 			InitAIFragments(EM, NewMassEntityHandle);
@@ -668,7 +676,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 		{
 			
 			MassEntityHandle = NewMassEntityHandle;
-			ApplyInitialStartupFreeze(World, EM, NewMassEntityHandle);
+			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
 			InitTransform(EM, NewMassEntityHandle);
 
 			if (AUnitBase* Unit = Cast<AUnitBase>(MyOwner))
