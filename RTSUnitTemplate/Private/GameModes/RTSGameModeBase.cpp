@@ -1167,6 +1167,19 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		}
 
 		UnitBase->InitializeAttributes();
+
+		if (UnitBase->Attributes)
+		{
+			if (SpawnParameter.RunSpeed > 0)
+			{
+				UnitBase->Attributes->SetRunSpeed(SpawnParameter.RunSpeed);
+			}
+			if (SpawnParameter.BaseRunSpeed > 0)
+			{
+				UnitBase->Attributes->SetBaseRunSpeed(SpawnParameter.BaseRunSpeed);
+			}
+		}
+
 		// Apply selectability from spawn parameter
 		UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
 
@@ -1201,7 +1214,8 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
 	{
 		HighestSquadId++;
-		for(int i = 0; i < SpawnParameter.UnitCount; i++)
+		int RandomCount = FMath::RandRange(SpawnParameter.MinRandomCount, SpawnParameter.MaxRandomCount);
+		for(int i = 0; i < SpawnParameter.UnitCount + RandomCount; i++)
 		{
 			// Waypointspawn
 			const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
@@ -1303,6 +1317,18 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				}
 			
 				UnitBase->InitializeAttributes();
+
+				if (UnitBase->Attributes)
+				{
+					if (SpawnParameter.RunSpeed > 0)
+					{
+						UnitBase->Attributes->SetRunSpeed(SpawnParameter.RunSpeed);
+					}
+					if (SpawnParameter.BaseRunSpeed > 0)
+					{
+						UnitBase->Attributes->SetBaseRunSpeed(SpawnParameter.BaseRunSpeed);
+					}
+				}
 			
 				//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 				// Assign a new unique UnitIndex without reusing old ones

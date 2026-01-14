@@ -379,6 +379,18 @@ struct FUnitSpawnParameter : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int MaxUnitSpawnCount = 10;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MinRandomCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxRandomCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float RunSpeed = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float BaseRunSpeed = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	USkeletalMesh* CharacterMesh;
 
