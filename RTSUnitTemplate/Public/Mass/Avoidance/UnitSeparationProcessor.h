@@ -7,24 +7,25 @@
 #include "MassCommonFragments.h"
 #include "MassMovementFragments.h"
 #include "Mass/UnitMassTag.h"
-#include "AttackPauseClumpSeparationProcessor.generated.h"
+#include "MassNavigationFragments.h"
+#include "UnitSeparationProcessor.generated.h"
 
 struct FMassExecutionContext;
 
 	/**
-	 * Applies a simple repulsion force between nearby units that are currently in Attack, Pause, Build or Repair state
-	 * to avoid clumping up while engaging the same target area. Uses FMassForceFragment so the existing
-	 * movement processor (UUnitApplyMassMovementProcessor) can consume it in the Avoidance->Movement order.
+	 * Applies a lateral repulsion force between nearby units to avoid clumping.
+	 * Includes all active states (Attack, Run, Chase, Pause, Build, Repair).
+	 * Uses FMassForceFragment so the existing movement processor can consume it.
 	 */
 UCLASS()
-class RTSUNITTEMPLATE_API UAttackPauseClumpSeparationProcessor : public UMassProcessor
+class RTSUNITTEMPLATE_API UUnitSeparationProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
 public:
-	UAttackPauseClumpSeparationProcessor();
+	UUnitSeparationProcessor();
 
-	// Debug toggle
-	bool bShowLogs = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool Debug = true;
 
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
@@ -32,34 +33,33 @@ protected:
 
 	// Throttling
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float ExecutionInterval = 0.25f;
+	float ExecutionInterval = 0.1f;
 	
 	// Separate repulsion strengths for friendly vs enemy interactions
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float RepulsionStrengthFriendly = 25.f;
+	float RepulsionStrengthFriendly = 50.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float RepulsionStrengthEnemy = 25.f;
+	float RepulsionStrengthEnemy = 30.f;
+
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
+	float RepulsionStrengthWorker = 5.f;
 
 	// If true, only apply separation to units that share the same target entity.
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	bool bOnlySeparateWhenSameTarget = true;
+	bool bOnlySeparateWhenSameTarget = false;
 
 	// Optional cap to limit checks radius (performance). 0 disables extra culling.
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float MaxCheckRadius = 300.f;
+	float MaxCheckRadius = 400.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float DistanceMultiplierFriendly = 1.f;
+	float DistanceMultiplierFriendly = 1.2f;
 	
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float DistanceMultiplierEnemy = 1.f;
+	float DistanceMultiplierEnemy = 1.0f;
 private:
-	// We keep multiple queries since Mass tag queries do not support OR within a single requirement.
-	FMassEntityQuery AttackQuery;
-	FMassEntityQuery PauseQuery;
-	FMassEntityQuery BuildQuery;
-	FMassEntityQuery RepairQuery;
+	FMassEntityQuery EntityQuery;
 	
 	float TimeSinceLastRun = 0.f;
 };

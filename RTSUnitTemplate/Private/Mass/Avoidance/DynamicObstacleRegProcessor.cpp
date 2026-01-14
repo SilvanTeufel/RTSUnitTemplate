@@ -23,7 +23,7 @@ namespace
 }
 
 
-UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor(): ObstacleQuery()
+UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Tasks;
 	bAutoRegisterWithProcessingPhases = true;
@@ -33,16 +33,29 @@ UDynamicObstacleRegProcessor::UDynamicObstacleRegProcessor(): ObstacleQuery()
 
 void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	ObstacleQuery.Initialize(EntityManager);
-	ObstacleQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
-	ObstacleQuery.AddRequirement<FMassAvoidanceColliderFragment>(EMassFragmentAccess::ReadOnly);
-	ObstacleQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
-	ObstacleQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+	auto SetupQuery = [&](FMassEntityQuery& Query)
+	{
+		Query.Initialize(EntityManager);
+		Query.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+		Query.AddRequirement<FMassAvoidanceColliderFragment>(EMassFragmentAccess::ReadOnly);
+		Query.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+		Query.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+		Query.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+		Query.AddTagRequirement<FMassStateDisableObstacleTag>(EMassFragmentPresence::None);
+		Query.RegisterWithProcessor(*this);
+	};
 
-    ObstacleQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
-    ObstacleQuery.AddTagRequirement<FMassStateDisableObstacleTag>(EMassFragmentPresence::None);
-	ObstacleQuery.RegisterWithProcessor(*this);
-    
+	SetupQuery(BuildObstacleQuery);
+	BuildObstacleQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::All);
+
+	SetupQuery(RepairObstacleQuery);
+	RepairObstacleQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::All);
+
+	SetupQuery(PauseObstacleQuery);
+	PauseObstacleQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::All);
+
+	SetupQuery(IdleObstacleQuery);
+	IdleObstacleQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::All);
 }
 // --- Main Execution ---
 
@@ -75,19 +88,24 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
     NavSys->GetObstacleGridMutable().Initialize(InitialCellSize);
 
     // Pass 1: Collect static obstacles and immediately process dynamic ones.
-    TArray<FStaticObstacleDesc> StaticObstacles;
-    CollectAndProcessObstacles(Context, *NavSys, StaticObstacles);
-    
+    auto ProcessQuery = [&](FMassEntityQuery& Query)
+    {
+        CollectAndProcessObstacles(Context, Query, *NavSys);
+    };
+
+    ProcessQuery(BuildObstacleQuery);
+    ProcessQuery(RepairObstacleQuery);
+    ProcessQuery(PauseObstacleQuery);
+    ProcessQuery(IdleObstacleQuery);
 }
 
-void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionContext& Context, UMassNavigationSubsystem& NavSys, TArray<FStaticObstacleDesc>& OutStaticObstacles)
+void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionContext& Context, FMassEntityQuery& Query, UMassNavigationSubsystem& NavSys)
 {
-    ObstacleQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
+    Query.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto& Colliders = ChunkContext.GetFragmentView<FMassAvoidanceColliderFragment>();
         const TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
-        const auto& AiStates = ChunkContext.GetFragmentView<FMassAIStateFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -97,17 +115,8 @@ void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionCont
             const FVector Location = CharList[i].PositionedTransform.GetLocation();
             const float Radius = Colliders[i].GetCircleCollider().Radius;
             
-            // Get the capsule height to calculate the bottom
-            const float Height = CharList[i].CapsuleHeight;
-            const float BottomZ = Location.Z - (Height / 2.f); // Calculate bottom
-
-            
-            
-            if (AiStates[i].CanMove)
-            {
-                // Process dynamic/moving obstacles immediately.
-                AddSingleObstacleToGrid(NavSys, Entity, Location, Radius);
-            }
+            // Stationary units should always be obstacles
+            AddSingleObstacleToGrid(NavSys, Entity, Location, Radius);
         }
     });
 }

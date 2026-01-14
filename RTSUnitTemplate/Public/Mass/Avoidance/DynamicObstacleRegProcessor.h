@@ -30,7 +30,10 @@ protected:
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	
 private:
-	FMassEntityQuery ObstacleQuery;
+	FMassEntityQuery BuildObstacleQuery;
+	FMassEntityQuery RepairObstacleQuery;
+	FMassEntityQuery PauseObstacleQuery;
+	FMassEntityQuery IdleObstacleQuery; // Units standing still should also be obstacles?
 
 	// Helper struct to hold data for static obstacles during processing.
 	struct FStaticObstacleDesc
@@ -43,7 +46,7 @@ private:
 	};
     
 	/** Gathers static obstacles and immediately processes all dynamic ones. */
-	void CollectAndProcessObstacles(FMassExecutionContext& Context, UMassNavigationSubsystem& NavSys, TArray<FStaticObstacleDesc>& OutStaticObstacles); // Removed const
+	void CollectAndProcessObstacles(FMassExecutionContext& Context, FMassEntityQuery& Query, UMassNavigationSubsystem& NavSys); // Removed const
 	
 	/** Adds a single obstacle to the grid, subdividing if it's a large circle. */
 	void AddSingleObstacleToGrid(UMassNavigationSubsystem& NavSys, const FMassEntityHandle Entity, const FVector& Location, const float Radius); // Removed const

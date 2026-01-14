@@ -61,6 +61,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateGoToRepairTag>(EMassFragmentPresence::Any);
 
+    EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
     EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::Any);
     
@@ -99,6 +100,7 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     ClientEntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::Any);
     ClientEntityQuery.AddTagRequirement<FMassStateGoToRepairTag>(EMassFragmentPresence::Any);
 
+    ClientEntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::Any);
     ClientEntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::Any);
     ClientEntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::Any);
     
