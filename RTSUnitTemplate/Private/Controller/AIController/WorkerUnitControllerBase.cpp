@@ -635,7 +635,6 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 		{
 			FUnitSpawnParameter SpawnParameter;
 			SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
-			SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
 			SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
 			SpawnParameter.UnitMinRange = FVector(0.f);
 			SpawnParameter.UnitMaxRange = FVector(0.f);
@@ -825,20 +824,6 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
     if (!UnitBase)
     {
         return nullptr;
-    }
-	
-    // 3) (Optional) AI-Controller spawnen und zuweisen
-    if (SpawnParameter.UnitControllerBaseClass)
-    {
-        AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(
-            SpawnParameter.UnitControllerBaseClass, 
-            FTransform()
-        );
-        if (!UnitController) 
-        {
-            return nullptr;
-        }
-        UnitController->Possess(UnitBase);
     }
 
     // --------------------------------------------

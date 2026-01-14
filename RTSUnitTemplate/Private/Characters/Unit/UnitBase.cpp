@@ -1001,7 +1001,6 @@ bool AUnitBase::SetNextUnitToChase()
 
 
 TArray<AUnitBase*> AUnitBase::SpawnUnitsFromParameters(
-TSubclassOf<class AAIController> AIControllerBaseClass,
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
@@ -1009,7 +1008,6 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 {
 	TArray<AUnitBase*> SpawnedUnits;
 	FUnitSpawnParameter SpawnParameter;
-	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
 	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
 	SpawnParameter.ServerMeshRotation = HostMeshRotation;

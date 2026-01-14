@@ -186,7 +186,6 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         W.Type = WA->Type;
         W.WorkResourceClass = WA->WorkResourceClass ? FSoftClassPath(*WA->WorkResourceClass) : FSoftClassPath();
         W.BuildingClass = WA->BuildingClass ? FSoftClassPath(*WA->BuildingClass) : FSoftClassPath();
-        W.BuildingControllerClass = WA->BuildingController ? FSoftClassPath(*WA->BuildingController) : FSoftClassPath();
         W.BuildTime = WA->BuildTime;
         W.CurrentBuildTime = WA->CurrentBuildTime;
         W.AvailableResourceAmount = WA->AvailableResourceAmount;
@@ -665,10 +664,6 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         if (UClass* BC = SavedWA.BuildingClass.IsValid() ? SavedWA.BuildingClass.TryLoadClass<ABuildingBase>() : nullptr)
         {
             WA->BuildingClass = BC;
-        }
-        if (UClass* BCC = SavedWA.BuildingControllerClass.IsValid() ? SavedWA.BuildingControllerClass.TryLoadClass<AAIController>() : nullptr)
-        {
-            WA->BuildingController = BCC;
         }
 
         WA->BuildTime = SavedWA.BuildTime;

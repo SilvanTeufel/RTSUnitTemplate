@@ -78,6 +78,8 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
         if (!EntitySubsystem || !GetWorld()) return;
 
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+        AControllerBase* PC = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
+        if (!PC || !PC->HUDBase) return;
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
             if (!EntityManager.IsEntityValid(Entity)) continue;
@@ -92,7 +94,6 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                     UnitBase->CanBeSelected = false;
                     if (GetWorld()->IsNetMode(NM_Client))
                     {
-                        AControllerBase* PC = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
                         if (PC && PC->HUDBase)
                         {
                             int32 UnitIndex = PC->HUDBase->SelectedUnits.Find(UnitBase);
@@ -118,39 +119,6 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                             }
                         }
                     }
-                    /*
-                    else
-                    {
-                        for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-                        {
-                            AControllerBase* PC = Cast<AControllerBase>(It->Get());
-                            if (PC && PC->HUDBase)
-                            {
-                                int32 UnitIndex = PC->HUDBase->SelectedUnits.Find(UnitBase);
-                                PC->HUDBase->SelectedUnits.Remove(UnitBase);
-                                PC->SelectedUnits = PC->HUDBase->SelectedUnits;
-                                if (UnitIndex != INDEX_NONE)
-                                {
-                                    if (UnitIndex < PC->CurrentUnitWidgetIndex)
-                                    {
-                                        PC->CurrentUnitWidgetIndex--;
-                                    }
-                                    else if (UnitIndex == PC->CurrentUnitWidgetIndex)
-                                    {
-                                        if (PC->HUDBase->SelectedUnits.Num() > 0)
-                                        {
-                                            PC->CurrentUnitWidgetIndex = FMath::Clamp(PC->CurrentUnitWidgetIndex, 0, PC->HUDBase->SelectedUnits.Num() - 1);
-                                        }
-                                        else
-                                        {
-                                            PC->CurrentUnitWidgetIndex = 0;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    */
                 }
             }
         }

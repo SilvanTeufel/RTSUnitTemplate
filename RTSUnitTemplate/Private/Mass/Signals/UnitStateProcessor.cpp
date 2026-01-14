@@ -2142,7 +2142,6 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    								}
    								FUnitSpawnParameter SpawnParameter;
 								SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
-								SpawnParameter.UnitControllerBaseClass = UnitBase->BuildArea->BuildingController;
 								SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
 								SpawnParameter.UnitMinRange = FVector(0.f);
 								SpawnParameter.UnitMaxRange = FVector(0.f);

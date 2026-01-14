@@ -362,7 +362,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	TArray<AUnitBase*> SpawnUnitsFromParameters(
-		TSubclassOf<class AAIController> AIControllerBaseClass,
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,

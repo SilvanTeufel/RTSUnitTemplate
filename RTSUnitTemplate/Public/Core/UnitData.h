@@ -347,9 +347,7 @@ struct FUnitSpawnParameter : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AUnitBase> UnitBaseClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<class AAIController> UnitControllerBaseClass;
+	
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int UnitCount = 3;

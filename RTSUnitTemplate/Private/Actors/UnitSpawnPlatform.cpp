@@ -187,7 +187,6 @@ TEnumAsByte<UnitData::EState> UStatePlaceholder,
 int NewTeamId, AWaypoint* Waypoint, int UIndex)
 {
 	FUnitSpawnParameter SpawnParameter;
-	SpawnParameter.UnitControllerBaseClass = AIControllerBaseClass;
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
 	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
 	SpawnParameter.ServerMeshRotation = HostMeshRotation;
@@ -215,16 +214,6 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 		(this, *SpawnParameter.UnitBaseClass, UnitTransform, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn));
 
 	
-	if(SpawnParameter.UnitControllerBaseClass)
-	{
-		AAIController* ControllerBase = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		if(!ControllerBase) return 0;
-		APawn* PawnBase = Cast<APawn>(UnitBase);
-		if(PawnBase)
-		{
-			ControllerBase->Possess(PawnBase);
-		}
-	}
 	
 	if (UnitBase != nullptr)
 	{

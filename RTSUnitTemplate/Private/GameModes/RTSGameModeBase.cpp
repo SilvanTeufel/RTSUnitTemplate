@@ -1098,14 +1098,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 	const auto UnitBase = Cast<AUnitBase>
 		(UGameplayStatics::BeginDeferredActorSpawnFromClass
 		(this, SpawnParameter.UnitBaseClass, EnemyTransform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-
-		
-
-	if(SpawnParameter.UnitControllerBaseClass)
-	{
-		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(SpawnParameter.UnitControllerBaseClass, FTransform());
-		AIController->Possess(UnitBase);
-	}
+	
 	
 	if (UnitBase != nullptr)
 	{
