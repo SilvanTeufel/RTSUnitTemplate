@@ -34,6 +34,7 @@
 #include "NavModifierComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/World.h"
+#include "Engine/EngineTypes.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/GameViewportClient.h"
 #include "Mass/States/ChaseStateProcessor.h"
@@ -564,7 +565,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             // If a ConstructionUnit dies: destroy its WorkArea and send its Worker back to placeholder
                             if (AConstructionUnit* CU = Cast<AConstructionUnit>(UnitBase))
                             {
-                            	if (World && World->GetNetMode() != NM_Client)
+                            	if (World && !World->IsNetMode(NM_Client))
                             	{
                          					if (CU->WorkArea)
                          					{
@@ -584,11 +585,14 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                          						FMassEntityHandle WorkerEntity;
                          						if (CU->Worker->GetMassEntityData(WorkerMgr, WorkerEntity))
                          						{
-                         							if (SignalSubsystem && WorkerMgr && WorkerMgr->IsEntityValid(WorkerEntity))
+                         							if (SignalSubsystem)
                          							{
-                         								// Split call to avoid macro parsing issues
-                         								UMassSignalSubsystem* LocalSignalSubsystem = SignalSubsystem;
-                         								LocalSignalSubsystem->SignalEntity(UnitSignals::SetUnitStatePlaceholder, WorkerEntity);
+                         								if (WorkerMgr && WorkerMgr->IsEntityValid(WorkerEntity))
+                         								{
+                         									// Split call to avoid macro parsing issues
+                         									UMassSignalSubsystem* LocalSignalSubsystem = SignalSubsystem;
+                         									LocalSignalSubsystem->SignalEntity(UnitSignals::SetUnitStatePlaceholder, WorkerEntity);
+                         								}
                          							}
                          						}
                          					}
@@ -596,7 +600,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             }
 
                             // Unregister from Mass replication when the unit dies (server only)
-                            if (World && World->GetNetMode() != NM_Client)
+                            if (World && !World->IsNetMode(NM_Client))
                             {
                                 // 1) Remove from client bubble replication list by NetID
                                 const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
@@ -1864,6 +1868,7 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
     }); // End AsyncTask Lambda
 }
 
+
 void UUnitStateProcessor::SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable)
 {
 	const FString NormalizedKey = NormalizeAbilityKey(Key);
@@ -3052,8 +3057,10 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 
 	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
 	{
-		if (World && World->GetNetMode() == NM_Client && UnitBase)
+		if (World && UnitBase)
 		{
+			if (World->IsNetMode(NM_Client))
+			{
 			//UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] UpdateUnitMovement: Invalid Mass entity or UnitBase for %s on client. Destroying local actor to clean up zombie."), *UnitBase->GetName());
 			TWeakObjectPtr<AUnitBase> WeakUnit(UnitBase);
 			AsyncTask(ENamedThreads::GameThread, [WeakUnit]()
@@ -3063,6 +3070,7 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 					Strong->Destroy();
 				}
 			});
+			}
 		}
 		return;
 	}

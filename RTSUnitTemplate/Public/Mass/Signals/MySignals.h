@@ -39,6 +39,7 @@ namespace UnitSignals
 	const FName StartDead(TEXT("StartDead"));
 	const FName EndDead(TEXT("EndDead"));
 	const FName SyncUnitBase(TEXT("SyncAttributes"));
+	const FName RemoveDeadUnit(TEXT("RemoveDeadUnit"));
 	const FName PISwitcher(TEXT("PISwitcher"));
 
 	const FName SetUnitStatePlaceholder(TEXT("IdlePatrolSwitcher"));

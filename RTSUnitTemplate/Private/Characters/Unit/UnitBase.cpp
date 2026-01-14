@@ -460,6 +460,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		SetActorEnableCollision(false);
 		SetDeselected();
+		CanBeSelected = false;
 		SetUnitState(UnitData::Dead);
 
 		// Server-authoritative: immediately remove this unit from the replicated registry to avoid stale ghosts

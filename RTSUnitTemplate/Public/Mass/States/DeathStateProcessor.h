@@ -24,6 +24,13 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	virtual void BeginDestroy() override;
+
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
+	UFUNCTION()
+	void HandleRemoveDeadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
@@ -35,4 +42,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMassEntitySubsystem> EntitySubsystem;
+
+	FDelegateHandle RemoveDeadUnitSignalDelegateHandle;
 };
