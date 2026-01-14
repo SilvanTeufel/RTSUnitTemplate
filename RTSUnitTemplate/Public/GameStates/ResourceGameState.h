@@ -39,6 +39,9 @@ public:
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	float MatchStartTime = -1.f;
 
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate")
+	bool bStartupFreezeReleased = false;
+
 	UFUNCTION()
 	void OnRep_LoadingWidgetConfig();
 };

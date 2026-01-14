@@ -66,8 +66,14 @@ static void ApplyInitialStartupFreeze(AActor* Owner, FMassEntityManager& EM, FMa
 	
 	if (GS)
 	{
-		// If MatchStartTime hasn't been set yet (-1.f) or hasn't been reached, we freeze.
-		if (GS->MatchStartTime < 0.f || World->GetTimeSeconds() < GS->MatchStartTime)
+		// If match already started/released, do not freeze new units.
+		if (GS->bStartupFreezeReleased)
+		{
+			return;
+		}
+
+		// If MatchStartTime is set, freeze until reached.
+		if (GS->MatchStartTime > 0.f && World->GetTimeSeconds() < GS->MatchStartTime)
 		{
 			bShouldFreeze = true;
 		}
@@ -80,12 +86,17 @@ static void ApplyInitialStartupFreeze(AActor* Owner, FMassEntityManager& EM, FMa
 
 	if (!bShouldFreeze)
 	{
-		// Registration not complete?
-		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+		// Registration not complete? 
+		// In Standalone or Singleplayer, we don't wait for registration once time is reached (or if no time set).
+		const bool bIsMultiplayer = (World->GetNetMode() == NM_DedicatedServer || World->GetNumPlayerControllers() > 1);
+		if (bIsMultiplayer)
 		{
-			if (!Reg->AreAllUnitsRegistered())
+			if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
 			{
-				bShouldFreeze = true;
+				if (!Reg->AreAllUnitsRegistered())
+				{
+					bShouldFreeze = true;
+				}
 			}
 		}
 	}

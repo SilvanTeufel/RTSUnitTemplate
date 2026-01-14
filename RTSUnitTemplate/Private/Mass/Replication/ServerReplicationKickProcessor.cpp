@@ -180,7 +180,7 @@ UServerReplicationKickProcessor::UServerReplicationKickProcessor()
 	: EntityQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
-	ExecutionFlags = (int32)EProcessorExecutionFlags::Server;
+	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
 	bRequiresGameThreadExecution = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
@@ -220,39 +220,64 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	}
 
 	// Handle global startup freeze release
-	static TMap<const UWorld*, bool> GStartupFreezeReleased;
-	if (!GStartupFreezeReleased.FindRef(World))
+	if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
 	{
-		if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
+		if (!GS->bStartupFreezeReleased)
 		{
-			// Release freeze if MatchStartTime is set AND reached AND all units are registered
-			if (GS->MatchStartTime > 0.f && World->GetTimeSeconds() >= GS->MatchStartTime)
+			// If MatchStartTime is not set (<= 0), we treat time as reached immediately.
+			// Default is -1.f, but also check for 0.f just in case.
+			const bool bTimeReached = (GS->MatchStartTime <= 0.01f) || (World->GetTimeSeconds() >= GS->MatchStartTime);
+
+			if (bTimeReached)
 			{
-				if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+				bool bCanRelease = false;
+				
+				// In Standalone or with no clients, we can release immediately when time is reached.
+				// Otherwise, wait for all units to be registered to ensure client sync.
+				// Note: GetNumPlayerControllers() might be 0 very early, which also qualifies as 'no clients yet'.
+				if (World->GetNetMode() == NM_Standalone || World->GetNetMode() == NM_ListenServer && World->GetNumPlayerControllers() <= 1)
 				{
-					if (Reg->AreAllUnitsRegistered())
+					bCanRelease = true;
+				}
+				else if (World->GetNetMode() == NM_DedicatedServer || World->GetNumPlayerControllers() > 1)
+				{
+					if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
 					{
-						StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager](FMassExecutionContext& FreezeCtx)
+						if (Reg->AreAllUnitsRegistered())
 						{
-							const int32 Num = FreezeCtx.GetNumEntities();
-							TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();
-							const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = FreezeCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
-							for (int32 i = 0; i < Num; ++i)
+							bCanRelease = true;
+						}
+					}
+				}
+				else
+				{
+					// Fallback for any other case (e.g. early ListenServer)
+					bCanRelease = true;
+				}
+
+				if (bCanRelease)
+				{
+					StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager](FMassExecutionContext& FreezeCtx)
+					{
+						const int32 Num = FreezeCtx.GetNumEntities();
+						TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();
+						const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = FreezeCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+						for (int32 i = 0; i < Num; ++i)
+						{
+							EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(FreezeCtx.GetEntity(i));
+							if (ACharacter* Character = Cast<ACharacter>(ActorList[i].GetMutable()))
 							{
-								EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(FreezeCtx.GetEntity(i));
-								if (ACharacter* Character = Cast<ACharacter>(ActorList[i].GetMutable()))
+								if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
 								{
-									if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
-									{
-										MoveComp->SetMovementMode(CharList[i].bIsFlying ? MOVE_Flying : MOVE_Walking);
-									}
+									MoveComp->SetMovementMode(CharList[i].bIsFlying ? MOVE_Flying : MOVE_Walking);
 								}
 							}
-						});
+						}
+					});
 
-						GStartupFreezeReleased.Add(World, true);
-						UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup freeze released for all units (MatchStartTime reached and AllUnitsRegistered)."));
-					}
+					GS->bStartupFreezeReleased = true;
+					UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup freeze released for all units (MatchStartTime reached or skipped. Mode=%d, PC=%d, MatchStartTime=%.2f)."), 
+						(int32)World->GetNetMode(), World->GetNumPlayerControllers(), GS->MatchStartTime);
 				}
 			}
 		}

@@ -13,6 +13,7 @@ void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AResourceGameState, IsSupplyLike);
 	DOREPLIFETIME(AResourceGameState, LoadingWidgetConfig);
 	DOREPLIFETIME(AResourceGameState, MatchStartTime);
+	DOREPLIFETIME(AResourceGameState, bStartupFreezeReleased);
 }
 
 void AResourceGameState::OnRep_LoadingWidgetConfig()

@@ -3560,6 +3560,7 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 	}
 
 	const int StartIndex = CurrentUnitWidgetIndex;
+	if (!SelectedUnits[StartIndex]) return;
 	const FGameplayTag CurrentTag = SelectedUnits[StartIndex]->AbilitySelectionTag;
 
 	int visited = 0;       // how many units (including empty‑ability ones) we've stepped past
@@ -3572,7 +3573,7 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 		CurrentUnitWidgetIndex = (CurrentUnitWidgetIndex + Add + NumUnits) % NumUnits;
 
 		// if this unit has no default abilities, skip it
-		if (SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num() == 0)
+		if (!SelectedUnits[CurrentUnitWidgetIndex] || SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities.Num() == 0)
 		{
 			visited++;
 			continue;
@@ -3582,8 +3583,8 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 		defaultHits++;
 
 		// if the tag changed, or we looped all the way back to where we started, stop here
-		if (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag ||
-			CurrentUnitWidgetIndex == StartIndex)
+		if (SelectedUnits[CurrentUnitWidgetIndex] && (SelectedUnits[CurrentUnitWidgetIndex]->AbilitySelectionTag != CurrentTag ||
+			CurrentUnitWidgetIndex == StartIndex))
 		{
 			break;
 		}
@@ -3744,7 +3745,7 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 		if (Base && Base->IsBase)
 		{
 			for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-				if (SelectedUnits[i]->IsWorker)
+				if (SelectedUnits[i] && SelectedUnits[i]->IsWorker)
 				{
 					SelectedUnits[i]->RemoveFocusEntityTarget();
 					SelectedUnits[i]->Base = Base;
