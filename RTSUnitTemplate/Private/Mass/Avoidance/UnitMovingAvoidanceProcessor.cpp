@@ -20,7 +20,7 @@
 #include "Engine/World.h"
 #include "MassDebugger.h"
 #include "MassNavigationDebug.h"
-
+#include "NavigationSystem.h"
 #include "MassLODFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
@@ -426,6 +426,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 	{
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
 		const double CurrentTime = World->GetTimeSeconds();
+		UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
 		
 		const TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
 		const TConstArrayView<FMassNavigationEdgesFragment> NavEdgesList = Context.GetFragmentView<FMassNavigationEdgesFragment>();
@@ -504,6 +505,16 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			const FVector::FReal MaximumSpeed = MovementParams.MaxSpeed;
 
 			const FVector AgentLocation = Location.GetTransform().GetTranslation();
+
+			if (NavSystem)
+			{
+				FNavLocation NavLoc;
+				if (!NavSystem->ProjectPointToNavigation(AgentLocation, NavLoc, FVector(100.f, 100.f, 300.f)))
+				{
+					continue;
+				}
+			}
+
 			const FVector AgentVelocity = FVector(Velocity.Value.X, Velocity.Value.Y, 0.);
 			
 			const FVector::FReal AgentRadius = RadiusFragment.Radius;

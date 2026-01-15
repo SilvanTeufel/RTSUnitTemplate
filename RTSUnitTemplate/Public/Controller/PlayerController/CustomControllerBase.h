@@ -125,17 +125,6 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyTeamAbilityKeyToggle(int32 TeamId, const FString& Key, bool bEnable);
 
-	// Client-side prediction mirror for movement request
-	/*
-	UFUNCTION(Client, Reliable)
-	void Client_CorrectSetUnitMoveTarget(
-		UObject* WorldContextObject,
-		AUnitBase* Unit,
-		const FVector& NewTargetLocation,
-		float DesiredSpeed = 300.0f,
-		float AcceptanceRadius = 50.0f,
-		bool AttackT = false);*/
-
 	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTargetForAbility(
 		UObject* WorldContextObject,
@@ -144,17 +133,6 @@ public:
 		float DesiredSpeed = 300.0f,
 		float AcceptanceRadius = 50.0f,
 		bool AttackT = false);
-
-	// Client-side prediction mirror for ability movement request
-	/*
-	UFUNCTION(Client, Reliable)
-	void Client_CorrectSetUnitMoveTargetForAbility(
-		UObject* WorldContextObject,
-		AUnitBase* Unit,
-		const FVector& NewTargetLocation,
-		float DesiredSpeed = 300.0f,
-		float AcceptanceRadius = 50.0f,
-		bool AttackT = false);*/
 
 	UFUNCTION(Server, Reliable)
 	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);

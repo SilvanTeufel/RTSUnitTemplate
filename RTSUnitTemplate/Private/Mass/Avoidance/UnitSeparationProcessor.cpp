@@ -8,6 +8,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "NavigationSystem.h"
 
 namespace
 {
@@ -48,6 +49,7 @@ void UUnitSeparationProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	
@@ -67,7 +69,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	TArray<FClumpUnitInfo> Units;
 	Units.Reserve(256);
 
-	auto GatherFromQuery = [this, &EntityManager, &Units](FMassExecutionContext& LocalContext)
+	auto GatherFromQuery = [this, &EntityManager, &Units, &Context](FMassExecutionContext& LocalContext)
 	{
 		const int32 Num = LocalContext.GetNumEntities();
 		const auto Transforms = LocalContext.GetFragmentView<FTransformFragment>();
@@ -76,11 +78,23 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		const auto Targets = LocalContext.GetFragmentView<FMassAITargetFragment>();
 		const auto MoveTargets = LocalContext.GetFragmentView<FMassMoveTargetFragment>();
 
+		UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(Context.GetWorld());
+
 		for (int32 i = 0; i < Num; ++i)
 		{
+			FVector Location = Transforms[i].GetTransform().GetLocation();
+			if (NavSystem)
+			{
+				FNavLocation NavLoc;
+				if (!NavSystem->ProjectPointToNavigation(Location, NavLoc, FVector(100.f, 100.f, 300.f)))
+				{
+					continue;
+				}
+			}
+
 			FClumpUnitInfo Info;
 			Info.Entity = LocalContext.GetEntity(i);
-			Info.Location = Transforms[i].GetTransform().GetLocation();
+			Info.Location = Location;
 			
 			const FVector& TargetPos = MoveTargets[i].Center;
 			FVector MoveDir = Horizontal(TargetPos - Info.Location);

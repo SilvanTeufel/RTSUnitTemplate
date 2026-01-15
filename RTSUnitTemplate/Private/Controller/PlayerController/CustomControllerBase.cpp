@@ -26,6 +26,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Actors/MinimapActor.h" 
 #include "Characters/Unit/BuildingBase.h"
+#include "NavigationSystem.h"
 #include "NavAreas/NavArea_Null.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "System/PlayerTeamSubsystem.h"
@@ -189,6 +190,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (NavSys)
+	{
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, FVector(200.f, 200.f, 500.f)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[SingleMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
+			return;
+		}
+	}
+
 	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
     if (!EntityManager.IsEntityValid(MassEntityHandle))
@@ -286,6 +298,19 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		return;
 	}
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (NavSys && NewTargetLocations.Num() > 0)
+	{
+		FNavLocation NavLoc;
+		// Check the first target location as a representative of the move command.
+		// Using a slightly larger extent to account for formation offsets.
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, FVector(250.f, 250.f, 500.f)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
+			return;
+		}
+	}
 
 	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num())
 	{
@@ -465,6 +490,18 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
 	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (NavSys && NewTargetLocations.Num() > 0)
+	{
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, FVector(250.f, 250.f, 500.f)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
+			return;
+		}
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
@@ -597,6 +634,17 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
     }
 
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (NavSys)
+	{
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, FVector(200.f, 200.f, 500.f)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[AbilityMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
+			return;
+		}
+	}
 
 	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
@@ -1109,6 +1157,16 @@ void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& GroundLo
 
 void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& GroundLocation)
 {
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (NavSys)
+	{
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(GroundLocation, NavLoc, FVector(100.f, 100.f, 500.f)))
+		{
+			return;
+		}
+	}
+
 	// Mimic LeftClickPressedMass attack branch using GroundLocation from minimap
 	if (!AttackToggled)
 	{
@@ -1339,6 +1397,17 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 {
     // 1. Setup
     if (SelectedUnits.Num() == 0) return;
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (NavSys)
+	{
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, FVector(100.f, 100.f, 500.f)))
+		{
+			return;
+		}
+	}
+
     AWaypoint* BWaypoint = nullptr;
     bool PlayWaypoint = false, PlayRun = false;
 
@@ -1492,6 +1561,17 @@ void ACustomControllerBase::LeftClickPressedMass()
         // 1) get world hit under cursor for ground and pawn
         FHitResult Hit;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+		if (NavSys)
+		{
+			FNavLocation NavLoc;
+			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, FVector(100.f, 100.f, 500.f)))
+			{
+				return;
+			}
+		}
+
         FHitResult HitPawn;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
         AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;

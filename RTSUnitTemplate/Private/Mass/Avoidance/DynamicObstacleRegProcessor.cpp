@@ -7,6 +7,7 @@
 #include "MassNavigationFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "NavigationSystem.h"
 
 
 namespace
@@ -101,6 +102,9 @@ void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionContext& Context, FMassEntityQuery& Query, UMassNavigationSubsystem& NavSys)
 {
+    UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(Context.GetWorld());
+    if (!NavSystem) return;
+
     Query.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -113,6 +117,13 @@ void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionCont
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FVector Location = CharList[i].PositionedTransform.GetLocation();
+            
+            FNavLocation NavLoc;
+            if (!NavSystem->ProjectPointToNavigation(Location, NavLoc, FVector(100.f, 100.f, 300.f)))
+            {
+                continue;
+            }
+
             const float Radius = Colliders[i].GetCircleCollider().Radius;
             
             // Stationary units should always be obstacles
