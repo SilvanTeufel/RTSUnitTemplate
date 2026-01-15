@@ -151,7 +151,10 @@ void AProjectile::InitISMComponent(FTransform Transform)
 		}
 
 		const FVector StartLocation = Transform.GetLocation();
-		FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
+		if (!TargetLocation.IsNearlyZero())
+		{
+			FlightDirection = (TargetLocation - StartLocation).GetSafeNormal();
+		}
 	}
 }
 
@@ -189,7 +192,7 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		
 		InitArc(ShooterLocation);
 	}
-	
+	bIsInitialized = true;
 }
 
 void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
@@ -223,7 +226,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	}
 
 	InitArc(ShooterLocation);
-	
+	bIsInitialized = true;
 }
 
 void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
@@ -551,7 +554,7 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
 
 void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 {
-	if (!bIsInitialized) return;
+	if (!bIsInitialized && !Shooter) return;
 
     // --- 1. Get current transform FROM THE INSTANCE ---
     FTransform CurrentTransform;
@@ -568,6 +571,11 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 	{
 		// The target is the same as the start, destroy the projectile to prevent errors
 		FlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
+
+		if (FlightDirection.IsNearlyZero(0.1f) && Shooter)
+		{
+			FlightDirection = Shooter->GetActorForwardVector();
+		}
 	}
 	
     const FVector FrameMovement = FlightDirection * MovementSpeed * DeltaSeconds * 10.f;
@@ -648,6 +656,22 @@ void AProjectile::FlyInArc(float DeltaTime)
         return; // Safety check
     }
     ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/ true);
+
+	if (Shooter)
+	{
+		if (ArcStartLocation.IsNearlyZero(0.1f))
+		{
+			if (!ShooterLocation.IsNearlyZero(0.1f))
+				ArcStartLocation = ShooterLocation;
+			else
+				ArcStartLocation = Shooter->GetActorLocation();
+		}
+
+		if (TargetLocation.IsNearlyZero(0.1f))
+		{
+			TargetLocation = ArcStartLocation + Shooter->GetActorForwardVector() * 10000.f;
+		}
+	}
 
     // --- 2. Update target location if it's a moving target ---
     if (FollowTarget && Target)
