@@ -259,6 +259,11 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			UnitBase->CheckTeamVisibility();
 			UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
 			UnitBase->SyncTranslation();
+			
+			// Client: Clear stale cache for any NetID this actor might have had previously 
+			// or might be about to receive. Better yet, the ClientReplicationProcessor 
+			// handles the actual NetID assignment from registry.
+			
 			// Server: assign NetID and update authoritative registry so clients can reconcile
    if (UWorld* WorldPtr = GetWorld())
 			{
@@ -266,7 +271,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 				{
 					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
 					{
-						// Skip registration if the owning unit is dead
+ 					// Skip registration if the owning unit is dead
 						AUnitBase* UnitBaseLocal2 = Cast<AUnitBase>(MyOwner);
 						if (UnitBaseLocal2 && UnitBaseLocal2->UnitState == UnitData::Dead)
 						{
@@ -283,10 +288,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 							{
 								Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
 							}
-							if (!Existing)
-							{
-								Existing = Reg->Registry.FindByOwner(OwnerName);
-							}
+							
 							if (Existing)
 							{
 								Existing->OwnerName = OwnerName;
@@ -721,10 +723,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 								{
 									Existing = Reg->Registry.FindByUnitIndex(UnitIdxVal);
 								}
-								if (!Existing)
-								{
-									Existing = Reg->Registry.FindByOwner(OwnerName);
-								}
+								
 								if (Existing)
 								{
 									Existing->OwnerName = OwnerName;
@@ -1185,13 +1184,29 @@ void UMassActorBindingComponent::RequestClientMassUnlink()
 	{
 		return;
 	}
-	// Prevent client-authoritative unlink to avoid desync; server drives destruction
-	if (World->GetNetMode() == NM_Client)
+	
+	// Server-authoritative: server drives destruction via CleanupMassEntity
+	if (World->GetNetMode() != NM_Client)
 	{
+		CleanupMassEntity();
 		return;
 	}
-	// On server, fall back to proper cleanup
-	CleanupMassEntity();
+
+	// On clients, we allow forced unlinking (and entity destruction) if requested by reconciliation.
+	// This ensures that 'ghost' entities are cleaned up even if the actor persists.
+	if (MassEntityHandle.IsValid())
+	{
+		if (!MassEntitySubsystemCache)
+		{
+			MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+		}
+		if (MassEntitySubsystemCache)
+		{
+			FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+			EM.Defer().DestroyEntity(MassEntityHandle);
+		}
+		MassEntityHandle.Reset();
+	}
 }
 
 void UMassActorBindingComponent::CleanupMassEntity()

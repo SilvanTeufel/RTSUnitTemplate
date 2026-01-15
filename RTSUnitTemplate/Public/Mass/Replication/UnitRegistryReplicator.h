@@ -34,7 +34,7 @@ public:
 	void QuarantineNetID(uint32 NetID);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Replication")
-	float NetIDQuarantineTime = 15.0f;
+	float NetIDQuarantineTime = 60.0f;
 	
 	// Client-side: track recent registry updates to debounce reconcile-unlink (plain members; not replicated)
 	int32 ClientOnRepCounter = 0;

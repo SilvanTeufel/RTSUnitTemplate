@@ -166,13 +166,10 @@ void AUnitRegistryReplicator::OnRep_Registry()
 			{
 				// Build quick sets for lookup
 				TSet<int32> RegIndices;
-				TSet<FName> RegOwners;
 				RegIndices.Reserve(Registry.Items.Num());
-				RegOwners.Reserve(Registry.Items.Num());
 				for (const FUnitRegistryItem& It : Registry.Items)
 				{
 					if (It.UnitIndex != INDEX_NONE) { RegIndices.Add(It.UnitIndex); }
-					if (It.OwnerName != NAME_None) { RegOwners.Add(It.OwnerName); }
 				}
 				int32 Cleaned = 0;
 				for (TActorIterator<AUnitBase> It(World); It; ++It)
@@ -180,7 +177,8 @@ void AUnitRegistryReplicator::OnRep_Registry()
 					AUnitBase* Unit = *It;
 					if (!IsValid(Unit)) { continue; }
 					// Do NOT destroy units simply because they are Dead; keep them until actor/entity despawns.
-					const bool bInReg = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex)) || RegOwners.Contains(Unit->GetFName());
+					// Use ONLY UnitIndex for registry check on client. OwnerName (GetFName) is unstable.
+					const bool bInReg = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex));
 					bool bHasValidBinding = false;
 					if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
 					{
@@ -188,6 +186,13 @@ void AUnitRegistryReplicator::OnRep_Registry()
 					}
 					if (!bInReg || !bHasValidBinding)
 					{
+						// Final sanity check: if it's dead, we might be keeping it for visuals, but if it's not in registry at all, it's a ghost.
+						// If it's not dead but also not in registry, it's definitely a ghost.
+						if (RegLogLevel() >= 1)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[RTS.Registry] Client reconcile destroying zombie Unit %s (Index=%d, HasBinding=%d)"), 
+								*Unit->GetName(), Unit->UnitIndex, bHasValidBinding ? 1 : 0);
+						}
 						Unit->Destroy();
 						++Cleaned;
 					}
@@ -222,9 +227,9 @@ void AUnitRegistryReplicator::OnRep_Registry()
 				}
 				if (Trimmed > 0)
 				{
-					if (RegLogLevel() >= 2)
+					if (RegLogLevel() >= 1)
 					{
-						UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
+						UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] Client trimmed %d stale NetIDs from UnitReplicationCache after registry update."), Trimmed);
 					}
 				}
 			}
@@ -369,13 +374,11 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 		{
 			// Build sets of currently live actors' keys
 			TSet<int32> LiveIndices;
-			TSet<FName> LiveOwners;
 			for (TActorIterator<AUnitBase> It(W); It; ++It)
 			{
 				AUnitBase* Unit = *It;
 				if (!IsValid(Unit)) continue;
 				// Include dead units as live for replication/registry until they despawn
-				LiveOwners.Add(Unit->GetFName());
 				if (Unit->UnitIndex != INDEX_NONE)
 				{
 					LiveIndices.Add(Unit->UnitIndex);
@@ -384,13 +387,10 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 
 			// Build sets of registry keys for quick lookup
 			TSet<int32> RegIndices;
-			TSet<FName> RegOwners;
 			RegIndices.Reserve(Registry.Items.Num());
-			RegOwners.Reserve(Registry.Items.Num());
 			for (const FUnitRegistryItem& Itm : Registry.Items)
 			{
 				if (Itm.UnitIndex != INDEX_NONE) { RegIndices.Add(Itm.UnitIndex); }
-				if (Itm.OwnerName != NAME_None) { RegOwners.Add(Itm.OwnerName); }
 			}
 
 			// Safety net: insert any missing live units into the registry immediately
@@ -402,7 +402,10 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 				AUnitBase* Unit = *It2;
 				if (!IsValid(Unit)) continue;
 				if (Unit->UnitState == UnitData::Dead) continue;
-				const bool bMissing = (Unit->UnitIndex == INDEX_NONE || !RegIndices.Contains(Unit->UnitIndex)) && !RegOwners.Contains(Unit->GetFName());
+				// Do not register units that are not supposed to have Mass
+				if (!Unit->FindComponentByClass<UMassActorBindingComponent>()) continue;
+
+				const bool bMissing = (Unit->UnitIndex == INDEX_NONE || !RegIndices.Contains(Unit->UnitIndex));
 				if (bMissing)
 				{
 					FMassNetworkID NetIDValue;
@@ -450,9 +453,27 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 			for (int32 i = Registry.Items.Num() - 1; i >= 0; --i)
 			{
 				const FUnitRegistryItem& Itm = Registry.Items[i];
-				const bool bOwnerGone = (Itm.OwnerName != NAME_None) && !LiveOwners.Contains(Itm.OwnerName);
 				const bool bIndexGone = (Itm.UnitIndex != INDEX_NONE) && !LiveIndices.Contains(Itm.UnitIndex);
-				if (bOwnerGone || bIndexGone)
+				
+				// Extra safety: Check if the actor name still refers to the same UnitIndex
+				bool bOwnerReused = false;
+				if (Itm.OwnerName != NAME_None)
+				{
+					// Use a cheap search for the actor by name
+					for (TActorIterator<AUnitBase> It(W); It; ++It)
+					{
+						if (It->GetFName() == Itm.OwnerName)
+						{
+							if (It->UnitIndex != Itm.UnitIndex)
+							{
+								bOwnerReused = true;
+							}
+							break;
+						}
+					}
+				}
+
+				if (bIndexGone || bOwnerReused)
 				{
 					QuarantineNetID(Itm.NetID.GetValue());
 					Registry.Items.RemoveAt(i);
@@ -581,11 +602,16 @@ void AUnitRegistryReplicator::GetRegistrationCounts(int32& OutRegistered, int32&
 			continue;
 		}
 		
+		// Only count units that are supposed to have Mass (to avoid blocking on props/actors that don't register)
+		if (!Unit->FindComponentByClass<UMassActorBindingComponent>())
+		{
+			continue;
+		}
+
 		OutTotal++;
 		
-		// Check if this unit is in the registry (by UnitIndex or OwnerName)
-		const bool bInRegistry = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex)) 
-		                      || RegOwners.Contains(Unit->GetFName());
+		// Check if this unit is in the registry (by UnitIndex ONLY)
+		const bool bInRegistry = (Unit->UnitIndex != INDEX_NONE && RegIndices.Contains(Unit->UnitIndex));
 		if (bInRegistry)
 		{
 			OutRegistered++;

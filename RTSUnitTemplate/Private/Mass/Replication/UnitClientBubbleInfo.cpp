@@ -37,7 +37,8 @@ void FUnitReplicationItem::PostReplicatedAdd(const FUnitReplicationArray& InArra
 {
 	if (InArraySerializer.OwnerBubble && InArraySerializer.OwnerBubble->GetNetMode() == NM_Client)
 	{
-		UnitReplicationCache::SetLatest(NetID, BuildTransformFromItem(*this));
+		const FTransform Xf = BuildTransformFromItem(*this);
+		UnitReplicationCache::SetLatest(NetID, Xf);
 	}
 }
 
@@ -55,6 +56,17 @@ void FUnitReplicationItem::PreReplicatedRemove(const FUnitReplicationArray& InAr
 	{
 		UnitReplicationCache::Remove(NetID);
 	}
+}
+
+namespace {
+	struct FUnitReplicationCacheCleanup {
+		FUnitReplicationCacheCleanup() {
+			FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* World, bool, bool) {
+				UnitReplicationCache::Clear();
+			});
+		}
+	};
+	static FUnitReplicationCacheCleanup GUnitReplicationCacheCleanup;
 }
 
 AUnitClientBubbleInfo::AUnitClientBubbleInfo(const FObjectInitializer& ObjectInitializer)

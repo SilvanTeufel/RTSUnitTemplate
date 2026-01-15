@@ -172,13 +172,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// 2) We do NOT create entities on the client. Instead we will map NetIDs to already created entities later in this tick.
 	//    Throttle registry actor lookup to once per second and cache between ticks.
 	AUnitRegistryReplicator* RegistryActor = nullptr;
-	TMap<FName, FMassNetworkID> AuthoritativeByOwnerName;
+	TMap<FName, FMassNetworkID> BubbleByOwnerName;
 	TMap<int32, FMassNetworkID> AuthoritativeByUnitIndex;
 	{
 		static TWeakObjectPtr<AUnitRegistryReplicator> GCachedRegistry;
 		static double GLastLookup = 0.0;
 		UWorld* LocalWorld = GetWorld();
 		const double Now = LocalWorld ? LocalWorld->GetTimeSeconds() : 0.0;
+		
+		// Reset static cache on world cleanup/change
+		static UWorld* GLastWorld = nullptr;
+		if (LocalWorld != GLastWorld)
+		{
+			GCachedRegistry.Reset();
+			GLastWorld = LocalWorld;
+		}
+
 		if (GCachedRegistry.IsValid())
 		{
 			RegistryActor = GCachedRegistry.Get();
@@ -198,25 +207,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		{
 			for (const FUnitRegistryItem& Item : RegistryActor->Registry.Items)
 			{
-				AuthoritativeByOwnerName.Add(Item.OwnerName, Item.NetID);
 				if (Item.UnitIndex != INDEX_NONE)
 				{
 					AuthoritativeByUnitIndex.Add(Item.UnitIndex, Item.NetID);
 				}
-			}
-			// Log the mapping we see on the client this tick (limited, verbose only)
-			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-			{
-				const int32 Num = RegistryActor->Registry.Items.Num();
-				const int32 MaxLog = FMath::Min(25, Num);
-				FString MapStr;
-				for (int32 i = 0; i < MaxLog; ++i)
-				{
-					const FUnitRegistryItem& It = RegistryActor->Registry.Items[i];
-					if (i > 0) { MapStr += TEXT(" | "); }
-					MapStr += FString::Printf(TEXT("%s->%u"), *It.OwnerName.ToString(), It.NetID.GetValue());
-				}
-				UE_LOG(LogTemp, Verbose, TEXT("ClientRegistry(Tick): %d entries. %s%s"), Num, *MapStr, (Num > MaxLog ? TEXT(" ...") : TEXT("")));
 			}
 		}
 	}
@@ -227,50 +221,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	TMap<FName, TWeakObjectPtr<AActor>> ByOwnerName;
 
 	// Build additional authoritative mapping from Bubble payload (client-replicated)
-	TMap<FName, FMassNetworkID> BubbleByOwnerName;
 	TSet<uint32> BubbleIDs;
-		if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+	{
+		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
 		{
-			if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
 			{
-				for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
-				{
-					BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
-					BubbleIDs.Add(Item.NetID.GetValue());
-				}
+				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
+				BubbleIDs.Add(Item.NetID.GetValue());
 			}
 		}
-		// Compare Registry vs Bubble mappings by OwnerName and log mismatches (diagnostic)
-		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1 && AuthoritativeByOwnerName.Num() > 0 && BubbleByOwnerName.Num() > 0)
-		{
-			int32 MismatchCount = 0;
-			int32 OnlyInRegistry = 0;
-			int32 OnlyInBubble = 0;
-			for (const auto& KVP : AuthoritativeByOwnerName)
-			{
-				const FMassNetworkID* B = BubbleByOwnerName.Find(KVP.Key);
-				if (!B)
-				{
-					OnlyInRegistry++;
-				}
-				else if (B->GetValue() != KVP.Value.GetValue())
-				{
-					MismatchCount++;
-				}
-			}
-			for (const auto& KVP : BubbleByOwnerName)
-			{
-				if (!AuthoritativeByOwnerName.Contains(KVP.Key))
-				{
-					OnlyInBubble++;
-				}
-			}
-			if (MismatchCount > 0 || OnlyInRegistry > 0 || OnlyInBubble > 0)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("ClientRegistryVsBubble: Mismatch=%d OnlyInReg=%d OnlyInBubble=%d (Reg=%d Bubble=%d)"),
-					MismatchCount, OnlyInRegistry, OnlyInBubble, AuthoritativeByOwnerName.Num(), BubbleByOwnerName.Num());
-			}
-		}
+	}
 		
 		EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
 	{
@@ -464,7 +426,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
 		}
 		
-		 EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByOwnerName, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
+		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -519,7 +481,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				// Duplicate NetID detection: ensure per-chunk uniqueness
 				const uint32 CurrentID = NetIDList[EntityIdx].NetID.GetValue();
 
-				// 0) Authoritative mapping by UnitIndex first, then OwnerName, then Bubble fallback
+				// 0) Authoritative mapping by UnitIndex first, then Bubble fallback (OwnerName is unstable)
 				if (AActor* OwnerActor = ActorList[EntityIdx].GetMutable())
 				{
 					// Try UnitIndex if this is a UnitBase
@@ -549,37 +511,20 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  				if (!bSet)
  				{
  					const FName OwnerName = OwnerActor->GetFName();
- 					if (const FMassNetworkID* AuthoritativeId = AuthoritativeByOwnerName.Find(OwnerName))
- 					{
-       if (NetIDList[EntityIdx].NetID != *AuthoritativeId)
+					if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
+					{
+						if (NetIDList[EntityIdx].NetID != *BubbleId)
 						{
 							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 							{
-								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=OwnerName)"),
+								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
 									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
-									NetIDList[EntityIdx].NetID.GetValue(), AuthoritativeId->GetValue());
+									NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
 							}
-							NetIDList[EntityIdx].NetID = *AuthoritativeId;
+							NetIDList[EntityIdx].NetID = *BubbleId;
 						}
 						bSet = true;
- 					}
- 					else
- 					{
- 						if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
- 						{
- 							if (NetIDList[EntityIdx].NetID != *BubbleId)
- 							{
-         if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-								{
-									UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
-										ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
-										NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
-								}
-								NetIDList[EntityIdx].NetID = *BubbleId;
- 							}
- 							bSet = true;
- 						}
- 					}
+					}
  				}
 				}
 				if (CurrentID != 0)
@@ -845,45 +790,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							const FMassNetworkID WantedID = NetIDList[EntityIdx].NetID;
 							// Try exact match first
 							const FUnitReplicationItem* UseItem = Bubble->Agents.FindItemByNetID(WantedID);
-							// If we still don't have a NetID (0), assign the nearest unclaimed bubble item
-							if (!UseItem && WantedID.GetValue() == 0 && Bubble->Agents.Items.Num() > 0)
-							{
-								float BestDistSq = TNumericLimits<float>::Max();
-								int32 BestIdx = INDEX_NONE;
-								FVector RefLoc = FVector::ZeroVector;
-								if (AActor* Actor = ActorList[EntityIdx].GetMutable())
-								{
-									RefLoc = Actor->GetActorLocation();
-								}
-								for (int32 Idx = 0; Idx < Bubble->Agents.Items.Num(); ++Idx)
-								{
-									const FUnitReplicationItem& Itm = Bubble->Agents.Items[Idx];
-									const uint32 CandID = Itm.NetID.GetValue();
-									if (ClaimedIDs.Contains(CandID))
-									{
-										continue; // already assigned to someone in this chunk this tick
-									}
-									const float DSq = FVector::DistSquared(RefLoc, FVector(Itm.Location));
-									if (DSq < BestDistSq)
-									{
-										BestDistSq = DSq;
-										BestIdx = Idx;
-									}
-								}
-								if (BestIdx != INDEX_NONE)
-								{
-									UseItem = &Bubble->Agents.Items[BestIdx];
- 								// Do not patch NetID on client; wait for replication
- 								ClaimedIDs.Add(UseItem->NetID.GetValue());
-								}
-							}
+							
+							// Mapping logic: ONLY map if we have a valid NetID from authoritative sources.
+							// Nearest-neighbor fallback removed because it often causes 'ghost' jumps 
+							// when units are missing in the bubble or registry.
+							
 							if (UseItem)
 							{
-								// If we still have NetID 0, adopt the bubble's NetID (exact or nearest mapping)
-								if (NetIDList[EntityIdx].NetID.GetValue() == 0)
-								{
-									NetIDList[EntityIdx].NetID = UseItem->NetID;
-								}
 								// Dequantize rotation and build transform
 								const float Pitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
 								const float Yaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
