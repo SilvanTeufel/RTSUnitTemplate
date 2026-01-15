@@ -87,7 +87,7 @@ void AUnitClientBubbleInfo::OnRep_Agents()
 	if (Level >= 1)
 	{
 		const int32 Count = Agents.Items.Num();
-		UE_LOG(LogTemp, Log, TEXT("[Bubble] OnRep_Agents: Items=%d (World=%s)"), Count, *GetWorld()->GetName());
+		//UE_LOG(LogTemp, Log, TEXT("[Bubble] OnRep_Agents: Items=%d (World=%s)"), Count, *GetWorld()->GetName());
 		if (Level >= 2 && Count > 0)
 		{
 			const int32 MaxLog = FMath::Min(20, Count);
@@ -97,7 +97,7 @@ void AUnitClientBubbleInfo::OnRep_Agents()
 				if (i > 0) IdList += TEXT(", ");
 				IdList += FString::Printf(TEXT("%u"), Agents.Items[i].NetID.GetValue());
 			}
-			UE_LOG(LogTemp, Log, TEXT("[Bubble] NetIDs[%d]: %s%s"), MaxLog, *IdList, (Count > MaxLog ? TEXT(" ...") : TEXT("")));
+			//UE_LOG(LogTemp, Log, TEXT("[Bubble] NetIDs[%d]: %s%s"), MaxLog, *IdList, (Count > MaxLog ? TEXT(" ...") : TEXT("")));
 		}
 	}
 }
@@ -114,7 +114,7 @@ void AUnitClientBubbleInfo::BeginPlay()
 	{
 		const ENetMode Mode = GetNetMode();
 		const TCHAR* ModeStr = (Mode == NM_DedicatedServer) ? TEXT("Server") : (Mode == NM_ListenServer ? TEXT("ListenServer") : (Mode == NM_Client ? TEXT("Client") : TEXT("Standalone")));
-		UE_LOG(LogTemp, Log, TEXT("[Bubble] BeginPlay in %s world %s, NetUpdateHz=%.1f"), ModeStr, *GetWorld()->GetName(), GetNetUpdateFrequency());
+		//UE_LOG(LogTemp, Log, TEXT("[Bubble] BeginPlay in %s world %s, NetUpdateHz=%.1f"), ModeStr, *GetWorld()->GetName(), GetNetUpdateFrequency());
 	}
 }
 

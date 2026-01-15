@@ -327,10 +327,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         }
         if (RepLogLevel() >= 2)
         {
-            UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Add): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
-                NetID.GetValue(), NewItem.CS_Health, NewItem.CS_MaxHealth, NewItem.CS_RunSpeed, NewItem.CS_TeamId,
-                NewItem.AC_bIsFlying?1:0, NewItem.AC_bIsInvisible?1:0, NewItem.AC_FlyHeight,
-                NewItem.AIS_StateTimer, NewItem.AIS_CanAttack?1:0, NewItem.AIS_CanMove?1:0, NewItem.AIS_HoldPosition?1:0);
+            //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Add): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+            //    NetID.GetValue(), NewItem.CS_Health, NewItem.CS_MaxHealth, NewItem.CS_RunSpeed, NewItem.CS_TeamId,
+            //    NewItem.AC_bIsFlying?1:0, NewItem.AC_bIsInvisible?1:0, NewItem.AC_FlyHeight,
+            //    NewItem.AIS_StateTimer, NewItem.AIS_CanAttack?1:0, NewItem.AIS_CanMove?1:0, NewItem.AIS_HoldPosition?1:0);
         }
 
         const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
@@ -466,6 +466,18 @@ void UMassUnitReplicatorBase::RemoveEntity(FMassEntityHandle Entity, FMassReplic
     // Remove from authoritative Unit Registry as well
     if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
     {
+        // Only quarantine if the unit is actually dead or being destroyed
+        bool bIsDead = false;
+        if (const FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID))
+        {
+            bIsDead = (Item->TagBits & UnitTagBits::Dead) != 0;
+        }
+        
+        if (bIsDead)
+        {
+            Reg->QuarantineNetID(NetID.GetValue());
+        }
+        
         int32 Removed = 0;
         for (int32 i = Reg->Registry.Items.Num() - 1; i >= 0; --i)
         {
@@ -561,9 +573,9 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 }
                 if (RepLogLevel() >= 2)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
-                        NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
-                        Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
+                    //UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
+                    //    NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
+                    //    Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
                 }
 
                 FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
@@ -687,27 +699,35 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     const float HealthThresh = FMath::Max(0.0f, CVarRTS_ServerRep_HealthThreshold.GetValueOnGameThread());
                     const float SightThresh = FMath::Max(0.0f, CVarRTS_ServerRep_SightRadiusThreshold.GetValueOnGameThread());
 
+                    const FMassEntityHandle EH = Context.GetEntity(Idx);
+                    const uint32 NewBits = EM ? BuildReplicatedTagBits(*EM, EH) : Item->TagBits;
+                    const bool bIsDead = (NewBits & UnitTagBits::Dead) != 0;
+
                     bool bDirty = false;
-                    if (!Item->Location.Equals(Loc, LocThresh)) { Item->Location = Loc; bDirty = true; }
-                    auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
+
+                    // Skip transform replication for dead units as requested
+                    if (!bIsDead)
                     {
-                        const float ClampedStep = FMath::Max(0.1f, AngleThresh);
-                        const float Snapped = FMath::RoundToFloat(AngleDeg / ClampedStep) * ClampedStep;
-                        const float Norm = FMath::Fmod(Snapped + 360.0f, 360.0f);
-                        return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
-                    };
-                    const uint16 NewP = QuantizeAngleWithThreshold(Rot.Pitch);
-                    const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
-                    const uint16 NewR = QuantizeAngleWithThreshold(Rot.Roll);
-                    if (Item->PitchQuantized != NewP) { Item->PitchQuantized = NewP; bDirty = true; }
-                    if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
-                    if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
-                    if (!Item->Scale.Equals(Sca, ScaleThresh)) { Item->Scale = Sca; bDirty = true; }
+                        if (!Item->Location.Equals(Loc, LocThresh)) { Item->Location = Loc; bDirty = true; }
+                        auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
+                        {
+                            const float ClampedStep = FMath::Max(0.1f, AngleThresh);
+                            const float Snapped = FMath::RoundToFloat(AngleDeg / ClampedStep) * ClampedStep;
+                            const float Norm = FMath::Fmod(Snapped + 360.0f, 360.0f);
+                            return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
+                        };
+                        const uint16 NewP = QuantizeAngleWithThreshold(Rot.Pitch);
+                        const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
+                        const uint16 NewR = QuantizeAngleWithThreshold(Rot.Roll);
+                        if (Item->PitchQuantized != NewP) { Item->PitchQuantized = NewP; bDirty = true; }
+                        if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
+                        if (Item->RollQuantized != NewR) { Item->RollQuantized = NewR; bDirty = true; }
+                        if (!Item->Scale.Equals(Sca, ScaleThresh)) { Item->Scale = Sca; bDirty = true; }
+                    }
+                    
                     // Update tag bits and AI target if EntityManager is available
                     if (EM)
                     {
-                        const FMassEntityHandle EH = Context.GetEntity(Idx);
-                        const uint32 NewBits = BuildReplicatedTagBits(*EM, EH);
                         if (Item->TagBits != NewBits) { Item->TagBits = NewBits; bDirty = true; }
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
@@ -842,10 +862,10 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         }
                         if (RepLogLevel() >= 2)
                         {
-                            UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Upd): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
-                                NetID.GetValue(), Item->CS_Health, Item->CS_MaxHealth, Item->CS_RunSpeed, Item->CS_TeamId,
-                                Item->AC_bIsFlying?1:0, Item->AC_bIsInvisible?1:0, Item->AC_FlyHeight,
-                                Item->AIS_StateTimer, Item->AIS_CanAttack?1:0, Item->AIS_CanMove?1:0, Item->AIS_HoldPosition?1:0);
+                            //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Upd): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
+                            //    NetID.GetValue(), Item->CS_Health, Item->CS_MaxHealth, Item->CS_RunSpeed, Item->CS_TeamId,
+                            //    Item->AC_bIsFlying?1:0, Item->AC_bIsInvisible?1:0, Item->AC_FlyHeight,
+                            //    Item->AIS_StateTimer, Item->AIS_CanAttack?1:0, Item->AIS_CanMove?1:0, Item->AIS_HoldPosition?1:0);
                         }
                     }
                     if (bDirty)

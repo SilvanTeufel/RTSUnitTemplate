@@ -29,6 +29,12 @@ public:
 	
 	// Server-only: get next NetID, starting at 1 for each game session
 	uint32 GetNextNetID();
+
+	// Server-only: block a NetID from being reused for NetIDQuarantineTime seconds
+	void QuarantineNetID(uint32 NetID);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Replication")
+	float NetIDQuarantineTime = 15.0f;
 	
 	// Client-side: track recent registry updates to debounce reconcile-unlink (plain members; not replicated)
 	int32 ClientOnRepCounter = 0;
@@ -60,4 +66,7 @@ private:
 	
 	UPROPERTY(Transient)
 	uint32 NextNetID = 1; // not replicated; authoritative on server only
+
+	// IDs that cannot be reused yet (NetID -> ExpirationTime)
+	TMap<uint32, double> QuarantinedNetIDs;
 };

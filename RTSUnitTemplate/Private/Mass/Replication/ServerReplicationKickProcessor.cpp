@@ -97,15 +97,21 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				bool IsNearlyEqual(const FSig& O, float LocThresh, float AngleThresh, float ScaleThresh) const
 				{
 					if (TagBits != O.TagBits) return false;
-					if (!Loc.Equals(O.Loc, LocThresh)) return false;
-					if (!Scale.Equals(O.Scale, ScaleThresh)) return false;
-					
-					// Angle check (quantized uint16)
-					auto Diff = [](uint16 a, uint16 b) { return (uint16)FMath::Abs((int32)a - (int32)b); };
-					uint16 ThresholdQ = (uint16)FMath::RoundToInt((AngleThresh / 360.0f) * 65535.0f);
-					if (Diff(P, O.P) > ThresholdQ) return false;
-					if (Diff(Y, O.Y) > ThresholdQ) return false;
-					if (Diff(R, O.R) > ThresholdQ) return false;
+
+					// If the unit is dead, we don't care about transform changes for the purpose of kicking replication
+					const bool bIsDead = (TagBits & UnitTagBits::Dead) != 0;
+					if (!bIsDead)
+					{
+						if (!Loc.Equals(O.Loc, LocThresh)) return false;
+						if (!Scale.Equals(O.Scale, ScaleThresh)) return false;
+						
+						// Angle check (quantized uint16)
+						auto Diff = [](uint16 a, uint16 b) { return (uint16)FMath::Abs((int32)a - (int32)b); };
+						uint16 ThresholdQ = (uint16)FMath::RoundToInt((AngleThresh / 360.0f) * 65535.0f);
+						if (Diff(P, O.P) > ThresholdQ) return false;
+						if (Diff(Y, O.Y) > ThresholdQ) return false;
+						if (Diff(R, O.R) > ThresholdQ) return false;
+					}
 
 					return true;
 				}
@@ -314,7 +320,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	{
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
 		{
-			UE_LOG(LogTemp, Log, TEXT("ServerKick: Init in world %s. LODSub=%p RepSub=%p"), *World->GetName(), LODSub, RepSub);
+			//UE_LOG(LogTemp, Log, TEXT("ServerKick: Init in world %s. LODSub=%p RepSub=%p"), *World->GetName(), LODSub, RepSub);
 		}
 		GLoggedInit.Add(World);
 	}
@@ -339,7 +345,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	{
 		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 1)
 		{
-			UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup replication grace ended (world=%s)"), *World->GetName());
+			//UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup replication grace ended (world=%s)"), *World->GetName());
 		}
 		GLoggedGraceEnd.Add(World);
 	}

@@ -21,7 +21,7 @@
 // 0=Off, 1=Warn, 2=Verbose
 static TAutoConsoleVariable<int32> CVarRTS_Registry_LogLevel(
 	TEXT("net.RTS.Registry.LogLevel"),
-	2,
+	0,
 	TEXT("Logging level for UnitRegistryReplicator diagnostics: 0=Off, 1=Warn, 2=Verbose."),
 	ECVF_Default);
 
@@ -66,7 +66,7 @@ void AUnitRegistryReplicator::BeginPlay()
 		}
 		if (RegLogLevel() >= 1)
 		{
-			UE_LOG(LogTemp, Log, TEXT("[RTS.Registry] Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
+			//UE_LOG(LogTemp, Log, TEXT("[RTS.Registry] Reset NetID counter to 1 (world=%s)"), *GetWorld()->GetName());
 		}
 	}
 }
@@ -74,12 +74,50 @@ void AUnitRegistryReplicator::BeginPlay()
 void AUnitRegistryReplicator::ResetNetIDCounter()
 {
 	NextNetID = 1;
+	QuarantinedNetIDs.Empty();
 }
 
 uint32 AUnitRegistryReplicator::GetNextNetID()
 {
-	// Return current and increment
-	return NextNetID++;
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	
+	// Skip any IDs that are currently in quarantine
+	while (true)
+	{
+		const uint32 TrialID = NextNetID++;
+		
+		double* Expiration = QuarantinedNetIDs.Find(TrialID);
+		if (Expiration)
+		{
+			if (Now < *Expiration)
+			{
+				// Still quarantined, skip it
+				continue;
+			}
+			else
+			{
+				// Expired, we can use it (and remove from map)
+				QuarantinedNetIDs.Remove(TrialID);
+				return TrialID;
+			}
+		}
+		
+		// Not in quarantine, use it
+		return TrialID;
+	}
+}
+
+void AUnitRegistryReplicator::QuarantineNetID(uint32 NetID)
+{
+	if (NetID == 0) return;
+	
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	QuarantinedNetIDs.Add(NetID, Now + static_cast<double>(NetIDQuarantineTime));
+	
+	if (RegLogLevel() >= 2)
+	{
+		//UE_LOG(LogTemp, Log, TEXT("[RTS.Registry] Quarantined NetID %u for %.1fs"), NetID, NetIDQuarantineTime);
+	}
 }
 
 void AUnitRegistryReplicator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -156,9 +194,9 @@ void AUnitRegistryReplicator::OnRep_Registry()
 				}
 				if (Cleaned > 0)
 				{
-					if (RegLogLevel() >= 2)
+					if (RegLogLevel() >= 1)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("[RTS.Registry] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
+						//UE_LOG(LogTemp, Warning, TEXT("[RTS.Registry] Client reconcile destroyed %d zombie Units after registry update."), Cleaned);
 					}
 				}
 			}
@@ -284,25 +322,27 @@ static void RunDiagnosticsForWorld(UWorld& World, const FUnitRegistryArray& Regi
 
 		if (RegLogLevel() >= 1)
 		{
+			/*
 			UE_LOG(LogTemp, Warning, TEXT("[RTS.Replication] DIAG[%s|%s]: LiveUnits=%d, Registry=%d, Missing(Index)=%d, Missing(Owner)=%d, Stale(Index)=%d, Stale(Owner)=%d"),
 				Context, ModeStr, LiveUnits, RegCount, MissingByIndex.Num(), MissingByOwner.Num(), StaleByIndex.Num(), StaleByOwner.Num());
+			*/
 			if (RegLogLevel() >= 2)
 			{
 				if (MissingByIndex.Num() > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
+					//UE_LOG(LogTemp, Warning, TEXT("  Missing UnitIndex -> Not in Registry: [%s]"), *JoinInts(MissingByIndex));
 				}
 				if (MissingByOwner.Num() > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
+					//UE_LOG(LogTemp, Warning, TEXT("  Missing OwnerName -> Not in Registry: [%s]"), *JoinNames(MissingByOwner));
 				}
 				if (StaleByIndex.Num() > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
+					//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry UnitIndex -> No longer in world: [%s]"), *JoinInts(StaleByIndex));
 				}
 				if (StaleByOwner.Num() > 0)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
+					//UE_LOG(LogTemp, Warning, TEXT("  Stale Registry OwnerName -> No longer in world: [%s]"), *JoinNames(StaleByOwner));
 				}
 			}
 		}
@@ -312,7 +352,7 @@ static void RunDiagnosticsForWorld(UWorld& World, const FUnitRegistryArray& Regi
 		// Low verbosity success summary
 		if (RegLogLevel() >= 2)
 		{
-			UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
+			//UE_LOG(LogTemp, Verbose, TEXT("[RTS.Replication] DIAG[%s|%s]: OK LiveUnits=%d Registry=%d"), Context, ModeStr, LiveUnits, RegCount);
 		}
 	}
 }
@@ -414,6 +454,7 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 				const bool bIndexGone = (Itm.UnitIndex != INDEX_NONE) && !LiveIndices.Contains(Itm.UnitIndex);
 				if (bOwnerGone || bIndexGone)
 				{
+					QuarantineNetID(Itm.NetID.GetValue());
 					Registry.Items.RemoveAt(i);
 					++Removed;
 				}

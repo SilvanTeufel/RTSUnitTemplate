@@ -1158,6 +1158,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 			UnitBase->SetActorLocation(NewLocation);
 		}
 
+		UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
 		
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 		
@@ -1179,9 +1180,6 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 				UnitBase->Attributes->SetBaseRunSpeed(SpawnParameter.BaseRunSpeed);
 			}
 		}
-
-		// Apply selectability from spawn parameter
-		UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
 
 		
 		AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
@@ -1299,6 +1297,8 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 					FVector NewLocation = CalcLocation(FVector(UnitBase->NextWaypoint->GetActorLocation().X, UnitBase->NextWaypoint->GetActorLocation().Y, UnitBase->NextWaypoint->GetActorLocation().Z+50.f), SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
 					UnitBase->SetActorLocation(NewLocation);
 				}
+
+				UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
 				
 				UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 

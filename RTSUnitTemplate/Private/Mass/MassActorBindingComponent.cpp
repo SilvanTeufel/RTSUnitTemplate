@@ -1209,6 +1209,15 @@ void UMassActorBindingComponent::CleanupMassEntity()
 			{
 				if (UnitBase->UnitIndex != INDEX_NONE)
 				{
+					// Resolve NetID if possible to quarantine it
+					if (MassEntityHandle.IsValid())
+					{
+						if (const FMassNetworkIDFragment* NetIDFrag = MassEntitySubsystemCache->GetEntityManager().GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+						{
+							Reg->QuarantineNetID(NetIDFrag->NetID.GetValue());
+						}
+					}
+					
 					bRemoved |= Reg->Registry.RemoveByUnitIndex(UnitBase->UnitIndex);
 				}
 				bRemoved |= Reg->Registry.RemoveByOwner(Owner ? Owner->GetFName() : NAME_None);

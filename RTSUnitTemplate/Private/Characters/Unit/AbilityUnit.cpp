@@ -44,13 +44,7 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 				if (WorldSeconds < 1.0f)
 				{
 					EffectiveDelay += static_cast<float>(GM->GatherControllerTimer);
-					UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Game start detected (t=%.2f). Adding GatherControllerTimer=%d to delay. EffectiveDelay=%.2f for %s (PossessedBy path)"),
-						WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
 				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] No RTSGameModeBase found; using default delay %.2f for %s (PossessedBy path)"), EffectiveDelay, *GetName());
 			}
 
 			bStartAbilitiesActivationScheduled = true;
@@ -92,7 +86,6 @@ void AAbilityUnit::BeginPlay()
 	{
 		if (!bAbilitiesGranted)
 		{
-			UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: abilities not yet granted, calling GetAbilitiesArrays for %s"), *GetName());
 			GetAbilitiesArrays();
 		}
 
@@ -107,17 +100,11 @@ void AAbilityUnit::BeginPlay()
 					if (WorldSeconds < GM->GatherControllerTimer)
 					{
 						EffectiveDelay += static_cast<float>(GM->GatherControllerTimer*2.f)+2.f;
-						UE_LOG(LogTemp, Log, TEXT("[StartAbilities] BeginPlay: game start detected (t=%.2f). Adding GatherControllerTimer=%d to delay. EffectiveDelay=%.2f for %s"),
-							WorldSeconds, GM->GatherControllerTimer, EffectiveDelay, *GetName());
 					}
 				}
 				else if (WorldSeconds < 15.f)
 				{
 					EffectiveDelay += 20.f;
-					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using 10s delay %.2f for %s"), EffectiveDelay, *GetName());
-				}else
-				{
-					UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] BeginPlay: No RTSGameModeBase found; using default delay %.2f for %s"), EffectiveDelay, *GetName());
 				}
 
 				bStartAbilitiesActivationScheduled = true;
