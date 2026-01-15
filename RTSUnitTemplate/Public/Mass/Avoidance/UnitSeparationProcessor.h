@@ -25,7 +25,7 @@ public:
 	UUnitSeparationProcessor();
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = true;
+	bool Debug = false;
 
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;

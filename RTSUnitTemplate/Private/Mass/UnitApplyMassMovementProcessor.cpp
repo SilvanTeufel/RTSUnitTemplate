@@ -55,6 +55,9 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	
+	
 	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
 	
 	EntityQuery.RegisterWithProcessor(*this);
@@ -90,6 +93,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);  
 	ClientEntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+	ClientEntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	
 	ClientEntityQuery.RegisterWithProcessor(*this);
 }
