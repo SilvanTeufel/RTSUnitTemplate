@@ -179,8 +179,8 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWalkSpeed(float Speed);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "StopRunTolerance", Keywords = "RTSUnitTemplate StopRunTolerance"), Category = RTSUnitTemplate)
-		float MovementAcceptanceRadius = 1.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float MovementAcceptanceRadius = 100.f;
 ///////////////////////////////////////////////////////////////////
 
 // related to Animations  //////////////////////////////////////////
