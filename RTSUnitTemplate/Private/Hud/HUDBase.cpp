@@ -397,7 +397,7 @@ void AHUDBase::MoveUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 			FVector ActorLocation = Units[i]->GetActorLocation();
 			const float Distance = sqrt((ActorLocation.X-Units[i]->RunLocation.X)*(ActorLocation.X-Units[i]->RunLocation.X)+(ActorLocation.Y-Units[i]->RunLocation.Y)*(ActorLocation.Y-Units[i]->RunLocation.Y));//FVector::Distance(ActorLocation, Units[i]->RunLocation);
 
-			if (Distance <= Units[i]->StopRunTolerance) { 
+			if (Distance <= Units[i]->MovementAcceptanceRadius) { 
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
 					Units[i]->RunLocation = Units[i]->RunLocationArray[Units[i]->RunLocationArrayIterator];
@@ -461,7 +461,7 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 
 			const float Distance = sqrt((ActorLocation.X-Units[i]->RunLocation.X)*(ActorLocation.X-Units[i]->RunLocation.X)+(ActorLocation.Y-Units[i]->RunLocation.Y)*(ActorLocation.Y-Units[i]->RunLocation.Y));//FVector::Distance(ActorLocation, Units[i]->RunLocation);
 
-			if (Distance <= Units[i]->StopRunTolerance) { // || DistanceY <= Units[i]->StopRunToleranceY 
+			if (Distance <= Units[i]->MovementAcceptanceRadius) { // || DistanceY <= Units[i]->StopRunToleranceY 
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
 					Units[i]->RunLocation = Units[i]->RunLocationArray[Units[i]->RunLocationArrayIterator];

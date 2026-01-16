@@ -338,7 +338,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
 {
     FQuat DesiredQuat = InOutMassTransform.GetRotation();
 
-    if (Char.RotatesToMovement && !CurrentVelocity.IsNearlyZero(50.f) && !CurrentActorLocation.Equals(State.StoredLocation, UnitBase->StopRunTolerance))
+    if (Char.RotatesToMovement && !CurrentVelocity.IsNearlyZero(50.f) && !CurrentActorLocation.Equals(State.StoredLocation, UnitBase->MovementAcceptanceRadius))
     {
         FVector LookAtDir = CurrentVelocity;
         LookAtDir.Z = 0.f;

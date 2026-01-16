@@ -35,7 +35,7 @@ void ACameraUnitController::CameraUnitRunUEPathfinding(AUnitBase* UnitBase, floa
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
-	if (Distance <= UnitBase->StopRunTolerance) {
+	if (Distance <= UnitBase->MovementAcceptanceRadius) {
 		UnitBase->SetUnitState(UnitData::Idle);
 		return;
 	}

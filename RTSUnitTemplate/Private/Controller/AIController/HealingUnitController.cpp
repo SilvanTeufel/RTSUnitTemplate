@@ -228,7 +228,7 @@ void AHealingUnitController::ChaseHealTarget(AHealingUnit* UnitBase, float Delta
     						
     						if(UnitToChase->IsFlying && !UnitBase->IsFlying)
     						{
-    							if (DistanceToUnitToChase > UnitBase->StopRunToleranceForFlying)
+    							if (DistanceToUnitToChase > 100.f)
     							{
     								UnitBase->SetUnitState(UnitData::Idle);
     							}
@@ -370,7 +370,7 @@ void AHealingUnitController::HealRun(AHealingUnit* UnitBase, float DeltaSeconds)
 
 		const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 	
-		if (Distance <= UnitBase->StopRunTolerance) {
+		if (Distance <= UnitBase->MovementAcceptanceRadius) {
 			UnitBase->SetUnitState(UnitData::Idle);
 		}
 	
@@ -406,7 +406,7 @@ void AHealingUnitController::HealRunUEPathfinding(AHealingUnit* UnitBase, float 
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
-	if (Distance <= UnitBase->StopRunTolerance) {
+	if (Distance <= UnitBase->MovementAcceptanceRadius) {
 		UnitBase->SetUnitState(UnitData::Idle);
 		return;
 	}

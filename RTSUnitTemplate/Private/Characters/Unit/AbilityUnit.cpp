@@ -293,14 +293,12 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 	if (bAbilitiesGranted)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] GetAbilitiesArrays skipped; abilities already granted for %s"), *GetName());
 		return;
 	}
 
 	// Give Start Abilities
 	if (StartAbilities.Num())
 	{
-		UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Granting %d start abilities to %s"), StartAbilities.Num(), *GetName());
 		for (TSubclassOf<UGameplayAbilityBase>& StartupAbility : StartAbilities)
 		{
 			if (StartupAbility)
@@ -601,17 +599,13 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 	// Server only
 	if (!HasAuthority())
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("[StartAbilities] Skipping activation on client for %s"), *GetName());
 		return;
 	}
 
 	if (!AbilitySystemComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[StartAbilities] AbilitySystemComponent is null on %s"), *GetName());
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Attempting to activate %d start abilities for %s"), StartAbilities.Num(), *GetName());
 
 	int32 Attempts = 0;
 	int32 Success = 0;
@@ -620,24 +614,17 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 	{
 		if (!AbilityClass)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[StartAbilities] Null ability class in StartAbilities on %s"), *GetName());
 			continue;
 		}
 
 		Attempts++;
 		const bool bActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
-		UE_LOG(LogTemp, Log, TEXT("[StartAbilities] TryActivateAbilityByClass(%s) -> %s on %s"),
-			*AbilityClass->GetName(),
-			bActivated ? TEXT("Success") : TEXT("Failed"),
-			*GetName());
 
 		if (bActivated)
 		{
 			Success++;
 		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("[StartAbilities] Activation summary for %s: Attempted=%d, Succeeded=%d"), *GetName(), Attempts, Success);
 
 	// If nothing activated, it may be because specs are not yet granted; try once more after the configured delay.
 	if (Success == 0 && StartAbilities.Num() > 0)
@@ -648,7 +635,7 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 			if (UWorld* World = GetWorld())
 			{
 				const float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
-				UE_LOG(LogTemp, Log, TEXT("[StartAbilities] No abilities activated; scheduling one retry in %.2fs for %s"), RetryDelay, *GetName());
+
 				FTimerDelegate Delegate;
 				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
 				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, RetryDelay, false);

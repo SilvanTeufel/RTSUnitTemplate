@@ -81,6 +81,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopMovementTagToEntity();
 
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool AddStopSeparationTagToEntity();
+
 	// Apply or remove the tag that freezes only X/Y movement (allowing Z updates)
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool ApplyStopXYMovementTag(bool bApply);

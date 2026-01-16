@@ -31,6 +31,8 @@ USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateStopSeparationTag : public FMassTag { GENERATED_BODY() };
+
 USTRUCT() struct FMassStateFrozenTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableObstacleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableNavManipulationTag : public FMassTag { GENERATED_BODY() };

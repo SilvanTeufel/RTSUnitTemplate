@@ -229,6 +229,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 	
 	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 	
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 	
@@ -264,14 +265,16 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		TArray<AUnitBase*> UnitsArr;
 		TArray<FVector> LocationsArr;
 		TArray<float> SpeedsArr;
+		TArray<float> RadiiArr;
 		UnitsArr.Add(Unit);
 		LocationsArr.Add(NewTargetLocation);
 		SpeedsArr.Add(DesiredSpeed);
+		RadiiArr.Add(AcceptanceRadius);
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, AcceptanceRadius, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT);
 			}
 		}
 	}
@@ -281,7 +284,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
-	float AcceptanceRadius,
+	const TArray<float>& AcceptanceRadii,
 	bool AttackT)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
@@ -312,17 +315,18 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		}
 	}
 
-	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num())
+	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num() || Units.Num() != AcceptanceRadii.Num())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Array size mismatch. Units:%d Locs:%d Speeds:%d (processing min count)"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+		UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Array size mismatch. Units:%d Locs:%d Speeds:%d Radii:%d (processing min count)"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num());
 	}
 
-	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	const int32 Count = FMath::Min(Units.Num(), FMath::Min3(NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num()));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Units[Index];
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
+		const float AcceptanceRadius = AcceptanceRadii[Index];
 
 		if (!Unit)
 		{
@@ -387,6 +391,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		
 		UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+		MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 
 		// Tags manipulation
 		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
@@ -426,13 +431,13 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
-	float AcceptanceRadius,
+	const TArray<float>& AcceptanceRadii,
 	bool AttackT)
 {
 	// Diagnostics: server received batch move
 	UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
 	// Apply authoritative changes on the server
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT);
 
 
 	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
@@ -442,7 +447,7 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadius, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT);
 			}
 		}
 	}
@@ -454,7 +459,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
-	float AcceptanceRadius,
+	const TArray<float>& AcceptanceRadii,
 	bool AttackT)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
@@ -559,7 +564,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		{
 			PredFrag->Location = NewTargetLocation;
 			PredFrag->PredDesiredSpeed = DesiredSpeed;
-			PredFrag->PredAcceptanceRadius = AcceptanceRadius;
+			PredFrag->PredAcceptanceRadius = AcceptanceRadii[Index];
 			PredFrag->bHasData = true;
 		}
 		// Ensure client won't skip movement this tick
@@ -668,6 +673,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 	
    	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 	
    	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 	
@@ -701,14 +707,16 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 		TArray<AUnitBase*> UnitsArr;
 		TArray<FVector> LocationsArr;
 		TArray<float> SpeedsArr;
+		TArray<float> RadiiArr;
 		UnitsArr.Add(Unit);
 		LocationsArr.Add(NewTargetLocation);
 		SpeedsArr.Add(DesiredSpeed);
+		RadiiArr.Add(AcceptanceRadius);
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, AcceptanceRadius, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT);
 			}
 		}
 	}
@@ -816,7 +824,12 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 			// Send a single batched RPC for all valid mass units gathered above
 			if (BatchUnits.Num() > 0)
 			{
-    Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, false);
+				TArray<float> BatchRadii;
+				for (AUnitBase* Unit : BatchUnits)
+				{
+					BatchRadii.Add(Unit->MovementAcceptanceRadius);
+				}
+				Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, false);
 			}
 
 			if (Transporter->GetUnitState() != UnitData::Casting)
@@ -1068,7 +1081,12 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 
 		if (ValidUnits.Num() > 0)
 		{
-			Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, 40.0f, AttackT);
+			TArray<float> BatchRadii;
+			for (AUnitBase* Unit : ValidUnits)
+			{
+				BatchRadii.Add(Unit->MovementAcceptanceRadius);
+			}
+			Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, BatchRadii, AttackT);
 		}
 	}
 }
@@ -1523,7 +1541,12 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     if (BatchUnits.Num() > 0)
     {
-    	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, 40.f, false);
+    	TArray<float> BatchRadii;
+    	for (AUnitBase* Unit : BatchUnits)
+    	{
+    		BatchRadii.Add(Unit->MovementAcceptanceRadius);
+    	}
+    	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, BatchRadii, false);
     }
 
     if (WaypointSound && PlayWaypoint)
@@ -1887,7 +1910,12 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 
 	if (BatchUnits.Num() > 0)
 	{
-  Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, 40.f, AttackT);
+		TArray<float> BatchRadii;
+		for (AUnitBase* Unit : BatchUnits)
+		{
+			BatchRadii.Add(Unit->MovementAcceptanceRadius);
+		}
+		Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, AttackT);
 	}
 }
 

@@ -495,14 +495,8 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 		
 		// Add worker to the WorkArea's worker list immediately to inform subsequent assignments
 		Worker->ResourcePlace->AddWorkerToArray(Worker);
-		
-		UE_LOG(LogTemp, Log, TEXT("Assigned ResourcePlace: %s to Worker: %s (Workers at location: %d)"), 
-			*Worker->ResourcePlace->GetName(), *Worker->GetName(), LowestWorkerCount);
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to select a resource place for Worker: %s"), *Worker->GetName());
-	}
+
 }
 
 ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)

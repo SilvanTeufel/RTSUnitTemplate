@@ -197,6 +197,7 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	InitMovementFragments(EntityManager, Entity);
 	InitAIFragments(EntityManager, Entity);
 	InitRepresentation(EntityManager, Entity);
+	
 	bNeedsMassUnitSetup = false;
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 	UnitBase->bIsMassUnit = true;
@@ -253,6 +254,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitMovementFragments(EM, NewMassEntityHandle);
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
+
+			if (StopSeparation)
+			{
+				EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
+			}
+			
 			bNeedsMassUnitSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
@@ -388,6 +395,9 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	
 	if(UnitBase->AddGameplayEffectFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
+
+	if (StopSeparation)
+		FragmentsAndTags.Add(FMassStateStopSeparationTag::StaticStruct());
 	
     FMassArchetypeCreationParams Params;
 	Params.ChunkMemorySize=0;
@@ -402,7 +412,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	
 	FMassMovementParameters MovementParamsInstance;
 	MovementParamsInstance.MaxSpeed = 10000.0f; //MyUnit->Attributes->GetRunSpeed()*20; //500.0f;     // Set desired value
-	MovementParamsInstance.MaxAcceleration = 4000.0f; // Set desired value
+	MovementParamsInstance.MaxAcceleration = MaxAcceleration; // Set desired value
 	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
 	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
 	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
@@ -567,7 +577,7 @@ void UMassActorBindingComponent::InitMovementFragments(FMassEntityManager& Entit
 
 	if (Unit)
 	{
-		MT.SlackRadius = Unit->StopRunTolerance;
+		MT.SlackRadius = Unit->MovementAcceptanceRadius;
 	}
     MT.DistanceToGoal = 0.f;
     MT.DesiredSpeed.Set(0.f);
@@ -698,6 +708,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
+
+			if (StopSeparation)
+			{
+				EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
+			}
+			
 			bNeedsMassBuildingSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;

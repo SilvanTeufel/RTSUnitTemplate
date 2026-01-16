@@ -75,7 +75,8 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 
 		//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
 		const float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
-		CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, ValidatedLocation, Speed, 40.f);
+		
+		CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, ValidatedLocation, Speed, CameraUnitWithTag->MovementAcceptanceRadius);
 	}
 }
 

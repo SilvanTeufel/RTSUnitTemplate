@@ -689,7 +689,7 @@ void AUnitControllerBase::Run(AUnitBase* UnitBase, float DeltaSeconds)
 
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
-	if (Distance <= UnitBase->StopRunTolerance) {
+	if (Distance <= UnitBase->MovementAcceptanceRadius) {
 		UnitBase->SetUnitState(UnitData::Idle);
 	}
 	UnitBase->UnitControlTimer = 0.f;
@@ -746,7 +746,7 @@ void AUnitControllerBase::Chase(AUnitBase* UnitBase, float DeltaSeconds)
         	
             // If the target is flying and we're not, check if we should idle.
             if(UnitBase->UnitToChase->IsFlying && !UnitBase->IsFlying 
-               && DistanceToUnitToChase > UnitBase->StopRunToleranceForFlying)
+               && DistanceToUnitToChase > 100.f)
             {
                 UnitBase->SetUnitState(UnitBase->UnitStatePlaceholder);
             }
@@ -1118,7 +1118,7 @@ void AUnitControllerBase::RunUEPathfinding(AUnitBase* UnitBase, float DeltaSecon
 	const FVector UnitLocation = UnitBase->GetActorLocation();
 	const float Distance = sqrt((UnitLocation.X-UnitBase->RunLocation.X)*(UnitLocation.X-UnitBase->RunLocation.X)+(UnitLocation.Y-UnitBase->RunLocation.Y)*(UnitLocation.Y-UnitBase->RunLocation.Y));
 
-	if (Distance <= UnitBase->StopRunTolerance) {
+	if (Distance <= UnitBase->MovementAcceptanceRadius) {
 		UnitBase->SetUnitState(UnitData::Idle);
 		return;
 	}
@@ -1268,7 +1268,7 @@ void AUnitControllerBase::SetUEPathfindingRandomLocation(AUnitBase* UnitBase, fl
 			
 			UnitBase->UnitControlTimer = 0.f;
 			UnitBase->SetUEPathfinding = true;
-		}else if (Distance <= UnitBase->StopRunTolerance)
+		}else if (Distance <= UnitBase->MovementAcceptanceRadius)
 		{
 				UnitBase->SetUnitState(UnitData::Idle);
 				return;

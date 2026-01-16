@@ -94,7 +94,7 @@ public:
 		const TArray<AUnitBase*>& Units,
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
-		float AcceptanceRadius = 50.0f,
+		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false);
 
 	// Server wrapper to validate and then trigger the multicast from the authority
@@ -104,7 +104,7 @@ public:
 		const TArray<AUnitBase*>& Units,
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
-		float AcceptanceRadius = 50.0f,
+		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false);
 
 	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
@@ -114,7 +114,7 @@ public:
 		const TArray<AUnitBase*>& Units,
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
-		float AcceptanceRadius = 50.0f,
+		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false);
 
 	// Apply owner ability-key toggle on client and refresh UI

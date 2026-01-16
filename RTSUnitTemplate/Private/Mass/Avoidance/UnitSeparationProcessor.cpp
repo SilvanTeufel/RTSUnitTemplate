@@ -52,6 +52,11 @@ void UUnitSeparationProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateStopSeparationTag>(EMassFragmentPresence::None);
+
+	EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	
 	EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);

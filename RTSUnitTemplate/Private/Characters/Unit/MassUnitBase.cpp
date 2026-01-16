@@ -143,6 +143,29 @@ bool AMassUnitBase::AddStopMovementTagToEntity()
  return true;
 }
 
+bool AMassUnitBase::AddStopSeparationTagToEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		return false;
+	}
+
+	// Check if entity is still valid
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): AddStopSeparationTagToEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	EntityManager->Defer().AddTag<FMassStateStopSeparationTag>(EntityHandle);
+	
+	return true;
+}
+
 bool AMassUnitBase::ApplyStopXYMovementTag(bool bApply)
 {
 	FMassEntityManager* EntityManager;
