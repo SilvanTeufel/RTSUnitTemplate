@@ -25,7 +25,7 @@ public:
 	UUnitSeparationProcessor();
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = true;
+	bool Debug = false;
 
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
@@ -43,7 +43,7 @@ protected:
 	float RepulsionStrengthEnemy = 30.f;
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float RepulsionStrengthWorker = 5.f;
+	float RepulsionStrengthWorker = 2.f;
 
 	// If true, only apply separation to units that share the same target entity.
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")

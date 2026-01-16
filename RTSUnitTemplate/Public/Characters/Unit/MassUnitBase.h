@@ -72,6 +72,48 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USelectionDecalComponent* SelectionIcon;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HealthCompCreated = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bForceWidgetPosition = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int HideHealthBarUnitCount = 200;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool HealthBarUpdateTriggered = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	class UWidgetComponent* HealthWidgetComp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float HealthWidgetHeightOffset = 150.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector HealthWidgetRelativeOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UUserWidget> HealthBarWidgetClass;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	class UWidgetComponent* TimerWidgetComp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TimerWidgetHeightOffset = 100.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector TimerWidgetRelativeOffset;
+
+protected:
+	// Cached widget pointers to avoid repeated casting every tick
+	UPROPERTY(Transient)
+	class UUnitBaseHealthBar* CachedHealthBarWidget = nullptr;
+
+	UPROPERTY(Transient)
+	class UUnitTimerWidget* CachedTimerWidget = nullptr;
+
+public:
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	//UAreaDecalComponent* AreaDecalComponent;
 

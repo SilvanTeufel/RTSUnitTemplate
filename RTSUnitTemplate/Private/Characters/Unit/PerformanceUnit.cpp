@@ -40,24 +40,6 @@ APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):
 	if (RootComponent == nullptr) {
 		RootComponent = ObjectInitializer.CreateDefaultSubobject<USceneComponent>(this, TEXT("Root"));
 	}
-
-	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
-	HealthWidgetComp->SetupAttachment(RootComponent);
-	HealthWidgetComp->SetVisibility(true);
-
-	float CapsuleHalfHeight = 88.f;
-	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
-	{
-		CapsuleHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
-	}
-
-	HealthWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + HealthWidgetHeightOffset);
-	HealthWidgetComp->SetRelativeLocation(HealthWidgetRelativeOffset);
-
-	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
-	TimerWidgetComp->SetupAttachment(RootComponent);
-	TimerWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + TimerWidgetHeightOffset);
-	TimerWidgetComp->SetRelativeLocation(TimerWidgetRelativeOffset);
 }
 
 void APerformanceUnit::Tick(float DeltaTime)
@@ -88,11 +70,6 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(APerformanceUnit, HealthWidgetComp);
-	DOREPLIFETIME(APerformanceUnit, TimerWidgetComp);
-	DOREPLIFETIME(APerformanceUnit, HealthWidgetRelativeOffset);
-	DOREPLIFETIME(APerformanceUnit, TimerWidgetRelativeOffset);
-
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactVFX);
 	DOREPLIFETIME(APerformanceUnit, MeleeImpactSound);
 	DOREPLIFETIME(APerformanceUnit, ScaleImpactSound);

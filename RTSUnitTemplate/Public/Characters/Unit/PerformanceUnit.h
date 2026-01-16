@@ -134,41 +134,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TeamVisibilityCheckInterval = 5.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool HealthCompCreated = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool bForceWidgetPosition = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int HideHealthBarUnitCount = 200;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool HealthBarUpdateTriggered = false;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	class UWidgetComponent* HealthWidgetComp;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float HealthWidgetHeightOffset = 150.f;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector HealthWidgetRelativeOffset;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<UUserWidget> HealthBarWidgetClass;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	class UWidgetComponent* TimerWidgetComp;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TimerWidgetHeightOffset = 100.f;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector TimerWidgetRelativeOffset;
-	//UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	//void SetEnemyVisibility(bool IsVisible, int PlayerTeamId);
-	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckViewport();
 
@@ -219,15 +184,8 @@ public:
  	UPROPERTY(Transient)
 		TArray<FTimerHandle> PendingEffectTimers;
 
-		// Cached widget pointers to avoid repeated casting every tick
-		UPROPERTY(Transient)
-		UUnitBaseHealthBar* CachedHealthBarWidget = nullptr;
-		
-		UPROPERTY(Transient)
-		UUnitTimerWidget* CachedTimerWidget = nullptr;
-
-		void StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime);
-		void StopAudioComponent(UAudioComponent* AC, bool bFade, float FadeTime);
+		void StopNiagaraComponent(class UNiagaraComponent* NC, float FadeTime);
+		void StopAudioComponent(class UAudioComponent* AC, bool bFade, float FadeTime);
 		
 		UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool IsInViewport(FVector WorldPosition, float Offset);

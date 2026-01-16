@@ -194,7 +194,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, FVector(200.f, 200.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[SingleMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
 			return;
@@ -308,7 +308,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		FNavLocation NavLoc;
 		// Check the first target location as a representative of the move command.
 		// Using a slightly larger extent to account for formation offsets.
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, FVector(250.f, 250.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
 			return;
@@ -500,7 +500,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	if (NavSys && NewTargetLocations.Num() > 0)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, FVector(250.f, 250.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
 			return;
@@ -644,7 +644,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, FVector(200.f, 200.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[AbilityMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
 			return;
@@ -1179,7 +1179,7 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(GroundLocation, NavLoc, FVector(100.f, 100.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(GroundLocation, NavLoc, NavMeshProjectionExtent))
 		{
 			return;
 		}
@@ -1420,7 +1420,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, FVector(100.f, 100.f, 500.f)))
+		if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
 		{
 			return;
 		}
@@ -1589,7 +1589,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 		if (NavSys)
 		{
 			FNavLocation NavLoc;
-			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, FVector(100.f, 100.f, 500.f)))
+			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
 			{
 				return;
 			}

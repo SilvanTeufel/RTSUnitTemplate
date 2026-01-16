@@ -8,6 +8,8 @@
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Mass/States/ChaseStateProcessor.h"
 #include "MassCommonFragments.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -41,6 +43,26 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	{
 		SelectionIcon->SetupAttachment(RootComponent);
 	}
+
+	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
+	HealthWidgetComp->SetupAttachment(RootComponent);
+	HealthWidgetComp->SetVisibility(true);
+	HealthWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	float CapsuleHalfHeight = 88.f;
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		CapsuleHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+	}
+
+	HealthWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + HealthWidgetHeightOffset);
+	HealthWidgetComp->SetRelativeLocation(HealthWidgetRelativeOffset);
+
+	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
+	TimerWidgetComp->SetupAttachment(RootComponent);
+	TimerWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TimerWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + TimerWidgetHeightOffset);
+	TimerWidgetComp->SetRelativeLocation(TimerWidgetRelativeOffset);
 }
 
 void AMassUnitBase::OnConstruction(const FTransform& Transform)
@@ -65,6 +87,11 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
 	DOREPLIFETIME(AMassUnitBase, FlyHeight);
+
+	DOREPLIFETIME(AMassUnitBase, HealthWidgetComp);
+	DOREPLIFETIME(AMassUnitBase, TimerWidgetComp);
+	DOREPLIFETIME(AMassUnitBase, HealthWidgetRelativeOffset);
+	DOREPLIFETIME(AMassUnitBase, TimerWidgetRelativeOffset);
 }
 
 FVector AMassUnitBase::GetMassActorLocation() const

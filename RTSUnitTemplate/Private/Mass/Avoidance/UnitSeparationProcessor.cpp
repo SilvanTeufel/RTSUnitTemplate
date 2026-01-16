@@ -54,11 +54,8 @@ void UUnitSeparationProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateStopSeparationTag>(EMassFragmentPresence::None);
 
-	EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::None);
-	EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
-	EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
-	
-	EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
+	//EntityQuery.AddTagRequirement<FMassStateGoToBaseTag>(EMassFragmentPresence::None);
+	//EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -116,10 +113,12 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			Info.CapsuleRadius = Characs[i].CapsuleRadius;
 			Info.Target = Targets[i].TargetEntity;
 			
-			Info.bUseWorkerStrength = DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToBaseTag::StaticStruct()) || 
+			Info.bUseWorkerStrength = DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct());
+
+			/*DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToBaseTag::StaticStruct()) || 
 								   DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct()) ||
 								   DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToResourceExtractionTag::StaticStruct());
-
+			*/
 			Units.Add(Info);
 		}
 	};

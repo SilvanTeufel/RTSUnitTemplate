@@ -213,6 +213,10 @@ public:
 	UPROPERTY()
 	ASelectionCircleActor* SelectionCircleActor;
 	
+	/** The extent used when projecting a point to the NavMesh to validate move commands. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Navigation")
+	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
+
 	UFUNCTION()
 	void UpdateSelectionCircles();
 

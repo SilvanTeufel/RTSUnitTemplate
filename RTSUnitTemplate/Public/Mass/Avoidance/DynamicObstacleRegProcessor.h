@@ -20,7 +20,7 @@ public:
 	UDynamicObstacleRegProcessor();
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = true;
+	bool Debug = false;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
