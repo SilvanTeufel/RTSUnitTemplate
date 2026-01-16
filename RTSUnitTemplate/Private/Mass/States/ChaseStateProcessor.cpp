@@ -118,7 +118,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -145,7 +144,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             if (StateFrag.HoldPosition)
             {
                 StateFrag.SwitchingState = true;
-                VelocityList[i].Value = FVector::ZeroVector;
                 auto& Defer = ChunkContext.Defer();
                 Defer.RemoveTag<FMassStateRunTag>(Entity);
                 Defer.RemoveTag<FMassStateChaseTag>(Entity);
@@ -170,7 +168,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                 {
                     StateFrag.SwitchingState = true;
-                    VelocityList[i].Value = FVector::ZeroVector;
                     auto& Defer = ChunkContext.Defer();
                     Defer.RemoveTag<FMassStateRunTag>(Entity);
                     Defer.RemoveTag<FMassStateChaseTag>(Entity);
@@ -213,7 +210,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
             
@@ -277,7 +273,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             {
                 // Queue signal instead of sending directly
                 StopMovement(MoveTarget, World);
-                VelocityList[i].Value = FVector::ZeroVector;
                 if (SignalSubsystem)
                 {
                     // MirrorStopMovement disabled (movement now replicated via Mass bubble)

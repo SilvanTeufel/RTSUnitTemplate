@@ -180,7 +180,7 @@ public:
 	void SetWalkSpeed(float Speed);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float MovementAcceptanceRadius = 5.f;
+		float MovementAcceptanceRadius = 50.f;
 ///////////////////////////////////////////////////////////////////
 
 // related to Animations  //////////////////////////////////////////

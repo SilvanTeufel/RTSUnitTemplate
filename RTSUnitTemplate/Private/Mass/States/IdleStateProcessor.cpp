@@ -35,7 +35,6 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -85,7 +84,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -95,9 +93,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
-            FMassVelocityFragment& VelocityFrag = VelocityList[i];
-            
-            VelocityFrag.Value = FVector::ZeroVector;
             
             
 
