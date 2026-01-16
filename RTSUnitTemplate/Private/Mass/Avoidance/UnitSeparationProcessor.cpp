@@ -33,7 +33,7 @@ UUnitSeparationProcessor::UUnitSeparationProcessor()
 {
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Avoidance;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
-	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
+	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Standalone);
 	bAutoRegisterWithProcessingPhases = true;
 	bRequiresGameThreadExecution = true;
 }
