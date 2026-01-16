@@ -170,9 +170,9 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             const FVector DesiredHorizontalVelocity(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
             const FVector HorizontalAvoidanceForce(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
 
-            FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
-            AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-            FVector HorizontalVelocityDelta = (AccelInput + HorizontalAvoidanceForce) * DeltaTime * 4.f;
+            FVector DesiredAcceleration = (DesiredHorizontalVelocity - CurrentHorizontalVelocity) / DeltaTime;
+            FVector ClampedAcceleration = DesiredAcceleration.GetClampedToMaxSize(Acceleration);
+            FVector HorizontalVelocityDelta = (ClampedAcceleration + HorizontalAvoidanceForce) * DeltaTime;
 
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
             NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);
@@ -229,9 +229,9 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             const FVector DesiredHorizontalVelocity(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
             const FVector HorizontalAvoidanceForce(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
 
-            FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
-            AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-            FVector HorizontalVelocityDelta = (AccelInput + HorizontalAvoidanceForce) * DeltaTime * 4.f;
+            FVector DesiredAcceleration = (DesiredHorizontalVelocity - CurrentHorizontalVelocity) / DeltaTime;
+            FVector ClampedAcceleration = DesiredAcceleration.GetClampedToMaxSize(Acceleration);
+            FVector HorizontalVelocityDelta = (ClampedAcceleration + HorizontalAvoidanceForce) * DeltaTime;
 
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
             NewHorizontalVelocity = NewHorizontalVelocity.GetClampedToMaxSize(MaxSpeed);

@@ -33,6 +33,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
@@ -76,12 +77,14 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         auto SightList = ChunkContext.GetMutableFragmentView<FMassSightFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassAITargetFragment& TargetFrag = TargetList[i];
+            VelocityList[i].Value = FVector::ZeroVector;
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

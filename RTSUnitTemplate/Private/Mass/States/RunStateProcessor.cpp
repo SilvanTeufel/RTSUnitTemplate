@@ -27,6 +27,7 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
     
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
@@ -100,6 +101,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
 
@@ -136,6 +138,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             if (!bHasFriendly && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
+                VelocityList[i].Value = FVector::ZeroVector;
 
                 // Emulate ClientIdle signal by removing all state tags and adding Idle locally via deferred command buffer tied to ChunkContext
                 auto& Defer = ChunkContext.Defer();
@@ -176,6 +179,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Keep mutable if State needs updates
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
             
@@ -251,6 +255,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             else if (!bHasFriendly && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
             {
                 StateFrag.SwitchingState = true;
+                VelocityList[i].Value = FVector::ZeroVector;
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
