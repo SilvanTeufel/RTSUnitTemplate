@@ -33,6 +33,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Save")
     void SetPendingQuickSave(bool bPending);
 
+    UFUNCTION(BlueprintCallable, Category="Save")
+    FString GetUniqueSaveSlotName(const FString& BaseName) const;
+
     // Fallback-Klasse zum Spawn fehlender Einheiten (im Editor/INI konfigurierbar)
     UPROPERTY(EditDefaultsOnly, Category="Save")
     TSubclassOf<AUnitBase> DefaultUnitClass;

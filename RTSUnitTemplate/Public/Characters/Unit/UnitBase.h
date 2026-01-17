@@ -33,6 +33,9 @@ public:
 	UPROPERTY()
 	TObjectPtr<AActor> NavObstacleProxy;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float NavObstaclePadding = -25.0f;
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_RegisterBuildingAsObstacle();
 

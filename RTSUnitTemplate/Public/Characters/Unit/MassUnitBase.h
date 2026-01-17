@@ -270,6 +270,10 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastContinuousUnitRotation(float YawRate, bool bEnable);
 
+	// Smoothly move the whole unit (Actor) by a relative offset (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastMoveUnitLinear(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -363,12 +367,6 @@ protected:
 	FTimerHandle UnitRotateTimerHandle;
 	void UnitRotation_Step();
 
-	// Continuous constant rotation state for the unit itself
-	bool bContinuousUnitRotationEnabled = false;
-	float ContinuousUnitYawRate = 0.f;
-	FTimerHandle ContinuousUnitRotationTimerHandle;
-	void ContinuousUnitRotation_Step();
-
 	// Lightweight tween state for moving arbitrary static mesh components
 	struct FStaticMeshMoveTween
 	{
@@ -378,6 +376,18 @@ protected:
 		FVector Start = FVector::ZeroVector;
 		FVector Target = FVector::ZeroVector;
 	};
+
+	// Smooth movement tween for the unit itself
+	FStaticMeshMoveTween UnitMoveTween;
+	FTimerHandle UnitMoveTimerHandle;
+	void UnitMove_Step();
+
+	// Continuous constant rotation state for the unit itself
+	bool bContinuousUnitRotationEnabled = false;
+	float ContinuousUnitYawRate = 0.f;
+	FTimerHandle ContinuousUnitRotationTimerHandle;
+	void ContinuousUnitRotation_Step();
+
 	void StaticMeshMoves_Step();
 	FTimerHandle StaticMeshMoveTimerHandle;
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshMoveTween> ActiveStaticMeshMoveTweens;

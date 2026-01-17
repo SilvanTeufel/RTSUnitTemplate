@@ -30,7 +30,7 @@ bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(const FVect
 
 void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const FVector& TargetLocation)
 {
-	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes) return;
+	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes || bIsCameraMovementHaltedByUI) return;
 
 	if (CameraUnitWithTag)
 	{
@@ -1829,6 +1829,10 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         if (CameraUnitWithTag)
         {
         	bool bCanMove = true;
+			if (bIsCameraMovementHaltedByUI)
+			{
+				bCanMove = false;
+			}
         	FMassEntityManager* EntityManager = nullptr;
         	FMassEntityHandle EntityHandle;
         	bool bHasCastingTag = false;

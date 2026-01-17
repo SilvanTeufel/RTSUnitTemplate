@@ -255,9 +255,26 @@ void UGameSaveSubsystem::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 
     if (bPendingQuickSave)
     {
-        SaveCurrentGame(TEXT("QuickSave"));
+        FString NewSlotName = GetUniqueSaveSlotName(TEXT("QuickSave"));
+        SaveCurrentGame(NewSlotName);
         bPendingQuickSave = false;
     }
+}
+
+FString UGameSaveSubsystem::GetUniqueSaveSlotName(const FString& BaseName) const
+{
+    if (!UGameplayStatics::DoesSaveGameExist(BaseName, 0))
+    {
+        return BaseName;
+    }
+
+    int32 Counter = 1;
+    while (UGameplayStatics::DoesSaveGameExist(FString::Printf(TEXT("%s_%d"), *BaseName, Counter), 0))
+    {
+        Counter++;
+    }
+
+    return FString::Printf(TEXT("%s_%d"), *BaseName, Counter);
 }
 
 void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* SaveData)

@@ -26,6 +26,9 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
     void StartMapSwitch();
 
+    UFUNCTION()
+    void CloseWidget();
+
 protected:
     virtual void BeginPlay() override;
 
@@ -73,6 +76,8 @@ protected:
 private:
     UPROPERTY()
     UMapSwitchWidget* ActiveWidget;
+
+    FTimerHandle WidgetCloseTimerHandle;
 
     UPROPERTY(Replicated)
     float CurrentAngle = 0.f;

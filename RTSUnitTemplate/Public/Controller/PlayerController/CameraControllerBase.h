@@ -321,6 +321,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool LockCameraToCharacter = false;
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsCameraMovementHaltedByUI = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool RotateBehindCharacterIfLocked = true;
 

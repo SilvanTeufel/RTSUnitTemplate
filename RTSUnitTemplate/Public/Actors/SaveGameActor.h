@@ -16,6 +16,9 @@ class RTSUNITTEMPLATE_API ASaveGameActor : public AActor
 public:
     ASaveGameActor();
 
+    UFUNCTION()
+    void CloseWidget();
+
 protected:
     virtual void BeginPlay() override;
 
@@ -39,4 +42,6 @@ protected:
 private:
     UPROPERTY()
     USaveGameWidget* ActiveWidget;
+
+    FTimerHandle WidgetCloseTimerHandle;
 };

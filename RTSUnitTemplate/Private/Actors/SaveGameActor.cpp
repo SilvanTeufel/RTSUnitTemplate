@@ -5,6 +5,8 @@
 #include "Widgets/SaveGameWidget.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
+#include "TimerManager.h"
 
 ASaveGameActor::ASaveGameActor()
 {
@@ -49,6 +51,11 @@ void ASaveGameActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor*
     // Nur anzeigen, wenn die Unit dem lokalen Team gehört
     if (Unit->TeamId == CustomPC->SelectableTeamId)
     {
+        if (WidgetCloseTimerHandle.IsValid())
+        {
+            GetWorldTimerManager().ClearTimer(WidgetCloseTimerHandle);
+        }
+
         if (SaveGameWidgetClass && !ActiveWidget)
         {
             ActiveWidget = CreateWidget<USaveGameWidget>(LocalPC, SaveGameWidgetClass);
@@ -56,6 +63,11 @@ void ASaveGameActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor*
             {
                 ActiveWidget->InitializeWidget(SaveSlotName, this);
                 ActiveWidget->AddToViewport();
+
+                if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))
+                {
+                    CameraPC->bIsCameraMovementHaltedByUI = true;
+                }
             }
         }
     }
@@ -80,8 +92,27 @@ void ASaveGameActor::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* O
     {
         if (ActiveWidget)
         {
-            ActiveWidget->RemoveFromParent();
-            ActiveWidget = nullptr;
+            GetWorldTimerManager().SetTimer(WidgetCloseTimerHandle, this, &ASaveGameActor::CloseWidget, 5.0f, false);
         }
+    }
+}
+
+void ASaveGameActor::CloseWidget()
+{
+    if (WidgetCloseTimerHandle.IsValid())
+    {
+        GetWorldTimerManager().ClearTimer(WidgetCloseTimerHandle);
+    }
+
+    if (ActiveWidget)
+    {
+        ActiveWidget->RemoveFromParent();
+        ActiveWidget = nullptr;
+    }
+
+    APlayerController* LocalPC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))
+    {
+        CameraPC->bIsCameraMovementHaltedByUI = false;
     }
 }

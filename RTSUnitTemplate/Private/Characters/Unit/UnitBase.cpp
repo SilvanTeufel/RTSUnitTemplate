@@ -7,6 +7,7 @@
 #include "NavCollision.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Actors/Projectile.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -107,6 +108,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	SetMinNetUpdateFrequency(1);
 	GetCharacterMovement()->SetIsReplicated(false);
 	GetCapsuleComponent()->SetIsReplicated(false);
+	NavObstaclePadding = 5.0f;
 }
 
 // Called when the game starts or when spawned
@@ -273,6 +275,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, UnitControlTimer);
 	DOREPLIFETIME(AUnitBase, LineTraceZDistance);
 	DOREPLIFETIME(AUnitBase, CanActivateAbilities);
+	DOREPLIFETIME(AUnitBase, NavObstaclePadding);
 
 	DOREPLIFETIME(AUnitBase, EvadeDistance); // Added for Build
 	DOREPLIFETIME(AUnitBase, EvadeDistanceChase); // Added for Build
@@ -1321,39 +1324,65 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// Try to find a capsule collision component first…
-	UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
 	FBox BoundsBox;
 
-	if (Capsule)
+	if (bUseSkeletalMovement)
 	{
-		// Pull radius & half‑height (accounting for scale)
-		const float Radius = Capsule->GetScaledCapsuleRadius();
-		const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
-		const FVector Center = Capsule->GetComponentLocation();
-
-		// Build an FBox from center±extent
-		const FVector Extents = FVector(Radius, Radius, HalfHeight);
-		BoundsBox = FBox(Center - Extents, Center + Extents);
-	}
-	else
-	{
-		// Fallback to component bounding box
-		FBox ComponentBB = GetComponentsBoundingBox();
-		if (!ComponentBB.IsValid)
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
-			return;
+			BoundsBox = MeshComp->Bounds.GetBox();
 		}
+	}
+	else if (ISMComponent)
+	{
+		BoundsBox = ISMComponent->Bounds.GetBox();
+	}
 
-		constexpr float BB_Padding = 10.0f;
-		BoundsBox = ComponentBB.ExpandBy(BB_Padding);
+	if (!BoundsBox.IsValid)
+	{
+		// Try to find a capsule collision component first…
+		UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
+
+		if (Capsule)
+		{
+			// Pull radius & half‑height (accounting for scale)
+			const float Radius = Capsule->GetScaledCapsuleRadius();
+			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+			const FVector Center = Capsule->GetComponentLocation();
+
+			// Build an FBox from center±extent
+			const FVector Extents = FVector(Radius, Radius, HalfHeight);
+			BoundsBox = FBox(Center - Extents, Center + Extents);
+		}
+		else
+		{
+			// Fallback to component bounding box
+			BoundsBox = GetComponentsBoundingBox();
+			if (!BoundsBox.IsValid)
+			{
+				return;
+			}
+		}
 	}
 
 	// 2. Pad the bounds slightly to ensure full coverage
-	constexpr float Final_Padding = 10.0f; // Small padding
-	const FBox PaddedBounds = BoundsBox.ExpandBy(FVector(Final_Padding));
+	// Ensure PaddedBounds remains valid even with negative padding
+	FBox PaddedBounds = BoundsBox.ExpandBy(NavObstaclePadding);
+	if (!PaddedBounds.IsValid)
+	{
+		PaddedBounds = FBox(BoundsBox.GetCenter(), BoundsBox.GetCenter());
+	}
 	const FVector Center = PaddedBounds.GetCenter();
-	const FVector Extent = PaddedBounds.GetExtent();
+	FVector Extent = PaddedBounds.GetExtent();
+	
+	// Ensure Extent is non-negative
+	Extent.X = FMath::Max(0.0f, Extent.X);
+	Extent.Y = FMath::Max(0.0f, Extent.Y);
+	Extent.Z = FMath::Max(0.0f, Extent.Z);
+
+	// Disable this actor's own navigation relevance so the proxy can take over
+	// This allows negative padding to actually shrink the obstacle on the navmesh
+	SetCanAffectNavigationGeneration(false, true);
 
 	// 3. Spawn a dedicated, lightweight actor to hold the nav modifier
 	NavObstacleProxy = World->SpawnActor<AActor>();
@@ -1361,7 +1390,7 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	{
 		return;
 	}
-
+	
 	// 4. Create and configure the Box Component for the volume
 	UBoxComponent* BoxComp = NewObject<UBoxComponent>(NavObstacleProxy);
 	BoxComp->SetWorldLocation(Center);
@@ -1394,6 +1423,9 @@ void AUnitBase::Multicast_UnregisterObstacle_Implementation()
 		// Destroy our proxy actor
 		NavObstacleProxy->Destroy();
 		NavObstacleProxy = nullptr;
+
+		// Re-enable navigation on this actor
+		SetCanAffectNavigationGeneration(true, true);
 
 		// Mark the area dirty again so the navmesh can reclaim the space
 		if (UWorld* World = GetWorld())

@@ -89,16 +89,24 @@ void UMapSwitchWidget::OnYesClicked()
         PC->Server_TravelToMap(TargetMapName, Tag);
     }
 
-    // The widget can be closed immediately.
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }
 
 void UMapSwitchWidget::OnNoClicked()
 {
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }
 
 void UMapSwitchWidget::OnOkClicked()
 {
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }

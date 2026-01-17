@@ -10,6 +10,8 @@
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "System/MapSwitchSubsystem.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
+#include "TimerManager.h"
 
 #define LOCTEXT_NAMESPACE "MapSwitchActor"
 
@@ -136,6 +138,11 @@ void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor
 
     if (Unit->TeamId == CustomPC->SelectableTeamId)
     {
+        if (WidgetCloseTimerHandle.IsValid())
+        {
+            GetWorldTimerManager().ClearTimer(WidgetCloseTimerHandle);
+        }
+
         if (MapSwitchWidgetClass && !ActiveWidget)
         {
             ActiveWidget = CreateWidget<UMapSwitchWidget>(LocalPC, MapSwitchWidgetClass);
@@ -144,6 +151,11 @@ void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor
                 FString MapToTravel = TargetMap.IsNull() ? "" : TargetMap.ToSoftObjectPath().GetLongPackageName();
                 ActiveWidget->InitializeWidget(MapToTravel, this, bIsEnabled);
                 ActiveWidget->AddToViewport();
+
+                if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))
+                {
+                    CameraPC->bIsCameraMovementHaltedByUI = true;
+                }
             }
         }
     }
@@ -167,8 +179,27 @@ void AMapSwitchActor::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* 
     {
         if (ActiveWidget)
         {
-            ActiveWidget->RemoveFromParent();
-            ActiveWidget = nullptr;
+            GetWorldTimerManager().SetTimer(WidgetCloseTimerHandle, this, &AMapSwitchActor::CloseWidget, 5.0f, false);
         }
+    }
+}
+
+void AMapSwitchActor::CloseWidget()
+{
+    if (WidgetCloseTimerHandle.IsValid())
+    {
+        GetWorldTimerManager().ClearTimer(WidgetCloseTimerHandle);
+    }
+
+    if (ActiveWidget)
+    {
+        ActiveWidget->RemoveFromParent();
+        ActiveWidget = nullptr;
+    }
+
+    APlayerController* LocalPC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))
+    {
+        CameraPC->bIsCameraMovementHaltedByUI = false;
     }
 }

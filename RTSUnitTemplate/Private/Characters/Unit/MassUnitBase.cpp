@@ -1915,6 +1915,56 @@ void AMassUnitBase::ContinuousUnitRotation_Step()
 	SyncRotation();
 }
 
+void AMassUnitBase::MulticastMoveUnitLinear_Implementation(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent)
+{
+	// Snap if no duration
+	if (InMoveDuration <= 0.f)
+	{
+		const FVector TargetLoc = GetActorLocation() + GetActorRotation().RotateVector(RelativeLocationChange);
+		SetActorLocation(TargetLoc, false, nullptr, ETeleportType::TeleportPhysics);
+		SyncTranslation();
+		return;
+	}
+
+	// Initialize interpolation state
+	GetWorldTimerManager().ClearTimer(UnitMoveTimerHandle);
+	UnitMoveTween.Duration = InMoveDuration;
+	UnitMoveTween.Elapsed = 0.f;
+	UnitMoveTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
+	UnitMoveTween.Start = GetActorLocation();
+	UnitMoveTween.Target = UnitMoveTween.Start + GetActorRotation().RotateVector(RelativeLocationChange);
+
+	// Immediate step then start timer
+	UnitMove_Step();
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	GetWorldTimerManager().SetTimer(UnitMoveTimerHandle, this, &AMassUnitBase::UnitMove_Step, TimerRate, true);
+}
+
+void AMassUnitBase::UnitMove_Step()
+{
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	UnitMoveTween.Elapsed += Dt;
+
+	float Alpha = (UnitMoveTween.Duration > 0.f) ? FMath::Clamp(UnitMoveTween.Elapsed / UnitMoveTween.Duration, 0.f, 1.f) : 1.f;
+	if (!FMath::IsNearlyEqual(UnitMoveTween.EaseExp, 1.f))
+	{
+		Alpha = FMath::Pow(Alpha, UnitMoveTween.EaseExp);
+	}
+
+	const FVector NewLocation = FMath::Lerp(UnitMoveTween.Start, UnitMoveTween.Target, Alpha);
+	SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	SyncTranslation();
+
+	if (Alpha >= 1.f)
+	{
+		SetActorLocation(UnitMoveTween.Target, false, nullptr, ETeleportType::TeleportPhysics);
+		SyncTranslation();
+		GetWorldTimerManager().ClearTimer(UnitMoveTimerHandle);
+	}
+}
+
 void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent)
 {
 	// Cache parameters

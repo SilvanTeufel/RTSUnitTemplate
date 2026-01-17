@@ -162,12 +162,18 @@ void USaveGameWidget::OnYesClicked()
         }
     }
 
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }
 
 void USaveGameWidget::OnNoClicked()
 {
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }
 
 void USaveGameWidget::OnLoadClicked()
@@ -193,5 +199,8 @@ void USaveGameWidget::OnLoadClicked()
         }
     }
 
-    RemoveFromParent();
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
 }
