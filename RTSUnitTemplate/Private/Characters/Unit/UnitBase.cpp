@@ -1326,6 +1326,7 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 
 	FBox BoundsBox;
 
+	/*
 	if (bUseSkeletalMovement)
 	{
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
@@ -1337,8 +1338,8 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	{
 		BoundsBox = ISMComponent->Bounds.GetBox();
 	}
-
-	if (!BoundsBox.IsValid)
+	*/
+	//if (!BoundsBox.IsValid)
 	{
 		// Try to find a capsule collision component first…
 		UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
@@ -1380,10 +1381,6 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	Extent.Y = FMath::Max(0.0f, Extent.Y);
 	Extent.Z = FMath::Max(0.0f, Extent.Z);
 
-	// Disable this actor's own navigation relevance so the proxy can take over
-	// This allows negative padding to actually shrink the obstacle on the navmesh
-	SetCanAffectNavigationGeneration(false, true);
-
 	// 3. Spawn a dedicated, lightweight actor to hold the nav modifier
 	NavObstacleProxy = World->SpawnActor<AActor>();
 	if (!NavObstacleProxy)
@@ -1423,9 +1420,6 @@ void AUnitBase::Multicast_UnregisterObstacle_Implementation()
 		// Destroy our proxy actor
 		NavObstacleProxy->Destroy();
 		NavObstacleProxy = nullptr;
-
-		// Re-enable navigation on this actor
-		SetCanAffectNavigationGeneration(true, true);
 
 		// Mark the area dirty again so the navmesh can reclaim the space
 		if (UWorld* World = GetWorld())

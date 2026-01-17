@@ -1582,23 +1582,29 @@ void ACustomControllerBase::LeftClickPressedMass()
     else if (AttackToggled)
     {
         // 1) get world hit under cursor for ground and pawn
-        FHitResult Hit;
-        GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
-		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
-		if (NavSys)
-		{
-			FNavLocation NavLoc;
-			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
-			{
-				return;
-			}
-		}
-
+    	
         FHitResult HitPawn;
         GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
         AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
 
+
+    	
+    	FHitResult Hit;
+    	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+    	if (!HitPawn.bBlockingHit)
+    	{
+    		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+    		if (NavSys)
+    		{
+    			FNavLocation NavLoc;
+    			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
+    			{
+    				return;
+    			}
+    		}
+    	}
+    	
         int32 NumUnits = SelectedUnits.Num();
         if (NumUnits == 0) return;
 
