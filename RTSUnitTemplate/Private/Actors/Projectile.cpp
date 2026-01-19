@@ -51,6 +51,10 @@ namespace
 		if (const UCapsuleComponent* Capsule = Target->FindComponentByClass<UCapsuleComponent>())
 		{
 			Radius2D = Capsule->GetScaledCapsuleRadius();
+			if (const UMassActorBindingComponent* BindingComponent = Target->FindComponentByClass<UMassActorBindingComponent>())
+			{
+				Radius2D += BindingComponent->AdditionalCapsuleRadius;
+			}
 		}
 		else
 		{

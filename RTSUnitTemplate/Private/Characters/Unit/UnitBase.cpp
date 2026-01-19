@@ -1347,9 +1347,14 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 		if (Capsule)
 		{
 			// Pull radius & half‑height (accounting for scale)
-			const float Radius = Capsule->GetScaledCapsuleRadius();
+			float Radius = Capsule->GetScaledCapsuleRadius();
 			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
 			const FVector Center = Capsule->GetComponentLocation();
+
+			if (const UMassActorBindingComponent* BindingComponent = FindComponentByClass<UMassActorBindingComponent>())
+			{
+				Radius += BindingComponent->AdditionalCapsuleRadius;
+			}
 
 			// Build an FBox from center±extent
 			const FVector Extents = FVector(Radius, Radius, HalfHeight);
