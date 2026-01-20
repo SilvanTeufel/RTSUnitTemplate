@@ -149,4 +149,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool StopSeparation = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool GroundAlignment = true;
 };
