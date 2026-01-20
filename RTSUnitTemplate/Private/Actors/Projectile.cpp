@@ -834,9 +834,9 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
+			ShootingUnit->IncreaseExperience();
 		}
 				
-		ShootingUnit->IncreaseExperience();
 		if (UnitToHit->DefensiveAbilityID != EGASAbilityInputID::None)
 		{
 			UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
@@ -941,7 +941,6 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
 		}
 		
-		ShootingUnit->IncreaseExperience();
 		if (UnitToHit->DefensiveAbilityID != EGASAbilityInputID::None)
 		{
 			UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);

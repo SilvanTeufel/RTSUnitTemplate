@@ -1524,6 +1524,11 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         }
                         
                         StrongAttacker->ServerMeeleImpactEvent();
+
+                        if (StrongAttacker->TeamId != StrongTarget->TeamId)
+                        {
+                            StrongAttacker->IncreaseExperience();
+                        }
                         
                         // Fire melee impact VFX/SFX at the target's location via multicast RPC
                         if (APerformanceUnit* PerfAttacker = Cast<APerformanceUnit>(StrongAttacker))
