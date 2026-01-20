@@ -2915,6 +2915,25 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 
 		NewConstruction->FlyHeight = WA->GetActorLocation().Z - GroundZ;
 		NewConstruction->TeamId = Unit->TeamId;
+
+		// Ensure every runtime-spawned construction unit gets a unique UnitIndex on the server
+		// (level-placed units are assigned in ARTSGameModeBase::FillUnitArrays).
+		if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+		{
+			if (NewConstruction->UnitIndex <= 0)
+			{
+				GM->AddUnitIndexAndAssignToAllUnitsArrayWithIndex(NewConstruction, INDEX_NONE, FUnitSpawnParameter());
+			}
+			else
+			{
+				// Make sure the unit is tracked by the authoritative unit list as well
+				if (!GM->AllUnits.Contains(NewConstruction))
+				{
+					GM->AllUnits.Add(NewConstruction);
+				}
+			}
+		}
+
 		if (WA->BuildingClass)
 		{
 			if (ABuildingBase* BuildingCDO = WA->BuildingClass->GetDefaultObject<ABuildingBase>())

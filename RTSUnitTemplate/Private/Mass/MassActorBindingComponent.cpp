@@ -28,6 +28,7 @@
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
 #include "MassReplicationSubsystem.h"
@@ -272,34 +273,46 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			// handles the actual NetID assignment from registry.
 			
 			// Server: assign NetID and update authoritative registry so clients can reconcile
-   if (UWorld* WorldPtr = GetWorld())
+			if (UWorld* WorldPtr = GetWorld())
 			{
 				if (WorldPtr->GetNetMode() != NM_Client)
 				{
 					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
 					{
- 					// Skip registration if the owning unit is dead
-						AUnitBase* UnitBaseLocal2 = Cast<AUnitBase>(MyOwner);
-						if (UnitBaseLocal2 && UnitBaseLocal2->UnitState == UnitData::Dead)
-						{
-							// Do not assign NetID or add to registry for dead units
-						}
-						else if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
-						{
-							const uint32 NewID = Reg->GetNextNetID();
-							NetFrag->NetID = FMassNetworkID(NewID);
-							const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
-							const int32 UnitIndex = (Cast<AUnitBase>(MyOwner)) ? Cast<AUnitBase>(MyOwner)->UnitIndex : INDEX_NONE;
-							FUnitRegistryItem* Existing = nullptr;
-							if (UnitIndex != INDEX_NONE)
+							// Skip registration if the owning unit is dead
+							AUnitBase* UnitBaseLocal2 = Cast<AUnitBase>(MyOwner);
+							if (UnitBaseLocal2 && UnitBaseLocal2->UnitState == UnitData::Dead)
 							{
-								Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
+								// Do not assign NetID or add to registry for dead units
 							}
-							
-							if (Existing)
+							else if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
 							{
-								Existing->OwnerName = OwnerName;
-								Existing->UnitIndex = UnitIndex;
+								// Ensure the unit has a valid unique UnitIndex before entering the registry.
+								int32 UnitIndex = UnitBaseLocal2 ? UnitBaseLocal2->UnitIndex : INDEX_NONE;
+								if (UnitBaseLocal2 && UnitIndex <= 0)
+								{
+									if (ARTSGameModeBase* GM = WorldPtr->GetAuthGameMode<ARTSGameModeBase>())
+									{
+										GM->AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBaseLocal2, INDEX_NONE, FUnitSpawnParameter());
+										UnitIndex = UnitBaseLocal2->UnitIndex;
+									}
+								}
+								if (UnitIndex <= 0)
+								{
+									// Cannot safely register without a stable UnitIndex.
+									// (Should not happen in normal flow; runtime-spawn paths must assign UnitIndex.)
+									return NewMassEntityHandle;
+								}
+
+								const uint32 NewID = Reg->GetNextNetID();
+								NetFrag->NetID = FMassNetworkID(NewID);
+								const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
+								FUnitRegistryItem* Existing = Reg->Registry.FindByUnitIndex(UnitIndex);
+							
+								if (Existing)
+								{
+									Existing->OwnerName = OwnerName;
+									Existing->UnitIndex = UnitIndex;
 								Existing->NetID = NetFrag->NetID;
 								Reg->Registry.MarkItemDirty(*Existing);
 							}
@@ -311,9 +324,9 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 								Reg->Registry.Items[NewIdx2].NetID = NetFrag->NetID;
 								Reg->Registry.MarkItemDirty(Reg->Registry.Items[NewIdx2]);
 							}
-							Reg->Registry.MarkArrayDirty();
-							Reg->ForceNetUpdate();
-						}
+								Reg->Registry.MarkArrayDirty();
+								Reg->ForceNetUpdate();
+							}
 					}
 				}
 			}
@@ -715,9 +728,11 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			}
 			
 			bNeedsMassBuildingSetup = false;
-			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
-			UnitBase->bIsMassUnit = true;
-			UnitBase->CheckTeamVisibility();
+			if (AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner))
+			{
+				UnitBase->bIsMassUnit = true;
+				UnitBase->CheckTeamVisibility();
+			}
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
 			{
@@ -730,15 +745,26 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 						{
 							if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*WorldPtr))
 							{
+								// Ensure stable UnitIndex before entering registry
+								int32 UnitIdxVal = UnitBaseLocal->UnitIndex;
+								if (UnitIdxVal <= 0)
+								{
+									if (ARTSGameModeBase* GM = WorldPtr->GetAuthGameMode<ARTSGameModeBase>())
+									{
+										GM->AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBaseLocal, INDEX_NONE, FUnitSpawnParameter());
+										UnitIdxVal = UnitBaseLocal->UnitIndex;
+									}
+								}
+								if (UnitIdxVal <= 0)
+								{
+									return NewMassEntityHandle;
+								}
+
 								const uint32 NewID = Reg->GetNextNetID();
 								NetFrag->NetID = FMassNetworkID(NewID);
 								const FName OwnerName = MyOwner ? MyOwner->GetFName() : NAME_None;
-								const int32 UnitIdxVal = UnitBaseLocal ? UnitBaseLocal->UnitIndex : INDEX_NONE;
 								FUnitRegistryItem* Existing = nullptr;
-								if (UnitIdxVal != INDEX_NONE)
-								{
-									Existing = Reg->Registry.FindByUnitIndex(UnitIdxVal);
-								}
+								Existing = Reg->Registry.FindByUnitIndex(UnitIdxVal);
 								
 								if (Existing)
 								{

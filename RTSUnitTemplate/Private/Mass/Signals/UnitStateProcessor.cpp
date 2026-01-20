@@ -3381,6 +3381,24 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				// Assign critical properties BEFORE finishing spawn so they're valid during BeginPlay/replication
 				NewConstruction->FlyHeight = BaseLoc.Z - GroundZ; 
 				NewConstruction->TeamId = UnitBase->TeamId;
+
+				// Ensure every runtime-spawned construction unit gets a unique UnitIndex on the server.
+				// Without this, registry/linking can become unstable under lag.
+				if (ARTSGameModeBase* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARTSGameModeBase>() : nullptr)
+				{
+					if (NewConstruction->UnitIndex <= 0)
+					{
+						GM->AddUnitIndexAndAssignToAllUnitsArrayWithIndex(NewConstruction, INDEX_NONE, FUnitSpawnParameter());
+					}
+					else
+					{
+						if (!GM->AllUnits.Contains(NewConstruction))
+						{
+							GM->AllUnits.Add(NewConstruction);
+						}
+					}
+				}
+
 				// Assign the BuildingClass DefaultAttributeEffect to the ConstructionUnit so it gets the same attributes
 				if (UnitBase->BuildArea && UnitBase->BuildArea->BuildingClass)
 				{
