@@ -185,8 +185,10 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
 
 
-		if(ShootingUnit->bUseSkeletalMovement)
-			ShooterLocation = ShootingUnit->GetActorLocation();
+		if (ShootingUnit->bUseSkeletalMovement)
+		{
+			ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
+		}
 		else
 		{
 			FTransform InstanceXform;
@@ -217,11 +219,17 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 		}
 	}
 	
-	if(ShootingActor)
-		ShooterLocation = ShootingActor->GetActorLocation();
-	
-	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	if (ShootingUnit && ShootingUnit->bUseSkeletalMovement)
+	{
+		ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
+	}
+	else if (Shooter)
+	{
+		ShooterLocation = Shooter->GetActorLocation();
+	}
+	
+	
 	if(ShootingUnit)
 	{
 		//Damage = ShootingUnit->Attributes->GetAttackDamage();
@@ -240,10 +248,16 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	TargetLocation = Aim;
 	SetOwner(Shooter);
 	
-	if(ShootingActor)
-		ShooterLocation = ShootingActor->GetActorLocation();
-	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	if (ShootingUnit && ShootingUnit->bUseSkeletalMovement)
+	{
+		ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
+	}
+	else if (Shooter)
+	{
+		ShooterLocation = Shooter->GetActorLocation();
+	}
+	
 	if(ShootingUnit)
 	{
 		//Damage = ShootingUnit->Attributes->GetAttackDamage();

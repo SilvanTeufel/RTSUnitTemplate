@@ -751,6 +751,27 @@ void AUnitBase::SetTimerWidgetCastingColor(FLinearColor Color)
 }
 
 
+FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) const
+{
+	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
+
+	// 1. Try to find a component with the specific tag
+	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
+	if (Comps.Num() > 0)
+	{
+		if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
+		{
+			return SpawnComp->GetComponentLocation();
+		}
+	}
+
+	// 2. Fallback to default offset logic
+	const FVector ShootingUnitLocation = GetMassActorLocation();
+	const FVector RotatedProjectileSpawnOffset = GetActorRotation().RotateVector(ProjectileSpawnOffset);
+	return ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector() + RotatedProjectileSpawnOffset + AdditionalOffset;
+}
+
+
 void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker) // FVector TargetLocation
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
@@ -762,13 +783,8 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	if(ShootingUnit)
 	{
 
-
-
-		FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation(); 
-		
 		FTransform Transform;
-		const FVector RotatedProjectileSpawnOffset = ShootingUnit->GetActorRotation().RotateVector(ProjectileSpawnOffset);
-		Transform.SetLocation(ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset()*ShootingUnit->GetActorForwardVector() + RotatedProjectileSpawnOffset);
+		Transform.SetLocation(ShootingUnit->GetProjectileSpawnLocation());
 
 
 		// 2) Figure out the exact world‐space "aim" point
@@ -779,7 +795,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 				AimLocation = UnitTarget->GetMassActorLocation(); 
 		}
 		
-		FVector Direction = (AimLocation - ShootingUnitLocation).GetSafeNormal();
+		FVector Direction = (AimLocation - Transform.GetLocation()).GetSafeNormal();
 		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
 
 		Transform.SetRotation(FQuat(InitialRotation));
@@ -850,14 +866,9 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
         if (ShootingUnit)
         {
             FTransform SpawnXf;
-            const FVector RotatedProjectileSpawnOffset = ShootingUnit->GetActorRotation().RotateVector(ProjectileSpawnOffset);
-            SpawnXf.SetLocation(
-            ShootingUnitLocation
-                + Attributes->GetProjectileScaleActorDirectionOffset() * ShootingUnit->GetActorForwardVector()
-                + RotatedProjectileSpawnOffset + SpawnOffset
-            );
+            SpawnXf.SetLocation(ShootingUnit->GetProjectileSpawnLocation(SpawnOffset));
 
-            const FVector Dir          = (LocationToShoot - ShootingUnitLocation).GetSafeNormal();
+            const FVector Dir          = (LocationToShoot - SpawnXf.GetLocation()).GetSafeNormal();
             const FRotator InitialRot  = Dir.Rotation() + ProjectileRotationOffset;
             SpawnXf.SetRotation(FQuat(InitialRot));
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
@@ -911,10 +922,8 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
 
     // Base spawn‐origin offset
-    const FVector RotatedProjectileSpawnOffset = GetActorRotation().RotateVector(ProjectileSpawnOffset);
-    const FVector SpawnOrigin = SpawnerLocationForAimDir
-        + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector()
-        + RotatedProjectileSpawnOffset;
+    FVector SpawnOrigin = GetProjectileSpawnLocation();
+
 
     for (int32 i = 0; i < ProjectileCount; ++i)
     {

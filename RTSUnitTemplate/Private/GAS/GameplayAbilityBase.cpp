@@ -450,11 +450,9 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 		if(ShootingUnit)
 		{
 			FTransform Transform;
-			Transform.SetLocation(ShootingUnit->GetActorLocation() + ShootingUnit->Attributes->GetProjectileScaleActorDirectionOffset()*ShootingUnit->GetActorForwardVector() + ShootingUnit->ProjectileSpawnOffset);
+			Transform.SetLocation(ShootingUnit->GetProjectileSpawnLocation());
 
-
-
-			FVector Direction = (LocationToShoot - ShootingUnit->GetActorLocation()).GetSafeNormal(); // Target->GetActorLocation()
+			FVector Direction = (LocationToShoot - Transform.GetLocation()).GetSafeNormal(); // Target->GetActorLocation()
 			FRotator InitialRotation = Direction.Rotation() + ShootingUnit->ProjectileRotationOffset;
 			
 			Transform.SetRotation(FQuat(InitialRotation));

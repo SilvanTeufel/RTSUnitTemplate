@@ -313,6 +313,14 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClassWithAim(FVector Aim, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f);
 	
+	/** 
+	 * Returns the world location for spawning projectiles.
+	 * Checks for a USceneComponent with the tag "ProjectileSpawn" first.
+	 * Falls back to standard offset logic if not found.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
+	FVector GetProjectileSpawnLocation(const FVector& AdditionalOffset = FVector::ZeroVector) const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;
 
