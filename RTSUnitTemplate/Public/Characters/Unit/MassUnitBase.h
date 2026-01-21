@@ -266,7 +266,7 @@ public:
 	// Continuously rotate an ISM instance's Yaw to face UnitToChase (runs on server and clients)
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastRotateISMYawToChase(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
+	void MulticastRotateISMYawToChase(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees, bool bTeleport);
 
 	// Continuously rotate the whole unit's Yaw to face UnitToChase (runs on server and clients)
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
@@ -344,6 +344,7 @@ protected:
 		float EaseExp = 1.f;
 		FQuat Start = FQuat::Identity;
 		FQuat Target = FQuat::Identity;
+		bool bTeleport = true;
 	};
 	
 	struct FISMInstanceKey
@@ -378,6 +379,7 @@ protected:
 		float Duration = 0.f;
 		float EaseExp = 1.f;
 		float OffsetDegrees = 0.f;
+		bool bTeleport = true;
 	};
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FYawFollowData> ActiveYawFollows;
 	FTimerHandle StaticMeshYawFollowTimerHandle;

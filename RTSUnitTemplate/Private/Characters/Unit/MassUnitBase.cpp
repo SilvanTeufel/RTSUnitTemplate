@@ -1081,7 +1081,7 @@ void AMassUnitBase::InitializeUnitMode()
 		else
 		{
 			// Update the existing instance to be at the component's local origin.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, true);
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, false);
 			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
 		}
 	}
@@ -1102,7 +1102,7 @@ int32 AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InIS
 	}
 	else
 	{
-		InISMComponent->UpdateInstanceTransform(0, LocalIdentityTransform, false, true, true);
+		InISMComponent->UpdateInstanceTransform(0, LocalIdentityTransform, false, true, false);
 		return 0;
 	}
 }
@@ -1688,7 +1688,7 @@ void AMassUnitBase::MulticastRotateActorYawToChase_Implementation(UStaticMeshCom
 	}
 }
 
-void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees)
+void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees, bool bTeleport)
 {
 	if (!ISMToRotate || InstIndex == INDEX_NONE)
 	{
@@ -1703,6 +1703,7 @@ void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStatic
 		Data.Duration = InRotateDuration;
 		Data.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
 		Data.OffsetDegrees = YawOffsetDegrees;
+		Data.bTeleport = bTeleport;
 
 		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
 		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
@@ -1785,6 +1786,7 @@ void AMassUnitBase::ISMInstanceYawFollow_Step()
 		Tween.Elapsed = 0.f;
 		Tween.Start = RelativeTransform.GetRotation().GetNormalized();
 		Tween.Target = NewRelative.Quaternion().GetNormalized();
+		Tween.bTeleport = Data.bTeleport;
 		if ((Tween.Start | Tween.Target) < 0.f)
 		{
 			Tween.Target = (-Tween.Target);
@@ -1835,12 +1837,12 @@ void AMassUnitBase::ISMInstanceRotations_Step()
 		FTransform InstTransform;
 		Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, false);
 		InstTransform.SetRotation(NewLocal);
-		Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, true);
+		Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, Tween.bTeleport);
 
 		if (Alpha >= 1.f)
 		{
 			InstTransform.SetRotation(Tween.Target);
-			Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, true);
+			Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, Tween.bTeleport);
 			ToRemove.Add(Key);
 		}
 	}
