@@ -94,6 +94,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Local(DeltaSeconds);
 	MoveAbilityIndicator_Local(DeltaSeconds);
+	UpdateExtractionSounds(DeltaSeconds);
 }
 
 void AExtendedControllerBase::LogSelectedUnitsTags()
@@ -3902,6 +3903,108 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 	}
 }
 
+
+void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
+{
+	if (!IsLocalController()) return;
+
+	FVector CameraLocation = FVector::ZeroVector;
+	FRotator CameraRotation = FRotator::ZeroRotator;
+	GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	float SoundMultiplier = GetSoundMultiplier();
+
+	// Mapping to store active work area per resource type for this frame
+	TMap<EResourceType, AWorkArea*> ActiveAreas;
+	TMap<EResourceType, float> FadeOutDurations;
+
+	// Iterate through all WorkAreas in the level
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		AWorkArea* Area = *It;
+		if (!Area) continue;
+
+		EResourceType ResType = Area->ConvertWorkAreaTypeToResourceType(Area->Type);
+		if (ResType == EResourceType::MAX) continue;
+
+		FadeOutDurations.Add(ResType, Area->ExtractionSoundFadeOutDuration);
+
+		if (ActiveAreas.Contains(ResType)) continue;
+
+		bool bHasExtractingWorker = false;
+		for (AWorkingUnitBase* Worker : Area->Workers)
+		{
+			if (Worker && Worker->GetUnitState() == UnitData::ResourceExtraction)
+			{
+				bHasExtractingWorker = true;
+				break;
+			}
+		}
+
+		if (bHasExtractingWorker)
+		{
+			float Distance = FVector::Dist(CameraLocation, Area->GetActorLocation());
+			bool bIsClose = Distance <= ExtractionSoundDistance;
+
+			bool bIsOnScreen = false;
+			FVector2D ScreenPosition;
+			if (ProjectWorldLocationToScreen(Area->GetActorLocation(), ScreenPosition))
+			{
+				bIsOnScreen = true;
+			}
+
+			if (bIsClose || bIsOnScreen)
+			{
+				ActiveAreas.Add(ResType, Area);
+			}
+		}
+	}
+
+	// Now handle the audio components
+	for (uint8 i = 0; i < (uint8)EResourceType::MAX; ++i)
+	{
+		EResourceType Type = (EResourceType)i;
+		AWorkArea* ActiveArea = ActiveAreas.FindRef(Type);
+		UAudioComponent* AudioComp = ExtractionAudioComponents.FindRef(Type);
+
+		if (ActiveArea && ActiveArea->ExtractionSound)
+		{
+			if (!IsValid(AudioComp))
+			{
+				AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
+				if (AudioComp)
+				{
+					ExtractionAudioComponents.Add(Type, AudioComp);
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+				}
+			}
+			else
+			{
+				if (AudioComp->Sound != ActiveArea->ExtractionSound)
+				{
+					AudioComp->FadeOut(ActiveArea->ExtractionSoundFadeOutDuration, 0.f);
+					AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
+					ExtractionAudioComponents.Add(Type, AudioComp);
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+				}
+				else if (!AudioComp->IsPlaying())
+				{
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+				}
+				else
+				{
+					AudioComp->SetVolumeMultiplier(SoundMultiplier);
+				}
+			}
+		}
+		else if (IsValid(AudioComp) && AudioComp->IsPlaying())
+		{
+			float FadeOutDuration = FadeOutDurations.Contains(Type) ? FadeOutDurations[Type] : 1.0f;
+			AudioComp->FadeOut(FadeOutDuration, 0.f);
+			ExtractionAudioComponents.Remove(Type);
+		}
+	}
+}
 
 // Server RPC to mirror ability indicator overlap state from client to server
 void AExtendedControllerBase::Server_SetIndicatorOverlap_Implementation(AAbilityIndicator* Indicator, bool bOverlapping)

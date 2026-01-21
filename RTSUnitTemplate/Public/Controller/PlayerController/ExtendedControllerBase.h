@@ -12,6 +12,8 @@ class AAbilityIndicator;
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Controller/PlayerController/WidgetController.h"
+#include "Core/WorkerData.h"
+#include "Components/AudioComponent.h"
 #include "ExtendedControllerBase.generated.h"
 
 /**
@@ -54,6 +56,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* DropWorkAreaSound;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Sound)
+	float ExtractionSoundDistance = 3000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Sound)
+	float ExtractionSoundFadeInDuration = 1.0f;
+
+protected:
+	UPROPERTY()
+	TMap<EResourceType, UAudioComponent*> ExtractionAudioComponents;
+
+	void UpdateExtractionSounds(float DeltaSeconds);
+
+public:
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyCustomizations(
 		USoundBase* InWaypointSound,
