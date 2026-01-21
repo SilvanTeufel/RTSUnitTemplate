@@ -1091,6 +1091,7 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 			 Cast<AActor>(UnitBase), 
 			 UnitTransform
 			);
+			UnitBase->ForceNetUpdate();
 
 			UnitBase->InitializeAttributes();
 			UnitBase->SquadId = (SpawnAsSquad ? SharedSquadId : 0);
