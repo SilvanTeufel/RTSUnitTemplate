@@ -225,6 +225,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeUnitMode();
 
+	UFUNCTION(BlueprintCallable, Category = ISM)
+	int32 InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
+
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastTransformSync(const FVector& Location);
 
@@ -259,6 +262,11 @@ public:
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateActorYawToChase(UStaticMeshComponent* MeshToRotate, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
+
+	// Continuously rotate an ISM instance's Yaw to face UnitToChase (runs on server and clients)
+	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateISMYawToChase(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees);
 
 	// Continuously rotate the whole unit's Yaw to face UnitToChase (runs on server and clients)
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
@@ -338,6 +346,25 @@ protected:
 		FQuat Target = FQuat::Identity;
 	};
 	
+	struct FISMInstanceKey
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> Component;
+		int32 InstanceIndex;
+
+		FISMInstanceKey() : InstanceIndex(INDEX_NONE) {}
+		FISMInstanceKey(UInstancedStaticMeshComponent* InComp, int32 InIndex) : Component(InComp), InstanceIndex(InIndex) {}
+
+		bool operator==(const FISMInstanceKey& Other) const
+		{
+			return Component == Other.Component && InstanceIndex == Other.InstanceIndex;
+		}
+
+		friend uint32 GetTypeHash(const FISMInstanceKey& Key)
+		{
+			return HashCombine(GetTypeHash(Key.Component), GetTypeHash(Key.InstanceIndex));
+		}
+	};
+	
 	// Timer step for rotating arbitrary static mesh components (state stored internally in cpp)
 	void StaticMeshRotations_Step();
 	FTimerHandle StaticMeshRotateTimerHandle;
@@ -355,6 +382,14 @@ protected:
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FYawFollowData> ActiveYawFollows;
 	FTimerHandle StaticMeshYawFollowTimerHandle;
 	void StaticMeshYawFollow_Step();
+
+	TMap<FISMInstanceKey, FYawFollowData> ActiveISMInstanceYawFollows;
+	FTimerHandle ISMInstanceYawFollowTimerHandle;
+	void ISMInstanceYawFollow_Step();
+	
+	void ISMInstanceRotations_Step();
+	FTimerHandle ISMInstanceRotateTimerHandle;
+	TMap<FISMInstanceKey, FStaticMeshRotateTween> ActiveISMInstanceTweens;
 
 	// Continuous yaw-follow state for the unit itself
 	FYawFollowData UnitYawFollowData;

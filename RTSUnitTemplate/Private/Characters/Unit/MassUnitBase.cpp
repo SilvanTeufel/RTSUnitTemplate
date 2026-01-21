@@ -18,6 +18,7 @@
 #include "MassNavigationFragments.h"
 #include "TimerManager.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
@@ -1087,6 +1088,25 @@ void AMassUnitBase::InitializeUnitMode()
 	
 }
 
+int32 AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
+{
+	if (!InISMComponent || !InISMComponent->GetStaticMesh())
+	{
+		return INDEX_NONE;
+	}
+
+	const FTransform LocalIdentityTransform = FTransform::Identity;
+	if (InISMComponent->GetInstanceCount() == 0)
+	{
+		return InISMComponent->AddInstance(LocalIdentityTransform, false);
+	}
+	else
+	{
+		InISMComponent->UpdateInstanceTransform(0, LocalIdentityTransform, false, true, true);
+		return 0;
+	}
+}
+
 bool AMassUnitBase::SyncTranslation()
 {
 	FMassEntityManager* EntityManager = nullptr;
@@ -1665,6 +1685,174 @@ void AMassUnitBase::MulticastRotateActorYawToChase_Implementation(UStaticMeshCom
 		{
 			GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
 		}
+	}
+}
+
+void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees)
+{
+	if (!ISMToRotate || InstIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	FISMInstanceKey Key(ISMToRotate, InstIndex);
+
+	if (bEnable)
+	{
+		FYawFollowData& Data = ActiveISMInstanceYawFollows.FindOrAdd(Key);
+		Data.Duration = InRotateDuration;
+		Data.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+		Data.OffsetDegrees = YawOffsetDegrees;
+
+		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+
+		ISMInstanceYawFollow_Step();
+		if (!GetWorldTimerManager().IsTimerActive(ISMInstanceYawFollowTimerHandle))
+		{
+			GetWorldTimerManager().SetTimer(ISMInstanceYawFollowTimerHandle, this, &AMassUnitBase::ISMInstanceYawFollow_Step, TimerRate, true);
+		}
+	}
+	else
+	{
+		ActiveISMInstanceYawFollows.Remove(Key);
+		if (ActiveISMInstanceYawFollows.Num() == 0)
+		{
+			GetWorldTimerManager().ClearTimer(ISMInstanceYawFollowTimerHandle);
+		}
+	}
+}
+
+void AMassUnitBase::ISMInstanceYawFollow_Step()
+{
+	if (ActiveISMInstanceYawFollows.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(ISMInstanceYawFollowTimerHandle);
+		return;
+	}
+
+	TArray<FISMInstanceKey> ToRemove;
+	for (auto& Pair : ActiveISMInstanceYawFollows)
+	{
+		const FISMInstanceKey& Key = Pair.Key;
+		FYawFollowData& Data = Pair.Value;
+
+		UInstancedStaticMeshComponent* Comp = Key.Component.Get();
+		if (!Comp || !Comp->IsValidInstance(Key.InstanceIndex))
+		{
+			ToRemove.Add(Key);
+			continue;
+		}
+
+		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
+		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
+		if (!IsValid(TargetUnit))
+		{
+			continue;
+		}
+
+		FTransform InstTransform;
+		Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
+		const FVector CompWorldLoc = InstTransform.GetLocation();
+		FVector TargetLoc = TargetUnit->GetActorLocation();
+
+		FVector ToTarget = TargetLoc - CompWorldLoc;
+		ToTarget.Z = 0.f;
+		if (ToTarget.IsNearlyZero(1e-3f))
+		{
+			continue;
+		}
+
+		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+		float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
+		DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+
+		float ParentYaw = 0.f;
+		if (const USceneComponent* Parent = Comp->GetAttachParent())
+		{
+			ParentYaw = Parent->GetComponentRotation().Yaw;
+		}
+		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
+
+		FTransform RelativeTransform;
+		Comp->GetInstanceTransform(Key.InstanceIndex, RelativeTransform, false);
+		FRotator NewRelative = RelativeTransform.Rotator();
+		NewRelative.Yaw = DesiredRelativeYaw;
+
+		FStaticMeshRotateTween& Tween = ActiveISMInstanceTweens.FindOrAdd(Key);
+		Tween.Duration = Data.Duration;
+		Tween.EaseExp = FMath::Max(Data.EaseExp, 0.001f);
+		Tween.Elapsed = 0.f;
+		Tween.Start = RelativeTransform.GetRotation().GetNormalized();
+		Tween.Target = NewRelative.Quaternion().GetNormalized();
+		if ((Tween.Start | Tween.Target) < 0.f)
+		{
+			Tween.Target = (-Tween.Target);
+		}
+	}
+
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float RotateTimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+	ISMInstanceRotations_Step();
+	if (!GetWorldTimerManager().IsTimerActive(ISMInstanceRotateTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(ISMInstanceRotateTimerHandle, this, &AMassUnitBase::ISMInstanceRotations_Step, RotateTimerRate, true);
+	}
+}
+
+void AMassUnitBase::ISMInstanceRotations_Step()
+{
+	if (ActiveISMInstanceTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(ISMInstanceRotateTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	TArray<FISMInstanceKey> ToRemove;
+	for (auto& Pair : ActiveISMInstanceTweens)
+	{
+		const FISMInstanceKey& Key = Pair.Key;
+		FStaticMeshRotateTween& Tween = Pair.Value;
+
+		UInstancedStaticMeshComponent* Comp = Key.Component.Get();
+		if (!Comp || !Comp->IsValidInstance(Key.InstanceIndex))
+		{
+			ToRemove.Add(Key);
+			continue;
+		}
+
+		Tween.Elapsed += Dt;
+		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
+		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
+		{
+			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
+		}
+
+		const FQuat NewLocal = FQuat::Slerp(Tween.Start, Tween.Target, Alpha).GetNormalized();
+		
+		FTransform InstTransform;
+		Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, false);
+		InstTransform.SetRotation(NewLocal);
+		Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, true);
+
+		if (Alpha >= 1.f)
+		{
+			InstTransform.SetRotation(Tween.Target);
+			Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, true);
+			ToRemove.Add(Key);
+		}
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveISMInstanceTweens.Remove(Key);
+	}
+
+	if (ActiveISMInstanceTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(ISMInstanceRotateTimerHandle);
 	}
 }
 
