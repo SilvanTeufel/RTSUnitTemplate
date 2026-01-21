@@ -39,7 +39,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	// Optional: if provided, a construction site will be spawned and tracked during build
- UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	TSubclassOf<class AUnitBase> ConstructionUnitClass;
 	
 	// Pointer to the active construction site actor (if any)
@@ -111,6 +111,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ExtractionSoundFadeOutDuration = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtractionSoundVolume = 1.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class ABuildingBase> BuildingClass;

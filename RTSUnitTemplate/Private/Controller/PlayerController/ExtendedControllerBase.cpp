@@ -3969,13 +3969,15 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 
 		if (ActiveArea && ActiveArea->ExtractionSound)
 		{
+			float FinalVolume = SoundMultiplier * ActiveArea->ExtractionSoundVolume;
+
 			if (!IsValid(AudioComp))
 			{
 				AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
 				if (AudioComp)
 				{
 					ExtractionAudioComponents.Add(Type, AudioComp);
-					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
 				}
 			}
 			else
@@ -3985,15 +3987,15 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 					AudioComp->FadeOut(ActiveArea->ExtractionSoundFadeOutDuration, 0.f);
 					AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
 					ExtractionAudioComponents.Add(Type, AudioComp);
-					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
 				}
 				else if (!AudioComp->IsPlaying())
 				{
-					AudioComp->FadeIn(ExtractionSoundFadeInDuration, SoundMultiplier);
+					AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
 				}
 				else
 				{
-					AudioComp->SetVolumeMultiplier(SoundMultiplier);
+					AudioComp->SetVolumeMultiplier(FinalVolume);
 				}
 			}
 		}
