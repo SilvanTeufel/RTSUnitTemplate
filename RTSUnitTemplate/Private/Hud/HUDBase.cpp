@@ -27,12 +27,6 @@
 
 void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, float DashLen, float GapLen, FColor Color, float Thickness, float ZOffset)
 {
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
 	FVector Start = InStart; Start.Z += ZOffset;
 	FVector End = InEnd; End.Z += ZOffset;
 
@@ -52,8 +46,55 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 		const float ThisDash = FMath::Min(SegmentLen, TotalLen - Traveled);
 		const FVector SegStart = Start + StepDir * Traveled;
 		const FVector SegEnd = Start + StepDir * (Traveled + ThisDash);
-		DrawDebugLine(World, SegStart, SegEnd, Color, /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, Thickness);
+
+		FVector2D ScreenStart, ScreenEnd;
+		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(SegStart, ScreenStart) &&
+			GetOwningPlayerController()->ProjectWorldLocationToScreen(SegEnd, ScreenEnd))
+		{
+			DrawLine(ScreenStart.X, ScreenStart.Y, ScreenEnd.X, ScreenEnd.Y, Color, Thickness);
+		}
+
 		Traveled += ThisDash + SkipLen;
+	}
+}
+
+void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime, float Radius)
+{
+	FClickIndicator NewIndicator;
+	NewIndicator.Location = Location;
+	NewIndicator.Color = Color;
+	NewIndicator.ExpiryTime = GetWorld()->GetTimeSeconds() + (LifeTime < 0.f ? ClickIndicatorLifeTime : LifeTime);
+	NewIndicator.Radius = (Radius < 0.f ? ClickIndicatorRadius : Radius);
+	ClickIndicators.Add(NewIndicator);
+}
+
+void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness)
+{
+	const int32 Segments = 16;
+	const float AngleStep = 2.0f * PI / Segments;
+	FVector2D PrevScreenPoint;
+	bool bPrevPointValid = false;
+
+	float ThicknessToUse = (Thickness < 0.f) ? ClickIndicatorThickness : Thickness;
+
+	for (int32 i = 0; i <= Segments; i++)
+	{
+		float Angle = i * AngleStep;
+		FVector WorldPoint = Location + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 15.f);
+		FVector2D ScreenPoint;
+		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(WorldPoint, ScreenPoint))
+		{
+			if (i > 0 && bPrevPointValid)
+			{
+				DrawLine(PrevScreenPoint.X, PrevScreenPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, ThicknessToUse);
+			}
+			PrevScreenPoint = ScreenPoint;
+			bPrevPointValid = true;
+		}
+		else
+		{
+			bPrevPointValid = false;
+		}
 	}
 }
 
@@ -130,7 +171,23 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 
 void AHUDBase::DrawHUD()
 {
-    if (bSelectFriendly) {
+	Super::DrawHUD();
+
+	float CurrentTime = GetWorld()->GetTimeSeconds();
+	for (int32 i = ClickIndicators.Num() - 1; i >= 0; --i)
+	{
+		if (CurrentTime >= ClickIndicators[i].ExpiryTime)
+		{
+			ClickIndicators.RemoveAtSwap(i);
+			continue;
+		}
+		DrawProjectedCircle(ClickIndicators[i].Location, ClickIndicators[i].Radius, ClickIndicators[i].Color);
+	}
+
+	// Draw dashed links between selected buildings and their waypoints each frame
+	DrawSelectedBuildingWaypointLinks();
+
+	if (bSelectFriendly) {
     
        DeselectAllUnits();
        SelectedUnits.Empty();
@@ -320,9 +377,6 @@ void AHUDBase::Tick(float DeltaSeconds)
 		MoveUnitsThroughWayPoints(FriendlyUnits);
 		IsSpeakingUnitClose(FriendlyUnits, GameMode->SpeakingUnits);
 	}
-
-	// Draw dashed links between selected buildings and their waypoints each frame
-	DrawSelectedBuildingWaypointLinks();
 }
 
 

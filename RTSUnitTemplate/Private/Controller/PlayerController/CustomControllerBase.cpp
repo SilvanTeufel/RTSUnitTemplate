@@ -1227,7 +1227,7 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 		}
 		else
 		{
-			DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+			DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
 			if (U->bIsMassUnit)
 			{
 				MassUnits.Add(U);
@@ -1496,7 +1496,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         }
         else if (IsShiftPressed)
         {
-            DrawDebugCircleAtLocation(GetWorld(), Loc, FColor::Green);
+            DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
             {
@@ -1513,7 +1513,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         }
         else
         {
-            DrawDebugCircleAtLocation(GetWorld(), Loc, FColor::Green);
+            DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
             if (U->bIsMassUnit)
             {
@@ -1642,7 +1642,7 @@ void ACustomControllerBase::LeftClickPressedMass()
             }
             else
             {
-                DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+                DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                 if (U->bIsMassUnit)
                 {
                     MassUnits.Add(U);

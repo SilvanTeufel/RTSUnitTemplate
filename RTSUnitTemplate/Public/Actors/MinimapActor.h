@@ -44,6 +44,14 @@ public:
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     int32 TeamId = 0;
 
+    /** Brightness adjustment for the topography (offsets the color). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
+    float MinimapBrightness = 0.0f;
+
+    /** Contrast adjustment for the topography (multiplies contrast). 1.0 is default. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
+    float MinimapContrast = 1.0f;
+
     /** The generated minimap texture, ready to be used in a UMG widget. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
     UTexture2D* MinimapTexture;

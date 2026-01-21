@@ -44,6 +44,10 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
             // 2. Setzen Sie den Textur-Parameter mit dem Namen "MinimapTexture" auf unsere Laufzeit-Textur.
             MID->SetTextureParameterValue(TEXT("TopographyTexture"), TopoTexture);
             MID->SetTextureParameterValue(TEXT("MinimapTexture"), DataTexture);
+            
+            // Pass Brightness and Contrast to the Material for potential runtime adjustments
+            MID->SetScalarParameterValue(TEXT("MinimapBrightness"), MinimapActorRef->MinimapBrightness);
+            MID->SetScalarParameterValue(TEXT("MinimapContrast"), MinimapActorRef->MinimapContrast);
 
             if (GetWorld())
             {

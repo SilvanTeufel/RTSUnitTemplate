@@ -21,7 +21,29 @@ class RTSUNITTEMPLATE_API AHUDBase : public AHUD
 	GENERATED_BODY()
 
 public:
+	void AddClickIndicator(FVector Location, FColor Color, float LifeTime = -1.f, float Radius = -1.f);
 
+private:
+	struct FClickIndicator
+	{
+		FVector Location;
+		FColor Color;
+		float ExpiryTime;
+		float Radius;
+	};
+
+	TArray<FClickIndicator> ClickIndicators;
+	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f);
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ClickIndicatorRadius = 15.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ClickIndicatorThickness = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ClickIndicatorLifeTime = 1.5f;
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		virtual void DrawHUD(); // used in Tick();
 
@@ -33,7 +55,7 @@ public:
 		void BeginPlay() override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bSelectFullSquad = false;
 	

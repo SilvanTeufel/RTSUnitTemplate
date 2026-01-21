@@ -30,7 +30,7 @@ AMinimapActor::AMinimapActor()
 
     // Wichtige Standardeinstellungen für eine saubere Top-Down-Aufnahme
     SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Orthographic; // Perfekte Top-Down-Sicht ohne Perspektive
-    SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_BaseColor;   // Nur die "Unlit"-Farben der Karte, ohne Licht/Schatten
+    SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;   // FinalColor allows PostProcessing (Brightness/Contrast)
     SceneCaptureComponent->bCaptureEveryFrame = false; // SEHR WICHTIG für die Performance!
     SceneCaptureComponent->bCaptureOnMovement = false; // Wir wollen nur einmal am Anfang aufnehmen.
 
@@ -71,6 +71,25 @@ void AMinimapActor::BeginPlay()
 void AMinimapActor::CaptureMapTopography()
 {
     if (!SceneCaptureComponent) return;
+
+    // --- Enable Post-Processing and apply Brightness/Contrast ---
+    
+    // Switch to FinalColor to enable PostProcessSettings
+    SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+    
+    // Disable lighting to maintain the "unlit" look
+    SceneCaptureComponent->ShowFlags.SetLighting(false);
+    
+    // Apply Contrast (FVector4: R, G, B, W)
+    SceneCaptureComponent->PostProcessSettings.bOverride_ColorContrast = true;
+    SceneCaptureComponent->PostProcessSettings.ColorContrast = FVector4(MinimapContrast, MinimapContrast, MinimapContrast, 1.0f);
+    
+    // Apply Brightness via ColorOffset (Additive)
+    SceneCaptureComponent->PostProcessSettings.bOverride_ColorOffset = true;
+    SceneCaptureComponent->PostProcessSettings.ColorOffset = FVector4(MinimapBrightness, MinimapBrightness, MinimapBrightness, 0.0f);
+
+    // Ensure the capture component uses its own settings fully
+    SceneCaptureComponent->PostProcessBlendWeight = 1.0f;
 
     // 1. Berechne die Position und Größe der Aufnahme basierend auf den Bounds
     const FVector CenterLocation(

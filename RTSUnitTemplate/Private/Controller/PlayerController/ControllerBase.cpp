@@ -48,7 +48,7 @@ void AControllerBase::InitCameraHUDGameMode()
 {
 	CameraBase = Cast<ACameraBase>(GetPawn());
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
-	if(HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
+	if (HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
 	
 	RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
@@ -749,30 +749,12 @@ FVector AControllerBase::CalculateGridOffset(int32 Row, int32 Col) const
 	}
 }
 
-void AControllerBase::DrawDebugCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor)
+void AControllerBase::DrawCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor)
 {
-	if (!World) return;
-
-	float Radius = 15.f;
-	int32 NumSegments = 32;       // Glätte des Kreises
-	float LifeTime = 1.5f;        // Dauer des Kreises in Sekunden
-	float Thickness = 2.f;        // Linienstärke
-
-	// Kreis in der XY-Ebene zeichnen
-	DrawDebugCircle(
-		World, 
-		Location+FVector(0.f,0.f,15.f), 
-		Radius, 
-		NumSegments, 
-		CircleColor, 
-		false,          // Nicht permanent
-		LifeTime, 
-		0,              // Depth Priority
-		Thickness, 
-		FVector(1, 0, 0), // X-Achse
-		FVector(0, 1, 0), // Y-Achse
-		false            // Keine Achsen zeichnen
-	);
+	if (HUDBase)
+	{
+		HUDBase->AddClickIndicator(Location, CircleColor);
+	}
 }
 
 #define COLLISION_NAVMODIFIER ECC_GameTraceChannel1
@@ -928,17 +910,17 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 				if (BuildingBase->HasWaypoint) PlayWaypointSound = true;
 			}
 			else if (IsShiftPressed) {
-				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunShift(SelectedUnits[i], RunLocation); // _Implementation
 				PlayRunSound = true;
 			}else if(UseUnrealEnginePathFinding)
 			{
-				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunUEPF(SelectedUnits[i], RunLocation, true); // _Implementation
 				PlayRunSound = true;
 			}
 			else {
-				DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				RightClickRunDijkstraPF(SelectedUnits[i], RunLocation, i); // _Implementation
 				PlayRunSound = true;
 			}

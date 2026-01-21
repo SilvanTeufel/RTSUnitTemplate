@@ -476,15 +476,15 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 				BuildingLocs.Add(RunLocation);
 				if (PlayWaypointSound) PlayWaypointSoundTotal = true;
 			}else if (ExtendedController->IsShiftPressed) {
-				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunShift(ExtendedController->SelectedUnits[i], RunLocation); // _Implementation
 			}else if(ExtendedController->UseUnrealEnginePathFinding)
 			{
-				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunUEPF(ExtendedController->SelectedUnits[i], RunLocation, true); // _Implementation
 			}
 			else {
-				ExtendedController->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
+				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
 				ExtendedController->RightClickRunDijkstraPF(ExtendedController->SelectedUnits[i], RunLocation, i); // _Implementation
 			}
 		}
@@ -562,7 +562,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 }
                 else
                 {
-                    CustomControllerBase->DrawDebugCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+                    CustomControllerBase->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
                     if (U->bIsMassUnit)
                     {
                         MassUnits.Add(U);
