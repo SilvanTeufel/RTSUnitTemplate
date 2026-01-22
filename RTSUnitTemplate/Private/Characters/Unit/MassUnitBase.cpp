@@ -1747,33 +1747,33 @@ void AMassUnitBase::ISMInstanceYawFollow_Step()
 
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		if (!IsValid(TargetUnit))
+		float DesiredRelativeYaw = Data.OffsetDegrees;
+
+		if (IsValid(TargetUnit))
 		{
-			continue;
+			FTransform InstTransform;
+			Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
+			const FVector CompWorldLoc = InstTransform.GetLocation();
+			FVector TargetLoc = TargetUnit->GetActorLocation();
+
+			FVector ToTarget = TargetLoc - CompWorldLoc;
+			ToTarget.Z = 0.f;
+			if (ToTarget.IsNearlyZero(1e-3f))
+			{
+				continue;
+			}
+
+			const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+			float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
+			DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+
+			float ParentYaw = 0.f;
+			if (const USceneComponent* Parent = Comp->GetAttachParent())
+			{
+				ParentYaw = Parent->GetComponentRotation().Yaw;
+			}
+			DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 		}
-
-		FTransform InstTransform;
-		Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
-		const FVector CompWorldLoc = InstTransform.GetLocation();
-		FVector TargetLoc = TargetUnit->GetActorLocation();
-
-		FVector ToTarget = TargetLoc - CompWorldLoc;
-		ToTarget.Z = 0.f;
-		if (ToTarget.IsNearlyZero(1e-3f))
-		{
-			continue;
-		}
-
-		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-		float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
-		DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
-
-		float ParentYaw = 0.f;
-		if (const USceneComponent* Parent = Comp->GetAttachParent())
-		{
-			ParentYaw = Parent->GetComponentRotation().Yaw;
-		}
-		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 
 		FTransform RelativeTransform;
 		Comp->GetInstanceTransform(Key.InstanceIndex, RelativeTransform, false);
@@ -1882,34 +1882,33 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 		// Use UnitToChase from AUnitBase if available
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		if (!IsValid(TargetUnit))
+		float DesiredRelativeYaw = Data.OffsetDegrees;
+
+		if (IsValid(TargetUnit))
 		{
-			// No target; skip but keep following state for when a target appears
-			continue;
+			const FVector CompWorldLoc = Comp->GetComponentLocation();
+			FVector TargetLoc = TargetUnit->GetActorLocation();
+
+			// 2D direction on the XY plane
+			FVector ToTarget = TargetLoc - CompWorldLoc;
+			ToTarget.Z = 0.f;
+			if (ToTarget.IsNearlyZero(1e-3f))
+			{
+				continue;
+			}
+
+			const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+			float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
+			DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+
+			// Convert desired world yaw to relative yaw under parent if any
+			float ParentYaw = 0.f;
+			if (const USceneComponent* Parent = Comp->GetAttachParent())
+			{
+				ParentYaw = Parent->GetComponentRotation().Yaw;
+			}
+			DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 		}
-
-		const FVector CompWorldLoc = Comp->GetComponentLocation();
-		FVector TargetLoc = TargetUnit->GetActorLocation();
-
-		// 2D direction on the XY plane
-		FVector ToTarget = TargetLoc - CompWorldLoc;
-		ToTarget.Z = 0.f;
-		if (ToTarget.IsNearlyZero(1e-3f))
-		{
-			continue;
-		}
-
-		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-		float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
-		DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
-
-		// Convert desired world yaw to relative yaw under parent if any
-		float ParentYaw = 0.f;
-		if (const USceneComponent* Parent = Comp->GetAttachParent())
-		{
-			ParentYaw = Parent->GetComponentRotation().Yaw;
-		}
-		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 
 		FRotator NewRelative = Comp->GetRelativeRotation();
 		NewRelative.Yaw = DesiredRelativeYaw;
@@ -1987,28 +1986,27 @@ void AMassUnitBase::UnitYawFollow_Step()
 		return;
 	}
 
-	// Use UnitToChase from AUnitBase if available
 	AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 	AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-	if (!IsValid(TargetUnit))
+	float DesiredWorldYaw = UnitYawFollowData.OffsetDegrees;
+
+	if (IsValid(TargetUnit))
 	{
-		// No target; skip but keep following state for when a target appears
-		return;
+		const FVector UnitWorldLoc = GetActorLocation();
+		FVector TargetLoc = TargetUnit->GetActorLocation();
+
+		// 2D direction on the XY plane
+		FVector ToTarget = TargetLoc - UnitWorldLoc;
+		ToTarget.Z = 0.f;
+		if (ToTarget.IsNearlyZero(1e-3f))
+		{
+			return;
+		}
+
+		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+		DesiredWorldYaw = FacingRot.Yaw + UnitYawFollowData.OffsetDegrees;
 	}
 
-	const FVector UnitWorldLoc = GetActorLocation();
-	FVector TargetLoc = TargetUnit->GetActorLocation();
-
-	// 2D direction on the XY plane
-	FVector ToTarget = TargetLoc - UnitWorldLoc;
-	ToTarget.Z = 0.f;
-	if (ToTarget.IsNearlyZero(1e-3f))
-	{
-		return;
-	}
-
-	const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-	float DesiredWorldYaw = FacingRot.Yaw + UnitYawFollowData.OffsetDegrees;
 	DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
 
 	FRotator NewRotation = GetActorRotation();
