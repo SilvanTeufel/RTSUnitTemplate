@@ -129,6 +129,11 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (!IsEndAbilityValid(Handle, ActorInfo))
+	{
+		return;
+	}
+	
 	if (bWasCancelled && bRefundOnCancel && ActorInfo && ActorInfo->OwnerActor.IsValid())
 	{
 		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))

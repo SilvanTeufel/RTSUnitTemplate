@@ -306,20 +306,32 @@ bool AGASUnit::ActivateAbilityByInputID(
 
 void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 {
-		// Example: delay by half a second
-		const float DelayTime = 0.1f; 
-		FTimerHandle TimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(
-			TimerHandle,
-			this, 
-			&AGASUnit::ActivateNextQueuedAbility, 
-			DelayTime, 
-			/*bLoop=*/false
-		);
+	if (ActivatedAbilityInstance == EndedAbility)
+	{
+		ActivatedAbilityInstance = nullptr;
+	}
 
-	UGameplayAbilityBase* AbilityToActivate = Cast<UGameplayAbilityBase>(EndedAbility);
-	AbilityToActivate->ClickCount = 0;
+	if (CurrentSnapshot.AbilityClass == EndedAbility->GetClass())
+	{
+		CurrentSnapshot = FQueuedAbility();
+		CurrentInstigatorPC = nullptr;
+	}
 
+	// Example: delay by half a second
+	const float DelayTime = 0.1f; 
+	FTimerHandle TimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(
+		TimerHandle,
+		this, 
+		&AGASUnit::ActivateNextQueuedAbility, 
+		DelayTime, 
+		/*bLoop=*/false
+	);
+
+	if (UGameplayAbilityBase* AbilityBase = Cast<UGameplayAbilityBase>(EndedAbility))
+	{
+		AbilityBase->ClickCount = 0;
+	}
 }
 
 void AGASUnit::ActivateNextQueuedAbility()
@@ -513,7 +525,8 @@ void AGASUnit::CancelCurrentAbility()
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;
-			CurrentSnapshot = FQueuedAbility();
 		}
 	}
+	CurrentSnapshot = FQueuedAbility();
+	CurrentInstigatorPC = nullptr;
 }
