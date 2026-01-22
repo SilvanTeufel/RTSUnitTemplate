@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "Actors/Waypoint.h"
 #include "GAS/AttributeSetBase.h"
 #include "AbilitySystemComponent.h"
 #include "AIController.h"
@@ -425,7 +427,18 @@ void AUnitBase::SetWalkSpeed_Implementation(float Speed)
 
 void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 {
-	NextWaypoint = NewNextWaypoint;
+	if (NextWaypoint == NewNextWaypoint) return;
+
+	if (ABuildingBase* Building = Cast<ABuildingBase>(this))
+	{
+		if (NextWaypoint) NextWaypoint->RemoveAssignedUnit(this);
+		NextWaypoint = NewNextWaypoint;
+		if (NextWaypoint) NextWaypoint->AddAssignedUnit(this);
+	}
+	else
+	{
+		NextWaypoint = NewNextWaypoint;
+	}
 }
 
 void AUnitBase::SetHealth_Implementation(float NewHealth)
@@ -465,6 +478,19 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		SetDeselected();
 		CanBeSelected = false;
 		SetUnitState(UnitData::Dead);
+
+		if (ABuildingBase* Building = Cast<ABuildingBase>(this))
+		{
+			if (Building->HasWaypoint && Building->NextWaypoint)
+			{
+				AWaypoint* WP = Building->NextWaypoint;
+				Building->SetWaypoint(nullptr);
+				if (HasAuthority() && WP->GetAssignedUnitCount() <= 0)
+				{
+					WP->Destroy(true, true);
+				}
+			}
+		}
 
 		// Server-authoritative: immediately remove this unit from the replicated registry to avoid stale ghosts
 		if (HasAuthority())
@@ -1099,7 +1125,7 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 			UnitBase->EnsureSquadHealthbarState();
 			
 			if(Waypoint)
-				UnitBase->NextWaypoint = Waypoint;
+				UnitBase->SetWaypoint(Waypoint);
 
 			UnitBase->ScheduleDelayedNavigationUpdate();
 			// Apply selectability flag from params

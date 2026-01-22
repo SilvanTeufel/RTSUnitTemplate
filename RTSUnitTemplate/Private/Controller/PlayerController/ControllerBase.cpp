@@ -623,11 +623,26 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 
 			// Assign the new waypoint to the building
 			BuildingBase->NextWaypoint = NewWaypoint;
+			NewWaypoint->AddAssignedUnit(BuildingBase);
 			return NewWaypoint;
 		}
 	}
 
 	return nullptr;
+}
+
+void AControllerBase::UnregisterWaypointFromBuilding(ABuildingBase* Building)
+{
+	if (Building && Building->NextWaypoint)
+	{
+		AWaypoint* WP = Building->NextWaypoint;
+		WP->RemoveAssignedUnit(Building);
+		if (HasAuthority() && WP->GetAssignedUnitCount() <= 0)
+		{
+			WP->Destroy(true, true);
+		}
+		Building->NextWaypoint = nullptr;
+	}
 }
 
 
@@ -655,15 +670,16 @@ void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 		
 		if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
 		{
-			if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+			if (BuildingBase->NextWaypoint) UnregisterWaypointFromBuilding(BuildingBase);
 
 			BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
 		}
 		else if (BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
 		{
-			if (BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->Destroy(true, true);
+			if (BuildingBase->NextWaypoint) UnregisterWaypointFromBuilding(BuildingBase);
 
 			BuildingBase->NextWaypoint = BuildingWaypoint;
+			BuildingWaypoint->AddAssignedUnit(BuildingBase);
 				
 		}
 		else if( BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
@@ -682,7 +698,7 @@ void AControllerBase::Multi_SetBuildingWaypoint_Implementation(FVector NewWPLoca
 	{
 		if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit))
 		{
-			BuildingBase->NextWaypoint = BuildingWaypoint;
+			BuildingBase->SetWaypoint(BuildingWaypoint);
 			if (BuildingBase->NextWaypoint)
 			{
 				BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);

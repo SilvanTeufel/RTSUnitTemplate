@@ -90,6 +90,22 @@ void AWaypoint::UpdateVisibility()
 	}
 }
 
+void AWaypoint::AddAssignedUnit(AUnitBase* Unit)
+{
+	if (Unit)
+	{
+		AssignedUnits.Add(Unit);
+	}
+}
+
+void AWaypoint::RemoveAssignedUnit(AUnitBase* Unit)
+{
+	if (Unit)
+	{
+		AssignedUnits.Remove(Unit);
+	}
+}
+
 // Called every frame
 void AWaypoint::Tick(float DeltaTime)
 {

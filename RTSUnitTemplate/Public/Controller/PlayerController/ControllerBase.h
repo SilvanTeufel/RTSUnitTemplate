@@ -156,6 +156,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
+	void UnregisterWaypointFromBuilding(ABuildingBase* Building);
 	
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint* BuildingWaypoint, bool bPlaySound);
