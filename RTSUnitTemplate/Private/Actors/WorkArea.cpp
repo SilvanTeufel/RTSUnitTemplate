@@ -201,6 +201,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, ConstructionUnitClass);
 	DOREPLIFETIME(AWorkArea, ConstructionUnit);
 	DOREPLIFETIME(AWorkArea, IsExtensionArea);
+	DOREPLIFETIME(AWorkArea, Workers);
 }
 
 void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

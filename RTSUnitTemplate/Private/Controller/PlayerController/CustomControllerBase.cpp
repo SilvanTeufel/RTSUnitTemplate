@@ -855,7 +855,6 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 {
 	if (!Hit_Pawn.bBlockingHit) return false;
 
-
 		AActor* HitActor = Hit_Pawn.GetActor();
 		
 		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);

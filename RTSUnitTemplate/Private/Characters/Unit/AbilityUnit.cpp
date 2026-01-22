@@ -23,6 +23,7 @@
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AAbilityUnit, UnitState);
 	DOREPLIFETIME(AAbilityUnit, UnitStatePlaceholder);
 	DOREPLIFETIME(AAbilityUnit, StoredUnitState);
 }

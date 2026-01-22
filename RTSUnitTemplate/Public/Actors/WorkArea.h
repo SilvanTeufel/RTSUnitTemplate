@@ -158,7 +158,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
     bool bFinalBuildingSpawned = false;
  	
- 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+ 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
  	TArray<AWorkingUnitBase*> Workers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
