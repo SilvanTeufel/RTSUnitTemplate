@@ -89,6 +89,12 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 	// This code now runs on the SERVER
 	if (HasAuthority())
 	{
+		UWorld* World = GetWorld();
+		if (!World)
+		{
+			return;
+		}
+
 		if (UGameInstance* GI = GetGameInstance())
 		{
 			if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
@@ -102,7 +108,7 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 
 		if (!MapName.IsEmpty())
 		{
-			GetWorld()->ServerTravel(MapName);
+			World->ServerTravel(MapName);
 		}
 	}
 }

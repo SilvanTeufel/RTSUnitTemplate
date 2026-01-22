@@ -27,7 +27,7 @@ void UWinLoseWidget::NativeConstruct()
 	}
 	
 	APlayerController* PC = GetOwningPlayer();
-	if (PC)
+	if (PC && IsValid(PC))
 	{
 		PC->SetShowMouseCursor(true);
 		PC->SetInputMode(FInputModeUIOnly());
@@ -37,6 +37,16 @@ void UWinLoseWidget::NativeConstruct()
 void UWinLoseWidget::OnOkClicked()
 {
 	if (bAlreadyClicked) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	APlayerController* OwningPC = GetOwningPlayer();
+	if (!OwningPC || !IsValid(OwningPC))
+	{
+		return;
+	}
+
 	bAlreadyClicked = true;
 
 	if (OkButton)
@@ -44,7 +54,7 @@ void UWinLoseWidget::OnOkClicked()
 		OkButton->SetIsEnabled(false);
 	}
 
-	if (UGameInstance* GI = GetGameInstance())
+	if (UGameInstance* GI = OwningPC->GetGameInstance())
 	{
 		if (UGameSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UGameSaveSubsystem>())
 		{
@@ -60,7 +70,7 @@ void UWinLoseWidget::OnOkClicked()
 		}
 	}
 
-	ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer());
+	ACameraControllerBase* PC = Cast<ACameraControllerBase>(OwningPC);
 	if (PC && !TargetMapName.IsEmpty())
 	{
 		PC->Server_TravelToMap(TargetMapName, DestinationSwitchTagToEnable);
