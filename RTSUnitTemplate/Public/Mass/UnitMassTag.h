@@ -60,6 +60,7 @@ USTRUCT() struct FMassStateEvasionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateCastingTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassSoftAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
 // --- Hilfs-Tags ---
 USTRUCT() struct FMassHasTargetTag : public FMassTag { GENERATED_BODY() }; // Wenn bHasValidTarget true ist
@@ -771,6 +772,7 @@ namespace UnitTagBits
 	static constexpr uint32 StopXYMovement      = 1u << 23;
 	// Startup freeze state
 	static constexpr uint32 Frozen              = 1u << 24;
+	static constexpr uint32 SoftAvoidance       = 1u << 25;
 }
 
 
@@ -803,6 +805,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateFrozenTag::StaticStruct()))               Bits |= UnitTagBits::Frozen;
 	if (H(FMassStateDisableObstacleTag::StaticStruct()))      Bits |= UnitTagBits::DisableObstacle;
 	if (H(FMassStateStopXYMovementTag::StaticStruct()))       Bits |= UnitTagBits::StopXYMovement;
+	if (H(FMassSoftAvoidanceTag::StaticStruct()))             Bits |= UnitTagBits::SoftAvoidance;
 	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
@@ -832,6 +835,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::Frozen,              FMassStateFrozenTag());
 	SetTag(UnitTagBits::DisableObstacle,     FMassStateDisableObstacleTag());
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
+	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 
 	// If the client already has Dead tag AND Health <= 0 on client, skip replication of other state tags
 	const bool bClientHasDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());

@@ -30,6 +30,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); 
 	
@@ -66,6 +67,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 	ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	ClientEntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
+	ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	//ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	ClientEntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
@@ -141,6 +143,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
@@ -187,7 +190,26 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+
+            UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(LocalContext.GetWorld());
+            const FMassAgentCharacteristicsFragment& Characteristics = CharacteristicsList[EntityIndex];
+
+            if (NavSys && !Characteristics.bIsFlying)
+            {
+                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 2.f, Characteristics.CapsuleRadius * 2.f, SoftAvoidanceZExtent);
+
+                FNavLocation ProjectedLocation;
+                // Use capsule-based extent to detect if we are on the mesh
+                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
+                    FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
+                {
+                    // If projection fails or is too far, the unit is trying to leave the mesh.
+                    // We add the tag so SoftAvoidance can push us back next frame
+                    LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
+                }
+            }
+
             CurrentTransform.SetTranslation(NewLocation);
 
             Force.Value = FVector::ZeroVector;
@@ -209,6 +231,7 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         const TArrayView<FTransformFragment> LocationList = LocalContext.GetMutableFragmentView<FTransformFragment>();
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
@@ -246,7 +269,26 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             }
 
             const FVector CurrentLocation = CurrentTransform.GetLocation();
-            const FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+            FVector NewLocation = CurrentLocation + Velocity.Value * DeltaTime;
+
+            UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(LocalContext.GetWorld());
+            const FMassAgentCharacteristicsFragment& Characteristics = CharacteristicsList[EntityIndex];
+
+            if (NavSys && !Characteristics.bIsFlying)
+            {
+                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 2.f, Characteristics.CapsuleRadius * 2.f, SoftAvoidanceZExtent);
+
+                FNavLocation ProjectedLocation;
+                // Use capsule-based extent to detect if we are on the mesh
+                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
+                    FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
+                {
+                    // If projection fails or is too far, the unit is trying to leave the mesh.
+                    // We add the tag so SoftAvoidance can push us back next frame
+                    LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
+                }
+            }
+
             CurrentTransform.SetTranslation(NewLocation);
 
             Force.Value = FVector::ZeroVector;
