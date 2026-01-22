@@ -150,10 +150,10 @@ public:
 	
 	/** Computes offsets for an N-unit grid formation centered at (0,0). */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	TArray<FVector> ComputeSlotOffsets(int32 NumUnits) const;
-	/** Builds an N×N cost matrix of squared distances from unitsto slots. */
+	TArray<FVector> ComputeSlotOffsets(const TArray<AUnitBase*>& Units) const;
+	/** Builds an N×N cost matrix of squared distances from units to slots, with size-compatibility penalties. */
 	TArray<TArray<float>> BuildCostMatrix(
-		const TArray<FVector>& UnitPositions,
+		const TArray<AUnitBase*>& Units,
 		const TArray<FVector>& SlotOffsets,
 		const FVector& TargetCenter) const;
 	

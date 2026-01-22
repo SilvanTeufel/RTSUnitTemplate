@@ -1196,7 +1196,7 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 	if (NumUnits == 0) return;
 
 	// 2) precompute grid offsets around GroundLocation
-	TArray<FVector> Offsets = ComputeSlotOffsets(NumUnits);
+	TArray<FVector> Offsets = ComputeSlotOffsets(SelectedUnits);
 
 	AWaypoint* BWaypoint = nullptr;
 	bool PlayWaypointSound = false;
@@ -1273,37 +1273,138 @@ FVector ACustomControllerBase::GetUnitWorldLocation(const AUnitBase* Unit) const
 	return Unit->GetMassActorLocation();
 }
 
-TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(int32 NumUnits) const
+TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase*>& Units) const
 {
+    int32 NumUnits = Units.Num();
+    if (NumUnits == 0) return TArray<FVector>();
+
+    // 1. Collect radii for all units
+    TArray<float> Radii;
+    Radii.Reserve(NumUnits);
+    for (const AUnitBase* Unit : Units)
+    {
+        float R = 50.0f; // Default fallback radius
+        if (Unit && Unit->GetCapsuleComponent())
+        {
+            R = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*GridCapsuleMultiplier;
+        }
+        Radii.Add(R);
+    }
+
+    // 2. Determine grid dimensions
     int32 GridSize = ComputeGridSize(NumUnits);
-    float Half = (GridSize - 1) * GridSpacing / 2.0f;
-    FVector Center(Half, Half, 0.f);
+    int32 NumRows = FMath::CeilToInt((float)NumUnits / (float)GridSize);
+
+    // 3. Compute max radius per row and column to ensure no overlaps in a non-uniform grid
+    TArray<float> MaxR_Col; MaxR_Col.Init(0.0f, GridSize);
+    TArray<float> MaxR_Row; MaxR_Row.Init(0.0f, NumRows);
+
+    for (int32 i = 0; i < NumUnits; ++i)
+    {
+        int32 Row = i / GridSize;
+        int32 Col = i % GridSize;
+        float R = Radii[i];
+        MaxR_Col[Col] = FMath::Max(MaxR_Col[Col], R);
+        MaxR_Row[Row] = FMath::Max(MaxR_Row[Row], R);
+    }
+
+    // 4. Calculate X and Y positions for each column and row
+    TArray<float> XPositions; XPositions.Init(0.0f, GridSize);
+    TArray<float> YPositions; YPositions.Init(0.0f, NumRows);
+
+    // Start with first column/row at 0. Next positions are previous + radii + spacing
+    for (int32 c = 1; c < GridSize; ++c)
+    {
+        XPositions[c] = XPositions[c - 1] + MaxR_Col[c - 1] + MaxR_Col[c] + GridSpacing;
+    }
+
+    for (int32 r = 1; r < NumRows; ++r)
+    {
+        YPositions[r] = YPositions[r - 1] + MaxR_Row[r - 1] + MaxR_Row[r] + GridSpacing;
+    }
+
+    // 5. Center the grid including unit widths
+    float LeftEdge = XPositions[0] - MaxR_Col[0];
+    float RightEdge = XPositions[GridSize - 1] + MaxR_Col[GridSize - 1];
+    float TopEdge = YPositions[0] - MaxR_Row[0];
+    float BottomEdge = YPositions[NumRows - 1] + MaxR_Row[NumRows - 1];
+    FVector TrueCenter((LeftEdge + RightEdge) * 0.5f, (TopEdge + BottomEdge) * 0.5f, 0.0f);
+
+    // 6. Generate offsets
     TArray<FVector> Offsets;
     Offsets.Reserve(NumUnits);
     for (int32 i = 0; i < NumUnits; ++i)
     {
         int32 Row = i / GridSize;
         int32 Col = i % GridSize;
-        Offsets.Add(FVector(Col * GridSpacing, Row * GridSpacing, 0.f) - Center);
+        Offsets.Add(FVector(XPositions[Col], YPositions[Row], 0.f) - TrueCenter);
     }
+
     return Offsets;
 }
 
 TArray<TArray<float>> ACustomControllerBase::BuildCostMatrix(
-    const TArray<FVector>& UnitPositions,
+    const TArray<AUnitBase*>& Units,
     const TArray<FVector>& SlotOffsets,
     const FVector& TargetCenter) const
 {
-    int32 N = UnitPositions.Num();
+    int32 N = Units.Num();
+    if (N == 0) return TArray<TArray<float>>();
+
+    // 1. Collect radii and identify slot capacities
+    TArray<float> Radii;
+    Radii.Reserve(N);
+    for (const AUnitBase* Unit : Units)
+    {
+        float R = 50.0f;
+        if (Unit && Unit->GetCapsuleComponent())
+            R = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius();
+        Radii.Add(R);
+    }
+
+    int32 GridSize = ComputeGridSize(N);
+    int32 NumRows = FMath::CeilToInt((float)N / (float)GridSize);
+
+    TArray<float> MaxR_Col; MaxR_Col.Init(0.0f, GridSize);
+    TArray<float> MaxR_Row; MaxR_Row.Init(0.0f, NumRows);
+
+    for (int32 i = 0; i < N; ++i)
+    {
+        int32 Row = i / GridSize;
+        int32 Col = i % GridSize;
+        float R = Radii[i];
+        MaxR_Col[Col] = FMath::Max(MaxR_Col[Col], R);
+        MaxR_Row[Row] = FMath::Max(MaxR_Row[Row], R);
+    }
+
+    // 2. Build the matrix with penalties
     TArray<TArray<float>> Cost;
     Cost.SetNum(N);
     for (int32 i = 0; i < N; ++i)
     {
+        float UnitR = Radii[i];
+        FVector UnitLoc = GetUnitWorldLocation(Units[i]);
+
         Cost[i].SetNum(N);
         for (int32 j = 0; j < N; ++j)
         {
+            int32 Row = j / GridSize;
+            int32 Col = j % GridSize;
+            float Capacity = FMath::Min(MaxR_Col[Col], MaxR_Row[Row]);
+
             FVector SlotWorld = TargetCenter + SlotOffsets[j];
-            Cost[i][j] = FVector::DistSquared(UnitPositions[i], SlotWorld);
+            float DistSq = FVector::DistSquared(UnitLoc, SlotWorld);
+
+            // If unit is too large for the slot's allocated space, add a massive penalty.
+            // We use a small epsilon for float comparison.
+            if (UnitR > Capacity + 0.1f)
+            {
+                Cost[i][j] = DistSq + 1e10f; 
+            }
+            else
+            {
+                Cost[i][j] = DistSq;
+            }
         }
     }
     return Cost;
@@ -1376,22 +1477,31 @@ bool ACustomControllerBase::ShouldRecalculateFormation() const
 void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter)
 {
     int32 N = SelectedUnits.Num();
+    if (N == 0) return;
     UnitFormationOffsets.Empty();
     LastFormationUnits.Empty();
 
-    auto Offsets = ComputeSlotOffsets(N);
-    TArray<FVector> Positions;
-    Positions.Reserve(N);
-    for (AUnitBase* U : SelectedUnits)
-        Positions.Add(GetUnitWorldLocation(U));
+    // 1. Sort a local copy of units by radius to ensure size-matched formation assignment
+    TArray<AUnitBase*> SortedUnits = SelectedUnits;
+    SortedUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
+        float RA = 50.0f;
+        if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        float RB = 50.0f;
+        if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        return RA > RB;
+    });
 
-    auto Cost = BuildCostMatrix(Positions, Offsets, TargetCenter);
+    // 2. Compute non-uniform offsets tailored for these units
+    auto Offsets = ComputeSlotOffsets(SortedUnits);
+    
+    // 3. Match units to slots. By including radius info in BuildCostMatrix, we ensure big units get big slots.
+    auto Cost = BuildCostMatrix(SortedUnits, Offsets, TargetCenter);
     auto Assign = SolveHungarian(Cost);
 
     for (int32 i = 0; i < N; ++i)
     {
-        UnitFormationOffsets.Add(SelectedUnits[i], Offsets[Assign[i]]);
-        LastFormationUnits.Add(SelectedUnits[i]);
+        UnitFormationOffsets.Add(SortedUnits[i], Offsets[Assign[i]]);
+        LastFormationUnits.Add(SortedUnits[i]);
     }
     bForceFormationRecalculation = false;
 }
@@ -1609,7 +1719,7 @@ void ACustomControllerBase::LeftClickPressedMass()
         if (NumUnits == 0) return;
 
         // 2) precompute grid offsets
-        TArray<FVector> Offsets = ComputeSlotOffsets(NumUnits);
+        TArray<FVector> Offsets = ComputeSlotOffsets(SelectedUnits);
 
         AWaypoint* BWaypoint = nullptr;
         bool PlayWaypointSound = false;

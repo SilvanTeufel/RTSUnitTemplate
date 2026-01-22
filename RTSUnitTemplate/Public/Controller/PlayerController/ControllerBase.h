@@ -171,8 +171,11 @@ public:
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
-	float GridSpacing = 250.0f;
+	float GridSpacing = 70.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
+	float GridCapsuleMultiplier = 1.5;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
 	EGridShape GridFormationShape = EGridShape::Staggered;
 	
