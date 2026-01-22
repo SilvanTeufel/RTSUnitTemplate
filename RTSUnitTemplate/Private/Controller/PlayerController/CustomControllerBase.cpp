@@ -38,6 +38,7 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "GAS/AttributeSetBase.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -861,8 +862,19 @@ bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
 	
 		if (!UnitBase || !UnitBase->CanBeSelected) return false;
 	
-		if (UnitBase && UnitBase->IsATransporter){
-			LoadUnitsMass(SelectedUnits, UnitBase);
+	if (UnitBase && UnitBase->IsATransporter){
+		if (UnitBase->Attributes && UnitBase->Attributes->GetHealth() < UnitBase->Attributes->GetMaxHealth())
+		{
+			for (const AUnitBase* SelectedUnit : SelectedUnits)
+			{
+				if (SelectedUnit && SelectedUnit->CanRepair)
+				{
+					return false;
+				}
+			}
+		}
+
+		LoadUnitsMass(SelectedUnits, UnitBase);
 			
 			UnitBase->RemoveFocusEntityTarget();
 			TArray<AUnitBase*> NewSelection;
