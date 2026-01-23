@@ -64,6 +64,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = Ability)
 	int32 AbilityQueueSize = 0;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Ability)
+	int32 MaxAbilityQueueSize = 6;
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const TArray<FQueuedAbility>& GetQueuedAbilities();
@@ -168,6 +171,9 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category=Ability)
 	FQueuedAbility CurrentSnapshot;
+
+	UPROPERTY()
+	float QueueFallbackTimer = 0.f;
 
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;

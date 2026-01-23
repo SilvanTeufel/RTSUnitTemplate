@@ -155,7 +155,7 @@ public:
 	int MaxAbilityButtonCount = 10;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int MaxQueButtonCount = 5;
+	int MaxQueButtonCount = 6;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ACustomControllerBase* ControllerBase;

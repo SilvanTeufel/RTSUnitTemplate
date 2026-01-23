@@ -343,7 +343,7 @@ void UUnitWidgetSelector::GetButtonsFromBP()
 	ButtonLabels.Empty();
 	UnitIcons.Empty();
 
-	for (int32 i = 0; i <= MaxQueButtonCount; i++)
+	for (int32 i = 0; i < MaxQueButtonCount; i++)
 	{
 		FString WidgetName = FString::Printf(TEXT("AbilityQueButtonWidget_%d"), i);
 		UUserWidget* Widget = Cast<UUserWidget>(GetWidgetFromName(FName(*WidgetName)));
