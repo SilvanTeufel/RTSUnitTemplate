@@ -342,7 +342,7 @@ bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionC
 		// Check if the team has enough resources of the current type
 		if (Costs.Contains(ResourceArray.ResourceType) && Costs[ResourceArray.ResourceType] > 0.f)
 		{
-			bool bIsSupply = SupplyLikeResources.Contains(ResourceArray.ResourceType) ? SupplyLikeResources[ResourceArray.ResourceType] : false;
+			bool bIsSupply = SupplyLikeResources.FindRef(ResourceArray.ResourceType);
 			if (bIsSupply)
 			{
 				if (ResourceAmount + Costs[ResourceArray.ResourceType] > ResourceArray.MaxResources[TeamId])
@@ -359,6 +359,88 @@ bool AResourceGameMode::CanAffordConstruction(const FBuildingCost& ConstructionC
 
 	// If all costs are affordable
 	return true;
+}
+
+bool AResourceGameMode::CanAffordResource(EResourceType ResourceType, float Amount, int32 TeamId) const
+{
+	if (TeamId < 0 || TeamId >= NumberOfTeams)
+		return false;
+
+	for (const FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.ResourceType == ResourceType)
+		{
+			if (!ResourceArray.Resources.IsValidIndex(TeamId))
+				return false;
+
+			float ResourceAmount = ResourceArray.Resources[TeamId];
+			bool bIsSupply = SupplyLikeResources.FindRef(ResourceType);
+
+			if (bIsSupply)
+			{
+				// For supply-like resources, check if adding the amount exceeds max capacity
+				return (ResourceAmount + Amount <= ResourceArray.MaxResources[TeamId]);
+			}
+			else
+			{
+				// For standard resources, check if the current amount is sufficient
+				return (ResourceAmount >= Amount);
+			}
+		}
+	}
+	return false;
+}
+
+bool AResourceGameMode::CanAffordConstructionExtended(const FBuildingCost& ConstructionCost, int32 TeamId, TArray<EResourceType>& OutMissingResources) const
+{
+	OutMissingResources.Empty();
+
+	if (TeamResources.Num() == 0 || TeamId < 0 || TeamId >= NumberOfTeams)
+		return false;
+
+	// Map the FBuildingCost members to EResourceType for easier iteration
+	TMap<EResourceType, int32> Costs;
+	Costs.Add(EResourceType::Primary, ConstructionCost.PrimaryCost);
+	Costs.Add(EResourceType::Secondary, ConstructionCost.SecondaryCost);
+	Costs.Add(EResourceType::Tertiary, ConstructionCost.TertiaryCost);
+	Costs.Add(EResourceType::Rare, ConstructionCost.RareCost);
+	Costs.Add(EResourceType::Epic, ConstructionCost.EpicCost);
+	Costs.Add(EResourceType::Legendary, ConstructionCost.LegendaryCost);
+
+	for (const FResourceArray& ResourceArray : TeamResources)
+	{
+		if (!ResourceArray.Resources.IsValidIndex(TeamId))
+			continue;
+
+		float ResourceAmount = ResourceArray.Resources[TeamId];
+		EResourceType RType = ResourceArray.ResourceType;
+
+		if (Costs.Contains(RType) && Costs[RType] > 0)
+		{
+			bool bIsSupply = SupplyLikeResources.FindRef(RType);
+			bool bAffordable = true;
+
+			if (bIsSupply)
+			{
+				if (ResourceAmount + Costs[RType] > ResourceArray.MaxResources[TeamId])
+				{
+					bAffordable = false;
+				}
+			}
+			else if (ResourceAmount < Costs[RType])
+			{
+				bAffordable = false;
+			}
+
+			if (!bAffordable)
+			{
+				OutMissingResources.Add(RType);
+			}
+		}
+	}
+
+	// Returns true if no resources were missing
+	return OutMissingResources.Num() == 0;
 }
 
 void AResourceGameMode::AssignWorkAreasToWorkers()

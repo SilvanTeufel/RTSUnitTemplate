@@ -143,6 +143,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool CanAffordConstruction(const FBuildingCost& ConstructionCost, int32 TeamId) const;
 
+	/** Checks if a specific resource type can be afforded */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool CanAffordResource(EResourceType ResourceType, float Amount, int32 TeamId) const;
+
+	/** Similar to CanAffordConstruction, but returns an array of resources that the team is missing or cannot afford */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool CanAffordConstructionExtended(const FBuildingCost& ConstructionCost, int32 TeamId, TArray<EResourceType>& OutMissingResources) const;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorker(AWorkingUnitBase* Worker);
 
