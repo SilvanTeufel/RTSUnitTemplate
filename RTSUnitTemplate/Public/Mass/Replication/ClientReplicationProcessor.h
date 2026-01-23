@@ -37,7 +37,7 @@ public:
 
 	// Rotation reconciliation (Yaw-only by default)
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool bEnableRotationReconciliation = true; // enable gentle rotation correction
+	bool bEnableRotationReconciliation = false; // enable gentle rotation correction
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MinYawErrorForCorrectionDeg = 3.0f; // deg, threshold to start correcting
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

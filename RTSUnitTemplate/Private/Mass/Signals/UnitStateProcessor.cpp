@@ -1273,8 +1273,13 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	if( StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
 			StrongUnitActor->SetUnitState(UnitData::Idle);
 		}
-
+    	
     	UpdateUnitArrayMovement(CapturedEntity , StrongUnitActor);
+
+
+    	if(StrongUnitActor->GetUnitState() == UnitData::Casting && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateCastingTag::StaticStruct())){
+						SwitchState(UnitSignals::Casting, CapturedEntity, GTEntityManager);
+		}
     	
     	if (!StrongUnitActor->IsWorker) return;
     		
