@@ -431,14 +431,19 @@ void AUnitBase::SetWaypoint(AWaypoint* NewNextWaypoint)
 
 	if (ABuildingBase* Building = Cast<ABuildingBase>(this))
 	{
-		if (NextWaypoint) NextWaypoint->RemoveAssignedUnit(this);
+		if (NextWaypoint && IsValid(NextWaypoint)) NextWaypoint->RemoveAssignedUnit(this);
 		NextWaypoint = NewNextWaypoint;
-		if (NextWaypoint) NextWaypoint->AddAssignedUnit(this);
+		if (NextWaypoint && IsValid(NextWaypoint)) NextWaypoint->AddAssignedUnit(this);
 	}
 	else
 	{
 		NextWaypoint = NewNextWaypoint;
 	}
+}
+
+AWaypoint* AUnitBase::GetNextWaypoint() const
+{
+	return IsValid(NextWaypoint) ? NextWaypoint : nullptr;
 }
 
 void AUnitBase::SetHealth_Implementation(float NewHealth)
@@ -1045,6 +1050,12 @@ TEnumAsByte<UnitData::EState> UStatePlaceholder,
 int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable)
 {
 	TArray<AUnitBase*> SpawnedUnits;
+
+	if (!IsValid(this))
+	{
+		return SpawnedUnits;
+	}
+
 	FUnitSpawnParameter SpawnParameter;
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
 	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
@@ -1107,7 +1118,7 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 			UnitBase->ConstructionCost = UsedConstructionCost;
 			
-			if(UnitToChase)
+			if(UnitToChase && IsValid(UnitToChase))
 			{
 				UnitBase->UnitToChase = UnitToChase;
 				UnitBase->SetUnitState(UnitData::Chase);
@@ -1124,7 +1135,7 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 			// Ensure squad healthbar setup on server right after SquadId assignment
 			UnitBase->EnsureSquadHealthbarState();
 			
-			if(Waypoint)
+			if(Waypoint && IsValid(Waypoint))
 				UnitBase->SetWaypoint(Waypoint);
 
 			UnitBase->ScheduleDelayedNavigationUpdate();

@@ -190,7 +190,7 @@ public:
 public:
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitToChase", Keywords = "RTSUnitTemplate UnitToChase"), Category = RTSUnitTemplate)
-	AUnitBase* UnitToChase;
+	AUnitBase* UnitToChase = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitsToChase", Keywords = "RTSUnitTemplate UnitsToChase"), Category = RTSUnitTemplate)
 	TArray <AUnitBase*> UnitsToChase;
@@ -205,7 +205,10 @@ public:
 // related to Waypoints  //////////////////////////////////////////
 public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "NextWaypoint", Keywords = "RTSUnitTemplate NextWaypoint"), Category = RTSUnitTemplate)
-	class AWaypoint* NextWaypoint;
+	class AWaypoint* NextWaypoint = nullptr;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	class AWaypoint* GetNextWaypoint() const;
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetWaypoint", Keywords = "RTSUnitTemplate SetWaypoint"), Category = RTSUnitTemplate)
 	void SetWaypoint(class AWaypoint* NewNextWaypoint);

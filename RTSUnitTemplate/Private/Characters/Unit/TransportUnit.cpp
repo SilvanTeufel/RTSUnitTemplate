@@ -73,9 +73,9 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 
 	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
 
-	// If the unit has been assigned a specific transporter (non-zero TransportId),
-	// only allow loading into that exact transporter. Do NOT modify readiness on mismatch.
-	if (UnitToLoad && UnitToLoad->TransportId != 0 && TransportId != UnitToLoad->TransportId)
+	// If the unit has been assigned a specific transporter,
+	// only allow loading into that exact transporter.
+	if (UnitToLoad && (UnitToLoad->TransportId == 0 || TransportId != UnitToLoad->TransportId))
 	{
 		return;
 	}
@@ -220,8 +220,8 @@ void ATransportUnit::OnCapsuleOverlapBegin(
 		// Attempt to cast the overlapping actor to ATransportUnit.
 		if (AUnitBase* OverlappingUnit = Cast<AUnitBase>(OtherActor))
 		{
-			// Check if the overlapping unit is ready for transport.
-			if (OverlappingUnit->RdyForTransport)
+			// Check if the overlapping unit is ready for transport and matches this transporter's ID.
+			if (OverlappingUnit->RdyForTransport && OverlappingUnit->TransportId != 0 && OverlappingUnit->TransportId == TransportId)
 			{
 				// Load the overlapping unit.
 				LoadUnit(OverlappingUnit);

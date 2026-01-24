@@ -87,6 +87,7 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
                         {
                             DrawDebugSphere(LocalContext.GetWorld(), Location + FVector(0,0,100.f), 20.f, 8, FColor::Blue, false, ExecutionInterval * 2.f);
                             DrawDebugLine(LocalContext.GetWorld(), Location + FVector(0,0,100.f), NavLoc.Location + FVector(0,0,100.f), FColor::Blue, false, ExecutionInterval * 2.f);
+                            DrawDebugDirectionalArrow(LocalContext.GetWorld(), Location + FVector(0,0,100.f), Location + FVector(0,0,100.f) + ToNavMesh.GetSafeNormal() * 150.f, 50.f, FColor::Green, false, ExecutionInterval * 2.f, 0, 2.f);
                         }
                     }
                     

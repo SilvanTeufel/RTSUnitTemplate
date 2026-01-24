@@ -1606,6 +1606,8 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         if (bNavMod) continue;
 
         U->RemoveFocusEntityTarget();
+        U->SetRdyForTransport(false);
+        U->TransportId = 0;
         float Speed = U->Attributes->GetBaseRunSpeed();
         bool bSuccess = false;
         SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint, bSuccess);
@@ -1964,6 +1966,8 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
+			Unit->SetRdyForTransport(false);
+			Unit->TransportId = 0;
 			SetUnitState_Replication(Unit, 3);
 			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
 		}
@@ -2022,6 +2026,8 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 
 		float Speed = Unit->Attributes->GetBaseRunSpeed();
 		SetUnitState_Replication(Unit, 1);
+		Unit->SetRdyForTransport(false);
+		Unit->TransportId = 0;
 
 		if (Unit->bIsMassUnit)
 		{

@@ -598,13 +598,22 @@ void AAbilityUnit::RollRandomAbilitys()
 void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 {
 	// Server only
-	if (!HasAuthority())
+	if (!HasAuthority() || !AbilitySystemComponent)
 	{
 		return;
 	}
 
-	if (!AbilitySystemComponent)
+	// Check if the unit is currently busy with another ability
+	if (ActivatedAbilityInstance != nullptr)
 	{
+		// Reschedule the activation to try again after a delay
+		if (UWorld* World = GetWorld())
+		{
+			float RetryDelay = FMath::Max(0.1f, StartAbilitiesActivationDelay);
+			FTimerDelegate Delegate;
+			Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
+			World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, RetryDelay, false);
+		}
 		return;
 	}
 

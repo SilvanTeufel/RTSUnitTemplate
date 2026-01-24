@@ -3655,6 +3655,11 @@ void AExtendedControllerBase::LoadUnits_Implementation(const TArray<AUnitBase*>&
 {
 		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
 		{
+			// Assign a non-zero TransportId to the clicked transporter (stable identifier)
+			if (Transporter->TransportId == 0)
+			{
+				Transporter->TransportId = Transporter->GetUniqueID();
+			}
 
 			// Set up start and end points for the line trace (downward direction)
 			FVector Start = Transporter->GetActorLocation();
@@ -3673,6 +3678,10 @@ void AExtendedControllerBase::LoadUnits_Implementation(const TArray<AUnitBase*>&
 			{
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
+					// Bind this unit to the clicked transporter so it won't load into others en route
+					UnitsToLoad[i]->TransportId = Transporter->TransportId;
+					UnitsToLoad[i]->RemoveFocusEntityTarget();
+					
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
 					float Distance = FVector::Dist2D(UnitsToLoad[i]->GetActorLocation(), Transporter->GetActorLocation());
 
