@@ -12,6 +12,7 @@
 #include "Widgets/UnitWidgetSelector.h"
 #include "Widgets/WinConditionWidget.h"
 #include "Widgets/MapMenuWidget.h"
+#include "Widgets/StoryWidgetBase.h"
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -126,6 +127,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMapMenuWidget* MapMenuWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UStoryWidgetBase* StoryWidget;
 
 	int32 TabMode = 1;
 	

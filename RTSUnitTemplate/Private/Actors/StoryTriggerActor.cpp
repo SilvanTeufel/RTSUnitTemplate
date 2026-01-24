@@ -56,8 +56,8 @@ void AStoryTriggerActor::BeginPlay()
             StoryMaterial = Row->StoryMaterial;
             StoryImageSoft = Row->StoryImageSoft;
             StoryMaterialSoft = Row->StoryMaterialSoft;
-            ScreenOffsetX = Row->ScreenOffsetX;
-            ScreenOffsetY = Row->ScreenOffsetY;
+            // ScreenOffsetX = Row->ScreenOffsetX;
+            // ScreenOffsetY = Row->ScreenOffsetY;
             WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
         }
     }
@@ -119,8 +119,8 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
                 Item.Material = StoryMaterial.Get();
                 Item.ImageSoft = StoryImageSoft;
                 Item.MaterialSoft = StoryMaterialSoft;
-                Item.OffsetX = ScreenOffsetX;
-                Item.OffsetY = ScreenOffsetY;
+                // Item.OffsetX = ScreenOffsetX;
+                // Item.OffsetY = ScreenOffsetY;
                 Item.LifetimeSeconds = WidgetLifetimeSeconds;
                 Item.Sound = TriggerSound;
                 Item.TriggeringSource = this;

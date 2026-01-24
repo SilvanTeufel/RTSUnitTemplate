@@ -43,8 +43,8 @@ bool UStoryTriggerComponent::BuildQueueItemFromRow(FName RowName, FStoryQueueIte
 		OutItem.Material = Row->StoryMaterial;
 		OutItem.ImageSoft = Row->StoryImageSoft;
 		OutItem.MaterialSoft = Row->StoryMaterialSoft;
-		OutItem.OffsetX = Row->ScreenOffsetX;
-		OutItem.OffsetY = Row->ScreenOffsetY;
+		// OutItem.OffsetX = Row->ScreenOffsetX;
+		// OutItem.OffsetY = Row->ScreenOffsetY;
 		OutItem.LifetimeSeconds = Row->WidgetLifetimeSeconds;
 		OutItem.Sound = Row->TriggerSound;
 		return true;

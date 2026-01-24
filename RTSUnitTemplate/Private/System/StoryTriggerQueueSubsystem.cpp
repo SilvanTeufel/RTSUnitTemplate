@@ -8,6 +8,8 @@
 #include "Actors/StoryTriggerActor.h"
 #include "Components/StoryTriggerComponent.h"
 #include "Sound/SoundClass.h"
+#include "Characters/Camera/ExtendedCameraBase.h"
+#include "Blueprint/UserWidget.h"
 
 UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 {
@@ -79,7 +81,7 @@ void UStoryTriggerQueueSubsystem::ClearActive()
 
 	if (ActiveWidget)
 	{
-		ActiveWidget->RemoveFromParent();
+		ActiveWidget->SetVisibility(ESlateVisibility::Collapsed);
 		ActiveWidget = nullptr;
 	}
 }
@@ -141,7 +143,30 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		return;
 	}
 
-	UStoryWidgetBase* Widget = CreateWidget<UStoryWidgetBase>(PC, Item.WidgetClass);
+	UStoryWidgetBase* Widget = nullptr;
+	if (AExtendedCameraBase* Cam = Cast<AExtendedCameraBase>(PC->GetPawn()))
+	{
+		if (Cam->StoryWidget)
+		{
+			Widget = Cam->StoryWidget;
+		}
+	}
+
+	if (!Widget)
+	{
+		Widget = CreateWidget<UStoryWidgetBase>(PC, Item.WidgetClass);
+		if (Widget)
+		{
+			Widget->AddToViewport();
+			Widget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
+
+			int32 SizeX = 0, SizeY = 0;
+			PC->GetViewportSize(SizeX, SizeY);
+			const FVector2D CenterPos(0.5f * SizeX, 0.5f * SizeY);
+			Widget->SetPositionInViewport(CenterPos, false);
+		}
+	}
+
 	if (!Widget)
 	{
 		TryPlayNext();
@@ -160,13 +185,7 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		ResolvedTexture = Item.ImageSoft.LoadSynchronous();
 	}
 
-	int32 SizeX = 0, SizeY = 0;
-	PC->GetViewportSize(SizeX, SizeY);
-	const FVector2D CenterPos(0.5f * SizeX + Item.OffsetX, 0.5f * SizeY + Item.OffsetY);
-
-	Widget->AddToViewport();
-	Widget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
-	Widget->SetPositionInViewport(CenterPos, false);
+	Widget->SetVisibility(ESlateVisibility::Visible);
 	Widget->StartStory(Item.Text, ResolvedTexture, ResolvedMaterial);
 
 	if (Item.Sound)

@@ -50,11 +50,11 @@ struct FStoryWidgetTable : public FTableRowBase
 	TSoftObjectPtr<UMaterialInterface> StoryMaterialSoft;
 
 	// Screen-space offset from center (X=right, Y=down)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
-	float ScreenOffsetX = 0.f;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	// float ScreenOffsetX = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
-	float ScreenOffsetY = 0.f;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	// float ScreenOffsetY = 0.f;
 
 	// Auto-remove the widget after this many seconds (<=0 disables auto-remove)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story, meta=(ClampMin="0.0"))
@@ -133,11 +133,11 @@ protected:
 	bool bTriggerOnce = true;
 
 	// Screen-space offset from center (X=right, Y=down)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
-	float ScreenOffsetX = 0.f;
+	// UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	// float ScreenOffsetX = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
-	float ScreenOffsetY = 0.f;
+	// UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	// float ScreenOffsetY = 0.f;
 
 	// Only units with this TeamId will trigger the story
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)

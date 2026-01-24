@@ -37,8 +37,8 @@ void UStoryBlueprintLibrary::EnqueueStory(UObject* WorldContextObject,
 			Item.Text = Text;
 			Item.Image = Image;
 			Item.Material = Material;
-			Item.OffsetX = OffsetX;
-			Item.OffsetY = OffsetY;
+			// Item.OffsetX = OffsetX;
+			// Item.OffsetY = OffsetY;
 			Item.LifetimeSeconds = LifetimeSeconds;
 			Item.Sound = Sound;
 			Queue->EnqueueStory(Item);
@@ -74,8 +74,8 @@ void UStoryBlueprintLibrary::EnqueueStorySoft(UObject* WorldContextObject,
 			Item.Text = Text;
 			Item.ImageSoft = ImageSoft;
 			Item.MaterialSoft = MaterialSoft;
-			Item.OffsetX = OffsetX;
-			Item.OffsetY = OffsetY;
+			// Item.OffsetX = OffsetX;
+			// Item.OffsetY = OffsetY;
 			Item.LifetimeSeconds = LifetimeSeconds;
 			Item.Sound = Sound;
 			Queue->EnqueueStory(Item);
@@ -131,8 +131,8 @@ void UStoryBlueprintLibrary::EnqueueFromDataTableRow(UObject* WorldContextObject
 			Item.Material = Row->StoryMaterial;
 			Item.ImageSoft = Row->StoryImageSoft;
 			Item.MaterialSoft = Row->StoryMaterialSoft;
-			Item.OffsetX = Row->ScreenOffsetX;
-			Item.OffsetY = Row->ScreenOffsetY;
+			// Item.OffsetX = Row->ScreenOffsetX;
+			// Item.OffsetY = Row->ScreenOffsetY;
 			Item.LifetimeSeconds = Row->WidgetLifetimeSeconds;
 			Item.Sound = Row->TriggerSound;
 			Queue->EnqueueStory(Item);
