@@ -2697,7 +2697,11 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         {
             if (!Candidate || Candidate == CurrentIndicator) return;
             // Do not consider the owner unit/building as a blocking/snap target
-            if (Candidate == Unit) return;
+            if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
+            {
+                if (Candidate == Unit) return;
+                if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (Candidate == OwnerBuilding) return; }
+            }
             FVector OtherCenter, OtherExtent;
             if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent)) return;
             const float OtherXY = FMath::Max(OtherExtent.X, OtherExtent.Y);
@@ -2772,8 +2776,11 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 {
                     if (!N) continue;
                     // Do not be blocked by the owning unit/building
-                    if (N == Unit) continue;
-                    if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
+                    if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
+                    {
+                        if (N == Unit) continue;
+                        if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
+                    }
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
                     float Required = DragR + NR + SnapGap;
@@ -2814,6 +2821,11 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 for (AActor* N : Neighbors)
                 {
                     if (!N) continue;
+                    if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
+                    {
+                        if (N == Unit) continue;
+                        if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
+                    }
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
                     const float Required = DragR + NR + SnapGap;

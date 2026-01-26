@@ -69,6 +69,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool RotatesToDirection = false;
 
+	// If true, this indicator will ignore its owning unit/building in distance/overlap checks
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIgnoreHoldingUnitInDistanceCheck = true;
+
 private:
 	// Root Scene Component
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)

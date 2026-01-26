@@ -27,6 +27,7 @@ AAbilityIndicator::AAbilityIndicator()
 	SetActorEnableCollision(false);
 	
 	bReplicates = true;
+	bIgnoreHoldingUnitInDistanceCheck = true;
 }
 
 // Called when the game starts or when spawned
