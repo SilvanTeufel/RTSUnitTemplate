@@ -565,7 +565,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
     }
 }
 
-void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation, int32 ID)
+void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation, float EffectDelay, float SoundDelay, int32 ID)
 {
     if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
     {
@@ -575,65 +575,100 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
             return;
         }
 
+        TWeakObjectPtr<APerformanceUnit> WeakThis = this;
+
         // Spawn the Niagara visual effect
-        UNiagaraComponent* NiagaraComp = nullptr;
         if (ImpactVFX)
         {
-            NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX);
-            if (NiagaraComp)
+            auto SpawnNiagara = [World, WeakThis, ImpactVFX, Location, Rotation, ScaleVFX, KillDelay, ID]()
             {
-                ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
-            }
-        }
-
-        // Spawn the sound effect and get its audio component
-        UAudioComponent* AudioComp = nullptr;
-        if (ImpactSound)
-        {
-            float Multiplier = ScaleSound;
-            if (UGameInstance* GI = World->GetGameInstance())
-            {
-                if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+                if (APerformanceUnit* Unit = WeakThis.Get())
                 {
-                    if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+                    if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX))
                     {
-                        Multiplier *= ControllerBase->GetSoundMultiplier();
+                        Unit->ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
+
+                        if (KillDelay > 0.0f)
+                        {
+                            TWeakObjectPtr<UNiagaraComponent> WeakNiagaraComp = NiagaraComp;
+                            FTimerHandle TimerHandle;
+                            World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakNiagaraComp]()
+                            {
+                                if (UNiagaraComponent* NC = WeakNiagaraComp.Get())
+                                {
+                                    NC->Deactivate();
+                                    NC->DestroyComponent();
+                                }
+                            }), KillDelay, false);
+                            Unit->PendingEffectTimers.Add(TimerHandle);
+                        }
                     }
                 }
-            }
-            AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, Multiplier);
-            if (AudioComp)
+            };
+
+            if (EffectDelay > 0.f)
             {
-                ActiveAudio.Add(AudioComp);
+                FTimerHandle VisualEffectTimerHandle;
+                World->GetTimerManager().SetTimer(VisualEffectTimerHandle, FTimerDelegate::CreateLambda(SpawnNiagara), EffectDelay, false);
+                PendingEffectTimers.Add(VisualEffectTimerHandle);
+            }
+            else
+            {
+                SpawnNiagara();
             }
         }
 
-        // If either component is valid and a kill delay is provided, set up a timer to kill them.
-        if ((NiagaraComp || AudioComp) && KillDelay > 0.0f)
+        // Spawn the sound effect
+        if (ImpactSound)
         {
-            // Create weak pointers to safely reference the components in the lambda
-            TWeakObjectPtr<UNiagaraComponent> WeakNiagaraComp = NiagaraComp;
-            TWeakObjectPtr<UAudioComponent> WeakAudioComp = AudioComp;
-
-            FTimerHandle TimerHandle;
-            World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakNiagaraComp, WeakAudioComp]()
+            auto SpawnSound = [World, WeakThis, ImpactSound, Location, Rotation, ScaleSound, KillDelay]()
             {
-                // Safely check if the Niagara component still exists and then clean it up
-                if (UNiagaraComponent* NC = WeakNiagaraComp.Get())
+                if (APerformanceUnit* Unit = WeakThis.Get())
                 {
-                    NC->Deactivate();
-                    NC->DestroyComponent();
-                }
-                
-                // Safely check if the Audio component still exists and then clean it up
-                if (UAudioComponent* AC = WeakAudioComp.Get())
-                {
-                    AC->Stop();
-                    AC->DestroyComponent();
-                }
-            }), KillDelay, false);
+                    float Multiplier = ScaleSound;
+                    if (UGameInstance* GI = World->GetGameInstance())
+                    {
+                        if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+                        {
+                            if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+                            {
+                                Multiplier *= ControllerBase->GetSoundMultiplier();
+                            }
+                        }
+                    }
 
-            PendingEffectTimers.Add(TimerHandle);
+                    if (UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAtLocation(World, ImpactSound, Location, Rotation, Multiplier))
+                    {
+                        Unit->ActiveAudio.Add(AudioComp);
+
+                        if (KillDelay > 0.0f)
+                        {
+                            TWeakObjectPtr<UAudioComponent> WeakAudioComp = AudioComp;
+                            FTimerHandle TimerHandle;
+                            World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakAudioComp]()
+                            {
+                                if (UAudioComponent* AC = WeakAudioComp.Get())
+                                {
+                                    AC->Stop();
+                                    AC->DestroyComponent();
+                                }
+                            }), KillDelay, false);
+                            Unit->PendingEffectTimers.Add(TimerHandle);
+                        }
+                    }
+                }
+            };
+
+            if (SoundDelay > 0.f)
+            {
+                FTimerHandle SoundTimerHandle;
+                World->GetTimerManager().SetTimer(SoundTimerHandle, FTimerDelegate::CreateLambda(SpawnSound), SoundDelay, false);
+                PendingEffectTimers.Add(SoundTimerHandle);
+            }
+            else
+            {
+                SpawnSound();
+            }
         }
     }
 }

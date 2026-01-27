@@ -1550,7 +1550,9 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                                     PerfAttacker->ScaleImpactSound,
                                     ImpactLocation,
                                     KillDelay,
-                                    PerfAttacker->RotateImpactVFX);
+                                    PerfAttacker->RotateImpactVFX,
+                                    PerfAttacker->MeeleImpactVFXDelay,
+                                    PerfAttacker->MeleeImpactSoundDelay);
                             }
                         }
                     }
