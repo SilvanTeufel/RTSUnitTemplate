@@ -1187,14 +1187,6 @@ void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& GroundLo
 void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& GroundLocation)
 {
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
-	if (NavSys)
-	{
-		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(GroundLocation, NavLoc, NavMeshProjectionExtent))
-		{
-			return;
-		}
-	}
 
 	// Mimic LeftClickPressedMass attack branch using GroundLocation from minimap
 	if (!AttackToggled)
@@ -1206,8 +1198,20 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 	int32 NumUnits = SelectedUnits.Num();
 	if (NumUnits == 0) return;
 
-	// 2) precompute grid offsets around GroundLocation
-	TArray<FVector> Offsets = ComputeSlotOffsets(SelectedUnits);
+	// Consistency: Sort units by radius so that formation validation and assignment match Move logic
+	TArray<AUnitBase*> UnitsToProcess = SelectedUnits;
+	UnitsToProcess.Sort([](const AUnitBase& A, const AUnitBase& B) {
+		float RA = 50.0f;
+		if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+		float RB = 50.0f;
+		if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+		return RA > RB;
+	});
+
+	FVector AdjustedLocation = GroundLocation;
+	TArray<FVector> Offsets;
+	float UsedSpacing;
+	ValidateAndAdjustGridLocation(UnitsToProcess, AdjustedLocation, Offsets, UsedSpacing);
 
 	AWaypoint* BWaypoint = nullptr;
 	bool PlayWaypointSound = false;
@@ -1219,10 +1223,10 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 	TArray<FVector>    BuildingLocs;
 	for (int32 i = 0; i < NumUnits; ++i)
 	{
-		AUnitBase* U = SelectedUnits[i];
+		AUnitBase* U = UnitsToProcess[i];
 		if (U == nullptr || U == CameraUnitWithTag) continue;
 
-		FVector RunLocation = GroundLocation + Offsets[i];
+		FVector RunLocation = AdjustedLocation + Offsets[i];
 
 		bool bNavMod;
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
@@ -1284,10 +1288,12 @@ FVector ACustomControllerBase::GetUnitWorldLocation(const AUnitBase* Unit) const
 	return Unit->GetMassActorLocation();
 }
 
-TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase*>& Units) const
+TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase*>& Units, float Spacing) const
 {
     int32 NumUnits = Units.Num();
     if (NumUnits == 0) return TArray<FVector>();
+
+	float ActualSpacing = (Spacing < 0.f) ? GridSpacing : Spacing;
 
     // 1. Collect radii for all units
     TArray<float> Radii;
@@ -1326,12 +1332,12 @@ TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase
     // Start with first column/row at 0. Next positions are previous + radii + spacing
     for (int32 c = 1; c < GridSize; ++c)
     {
-        XPositions[c] = XPositions[c - 1] + MaxR_Col[c - 1] + MaxR_Col[c] + GridSpacing;
+        XPositions[c] = XPositions[c - 1] + MaxR_Col[c - 1] + MaxR_Col[c] + ActualSpacing;
     }
 
     for (int32 r = 1; r < NumRows; ++r)
     {
-        YPositions[r] = YPositions[r - 1] + MaxR_Row[r - 1] + MaxR_Row[r] + GridSpacing;
+        YPositions[r] = YPositions[r - 1] + MaxR_Row[r - 1] + MaxR_Row[r] + ActualSpacing;
     }
 
     // 5. Center the grid including unit widths
@@ -1485,7 +1491,7 @@ bool ACustomControllerBase::ShouldRecalculateFormation() const
     return false;
 }
 
-void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter)
+void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter, float Spacing)
 {
     int32 N = SelectedUnits.Num();
     if (N == 0) return;
@@ -1503,7 +1509,7 @@ void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter)
     });
 
     // 2. Compute non-uniform offsets tailored for these units
-    auto Offsets = ComputeSlotOffsets(SortedUnits);
+    auto Offsets = ComputeSlotOffsets(SortedUnits, Spacing);
     
     // 3. Match units to slots. By including radius info in BuildCostMatrix, we ensure big units get big slots.
     auto Cost = BuildCostMatrix(SortedUnits, Offsets, TargetCenter);
@@ -1515,6 +1521,93 @@ void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter)
         LastFormationUnits.Add(SortedUnits[i]);
     }
     bForceFormationRecalculation = false;
+}
+
+bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase*>& Units, FVector& InOutLocation, TArray<FVector>& OutOffsets, float& OutSpacing)
+{
+    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+    OutSpacing = GridSpacing;
+    if (!NavSys || Units.Num() == 0) 
+    {
+        OutOffsets = ComputeSlotOffsets(Units, OutSpacing);
+        return true;
+    }
+
+    // 1. Initial wide projection to find the nearest valid ground
+    FNavLocation InitialNavLoc;
+    if (NavSys->ProjectPointToNavigation(InOutLocation, InitialNavLoc, FVector(1500.f, 1500.f, 1500.f)))
+    {
+        InOutLocation = InitialNavLoc.Location;
+    }
+
+    // 2. Consistency: Sort by radius to match RecalculateFormation
+    TArray<AUnitBase*> LocalUnits = Units;
+    LocalUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
+        float RA = 50.0f;
+        if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        float RB = 50.0f;
+        if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        return RA > RB;
+    });
+
+    const float SpacingSteps[] = { 1.0f, 0.7f, 0.4f, 0.1f };
+    bool bFinalSuccess = false;
+
+    for (float StepMult : SpacingSteps)
+    {
+        OutSpacing = GridSpacing * StepMult;
+        
+        // Try up to 5 times to shift the grid to a valid location at this spacing
+        for (int32 Try = 0; Try < 5; ++Try)
+        {
+            OutOffsets = ComputeSlotOffsets(LocalUnits, OutSpacing);
+            bool bAllValid = true;
+            FVector FirstFailedPointShift = FVector::ZeroVector;
+
+            for (const FVector& Off : OutOffsets)
+            {
+                FVector TargetP = InOutLocation + Off;
+                FNavLocation NavLoc;
+                if (!NavSys->ProjectPointToNavigation(TargetP, NavLoc, NavMeshProjectionExtent))
+                {
+                    bAllValid = false;
+                    // Find nearest nav location for THIS point to calculate a shift for the whole grid
+                    if (NavSys->ProjectPointToNavigation(TargetP, NavLoc, FVector(1000.f, 1000.f, 1000.f)))
+                    {
+                        FirstFailedPointShift = NavLoc.Location - TargetP;
+                    }
+                    break; 
+                }
+            }
+
+            if (bAllValid)
+            {
+                bFinalSuccess = true;
+                break;
+            }
+
+            // If not all valid, shift InOutLocation based on the first point that failed
+            if (!FirstFailedPointShift.IsNearlyZero())
+            {
+                InOutLocation += FirstFailedPointShift;
+            }
+            else
+            {
+                // Fallback: just project center again with wide extent
+                FNavLocation CenterNav;
+                if (NavSys->ProjectPointToNavigation(InOutLocation, CenterNav, FVector(1000.f, 1000.f, 1000.f)))
+                {
+                    InOutLocation = CenterNav.Location;
+                }
+            }
+        }
+        
+        if (bFinalSuccess) break;
+    }
+
+    // We return true even if it's not perfectly on NavMesh after all attempts, 
+    // to ensure the command is never completely rejected.
+    return true; 
 }
 
 void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
@@ -1538,23 +1631,20 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     if (SelectedUnits.Num() == 0) return;
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
-	if (NavSys)
-	{
-		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
-		{
-			return;
-		}
-	}
+	FVector AdjustedLocation = Hit.Location;
+	TArray<FVector> DummyOffsets;
+	float UsedSpacing;
+	
+	ValidateAndAdjustGridLocation(SelectedUnits, AdjustedLocation, DummyOffsets, UsedSpacing);
 
     AWaypoint* BWaypoint = nullptr;
     bool PlayWaypoint = false, PlayRun = false;
 
     // 2. Formation check
-    if (ShouldRecalculateFormation())
+    // We recalculate if selection changed OR if the target location was adjusted significantly
+    if (ShouldRecalculateFormation() || !AdjustedLocation.Equals(Hit.Location, 1.0f))
     {
-        //UE_LOG(LogTemp, Warning, TEXT("Recalculating formation..."));
-        RecalculateFormation(Hit.Location);
+        RecalculateFormation(AdjustedLocation, UsedSpacing);
     }
 
     // 3. Assign final positions
@@ -1584,7 +1674,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	if (UnitIsValid)
     	{
     		FVector Off = UnitFormationOffsets.FindRef(U);
-    		Finals.Add(U, Hit.Location + Off);
+    		Finals.Add(U, AdjustedLocation + Off);
     	}
     }
 
@@ -1715,24 +1805,33 @@ void ACustomControllerBase::LeftClickPressedMass()
     	FHitResult Hit;
     	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
-    	if (!HitPawn.bBlockingHit)
-    	{
-    		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
-    		if (NavSys)
-    		{
-    			FNavLocation NavLoc;
-    			if (!NavSys->ProjectPointToNavigation(Hit.Location, NavLoc, NavMeshProjectionExtent))
-    			{
-    				return;
-    			}
-    		}
-    	}
-    	
         int32 NumUnits = SelectedUnits.Num();
         if (NumUnits == 0) return;
 
-        // 2) precompute grid offsets
-        TArray<FVector> Offsets = ComputeSlotOffsets(SelectedUnits);
+        // Consistency: Sort units by radius so that formation validation and assignment match Move logic
+        TArray<AUnitBase*> UnitsToProcess = SelectedUnits;
+        UnitsToProcess.Sort([](const AUnitBase& A, const AUnitBase& B) {
+            float RA = 50.0f;
+            if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+            float RB = 50.0f;
+            if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+            return RA > RB;
+        });
+
+        FVector AdjustedLocation = Hit.Location;
+        TArray<FVector> Offsets;
+        float UsedSpacing;
+        
+        // If we are not clicking directly on a pawn, validate and adjust the grid on the NavMesh
+        if (!HitPawn.bBlockingHit)
+        {
+            ValidateAndAdjustGridLocation(UnitsToProcess, AdjustedLocation, Offsets, UsedSpacing);
+        }
+        else
+        {
+            UsedSpacing = GridSpacing;
+            Offsets = ComputeSlotOffsets(UnitsToProcess, UsedSpacing);
+        }
 
         AWaypoint* BWaypoint = nullptr;
         bool PlayWaypointSound = false;
@@ -1745,11 +1844,11 @@ void ACustomControllerBase::LeftClickPressedMass()
         TArray<FVector>    BuildingLocs;
         for (int32 i = 0; i < NumUnits; ++i)
         {
-            AUnitBase* U = SelectedUnits[i];
+            AUnitBase* U = UnitsToProcess[i];
             if (U == nullptr || U == CameraUnitWithTag) continue;
         
             // apply the same slot-by-index approach
-            FVector RunLocation = Hit.Location + Offsets[i];
+            FVector RunLocation = AdjustedLocation + Offsets[i];
 
             bool bNavMod;
             RunLocation = TraceRunLocation(RunLocation, bNavMod);

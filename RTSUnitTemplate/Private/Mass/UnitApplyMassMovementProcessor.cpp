@@ -197,7 +197,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 
             if (NavSys && !Characteristics.bIsFlying)
             {
-                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 2.f, Characteristics.CapsuleRadius * 2.f, SoftAvoidanceZExtent);
+                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 4.0f, Characteristics.CapsuleRadius * 4.0f, SoftAvoidanceZExtent);
 
                 FNavLocation ProjectedLocation;
                 // Use capsule-based extent to detect if we are on the mesh
@@ -276,7 +276,7 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
 
             if (NavSys && !Characteristics.bIsFlying)
             {
-                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 2.f, Characteristics.CapsuleRadius * 2.f, SoftAvoidanceZExtent);
+                const FVector ProjectionExtent(Characteristics.CapsuleRadius * 4.0f, Characteristics.CapsuleRadius * 4.0f, SoftAvoidanceZExtent);
 
                 FNavLocation ProjectedLocation;
                 // Use capsule-based extent to detect if we are on the mesh

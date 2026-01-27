@@ -26,10 +26,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float ExecutionInterval = 0.1f;
-
-	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float AvoidanceRadius = 200.f;
-
+	
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float AvoidanceStrength = 1500.f;
 

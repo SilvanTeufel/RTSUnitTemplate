@@ -150,7 +150,7 @@ public:
 	
 	/** Computes offsets for an N-unit grid formation centered at (0,0). */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	TArray<FVector> ComputeSlotOffsets(const TArray<AUnitBase*>& Units) const;
+	TArray<FVector> ComputeSlotOffsets(const TArray<AUnitBase*>& Units, float Spacing = -1.0f) const;
 	/** Builds an N×N cost matrix of squared distances from units to slots, with size-compatibility penalties. */
 	TArray<TArray<float>> BuildCostMatrix(
 		const TArray<AUnitBase*>& Units,
@@ -165,8 +165,10 @@ public:
 	
 	/** Recalculates and stores unit formation offsets around TargetCenter. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void RecalculateFormation(const FVector& TargetCenter);
+	void RecalculateFormation(const FVector& TargetCenter, float Spacing = -1.0f);
 
+	/** Validates and adjusts a target location and formation offsets to fit on the NavMesh. */
+	bool ValidateAndAdjustGridLocation(const TArray<AUnitBase*>& Units, FVector& InOutLocation, TArray<FVector>& OutOffsets, float& OutSpacing);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetHoldPositionOnSelectedUnits();

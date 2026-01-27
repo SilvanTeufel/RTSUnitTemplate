@@ -25,6 +25,7 @@ void UUnitSoftAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	EntityQuery.AddTagRequirement<FMassSoftAvoidanceTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -63,7 +64,7 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				continue;
 			}
 
-			const FVector ProjectionExtent(Characteristics.CapsuleRadius * 2.f, Characteristics.CapsuleRadius * 2.f, ZExtent);
+			const FVector ProjectionExtent(Characteristics.CapsuleRadius * 4.0f, Characteristics.CapsuleRadius * 4.0f, ZExtent);
 
             FNavLocation NavLoc;
             bool bOnNavMesh = NavSys->ProjectPointToNavigation(Location, NavLoc, ProjectionExtent);
