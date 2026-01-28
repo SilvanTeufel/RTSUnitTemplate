@@ -318,7 +318,7 @@ void AProjectile::BeginPlay()
 
 void AProjectile::InitArc(FVector ArcBeginLocation)
 {
-	if (ArcHeight <= 0.f) return;
+	if (ArcHeight <= 0.f && ArcHeightDistanceFactor <= 0.f) return;
 
 	ArcStartLocation = ArcBeginLocation; // <<< ADD THIS
 }
@@ -329,6 +329,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, Target);
 	DOREPLIFETIME(AProjectile, Shooter);
 	DOREPLIFETIME(AProjectile, ArcHeight);
+	DOREPLIFETIME(AProjectile, ArcHeightDistanceFactor);
 
 	DOREPLIFETIME(AProjectile, ImpactSound);
 	DOREPLIFETIME(AProjectile, ImpactVFX);
@@ -482,7 +483,7 @@ void AProjectile::Tick(float DeltaTime)
 		}
 		if (HasAuthority()) Destroy(true, false);
 	}
-	else if (ArcHeight > 0.f)
+	else if (ArcHeight > 0.f || ArcHeightDistanceFactor > 0.f)
 	{
 		FlyInArc(DeltaTime);
 	}else if(Target)
@@ -719,7 +720,8 @@ void AProjectile::FlyInArc(float DeltaTime)
 
     // The Z position is offset by a sine wave to create the arc
     // Sin(0) = 0, Sin(PI/2) = 1 (peak), Sin(PI) = 0 (end)
-    float ZOffset = FMath::Sin(Alpha * PI) * ArcHeight;
+    float CurrentArcHeight = ArcHeight + (TotalDistance * ArcHeightDistanceFactor);
+    float ZOffset = FMath::Sin(Alpha * PI) * CurrentArcHeight;
     NewLocation.Z += ZOffset;
     
     FTransform NewTransform = CurrentTransform;

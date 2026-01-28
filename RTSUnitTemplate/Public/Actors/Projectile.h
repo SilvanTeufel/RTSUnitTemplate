@@ -26,6 +26,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Movement")
 	float ArcHeight = 0.f;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Movement")
+	float ArcHeightDistanceFactor = 0.f;
 	// Sets default values for this actor's properties
 	AProjectile();
 
