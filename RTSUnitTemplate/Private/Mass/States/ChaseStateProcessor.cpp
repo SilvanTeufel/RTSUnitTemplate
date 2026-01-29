@@ -265,7 +265,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
             FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-            const float EffectiveAttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
+            const float TargetRadius = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
+            const float EffectiveAttackRange = Stats.AttackRange + CharFrag.CapsuleRadius + TargetRadius;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---
@@ -285,8 +286,16 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
            // You might want to adjust Min/Max Radius based on unit size or target.
            //FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
-           //StateFrag.StoredLocation = TargetFrag.LastKnownLocation;
-           UpdateMoveTarget(MoveTarget, TargetFrag.LastKnownLocation, Stats.RunSpeed, World);
+           FVector TargetLocation = TargetFrag.LastKnownLocation;
+
+           // If we are a ground unit and the target has characteristic data, 
+           // use its buffered ground height for our movement target Z
+           if (TargetCharFrag)
+           {
+               TargetLocation.Z = TargetCharFrag->LastGroundLocation;
+           }
+
+           UpdateMoveTarget(MoveTarget, TargetLocation, Stats.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 }

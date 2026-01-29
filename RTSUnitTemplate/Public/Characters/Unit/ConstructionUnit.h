@@ -50,6 +50,9 @@ public:
  FVector DefaultOscOffsetB = FVector(0.f, 0.f, 50.f);
 
  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Anim")
+ bool SetOffsetsDueToWorkAreaBounds = false;
+	
+ UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Anim")
  float DefaultOscillationCyclesPerSecond = 1.0f;
 
  // Pulsating scale configuration (applied multiplicatively on top of base scale from WorkArea fit)

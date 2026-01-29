@@ -236,7 +236,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     {
                         if (const AActor* PredActor = ActorList[i].Get())
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Using fallback speed for %s: %.1f (MoveTarget.DesiredSpeed was %.2f)"), *PredActor->GetName(), DesiredSpeedUsed, MoveTarget.DesiredSpeed.Get());
+                            //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Using fallback speed for %s: %.1f (MoveTarget.DesiredSpeed was %.2f)"), *PredActor->GetName(), DesiredSpeedUsed, MoveTarget.DesiredSpeed.Get());
                         }
                     }
                 }
@@ -252,8 +252,8 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 {
                     if (const AActor* PredActor = ActorList[i].Get())
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Active for %s -> Dest=%s (SrvTarget=%s), Speed=%.1f, AccRad=%.1f"),
-                            *PredActor->GetName(), *FinalDestination.ToString(), *MoveTarget.Center.ToString(), DesiredSpeedUsed, AcceptanceRadiusUsed);
+                        //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Active for %s -> Dest=%s (SrvTarget=%s), Speed=%.1f, AccRad=%.1f"),
+                        //    *PredActor->GetName(), *FinalDestination.ToString(), *MoveTarget.Center.ToString(), DesiredSpeedUsed, AcceptanceRadiusUsed);
                     }
                 }
                 // Clear prediction when server target converges to predicted (2D check)
@@ -264,7 +264,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     {
                         if (const AActor* PredActor = ActorList[i].Get())
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Reconciled for %s (server MoveTarget matched predicted)"), *PredActor->GetName());
+                            //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Reconciled for %s (server MoveTarget matched predicted)"), *PredActor->GetName());
                         }
                     }
                 }

@@ -17,6 +17,7 @@
 #include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
@@ -286,6 +287,16 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 			{
 				CurrentDraggedWorkArea->ConstructionUnitClass = ConstructionUnitClass;
 				CurrentDraggedWorkArea->Origin = this;
+
+				if (AConstructionUnit* ConstructionCDO = Cast<AConstructionUnit>(ConstructionUnitClass->GetDefaultObject()))
+				{
+					if (ConstructionCDO->SetOffsetsDueToWorkAreaBounds && CurrentDraggedWorkArea->Mesh)
+					{
+						const FBoxSphereBounds MeshBounds = CurrentDraggedWorkArea->Mesh->CalcBounds(CurrentDraggedWorkArea->Mesh->GetRelativeTransform());
+						ConstructionCDO->DefaultOscOffsetA.Z = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
+						ConstructionCDO->DefaultOscOffsetB.Z = MeshBounds.Origin.Z + MeshBounds.BoxExtent.Z;
+					}
+				}
 			}
 			
 			return CurrentDraggedWorkArea;

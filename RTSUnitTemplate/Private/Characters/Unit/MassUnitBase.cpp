@@ -95,6 +95,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, TimerWidgetRelativeOffset);
 }
 
+
 FVector AMassUnitBase::GetMassActorLocation() const
 {
 	if (!bUseSkeletalMovement && ISMComponent && !bUseIsmWithActorMovement)
@@ -741,6 +742,7 @@ bool AMassUnitBase::FocusEntityTarget(AUnitBase* TargetUnit)
 	if (!TargetFrag) return false;
 	
 	TargetFrag->TargetEntity      = TargetEntity;
+	TargetFrag->LastKnownLocation = TargetUnit->GetMassActorLocation();
 	TargetFrag->IsFocusedOnTarget = true;
 
 	return true;

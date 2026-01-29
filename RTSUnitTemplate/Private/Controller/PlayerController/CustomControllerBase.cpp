@@ -436,7 +436,7 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	bool AttackT)
 {
 	// Diagnostics: server received batch move
-	UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
+	//UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
 	// Apply authoritative changes on the server
 	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT);
 
@@ -468,7 +468,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 
 	if (HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: HasAuthority()==true. Skipping client prediction."));
+		//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: HasAuthority()==true. Skipping client prediction."));
 		return;
 	}
 
@@ -483,14 +483,14 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	}
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: World is null (WorldContextObject=%s)."), *GetNameSafe(WorldContextObject));
+		//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: World is null (WorldContextObject=%s)."), *GetNameSafe(WorldContextObject));
 		return;
 	}
 
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: MassEntitySubsystem is null for world %s."), *GetNameSafe(World));
+		//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: MassEntitySubsystem is null for world %s."), *GetNameSafe(World));
 		return;
 	}
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
@@ -503,35 +503,35 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		FNavLocation NavLoc;
 		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
+			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
 			return;
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
+	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Units[Index];
 		if (!Unit)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] Unit is null. Skipping."), Index);
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] Unit is null. Skipping."), Index);
 			continue;
 		}
 		
 		if (!Unit->IsInitialized)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		if (!Unit->CanMove)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		
 		if (Unit->UnitState == UnitData::Dead)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		
@@ -544,14 +544,14 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
 		if (!EntityManager.IsEntityValid(MassEntityHandle))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
 		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 		if (!AiStatePtr)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] Missing FMassAIStateFragment. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] Missing FMassAIStateFragment. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		
@@ -2066,7 +2066,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 			Unit->UnitToChase = TargetUnitBase;
 			Unit->FocusEntityTarget(TargetUnitBase);
 			Unit->SetRdyForTransport(false);
-			Unit->TransportId = 0;
+			// Unit->TransportId = 0;
 			SetUnitState_Replication(Unit, 3);
 			Unit->SwitchEntityTagByState(UnitData::Chase, Unit->UnitStatePlaceholder);
 		}

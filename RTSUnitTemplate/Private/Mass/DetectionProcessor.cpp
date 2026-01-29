@@ -47,15 +47,7 @@ void UDetectionProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 void UDetectionProcessor::BeginDestroy()
 {
-    if (SignalSubsystem && SignalDelegateHandle.IsValid()) // Check if subsystem and handle are valid
-    {
-        SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitInDetectionRange)
-        .Remove(SignalDelegateHandle);
-            
-        SignalDelegateHandle.Reset();
-    }
-
-    Super::BeginDestroy();
+	Super::BeginDestroy();
 }
 
 // Called by the Signal Subsystem when the corresponding signal is processed
@@ -225,11 +217,13 @@ void UDetectionProcessor::Execute(
     for (auto& Det : DetectorUnits)
     {
         const float Now = World->GetTimeSeconds();
+        const float DetCapsule = Det.Char ? Det.Char->CapsuleRadius : 0.f;
         
         FMassEntityHandle BestEntity;
         FVector BestLocation = FVector::ZeroVector;
         bool bFoundNew = false;
         bool bCurrentStillViable = false;
+        bool bCurrentTargetCanAttack = true; // Assume true if no focused target
         FVector CurrentLocation = FVector::ZeroVector;
         // Track best candidate distance separately from threshold checks
         bool bHasBestCandidate = false;
@@ -243,9 +237,48 @@ void UDetectionProcessor::Execute(
             continue;
         }
         
+        InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
+   
+        // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not already inside
+        if (Det.TargetFrag->IsFocusedOnTarget)
+        {
+            for (auto& Tgt : TargetUnits)
+            {
+                if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
+                    continue;
+                
+                const int32* SightCount = Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId);
+                const int32* DetectorSightCount = Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId);
+
+                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
+                const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
+                const float EffectiveMinRangeSq = Det.Stats->MinRange > 0.f ? FMath::Square(Det.Stats->MinRange + DetCapsule + TgtCapsule) : 0.f;
+      
+                if (Tgt.Stats->TeamId == Det.Stats->TeamId && Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0 && DistSq >= EffectiveMinRangeSq)
+                {
+                    CurrentLocation    = Tgt.Location;
+                    bCurrentStillViable = true;
+                    bCurrentTargetCanAttack = Tgt.State->CanAttack;
+                }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
+                    Tgt.Stats->Health > 0 &&
+                    ((!Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0)) &&
+                    DistSq >= EffectiveMinRangeSq)
+                {
+                    CurrentLocation    = Tgt.Location;
+                    bCurrentStillViable = true;
+                    bCurrentTargetCanAttack = Tgt.State->CanAttack;
+                }else
+                {
+                    Det.TargetFrag->IsFocusedOnTarget = false;
+                    bCurrentTargetCanAttack = true;
+                }
+                break;
+            }
+        }
+
         // Squad target sharing: if this unit is in a squad (> 0) and has no target,
         // copy the target from any squadmate with the same SquadId and TeamId.
-        if (Det.Stats->SquadId > 0 && (!Det.TargetFrag->bHasValidTarget || !Det.TargetFrag->TargetEntity.IsSet()))
+        if (Det.Stats->SquadId > 0 && (!Det.TargetFrag->bHasValidTarget || !Det.TargetFrag->TargetEntity.IsSet() || !bCurrentTargetCanAttack))
         {
             for (const auto& Mate : DetectorUnits)
             {
@@ -263,20 +296,30 @@ void UDetectionProcessor::Execute(
                 if (SquadTgtStats->TeamId == Det.Stats->TeamId) continue;
                 if (SquadTgtStats->Health <= 0) continue;
 
+                const FMassAIStateFragment* SquadTgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(SquadTarget);
+                if (!SquadTgtState) continue;
+
+                // If current target can't attack, but squad target also can't attack, don't switch unless we have NO target
+                if (!bCurrentTargetCanAttack && !SquadTgtState->CanAttack && Det.TargetFrag->bHasValidTarget) continue;
+
                 FTransformFragment* SquadTgtTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(SquadTarget);
                 const FVector SquadTgtLocation = SquadTgtTransform ? SquadTgtTransform->GetTransform().GetLocation() : FVector::ZeroVector;
+
+                const float DistSq = FVector::DistSquared2D(Det.Location, SquadTgtLocation);
+                const FMassAgentCharacteristicsFragment* SquadTgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(SquadTarget);
+                const float TgtCapsule = SquadTgtChar ? SquadTgtChar->CapsuleRadius : 0.f;
+                const float EffectiveMinRangeSq = Det.Stats->MinRange > 0.f ? FMath::Square(Det.Stats->MinRange + DetCapsule + TgtCapsule) : 0.f;
+                if (DistSq < EffectiveMinRangeSq) continue;
 
                 // Mark as newly found target. The normal update section will set the fragment and send chase signal.
                 BestEntity   = SquadTarget;
                 BestLocation = SquadTgtLocation;
                 bFoundNew    = true;
+                bCurrentTargetCanAttack = SquadTgtState->CanAttack; // Update for subsequent checks in this tick
                 break;
             }
         }
-        
-        InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
-   
-        // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not allready inside
+
         if (!Det.TargetFrag->IsFocusedOnTarget)
         {
             for (auto& Tgt : TargetUnits)
@@ -303,23 +346,50 @@ void UDetectionProcessor::Execute(
                 }
 
                 const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
-                const float DetCapsule = Det.Char ? Det.Char->CapsuleRadius : 0.f;
                 const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
 
                 // Effective radii: add both capsule radii to base sight radii (2D)
                 const float EffectiveSight = Det.Stats->SightRadius + DetCapsule + TgtCapsule;
                 const float EffectiveSightSq = FMath::Square(EffectiveSight);
 
+                const float EffectiveMinRangeSq = Det.Stats->MinRange > 0.f ? FMath::Square(Det.Stats->MinRange + DetCapsule + TgtCapsule) : 0.f;
+
+                const bool bNewTargetCanAttack = Tgt.State->CanAttack;
+
                 // “new” target if within effective sight radius and closer than previous best, and alive
-                if (DistSq < EffectiveSightSq && Tgt.Stats->Health > 0)
+                if (DistSq < EffectiveSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0)
                 {
-                    if (!bHasBestCandidate || DistSq < BestCandidateDistSq)
+                    bool bBetterPriority = false;
+                    if (!bHasBestCandidate)
+                    {
+                        bBetterPriority = true;
+                    }
+                    else
+                    {
+                        // Priority: CanAttack target > CannotAttack target
+                        // If current best cannot attack, but this one can -> switch
+                        if (!bCurrentTargetCanAttack && bNewTargetCanAttack)
+                        {
+                            bBetterPriority = true;
+                        }
+                        // If both have same attack priority, pick closer
+                        else if (bCurrentTargetCanAttack == bNewTargetCanAttack)
+                        {
+                            if (DistSq < BestCandidateDistSq)
+                            {
+                                bBetterPriority = true;
+                            }
+                        }
+                    }
+
+                    if (bBetterPriority)
                     {
                         BestEntity           = Tgt.Entity;
                         BestLocation         = Tgt.Location;
                         bFoundNew            = true;
                         bHasBestCandidate    = true;
                         BestCandidateDistSq  = DistSq;
+                        bCurrentTargetCanAttack = bNewTargetCanAttack;
                     }
                 }
 
@@ -327,10 +397,11 @@ void UDetectionProcessor::Execute(
                 {
                     const float EffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
                     const float EffectiveLoseSightSq = FMath::Square(EffectiveLoseSight);
-                    if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && Tgt.Stats->Health > 0)
+                    if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0)
                     {
                         CurrentLocation      = Tgt.Location;
                         bCurrentStillViable  = true;
+                        // Note: bCurrentTargetCanAttack was already updated at the start for the current target
                     }
                 }
 
@@ -340,50 +411,24 @@ void UDetectionProcessor::Execute(
                     const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
                     const float TgtEffectiveLoseSight = Tgt.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
                     const float TgtEffectiveLoseSightSq = FMath::Square(TgtEffectiveLoseSight);
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < TgtEffectiveLoseSightSq)
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < TgtEffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq)
                     {
+                        // Even for fallback, we should prioritize attack capability if we were to pick it
+                        // But here we only reach if we haven't found anything else yet.
                         BestEntity             = Tgt.Entity;
                         BestLocation           = Tgt.Location;
                         bFoundNew              = true;
                         bHasBestCandidate      = true;
                         BestCandidateDistSq    = DistSq;
+                        bCurrentTargetCanAttack = bNewTargetCanAttack;
                     }
-                    
                 }
                 
-            }
-        }
-        else
-        {
-            for (auto& Tgt : TargetUnits)
-            {
-                if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
-                    continue;
-                
-               // const int32 DetectorTeamId = Det.Stats->TeamId;
-                
-                const int32* SightCount = Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId);
-                const int32* DetectorSightCount = Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId);
-      
-                if (Tgt.Stats->TeamId == Det.Stats->TeamId && Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0)
-                {
-                    CurrentLocation    = Tgt.Location;
-                    bCurrentStillViable = true;
-                }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
-                    Tgt.Stats->Health > 0 &&
-                    ((!Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0)))
-                {
-                    CurrentLocation    = Tgt.Location;
-                    bCurrentStillViable = true;
-                }else
-                {
-                    Det.TargetFrag->IsFocusedOnTarget = false;
-                }
             }
         }
 
         // 4) Update target fragment
-        if (bFoundNew && !Det.TargetFrag->IsFocusedOnTarget)
+        if (bFoundNew && (!Det.TargetFrag->IsFocusedOnTarget || (BestEntity != Det.TargetFrag->TargetEntity)))
         {
             Det.TargetFrag->TargetEntity      = BestEntity;
             Det.TargetFrag->LastKnownLocation = BestLocation;

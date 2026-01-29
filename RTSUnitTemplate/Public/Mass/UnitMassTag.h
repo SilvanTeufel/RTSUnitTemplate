@@ -383,7 +383,6 @@ struct FMassAITargetFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float FollowOffset = 0.f;
-
 };
 
 //----------------------------------------------------------------------//
@@ -459,6 +458,9 @@ struct FMassCombatStatsFragment : public FMassFragment
      /** Flag, ob die Einheit Projektile verwendet. */
      UPROPERTY(EditAnywhere, Category = "Stats")
      bool bUseProjectile = false;
+
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float MinRange = 0.f;
 };
 
 //----------------------------------------------------------------------//
