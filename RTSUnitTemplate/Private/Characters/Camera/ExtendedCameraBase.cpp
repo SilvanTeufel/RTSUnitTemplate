@@ -640,7 +640,10 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 999: HandleState_StopRotateLeft(CameraControllerBase); break;
             case 10: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlE, CameraControllerBase->SelectableTeamId); break;
             case 101010: HandleState_StopRotateRight(CameraControllerBase); break;
-            case 13: HandleState_AbilityUnitIndex(InputActionValue, CameraControllerBase); break;
+            case 13: 
+                if (SwapScroll) HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase);
+                else HandleState_ScrollZoom(InputActionValue, CameraControllerBase);
+                break;
             case 18: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrlR, CameraControllerBase->SelectableTeamId); break;
             case 21: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl1, CameraControllerBase->SelectableTeamId); break; // ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySeven, CameraControllerBase);break;
             case 22: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagCtrl2, CameraControllerBase->SelectableTeamId); break;// ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityEight, CameraControllerBase); break;
@@ -687,7 +690,10 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 10: HandleState_RotateRight_NoStrg(CameraControllerBase); break;
             case 101010: HandleState_StopRotateRight_NoStrg(CameraControllerBase); break;
             case 12: HandleState_TPressed(CameraControllerBase); break;
-            case 13: HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase); break;
+            case 13: 
+                if (SwapScroll) HandleState_ScrollZoom(InputActionValue, CameraControllerBase);
+                else HandleState_AbilityArrayIndex(InputActionValue, CameraControllerBase);
+                break;
             case 16: HandleState_MiddleMousePressed(CameraControllerBase); break;
             case 17: HandleState_MiddleMouseReleased(CameraControllerBase); break;
             case 18: CameraControllerBase->SetHoldPositionOnSelectedUnits(); break;
