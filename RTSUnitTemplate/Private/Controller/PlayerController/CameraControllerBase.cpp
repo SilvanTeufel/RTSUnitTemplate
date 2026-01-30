@@ -84,8 +84,16 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 #include "Engine/GameInstance.h"
 #include "System/MapSwitchSubsystem.h"
 
+bool ACameraControllerBase::bServerTravelInProgress = false;
+
 void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& MapName, FName TagToEnable)
 {
+	if (bServerTravelInProgress)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server_TravelToMap: ServerTravel already in progress, ignoring duplicate request."));
+		return;
+	}
+	
 	// This code now runs on the SERVER
 	if (HasAuthority())
 	{
@@ -106,8 +114,10 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 			}
 		}
 
-		if (!MapName.IsEmpty())
+		if (!MapName.IsEmpty() && !bServerTravelInProgress)
 		{
+			// Set the guard before initiating travel
+			bServerTravelInProgress = true;
 			World->ServerTravel(MapName);
 		}
 	}
@@ -254,6 +264,11 @@ ACameraControllerBase::ACameraControllerBase()
 void ACameraControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		bServerTravelInProgress = false;
+	}
 
 	// Check GameState for any active loading widget (useful if we join late)
 	if (IsLocalPlayerController())

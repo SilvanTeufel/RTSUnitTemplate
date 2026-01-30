@@ -358,6 +358,8 @@ public:
 	float ScrollZoomCount = 0.f;
 	
 private:
+	static bool bServerTravelInProgress;
+
 	// Helper functions for scroll zoom logic
 	void HandleScrollZoomIn();
 	void HandleScrollZoomOut();
