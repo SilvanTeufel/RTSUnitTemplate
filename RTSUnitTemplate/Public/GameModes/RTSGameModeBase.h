@@ -87,7 +87,14 @@ public:
 	int32 LoadingWidgetTriggerId = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
-	AWinLoseConfigActor* WinLoseConfigActor;
+	TArray<AWinLoseConfigActor*> WinLoseConfigActors;
+
+	FTimerHandle WinLoseTimerHandle;
+
+	void CheckWinLoseConditionTimer();
+
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
+	AWinLoseConfigActor* WinLoseConfigActor; // Primary or first found config actor
 
 	bool bWinLoseTriggered = false;
 	bool bInitialSpawnFinished = false;
@@ -95,6 +102,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
 	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);
+
+	void TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool bWon, AWinLoseConfigActor* Config);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);

@@ -7,6 +7,7 @@
 #include "WinLoseConfigActor.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnWinLoseEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWinConditionChanged, AWinLoseConfigActor*, Config, EWinLoseCondition, NewCondition);
 
 UCLASS()
 class RTSUNITTEMPLATE_API AWinLoseConfigActor : public AActor
@@ -16,11 +17,22 @@ class RTSUNITTEMPLATE_API AWinLoseConfigActor : public AActor
 public:	
 	AWinLoseConfigActor();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|WinLose")
 	FOnWinLoseEvent OnYouWonTheGame;
 
 	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|WinLose")
 	FOnWinLoseEvent OnYouLostTheGame;
+
+	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|WinLose")
+	FOnWinConditionChanged OnWinConditionChanged;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
+	float WinConditionDisplayDuration = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
+	float GameStartDisplayDuration = 15.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	float WinDelay = 5.0f;
@@ -28,22 +40,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	float LoseDelay = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
-	EWinLoseCondition WinLoseCondition = EWinLoseCondition::None;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
+	TArray<EWinLoseCondition> WinConditions;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
-	EWinLoseCondition LoseCondition = EWinLoseCondition::None;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentWinConditionIndex, Category = "RTSUnitTemplate|WinLose")
+	int32 CurrentWinConditionIndex = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	UFUNCTION()
+	void OnRep_CurrentWinConditionIndex();
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
+	EWinLoseCondition LoseCondition = EWinLoseCondition::AllBuildingsDestroyed;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
 	int32 TeamId = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
 	FBuildingCost TargetResourceCount;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
 	float TargetGameTime = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
 	FGameplayTag WinLoseTargetTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
@@ -54,6 +72,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FName DestinationSwitchTagToEnable;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	EWinLoseCondition GetCurrentWinCondition() const;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	bool IsLastWinCondition() const;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void AdvanceToNextWinCondition();
 
 protected:
 	virtual void BeginPlay() override;

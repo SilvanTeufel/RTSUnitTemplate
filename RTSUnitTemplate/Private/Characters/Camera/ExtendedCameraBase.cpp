@@ -1,6 +1,8 @@
 
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "GameFramework/PlayerController.h"
+#include "EngineUtils.h"
+#include "Actors/WinLoseConfigActor.h"
 
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -70,6 +72,90 @@ void AExtendedCameraBase::BeginPlay()
 
 	TabMode = 1;
 	UpdateTabModeUI();
+
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	if (MyPC)
+	{
+		MyPC->OnTeamIdChanged.AddDynamic(this, &AExtendedCameraBase::OnTeamIdChanged_Internal);
+		
+		// If team ID is already valid, trigger search
+		if (MyPC->SelectableTeamId != -1)
+		{
+			OnTeamIdChanged_Internal(MyPC->SelectableTeamId);
+		}
+	}
+	
+	// Optional fallback timer in case controller is not yet possessed
+	FTimerHandle InitialShowTimer;
+	GetWorldTimerManager().SetTimer(InitialShowTimer, [this]()
+	{
+		ACameraControllerBase* MyPC2 = Cast<ACameraControllerBase>(GetController());
+		if (MyPC2 && MyPC2->SelectableTeamId != -1)
+		{
+			OnTeamIdChanged_Internal(MyPC2->SelectableTeamId);
+		}
+	}, 2.0f, false);
+}
+
+void AExtendedCameraBase::OnTeamIdChanged_Internal(int32 NewTeamId)
+{
+	AWinLoseConfigActor* BestConfig = nullptr;
+	AWinLoseConfigActor* GlobalConfig = nullptr;
+
+	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
+	{
+		AWinLoseConfigActor* Config = *It;
+		if (Config)
+		{
+			Config->OnWinConditionChanged.RemoveDynamic(this, &AExtendedCameraBase::OnWinConditionChanged);
+			Config->OnWinConditionChanged.AddDynamic(this, &AExtendedCameraBase::OnWinConditionChanged);
+                
+			if (Config->TeamId == NewTeamId) BestConfig = Config;
+			else if (Config->TeamId == 0) GlobalConfig = Config;
+		}
+	}
+
+	AWinLoseConfigActor* TargetConfig = BestConfig ? BestConfig : GlobalConfig;
+	if (TargetConfig)
+	{
+		ShowWinConditionWidget(TargetConfig->GameStartDisplayDuration);
+	}
+}
+
+void AExtendedCameraBase::ShowWinConditionWidget(float Duration)
+{
+	if (WinConditionWidget)
+	{
+		WinConditionWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+        
+		GetWorldTimerManager().ClearTimer(WinConditionDisplayTimerHandle);
+		if (Duration > 0)
+		{
+			GetWorldTimerManager().SetTimer(WinConditionDisplayTimerHandle, this, &AExtendedCameraBase::HideWinConditionWidget, Duration, false);
+		}
+	}
+}
+
+void AExtendedCameraBase::HideWinConditionWidget()
+{
+	if (WinConditionWidget && TabMode != 3)
+	{
+		WinConditionWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void AExtendedCameraBase::OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition)
+{
+	if (!Config) return;
+
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
+
+	// Only show if the config is relevant to us
+	if (Config->TeamId == MyTeamId || Config->TeamId == 0)
+	{
+		ShowWinConditionWidget(Config->WinConditionDisplayDuration);
+	}
 }
 
 void AExtendedCameraBase::UpdateTabModeUI()

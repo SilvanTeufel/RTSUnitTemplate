@@ -41,9 +41,6 @@ void AResourceGameMode::BeginPlay()
 		RGState->SetTeamResources(TeamResources); 
 	}
 	//AssignWorkAreasToWorkers();
-
-	FTimerHandle WinLoseTimerHandle;
-	GetWorldTimerManager().SetTimer(WinLoseTimerHandle, this, &AResourceGameMode::CheckWinLoseConditionTimer, 1.0f, true);
 }
 
 void AResourceGameMode::CheckWinLoseConditionTimer()
@@ -58,72 +55,79 @@ void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 	Super::CheckWinLoseCondition(DestroyedUnit);
 	if (bWinLoseTriggered) return;
 
-	if (!WinLoseConfigActor || (WinLoseConfigActor->WinLoseCondition != EWinLoseCondition::TeamReachedResourceCount && WinLoseConfigActor->LoseCondition != EWinLoseCondition::TeamReachedResourceCount)) return;
+	bool bAnyWon = false;
+	bool bAnyLost = false;
 
-	int32 TargetTeamId = WinLoseConfigActor->TeamId;
-	const FBuildingCost& TargetResources = WinLoseConfigActor->TargetResourceCount;
-
-	bool bReached = true;
-	if (GetResource(TargetTeamId, EResourceType::Primary) < TargetResources.PrimaryCost) bReached = false;
-	if (GetResource(TargetTeamId, EResourceType::Secondary) < TargetResources.SecondaryCost) bReached = false;
-	if (GetResource(TargetTeamId, EResourceType::Tertiary) < TargetResources.TertiaryCost) bReached = false;
-	if (GetResource(TargetTeamId, EResourceType::Rare) < TargetResources.RareCost) bReached = false;
-	if (GetResource(TargetTeamId, EResourceType::Epic) < TargetResources.EpicCost) bReached = false;
-	if (GetResource(TargetTeamId, EResourceType::Legendary) < TargetResources.LegendaryCost) bReached = false;
-
-	if (bReached)
+	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
-		bWinLoseTriggered = true;
-		FString TargetMapName = WinLoseConfigActor->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
+		EWinLoseCondition CurrentWinCondition = Config->GetCurrentWinCondition();
+		if (CurrentWinCondition != EWinLoseCondition::TeamReachedResourceCount && Config->LoseCondition != EWinLoseCondition::TeamReachedResourceCount) continue;
 
-		if (UGameInstance* GI = GetGameInstance())
+		TArray<int32> TeamsToCheck;
+		if (Config->TeamId == 0)
 		{
-			if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+			for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 			{
-				if (WinLoseConfigActor->DestinationSwitchTagToEnable != NAME_None && !TargetMapName.IsEmpty())
+				if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
 				{
-					MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, WinLoseConfigActor->DestinationSwitchTagToEnable);
+					TeamsToCheck.AddUnique(PC->SelectableTeamId);
 				}
 			}
 		}
-
-		bool bAnyWon = false;
-		bool bAnyLost = false;
-
-		for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+		else
 		{
-			ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
-			if (!PC) continue;
-
-			int32 PlayerTeamId = PC->SelectableTeamId;
-
-			bool bWon = false;
-			if (WinLoseConfigActor->WinLoseCondition == EWinLoseCondition::TeamReachedResourceCount)
-			{
-				bWon = (PlayerTeamId == TargetTeamId);
-			}
-			else
-			{
-				bWon = (PlayerTeamId != TargetTeamId);
-			}
-
-			if (bWon) bAnyWon = true; else bAnyLost = true;
-
-			TWeakObjectPtr<ACameraControllerBase> WeakPC = PC;
-			TSubclassOf<UWinLoseWidget> WidgetClass = WinLoseConfigActor->WinLoseWidgetClass;
-			FName Tag = WinLoseConfigActor->DestinationSwitchTagToEnable;
-
-			GetWorldTimerManager().SetTimer(PC->WinLoseTimerHandle, [WeakPC, bWon, WidgetClass, TargetMapName, Tag]()
-			{
-				if (ACameraControllerBase* StrongPC = WeakPC.Get())
-				{
-					StrongPC->Client_TriggerWinLoseUI(bWon, WidgetClass, TargetMapName, Tag);
-				}
-			}, bWon ? WinLoseConfigActor->WinDelay : WinLoseConfigActor->LoseDelay, false);
+			TeamsToCheck.Add(Config->TeamId);
 		}
 
-		if (bAnyWon) WinLoseConfigActor->OnYouWonTheGame.Broadcast();
-		if (bAnyLost) WinLoseConfigActor->OnYouLostTheGame.Broadcast();
+		for (int32 CheckingTeamId : TeamsToCheck)
+		{
+			if (CheckingTeamId == 0) continue;
+
+			const FBuildingCost& TargetResources = Config->TargetResourceCount;
+
+			bool bReached = true;
+			if (GetResource(CheckingTeamId, EResourceType::Primary) < TargetResources.PrimaryCost) bReached = false;
+			if (GetResource(CheckingTeamId, EResourceType::Secondary) < TargetResources.SecondaryCost) bReached = false;
+			if (GetResource(CheckingTeamId, EResourceType::Tertiary) < TargetResources.TertiaryCost) bReached = false;
+			if (GetResource(CheckingTeamId, EResourceType::Rare) < TargetResources.RareCost) bReached = false;
+			if (GetResource(CheckingTeamId, EResourceType::Epic) < TargetResources.EpicCost) bReached = false;
+			if (GetResource(CheckingTeamId, EResourceType::Legendary) < TargetResources.LegendaryCost) bReached = false;
+
+			if (bReached)
+			{
+				bool bWonTriggered = (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount);
+				
+				if (bWonTriggered)
+				{
+					if (!Config->IsLastWinCondition())
+					{
+						Config->AdvanceToNextWinCondition();
+						break; // Move to next condition for this config
+					}
+				}
+
+				// If we reach here, it's either the final Win or a Lose
+				bWinLoseTriggered = true;
+				
+				for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+				{
+					ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+					if (!PC) continue;
+
+					int32 PlayerTeamId = PC->SelectableTeamId;
+					bool bPlayerWon = bWonTriggered ? (PlayerTeamId == CheckingTeamId) : (PlayerTeamId != CheckingTeamId);
+
+					if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
+
+					TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
+				}
+
+				if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
+				if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
+				
+				return; // Game ended
+			}
+		}
 	}
 }
 

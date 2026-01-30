@@ -1219,6 +1219,7 @@ void AControllerBase::OnRep_SelectableTeamId()
 			It->UpdateVisibility();
 		}
 	}
+	OnTeamIdChanged.Broadcast(SelectableTeamId);
 }
 
 void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoint* Waypoint)

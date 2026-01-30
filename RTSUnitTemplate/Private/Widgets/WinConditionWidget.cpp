@@ -1,10 +1,43 @@
 #include "Widgets/WinConditionWidget.h"
 #include "Actors/WinLoseConfigActor.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "EngineUtils.h"
 
 void UWinConditionWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	
+	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
+	{
+		AWinLoseConfigActor* ConfigActor = *It;
+		if (ConfigActor)
+		{
+			ConfigActor->OnWinConditionChanged.RemoveDynamic(this, &UWinConditionWidget::OnWinConditionChanged);
+			ConfigActor->OnWinConditionChanged.AddDynamic(this, &UWinConditionWidget::OnWinConditionChanged);
+			ConfigActor->OnYouWonTheGame.RemoveDynamic(this, &UWinConditionWidget::UpdateConditionText);
+			ConfigActor->OnYouWonTheGame.AddDynamic(this, &UWinConditionWidget::UpdateConditionText);
+			ConfigActor->OnYouLostTheGame.RemoveDynamic(this, &UWinConditionWidget::UpdateConditionText);
+			ConfigActor->OnYouLostTheGame.AddDynamic(this, &UWinConditionWidget::UpdateConditionText);
+		}
+	}
+
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetOwningPlayer());
+	if (MyPC)
+	{
+		MyPC->OnTeamIdChanged.RemoveDynamic(this, &UWinConditionWidget::OnTeamIdChanged);
+		MyPC->OnTeamIdChanged.AddDynamic(this, &UWinConditionWidget::OnTeamIdChanged);
+	}
+
+	UpdateConditionText();
+}
+
+void UWinConditionWidget::OnTeamIdChanged(int32 NewTeamId)
+{
+	UpdateConditionText();
+}
+
+void UWinConditionWidget::OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition)
+{
 	UpdateConditionText();
 }
 
@@ -12,42 +45,82 @@ void UWinConditionWidget::UpdateConditionText()
 {
 	if (!ConditionText) return;
 
-	AWinLoseConfigActor* ConfigActor = nullptr;
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetOwningPlayer());
+	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
+
+	AWinLoseConfigActor* BestConfig = nullptr;
+	AWinLoseConfigActor* GlobalConfig = nullptr;
+
 	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
 	{
-		ConfigActor = *It;
-		break;
+		AWinLoseConfigActor* Config = *It;
+		if (!Config) continue;
+
+		if (Config->TeamId == MyTeamId)
+		{
+			BestConfig = Config;
+			break;
+		}
+
+		if (Config->TeamId == 0)
+		{
+			GlobalConfig = Config;
+		}
 	}
+
+	AWinLoseConfigActor* ConfigActor = BestConfig ? BestConfig : GlobalConfig;
 
 	if (!ConfigActor)
 	{
-		ConditionText->SetText(FText::FromString(TEXT("No win condition defined for this map.")));
+		if (MyTeamId == -1)
+		{
+			ConditionText->SetText(WaitingForTeamText);
+		}
+		else
+		{
+			ConditionText->SetText(NoConditionText);
+		}
 		return;
 	}
 
-	FString Description = TEXT("Goal: ");
-	switch (ConfigActor->WinLoseCondition)
+	FText DescriptionBody;
+	EWinLoseCondition CurrentCondition = ConfigActor->GetCurrentWinCondition();
+	switch (CurrentCondition)
 	{
 	case EWinLoseCondition::None:
-		Description += TEXT("None (Sandbox)");
+		DescriptionBody = NoneConditionText;
 		break;
 	case EWinLoseCondition::AllBuildingsDestroyed:
-		Description += TEXT("Destroy all enemy buildings to win. Protect your own!");
+		DescriptionBody = AllBuildingsDestroyedText;
 		break;
 	case EWinLoseCondition::TaggedUnitDestroyed:
-		Description += FString::Printf(TEXT("Destroy the unit with tag: %s"), *ConfigActor->WinLoseTargetTag.ToString());
+		{
+			FString TagString = ConfigActor->WinLoseTargetTag.ToString();
+			int32 LastDotIndex;
+			if (TagString.FindLastChar('.', LastDotIndex))
+			{
+				TagString = TagString.RightChop(LastDotIndex + 1);
+			}
+			DescriptionBody = FText::Format(TaggedUnitDestroyedText, FText::FromString(TagString));
+		}
 		break;
 	case EWinLoseCondition::TeamReachedResourceCount:
-		Description += TEXT("Gather the required amount of resources:\n");
-		Description += ConfigActor->TargetResourceCount.ToFormattedString();
+		DescriptionBody = FText::Format(FText::FromString(TEXT("{0}{1}")), ResourcesConditionText, FText::FromString(ConfigActor->TargetResourceCount.ToFormattedString()));
 		break;
 	case EWinLoseCondition::TeamReachedGameTime:
-		Description += FString::Printf(TEXT("Survive for %.0f seconds."), ConfigActor->TargetGameTime);
+		DescriptionBody = FText::Format(SurvivalConditionText, FText::AsNumber(FMath::RoundToInt(ConfigActor->TargetGameTime)));
 		break;
 	default:
-		Description += TEXT("Unknown");
+		DescriptionBody = UnknownConditionText;
 		break;
 	}
 
-	ConditionText->SetText(FText::FromString(Description));
+	FText FinalText = FText::Format(FText::FromString(TEXT("{0}{1}")), GoalPrefix, DescriptionBody);
+
+	if (ConfigActor->WinConditions.Num() > 1)
+	{
+		FinalText = FText::Format(ProgressFormatText, FText::AsNumber(ConfigActor->CurrentWinConditionIndex + 1), FText::AsNumber(ConfigActor->WinConditions.Num()), FinalText);
+	}
+
+	ConditionText->SetText(FinalText);
 }

@@ -126,6 +126,19 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UWinConditionWidget* WinConditionWidget;
 
+	FTimerHandle WinConditionDisplayTimerHandle;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ShowWinConditionWidget(float Duration);
+
+	void HideWinConditionWidget();
+
+	UFUNCTION()
+	void OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition);
+
+	UFUNCTION()
+	void OnTeamIdChanged_Internal(int32 NewTeamId);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMapMenuWidget* MapMenuWidget;
 

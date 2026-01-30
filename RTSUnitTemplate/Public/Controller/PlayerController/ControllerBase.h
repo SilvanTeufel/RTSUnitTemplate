@@ -26,6 +26,8 @@ enum class EGridShape : uint8
 };
 
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTeamIdChanged, int32, NewTeamId);
+
 UCLASS()
 class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
 {
@@ -33,7 +35,10 @@ class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
 
 public:
 	AControllerBase();
-	
+
+	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|Team")
+	FOnTeamIdChanged OnTeamIdChanged;
+
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
