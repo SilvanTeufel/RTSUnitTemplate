@@ -145,7 +145,7 @@ void AExtendedCameraBase::ShowWinConditionWidget(float Duration)
 
 void AExtendedCameraBase::HideWinConditionWidget()
 {
-	if (WinConditionWidget && TabMode != 3)
+	if (WinConditionWidget != nullptr && TabMode != 3)
 	{
 		WinConditionWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
@@ -693,6 +693,17 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 		}
 		else
 		{
+			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			if (CameraControllerBase && CameraControllerBase->HUDBase)
+			{
+				if (CameraControllerBase->HUDBase->SelectedUnits.Num() > 0)
+				{
+					CameraControllerBase->HUDBase->DeselectAllUnits();
+					CameraControllerBase->SelectedUnits = CameraControllerBase->HUDBase->SelectedUnits;
+					return;
+				}
+			}
+
 			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
 			BlockControls = true;
 		}
