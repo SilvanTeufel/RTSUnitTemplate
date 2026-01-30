@@ -81,6 +81,13 @@ public:
 	FGameplayTag InputTag_F4_Pressed;
 	FGameplayTag InputTag_F5_Pressed;
 	FGameplayTag InputTag_F6_Pressed;
+
+	FGameplayTag InputTag_F1_Released;
+	FGameplayTag InputTag_F2_Released;
+	FGameplayTag InputTag_F3_Released;
+	FGameplayTag InputTag_F4_Released;
+	FGameplayTag InputTag_F5_Released;
+	FGameplayTag InputTag_F6_Released;
 	FGameplayTag InputTag_Esc_Pressed;
 protected:
 	//Registers all of the tags with the GameplayTags Manager

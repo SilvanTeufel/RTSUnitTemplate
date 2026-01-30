@@ -3543,6 +3543,27 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 
+void AExtendedControllerBase::Server_AssignTagToSelectedUnits_Implementation(FGameplayTag Tag, const TArray<AUnitBase*>& Units, int TeamId)
+{
+	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
+
+	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
+		if (Unit && Unit->TeamId == TeamId)
+		{
+			if (Units.Contains(Unit))
+			{
+				Unit->UnitTags.AddTag(Tag);
+			}
+			else
+			{
+				Unit->UnitTags.RemoveTag(Tag);
+			}
+		}
+	}
+}
+
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
 	if (SelectableTeamId != TeamId)

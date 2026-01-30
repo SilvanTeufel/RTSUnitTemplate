@@ -62,6 +62,13 @@ AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitial
 	SetMinNetUpdateFrequency(1);
 	SetReplicates(true);
 	SetReplicatingMovement(false);
+
+	for (int i = 0; i < 6; i++)
+	{
+		FKeyHoldTimes[i] = 0.f;
+		bFKeyTagAssigned[i] = false;
+		bFKeyPressed[i] = false;
+	}
 }
 
 // BeginPlay implementation
@@ -264,6 +271,37 @@ void AExtendedCameraBase::Tick(float DeltaTime)
 {
 	// Call the base class Tick
 	Super::Tick(DeltaTime);
+
+	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+	if (CameraControllerBase)
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			if (bFKeyPressed[i])
+			{
+				FKeyHoldTimes[i] += DeltaTime;
+				if (FKeyHoldTimes[i] > TagTime && !bFKeyTagAssigned[i])
+				{
+					FGameplayTag Tag;
+					switch(i)
+					{
+					case 0: Tag = CameraControllerBase->KeyTagF1; break;
+					case 1: Tag = CameraControllerBase->KeyTagF2; break;
+					case 2: Tag = CameraControllerBase->KeyTagF3; break;
+					case 3: Tag = CameraControllerBase->KeyTagF4; break;
+					case 4: Tag = CameraControllerBase->KeyTagF5; break;
+					case 5: Tag = CameraControllerBase->KeyTagF6; break;
+					}
+
+					if (Tag.IsValid())
+					{
+						CameraControllerBase->Server_AssignTagToSelectedUnits(Tag, CameraControllerBase->SelectedUnits, CameraControllerBase->SelectableTeamId);
+					}
+					bFKeyTagAssigned[i] = true;
+				}
+			}
+		}
+	}
 }
 
 
@@ -354,6 +392,13 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F4_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 30);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F5_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 31);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F6_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 32);
+
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F1_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 2727);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F2_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 2828);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F3_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 2929);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F4_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 3030);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F5_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 3131);
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_F6_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::SwitchControllerStateMachine, 3232);
 		
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Pressed, 0);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Alt_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Alt_Released, 0);
@@ -789,10 +834,72 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
             case 24: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFour, CameraControllerBase); break;
             case 25: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityFive, CameraControllerBase); break;
             case 26: ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase); break;
-            case 27: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF1, CameraControllerBase->SelectableTeamId); break;
-            case 28: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF2, CameraControllerBase->SelectableTeamId); break;
-            case 29: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF3, CameraControllerBase->SelectableTeamId); break;
-            case 30: CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF4, CameraControllerBase->SelectableTeamId); break;
+            case 27:
+                bFKeyPressed[0] = true;
+                FKeyHoldTimes[0] = 0.f;
+                bFKeyTagAssigned[0] = false;
+                break;
+            case 28:
+                bFKeyPressed[1] = true;
+                FKeyHoldTimes[1] = 0.f;
+                bFKeyTagAssigned[1] = false;
+                break;
+            case 29:
+                bFKeyPressed[2] = true;
+                FKeyHoldTimes[2] = 0.f;
+                bFKeyTagAssigned[2] = false;
+                break;
+            case 30:
+                bFKeyPressed[3] = true;
+                FKeyHoldTimes[3] = 0.f;
+                bFKeyTagAssigned[3] = false;
+                break;
+            case 31:
+                bFKeyPressed[4] = true;
+                FKeyHoldTimes[4] = 0.f;
+                bFKeyTagAssigned[4] = false;
+                break;
+            case 32:
+                bFKeyPressed[5] = true;
+                FKeyHoldTimes[5] = 0.f;
+                bFKeyTagAssigned[5] = false;
+                break;
+            case 2727:
+                if (bFKeyPressed[0]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF1, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[0] = false;
+                }
+                break;
+            case 2828:
+                if (bFKeyPressed[1]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF2, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[1] = false;
+                }
+                break;
+            case 2929:
+                if (bFKeyPressed[2]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF3, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[2] = false;
+                }
+                break;
+            case 3030:
+                if (bFKeyPressed[3]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF4, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[3] = false;
+                }
+                break;
+            case 3131:
+                if (bFKeyPressed[4]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF5, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[4] = false;
+                }
+                break;
+            case 3232:
+                if (bFKeyPressed[5]) {
+                    CameraControllerBase->SelectUnitsWithTag(CameraControllerBase->KeyTagF6, CameraControllerBase->SelectableTeamId);
+                    bFKeyPressed[5] = false;
+                }
+                break;
             default: break;
             }
         }

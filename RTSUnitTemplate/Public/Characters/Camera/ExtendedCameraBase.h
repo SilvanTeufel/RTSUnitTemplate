@@ -13,6 +13,7 @@
 #include "Widgets/WinConditionWidget.h"
 #include "Widgets/MapMenuWidget.h"
 #include "Widgets/StoryWidgetBase.h"
+#include "GameplayTagContainer.h"
 #include "ExtendedCameraBase.generated.h"
 
 /**
@@ -145,7 +146,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStoryWidgetBase* StoryWidget;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TagTime = 0.5f;
+	
 	int32 TabMode = 1;
+
+	float FKeyHoldTimes[6];
+	bool bFKeyTagAssigned[6];
+	bool bFKeyPressed[6];
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateTabModeUI();

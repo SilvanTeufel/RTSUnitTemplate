@@ -100,6 +100,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagF4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag KeyTagF6;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag KeyTagCtrl1;
@@ -368,6 +374,9 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SelectUnitsWithTag(FGameplayTag Tag, int TeamId);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_AssignTagToSelectedUnits(FGameplayTag Tag, const TArray<AUnitBase*>& Units, int TeamId);
 	
 	UFUNCTION(Client, Reliable)
 	void Client_UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
