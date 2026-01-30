@@ -4,6 +4,7 @@
 #include "Widgets/ControlWidget.h"
 #include "Components/CheckBox.h"
 #include "Characters/Camera/CameraBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 
 void UControlWidget::NativeConstruct()
@@ -24,6 +25,17 @@ void UControlWidget::NativeConstruct()
 			}
 		}
 	}
+
+	if (SwapAttackMoveCheckBox)
+	{
+		SwapAttackMoveCheckBox->OnCheckStateChanged.AddDynamic(this, &UControlWidget::OnSwapAttackMoveChanged);
+
+		ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayer());
+		if (PC)
+		{
+			SwapAttackMoveCheckBox->SetIsChecked(PC->SwapAttackMove);
+		}
+	}
 }
 
 void UControlWidget::OnSwapScrollChanged(bool bIsChecked)
@@ -36,5 +48,14 @@ void UControlWidget::OnSwapScrollChanged(bool bIsChecked)
 		{
 			Camera->SwapScroll = bIsChecked;
 		}
+	}
+}
+
+void UControlWidget::OnSwapAttackMoveChanged(bool bIsChecked)
+{
+	ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayer());
+	if (PC)
+	{
+		PC->SwapAttackMove = bIsChecked;
 	}
 }

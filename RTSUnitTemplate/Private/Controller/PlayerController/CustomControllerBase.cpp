@@ -1129,6 +1129,12 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 
 void ACustomControllerBase::RightClickPressedMass()
 {
+	if (SwapAttackMove && AttackToggled)
+	{
+		HandleAttackMovePressed();
+		AttackToggled = false;
+		return;
+	}
 	AttackToggled = false;
 
 	FHitResult HitPawn;
@@ -1783,6 +1789,8 @@ void ACustomControllerBase::LeftClickPressedMass()
 
     if (!CameraBase || CameraBase->TabToggled) return;
 
+	if (SwapAttackMove) AttackToggled = false;
+	
     // --- ALT: cancel / destroy area ---
 	if (AltIsPressed)
     {
@@ -1792,117 +1800,9 @@ void ACustomControllerBase::LeftClickPressedMass()
             CancelAbilitiesIfNoBuilding(U);
         }
     }
-    else if (AttackToggled)
+    else if (AttackToggled && !SwapAttackMove)
     {
-        // 1) get world hit under cursor for ground and pawn
-    	
-        FHitResult HitPawn;
-        GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-        AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
-
-
-    	
-    	FHitResult Hit;
-    	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
-        int32 NumUnits = SelectedUnits.Num();
-        if (NumUnits == 0) return;
-
-        // Consistency: Sort units by radius so that formation validation and assignment match Move logic
-        TArray<AUnitBase*> UnitsToProcess = SelectedUnits;
-        UnitsToProcess.Sort([](const AUnitBase& A, const AUnitBase& B) {
-            float RA = 50.0f;
-            if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
-            float RB = 50.0f;
-            if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
-            return RA > RB;
-        });
-
-        FVector AdjustedLocation = Hit.Location;
-        TArray<FVector> Offsets;
-        float UsedSpacing;
-        
-        // If we are not clicking directly on a pawn, validate and adjust the grid on the NavMesh
-        if (!HitPawn.bBlockingHit)
-        {
-            ValidateAndAdjustGridLocation(UnitsToProcess, AdjustedLocation, Offsets, UsedSpacing);
-        }
-        else
-        {
-            UsedSpacing = GridSpacing;
-            Offsets = ComputeSlotOffsets(UnitsToProcess, UsedSpacing);
-        }
-
-        AWaypoint* BWaypoint = nullptr;
-        bool PlayWaypointSound = false;
-        bool PlayAttackSound   = false;
-
-        // 3) issue each unit (collect arrays for mass units)
-        TArray<AUnitBase*> MassUnits;
-        TArray<FVector>    MassLocations;
-        TArray<AUnitBase*> BuildingUnits;
-        TArray<FVector>    BuildingLocs;
-        for (int32 i = 0; i < NumUnits; ++i)
-        {
-            AUnitBase* U = UnitsToProcess[i];
-            if (U == nullptr || U == CameraUnitWithTag) continue;
-        
-            // apply the same slot-by-index approach
-            FVector RunLocation = AdjustedLocation + Offsets[i];
-
-            bool bNavMod;
-            RunLocation = TraceRunLocation(RunLocation, bNavMod);
-            if (bNavMod) continue;
-        
-            bool bSuccess = false;
-            SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
-            if (bSuccess)
-            {
-                // waypoint placed
-                BuildingUnits.Add(U);
-                BuildingLocs.Add(RunLocation);
-            }
-            else
-            {
-                DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
-                if (U->bIsMassUnit)
-                {
-                    MassUnits.Add(U);
-                    MassLocations.Add(RunLocation);
-                }
-                else
-                {
-                    LeftClickAttack(U, RunLocation);
-                }
-
-                PlayAttackSound = true;
-            }
-
-            // still fire any dragged ability on each unit
-            FireAbilityMouseHit(U, Hit);
-        }
-
-        if (BuildingUnits.Num() > 0)
-        {
-            Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
-        }
-
-        if (MassUnits.Num() > 0)
-        {
-            LeftClickAttackMass(MassUnits, MassLocations, AttackToggled, CursorHitActor);
-        }
-
-        AttackToggled = false;
-
-        // 4) play sounds
-        if (WaypointSound && PlayWaypointSound)
-        {
-            UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
-        }
-        if (AttackSound && PlayAttackSound)
-        {
-            UGameplayStatics::PlaySound2D(this, AttackSound, GetSoundMultiplier());
-        }
+        HandleAttackMovePressed();
     }
     else
     {
@@ -2486,6 +2386,119 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 		// server's authoritative version of the subsystem.
 		TeamSubsystem->SetTeamForPlayer(this, TeamId);
 	}
+}
+
+void ACustomControllerBase::HandleAttackMovePressed()
+{
+    // 1) get world hit under cursor for ground and pawn
+    	
+    FHitResult HitPawn;
+    GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+    AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
+
+
+    	
+    FHitResult Hit;
+    GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+
+    int32 NumUnits = SelectedUnits.Num();
+    if (NumUnits == 0) return;
+
+    // Consistency: Sort units by radius so that formation validation and assignment match Move logic
+    TArray<AUnitBase*> UnitsToProcess = SelectedUnits;
+    UnitsToProcess.Sort([](const AUnitBase& A, const AUnitBase& B) {
+        float RA = 50.0f;
+        if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        float RB = 50.0f;
+        if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        return RA > RB;
+    });
+
+    FVector AdjustedLocation = Hit.Location;
+    TArray<FVector> Offsets;
+    float UsedSpacing;
+        
+    // If we are not clicking directly on a pawn, validate and adjust the grid on the NavMesh
+    if (!HitPawn.bBlockingHit)
+    {
+        ValidateAndAdjustGridLocation(UnitsToProcess, AdjustedLocation, Offsets, UsedSpacing);
+    }
+    else
+    {
+        UsedSpacing = GridSpacing;
+        Offsets = ComputeSlotOffsets(UnitsToProcess, UsedSpacing);
+    }
+
+    AWaypoint* BWaypoint = nullptr;
+    bool PlayWaypointSound = false;
+    bool PlayAttackSound   = false;
+
+    // 3) issue each unit (collect arrays for mass units)
+    TArray<AUnitBase*> MassUnits;
+    TArray<FVector>    MassLocations;
+    TArray<AUnitBase*> BuildingUnits;
+    TArray<FVector>    BuildingLocs;
+    for (int32 i = 0; i < NumUnits; ++i)
+    {
+        AUnitBase* U = UnitsToProcess[i];
+        if (U == nullptr || U == CameraUnitWithTag) continue;
+        
+        // apply the same slot-by-index approach
+        FVector RunLocation = AdjustedLocation + Offsets[i];
+
+        bool bNavMod;
+        RunLocation = TraceRunLocation(RunLocation, bNavMod);
+        if (bNavMod) continue;
+        
+        bool bSuccess = false;
+        SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+        if (bSuccess)
+        {
+            // waypoint placed
+            BuildingUnits.Add(U);
+            BuildingLocs.Add(RunLocation);
+        }
+        else
+        {
+            DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
+            if (U->bIsMassUnit)
+            {
+                MassUnits.Add(U);
+                MassLocations.Add(RunLocation);
+            }
+            else
+            {
+                LeftClickAttack(U, RunLocation);
+            }
+
+            PlayAttackSound = true;
+        }
+
+        // still fire any dragged ability on each unit
+        FireAbilityMouseHit(U, Hit);
+    }
+
+    if (BuildingUnits.Num() > 0)
+    {
+        Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
+    }
+
+    if (MassUnits.Num() > 0)
+    {
+        LeftClickAttackMass(MassUnits, MassLocations, AttackToggled, CursorHitActor);
+    }
+
+    AttackToggled = false;
+
+    // 4) play sounds
+    if (WaypointSound && PlayWaypointSound)
+    {
+        UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
+    }
+    if (AttackSound && PlayAttackSound)
+    {
+        UGameplayStatics::PlaySound2D(this, AttackSound, GetSoundMultiplier());
+    }
 }
 
 // === Client mirror helpers ===

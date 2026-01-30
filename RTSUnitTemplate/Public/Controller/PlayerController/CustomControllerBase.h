@@ -237,6 +237,12 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_SetPendingTeam(int32 TeamId);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool SwapAttackMove = false;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HandleAttackMovePressed();
+
 	void ShowFriendlyHealthbars();
 
 	UFUNCTION(Server, Reliable)

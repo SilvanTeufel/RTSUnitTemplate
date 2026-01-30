@@ -22,6 +22,12 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UCheckBox* SwapScrollCheckBox;
 
+	UPROPERTY(meta = (BindWidget))
+	UCheckBox* SwapAttackMoveCheckBox;
+
 	UFUNCTION()
 	void OnSwapScrollChanged(bool bIsChecked);
+
+	UFUNCTION()
+	void OnSwapAttackMoveChanged(bool bIsChecked);
 };
