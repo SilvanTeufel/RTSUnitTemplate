@@ -2490,3 +2490,37 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 
 // === Client mirror helpers ===
 
+void ACustomControllerBase::ShowFriendlyHealthbars()
+{
+	TArray<AUnitBase*> UnitsToShow;
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (Unit && Unit->TeamId == SelectableTeamId && Unit->IsOnViewport)
+		{
+			if (Unit->Attributes && (Unit->Attributes->GetHealth() < Unit->Attributes->GetMaxHealth() || 
+				Unit->Attributes->GetShield() < Unit->Attributes->GetMaxShield()))
+			{
+				UnitsToShow.Add(Unit);
+			}
+		}
+	}
+	if (UnitsToShow.Num() > 0)
+	{
+		Server_ShowFriendlyHealthbars(UnitsToShow);
+	}
+}
+
+void ACustomControllerBase::Server_ShowFriendlyHealthbars_Implementation(const TArray<AUnitBase*>& Units)
+{
+	for (AUnitBase* Unit : Units)
+	{
+		if (Unit)
+		{
+			Unit->OpenHealthWidget = true;
+			Unit->bShowLevelOnly = false;
+			GetWorld()->GetTimerManager().SetTimer(Unit->HealthWidgetTimerHandle, Unit, &ALevelUnit::HideHealthWidget, Unit->HealthWidgetDisplayDuration, false);
+		}
+	}
+}
+

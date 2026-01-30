@@ -237,4 +237,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_SetPendingTeam(int32 TeamId);
 
+	void ShowFriendlyHealthbars();
+
+	UFUNCTION(Server, Reliable)
+	void Server_ShowFriendlyHealthbars(const TArray<AUnitBase*>& Units);
 };

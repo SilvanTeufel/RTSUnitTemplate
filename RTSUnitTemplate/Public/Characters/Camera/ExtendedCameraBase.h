@@ -79,7 +79,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState);
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Input_V_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+
 	void Input_Tab_Released_BP(int32 CamState);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

@@ -48,6 +48,7 @@ public:
 
 	FGameplayTag InputTag_Y_Pressed;
 	FGameplayTag InputTag_X_Pressed;
+	FGameplayTag InputTag_V_Pressed;
 
 	FGameplayTag InputTag_Y_Released;
 	FGameplayTag InputTag_X_Released;

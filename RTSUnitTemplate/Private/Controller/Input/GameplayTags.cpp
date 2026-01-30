@@ -53,6 +53,7 @@ void FGameplayTags::AddAllTags(UGameplayTagsManager& Manager)
 
 	AddTag(InputTag_Y_Pressed, "InputTag.Y_Pressed", "Y_Pressed");
 	AddTag(InputTag_X_Pressed, "InputTag.X_Pressed", "X_Pressed");
+	AddTag(InputTag_V_Pressed, "InputTag.V_Pressed", "V_Pressed");
 
 	AddTag(InputTag_Y_Released, "InputTag.Y_Released", "Y_Released");
 	AddTag(InputTag_X_Released, "InputTag.X_Released", "X_Released");

@@ -201,6 +201,8 @@ void AExtendedCameraBase::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Tab_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Tab_Pressed, 0);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Tab_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Tab_Released, 0);
 		
+		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_V_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_V_Pressed, 0);
+
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_LeftClick_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_LeftClick_Pressed, 0);
 		EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_LeftClick_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_LeftClick_Released, 0);
 
@@ -509,7 +511,16 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 
 void AExtendedCameraBase::Input_Tab_Released(const FInputActionValue& InputActionValue, int32 CamState)
 {
+	Input_Tab_Released_BP(CamState);
+}
 
+void AExtendedCameraBase::Input_V_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
+{
+	ACustomControllerBase* CustomController = Cast<ACustomControllerBase>(GetController());
+	if (CustomController)
+	{
+		CustomController->ShowFriendlyHealthbars();
+	}
 }
 
 void AExtendedCameraBase::Input_Tab_Released_BP(int32 CamState)
