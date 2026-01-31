@@ -134,8 +134,7 @@ public:
 	bool ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId);
 
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	float GetResource(int TeamId, EResourceType RType);
+	virtual float GetResource(int32 TeamId, EResourceType ResourceType) const override;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Work)
 	TArray<FResourceArray> TeamResources;

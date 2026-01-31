@@ -7,6 +7,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInstance.h"
 #include "Core/UnitData.h"
+#include "Core/WorkerData.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameplayEffect.h"
 #include "Characters/Unit/SpeakingUnit.h"
@@ -130,6 +131,8 @@ public:
 	void UpdateTagProgressForConfig(AWinLoseConfigActor* Config);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	virtual float GetResource(int32 TeamId, EResourceType ResourceType) const;
+
 	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);
 
 	void TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool bWon, AWinLoseConfigActor* Config);

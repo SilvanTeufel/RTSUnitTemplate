@@ -52,10 +52,10 @@ public:
 	FText AllBuildingsDestroyedText = FText::FromString(TEXT("Destroy all enemy buildings to win. Protect your own!"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
-	FText TaggedUnitsDestroyedText = FText::FromString(TEXT("Eliminate the targets: {0}"));
+	FText TaggedUnitsDestroyedText = FText::FromString(TEXT("Eliminate the targets:\n{0}"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
-	FText TaggedUnitsSpawnedText = FText::FromString(TEXT("Build units: {0}"));
+	FText TaggedUnitsSpawnedText = FText::FromString(TEXT("Build units:\n{0}"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	FText TaggedUnitsSpawnedFormat = FText::FromString(TEXT("{0}/{1} {2}"));

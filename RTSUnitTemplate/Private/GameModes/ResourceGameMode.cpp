@@ -51,119 +51,6 @@ void AResourceGameMode::CheckWinLoseConditionTimer()
 void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
 	Super::CheckWinLoseCondition(DestroyedUnit);
-	if (bWinLoseTriggered) return;
-	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
-
-	bool bAnyWon = false;
-	bool bAnyLost = false;
-
-	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
-	{
-		TArray<int32> TeamsToCheck;
-		if (Config->TeamId == 0)
-		{
-			for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
-			{
-				if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
-				{
-					TeamsToCheck.AddUnique(PC->SelectableTeamId);
-				}
-			}
-		}
-		else
-		{
-			TeamsToCheck.Add(Config->TeamId);
-		}
-
-		for (int32 CheckingTeamId : TeamsToCheck)
-		{
-			if (CheckingTeamId == 0) continue;
-
-			bool bAdvancedInLoop = true;
-			while (bAdvancedInLoop)
-			{
-				bAdvancedInLoop = false;
-				FWinConditionData CurrentWinData = Config->GetCurrentWinConditionData();
-				EWinLoseCondition CurrentWinCondition = CurrentWinData.Condition;
-
-				bool bReachedWin = false;
-				if (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount)
-				{
-					const FBuildingCost& Target = CurrentWinData.TargetResourceCount;
-					if (GetResource(CheckingTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Rare) >= Target.RareCost &&
-						GetResource(CheckingTeamId, EResourceType::Epic) >= Target.EpicCost &&
-						GetResource(CheckingTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
-					{
-						bReachedWin = true;
-					}
-				}
-
-				if (bReachedWin)
-				{
-					if (!Config->IsLastWinCondition())
-					{
-						Config->AdvanceToNextWinCondition();
-						UpdateTagProgressForConfig(Config); // Refresh data for the next step immediately
-						bAdvancedInLoop = true;
-						continue; // Re-check the next condition immediately
-					}
-					else
-					{
-						// Final Win
-						bWinLoseTriggered = true;
-						for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
-						{
-							ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
-							if (!PC) continue;
-
-							int32 PlayerTeamId = PC->SelectableTeamId;
-							bool bPlayerWon = (PlayerTeamId == CheckingTeamId);
-
-							if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
-							TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
-						}
-
-						if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
-						if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
-						return;
-					}
-				}
-
-				// If Win didn't trigger, check Lose Condition (top-level, non-sequential)
-				if (Config->LoseCondition == EWinLoseCondition::TeamReachedResourceCount)
-				{
-					const FBuildingCost& Target = Config->TargetResourceCount;
-					if (GetResource(CheckingTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
-						GetResource(CheckingTeamId, EResourceType::Rare) >= Target.RareCost &&
-						GetResource(CheckingTeamId, EResourceType::Epic) >= Target.EpicCost &&
-						GetResource(CheckingTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
-					{
-						bWinLoseTriggered = true;
-						for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
-						{
-							ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
-							if (!PC) continue;
-
-							int32 PlayerTeamId = PC->SelectableTeamId;
-							bool bPlayerWon = (PlayerTeamId != CheckingTeamId);
-
-							if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
-							TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
-						}
-
-						if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
-						if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
-						return;
-					}
-				}
-			}
-		}
-	}
 }
 
 void AResourceGameMode::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -823,11 +710,11 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 	return true;
 }
 
-float AResourceGameMode::GetResource(int TeamId, EResourceType RType)
+float AResourceGameMode::GetResource(int32 TeamId, EResourceType ResourceType) const
 {
 	for (const FResourceArray& ResourceArray : TeamResources)
 	{
-		if (ResourceArray.Resources.IsValidIndex(TeamId) && ResourceArray.ResourceType == RType)
+		if (ResourceArray.Resources.IsValidIndex(TeamId) && ResourceArray.ResourceType == ResourceType)
 		{
 			return ResourceArray.Resources[TeamId];
 		}

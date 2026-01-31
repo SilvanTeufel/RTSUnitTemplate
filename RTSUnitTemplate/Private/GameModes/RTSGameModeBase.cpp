@@ -250,6 +250,11 @@ void ARTSGameModeBase::UpdateTagProgressForConfig(AWinLoseConfigActor* Config)
 	}
 }
 
+float ARTSGameModeBase::GetResource(int32 TeamId, EResourceType ResourceType) const
+{
+	return 0.f;
+}
+
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
 	if (DestroyedUnit)
@@ -272,13 +277,16 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 
 	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
-		if (Config->GetCurrentWinCondition() == EWinLoseCondition::AllBuildingsDestroyed || 
+		EWinLoseCondition CurrentWinCondition = Config->GetCurrentWinCondition();
+		if (CurrentWinCondition == EWinLoseCondition::AllBuildingsDestroyed || 
 			Config->LoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 		{
 			bNeedBuildings = true;
 		}
 		
-		if (Config->LoseCondition == EWinLoseCondition::TaggedUnitsDestroyed || 
+		if (CurrentWinCondition == EWinLoseCondition::TaggedUnitsDestroyed ||
+			CurrentWinCondition == EWinLoseCondition::TaggedUnitsSpawned ||
+			Config->LoseCondition == EWinLoseCondition::TaggedUnitsDestroyed || 
 			Config->LoseCondition == EWinLoseCondition::TaggedUnitsSpawned ||
 			Config->WinLoseTargetTags.Num() > 0)
 		{
@@ -459,6 +467,20 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 						bStepWon = (PlayerTeamId == Config->TeamId || Config->TeamId == 0);
 					}
 				}
+				else if (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount)
+				{
+					const FBuildingCost& Target = CurrentWinData.TargetResourceCount;
+					if (GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost &&
+						GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost &&
+						GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					{
+						bStepMet = true;
+						bStepWon = true;
+					}
+				}
 
 				if (bStepMet && bStepWon)
 				{
@@ -560,6 +582,20 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 							bLocalTriggered = true;
 							bWon = false;
 						}
+					}
+				}
+				else if (Config->LoseCondition == EWinLoseCondition::TeamReachedResourceCount)
+				{
+					const FBuildingCost& Target = Config->TargetResourceCount;
+					if (GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
+						GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost &&
+						GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost &&
+						GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					{
+						bLocalTriggered = true;
+						bWon = false;
 					}
 				}
 			}
@@ -1016,6 +1052,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
 		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
 		CameraControllerBase->Multi_SetCameraOnly();
+		CameraControllerBase->Client_InitializeMainHUD();
 		
 		CameraControllerBase->Multi_HideEnemyWaypoints();
 		CameraControllerBase->Multi_InitFogOfWar();
@@ -1182,6 +1219,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	NavInitialisation();
 
 	// Initialize MainHUD
+	/*
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
 		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
@@ -1189,7 +1227,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			PC->Client_InitializeMainHUD();
 		}
 	}
-	
+	*/
 	InitializeWinLoseConfigActors();
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{

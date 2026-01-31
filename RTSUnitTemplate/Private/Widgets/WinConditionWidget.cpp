@@ -5,6 +5,20 @@
 #include "Components/RichTextBlock.h"
 #include "Components/Image.h"
 
+static FString SplitPascalCase(const FString& InString)
+{
+	FString Result;
+	for (int32 i = 0; i < InString.Len(); ++i)
+	{
+		if (i > 0 && FChar::IsUpper(InString[i]) && !FChar::IsUpper(InString[i - 1]))
+		{
+			Result.AppendChar(' ');
+		}
+		Result.AppendChar(InString[i]);
+	}
+	return Result;
+}
+
 void UWinConditionWidget::UpdateResourceWidgets(const FBuildingCost& Cost, bool bVisible)
 {
 	auto UpdateWidgetPair = [&](UImage* Icon, UTextBlock* AmountText, UTextBlock* NameText, int32 Amount, EResourceType Type)
@@ -229,7 +243,7 @@ void UWinConditionWidget::UpdateConditionText()
 		break;
 	case EWinLoseCondition::TaggedUnitsDestroyed:
 		{
-			TArray<FString> TagStrings;
+			TArray<FText> TagTexts;
 			for (const FTagProgress& Progress : ConfigActor->TagProgress)
 			{
 				FString TagString = Progress.Tag.ToString();
@@ -238,17 +252,18 @@ void UWinConditionWidget::UpdateConditionText()
 				{
 					TagString = TagString.RightChop(LastDotIndex + 1);
 				}
+				TagString = SplitPascalCase(TagString);
 
 				int32 DestroyedCount = Progress.TotalCount - Progress.AliveCount;
-				TagStrings.Add(FString::Printf(TEXT("%d/%d %s Destroyed"), DestroyedCount, Progress.TotalCount, *TagString));
+				TagTexts.Add(FText::Format(FText::FromString(TEXT("{0}/{1} {2}")), FText::AsNumber(DestroyedCount), FText::AsNumber(Progress.TotalCount), FText::FromString(TagString)));
 			}
-			FString CombinedTags = FString::Join(TagStrings, TEXT(", "));
- 		DescriptionBody = FText::Format(TaggedUnitsDestroyedText, FText::FromString(CombinedTags));
+			FText CombinedTags = FText::Join(FText::FromString(TEXT("\n")), TagTexts);
+			DescriptionBody = FText::Format(TaggedUnitsDestroyedText, CombinedTags);
 		}
 		break;
 	case EWinLoseCondition::TaggedUnitsSpawned:
 		{
-			TArray<FString> TagStrings;
+			TArray<FText> TagTexts;
 			for (const FTagProgress& Progress : ConfigActor->TagProgress)
 			{
 				FString TagString = Progress.Tag.ToString();
@@ -257,11 +272,12 @@ void UWinConditionWidget::UpdateConditionText()
 				{
 					TagString = TagString.RightChop(LastDotIndex + 1);
 				}
+				TagString = SplitPascalCase(TagString);
 
-				TagStrings.Add(FText::Format(TaggedUnitsSpawnedFormat, FText::AsNumber(Progress.TotalCount), FText::AsNumber(Progress.TargetCount), FText::FromString(TagString)).ToString());
+				TagTexts.Add(FText::Format(TaggedUnitsSpawnedFormat, FText::AsNumber(Progress.TotalCount), FText::AsNumber(Progress.TargetCount), FText::FromString(TagString)));
 			}
-			FString CombinedTags = FString::Join(TagStrings, TEXT(", "));
-			DescriptionBody = FText::Format(TaggedUnitsSpawnedText, FText::FromString(CombinedTags));
+			FText CombinedTags = FText::Join(FText::FromString(TEXT("\n")), TagTexts);
+			DescriptionBody = FText::Format(TaggedUnitsSpawnedText, CombinedTags);
 		}
 		break;
 	case EWinLoseCondition::TeamReachedResourceCount:
