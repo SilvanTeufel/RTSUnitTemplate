@@ -41,6 +41,17 @@ public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWaypoint* NextWaypoint;
 
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	AUnitBase* FollowCharacter;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float FollowInterval = 5.0f;
+
+	FTimerHandle FollowTimerHandle;
+
+	UFUNCTION()
+	void UpdatePositionToFollowCharacter();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* ActualCharacter;
 
