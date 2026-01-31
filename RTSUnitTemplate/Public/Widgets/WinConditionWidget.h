@@ -52,7 +52,13 @@ public:
 	FText AllBuildingsDestroyedText = FText::FromString(TEXT("Destroy all enemy buildings to win. Protect your own!"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
-	FText TaggedUnitDestroyedText = FText::FromString(TEXT("Eliminate the target: {0}"));
+	FText TaggedUnitsDestroyedText = FText::FromString(TEXT("Eliminate the targets: {0}"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
+	FText TaggedUnitsSpawnedText = FText::FromString(TEXT("Build units: {0}"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
+	FText TaggedUnitsSpawnedFormat = FText::FromString(TEXT("{0}/{1} {2}"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	FText ResourcesConditionText = FText::FromString(TEXT("Gather the required amount of resources:\n"));
@@ -108,8 +114,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional), Category = RTSUnitTemplate)
 	UTextBlock* ResourceAmountLegendary;
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StartUpdateTimer();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopTimer();
+
 protected:
 	virtual void NativeConstruct() override;
+
+	FTimerHandle UpdateTimerHandle;
+	const float UpdateInterval = 1.0f;
 
 	UFUNCTION()
 	void UpdateConditionText();
@@ -119,6 +134,9 @@ protected:
 
 	UFUNCTION()
 	void OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition);
+
+	UFUNCTION()
+	void OnTagProgressUpdated(AWinLoseConfigActor* Config);
 
 	void UpdateResourceWidgets(const FBuildingCost& Cost, bool bVisible);
 

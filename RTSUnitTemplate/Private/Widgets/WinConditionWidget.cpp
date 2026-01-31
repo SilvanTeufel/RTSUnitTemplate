@@ -139,6 +139,8 @@ void UWinConditionWidget::NativeConstruct()
 		{
 			ConfigActor->OnWinConditionChanged.RemoveDynamic(this, &UWinConditionWidget::OnWinConditionChanged);
 			ConfigActor->OnWinConditionChanged.AddDynamic(this, &UWinConditionWidget::OnWinConditionChanged);
+			ConfigActor->OnTagProgressUpdated.RemoveDynamic(this, &UWinConditionWidget::OnTagProgressUpdated);
+			ConfigActor->OnTagProgressUpdated.AddDynamic(this, &UWinConditionWidget::OnTagProgressUpdated);
 			ConfigActor->OnYouWonTheGame.RemoveDynamic(this, &UWinConditionWidget::UpdateConditionText);
 			ConfigActor->OnYouWonTheGame.AddDynamic(this, &UWinConditionWidget::UpdateConditionText);
 			ConfigActor->OnYouLostTheGame.RemoveDynamic(this, &UWinConditionWidget::UpdateConditionText);
@@ -153,7 +155,22 @@ void UWinConditionWidget::NativeConstruct()
 		MyPC->OnTeamIdChanged.AddDynamic(this, &UWinConditionWidget::OnTeamIdChanged);
 	}
 
+	StartUpdateTimer();
 	UpdateConditionText();
+}
+
+void UWinConditionWidget::StartUpdateTimer()
+{
+	if (!GetWorld()) return;
+	GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UWinConditionWidget::UpdateConditionText, UpdateInterval, true);
+}
+
+void UWinConditionWidget::StopTimer()
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(UpdateTimerHandle);
+	}
 }
 
 void UWinConditionWidget::OnTeamIdChanged(int32 NewTeamId)
@@ -166,6 +183,11 @@ void UWinConditionWidget::OnWinConditionChanged(AWinLoseConfigActor* Config, EWi
 	UpdateConditionText();
 }
 
+void UWinConditionWidget::OnTagProgressUpdated(AWinLoseConfigActor* Config)
+{
+	UpdateConditionText();
+}
+
 void UWinConditionWidget::UpdateConditionText()
 {
 	if (!ConditionText && !RichConditionText) return;
@@ -173,27 +195,7 @@ void UWinConditionWidget::UpdateConditionText()
 	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetOwningPlayer());
 	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
 
-	AWinLoseConfigActor* BestConfig = nullptr;
-	AWinLoseConfigActor* GlobalConfig = nullptr;
-
-	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
-	{
-		AWinLoseConfigActor* Config = *It;
-		if (!Config) continue;
-
-		if (Config->TeamId == MyTeamId)
-		{
-			BestConfig = Config;
-			break;
-		}
-
-		if (Config->TeamId == 0)
-		{
-			GlobalConfig = Config;
-		}
-	}
-
-	AWinLoseConfigActor* ConfigActor = BestConfig ? BestConfig : GlobalConfig;
+	AWinLoseConfigActor* ConfigActor = AWinLoseConfigActor::GetWinLoseConfigForTeam(this, MyTeamId);
 
 	// Reset resource widgets by default
 	UpdateResourceWidgets(FBuildingCost(), false);
@@ -215,7 +217,8 @@ void UWinConditionWidget::UpdateConditionText()
 	}
 
 	FText DescriptionBody;
-	EWinLoseCondition CurrentCondition = ConfigActor->GetCurrentWinCondition();
+	FWinConditionData WinData = ConfigActor->GetCurrentWinConditionData();
+	EWinLoseCondition CurrentCondition = WinData.Condition;
 	switch (CurrentCondition)
 	{
 	case EWinLoseCondition::None:
@@ -224,15 +227,41 @@ void UWinConditionWidget::UpdateConditionText()
 	case EWinLoseCondition::AllBuildingsDestroyed:
 		DescriptionBody = AllBuildingsDestroyedText;
 		break;
-	case EWinLoseCondition::TaggedUnitDestroyed:
+	case EWinLoseCondition::TaggedUnitsDestroyed:
 		{
-			FString TagString = ConfigActor->WinLoseTargetTag.ToString();
-			int32 LastDotIndex;
-			if (TagString.FindLastChar('.', LastDotIndex))
+			TArray<FString> TagStrings;
+			for (const FTagProgress& Progress : ConfigActor->TagProgress)
 			{
-				TagString = TagString.RightChop(LastDotIndex + 1);
+				FString TagString = Progress.Tag.ToString();
+				int32 LastDotIndex;
+				if (TagString.FindLastChar('.', LastDotIndex))
+				{
+					TagString = TagString.RightChop(LastDotIndex + 1);
+				}
+
+				int32 DestroyedCount = Progress.TotalCount - Progress.AliveCount;
+				TagStrings.Add(FString::Printf(TEXT("%d/%d %s Destroyed"), DestroyedCount, Progress.TotalCount, *TagString));
 			}
-			DescriptionBody = FText::Format(TaggedUnitDestroyedText, FText::FromString(TagString));
+			FString CombinedTags = FString::Join(TagStrings, TEXT(", "));
+ 		DescriptionBody = FText::Format(TaggedUnitsDestroyedText, FText::FromString(CombinedTags));
+		}
+		break;
+	case EWinLoseCondition::TaggedUnitsSpawned:
+		{
+			TArray<FString> TagStrings;
+			for (const FTagProgress& Progress : ConfigActor->TagProgress)
+			{
+				FString TagString = Progress.Tag.ToString();
+				int32 LastDotIndex;
+				if (TagString.FindLastChar('.', LastDotIndex))
+				{
+					TagString = TagString.RightChop(LastDotIndex + 1);
+				}
+
+				TagStrings.Add(FText::Format(TaggedUnitsSpawnedFormat, FText::AsNumber(Progress.TotalCount), FText::AsNumber(Progress.TargetCount), FText::FromString(TagString)).ToString());
+			}
+			FString CombinedTags = FString::Join(TagStrings, TEXT(", "));
+			DescriptionBody = FText::Format(TaggedUnitsSpawnedText, FText::FromString(CombinedTags));
 		}
 		break;
 	case EWinLoseCondition::TeamReachedResourceCount:
@@ -246,13 +275,13 @@ void UWinConditionWidget::UpdateConditionText()
 			}
 			else
 			{
-				DescriptionBody = FText::Format(FText::FromString(TEXT("{0}{1}")), ResourcesConditionText, FormatResourceCost(ConfigActor->TargetResourceCount, RichConditionText != nullptr));
+				DescriptionBody = FText::Format(FText::FromString(TEXT("{0}{1}")), ResourcesConditionText, FormatResourceCost(WinData.TargetResourceCount, RichConditionText != nullptr));
 			}
-			UpdateResourceWidgets(ConfigActor->TargetResourceCount, true);
+			UpdateResourceWidgets(WinData.TargetResourceCount, true);
 		}
 		break;
 	case EWinLoseCondition::TeamReachedGameTime:
-		DescriptionBody = FText::Format(SurvivalConditionText, FText::AsNumber(FMath::RoundToInt(ConfigActor->TargetGameTime)));
+		DescriptionBody = FText::Format(SurvivalConditionText, FText::AsNumber(FMath::RoundToInt(WinData.TargetGameTime)));
 		break;
 	default:
 		DescriptionBody = UnknownConditionText;

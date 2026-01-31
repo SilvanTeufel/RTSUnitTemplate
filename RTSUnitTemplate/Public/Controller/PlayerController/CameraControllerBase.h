@@ -57,6 +57,9 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UFUNCTION(Client, Reliable)
 	void Client_TriggerWinLoseUI(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable);
 
+	UFUNCTION(Client, Reliable)
+	void Client_InitializeWinLoseSystem();
+
 	FTimerHandle WinLoseTimerHandle;
 
 	UFUNCTION(Client, Reliable)

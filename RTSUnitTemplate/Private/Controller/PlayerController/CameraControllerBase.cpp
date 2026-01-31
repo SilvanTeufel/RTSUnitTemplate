@@ -1,4 +1,5 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Characters/Camera/ExtendedCameraBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -141,6 +142,14 @@ void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TS
 			WinLoseWidget->SetupWidget(bWon, InMapName, DestinationSwitchTagToEnable);
 			WinLoseWidget->AddToViewport();
 		}
+	}
+}
+
+void ACameraControllerBase::Client_InitializeWinLoseSystem_Implementation()
+{
+	if (AExtendedCameraBase* ExtendedCamera = Cast<AExtendedCameraBase>(GetPawn()))
+	{
+		ExtendedCamera->InitializeWinConditionDisplay();
 	}
 }
 

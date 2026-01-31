@@ -50,19 +50,15 @@ void AResourceGameMode::CheckWinLoseConditionTimer()
 
 void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
-	if (bWinLoseTriggered) return;
 	Super::CheckWinLoseCondition(DestroyedUnit);
 	if (bWinLoseTriggered) return;
+	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
 
 	bool bAnyWon = false;
 	bool bAnyLost = false;
 
 	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
-		EWinLoseCondition CurrentWinCondition = Config->GetCurrentWinCondition();
-		if (CurrentWinCondition != EWinLoseCondition::TeamReachedResourceCount && Config->LoseCondition != EWinLoseCondition::TeamReachedResourceCount) continue;
-
 		TArray<int32> TeamsToCheck;
 		if (Config->TeamId == 0)
 		{
@@ -83,49 +79,88 @@ void AResourceGameMode::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		{
 			if (CheckingTeamId == 0) continue;
 
-			const FBuildingCost& TargetResources = Config->TargetResourceCount;
-
-			bool bReached = true;
-			if (GetResource(CheckingTeamId, EResourceType::Primary) < TargetResources.PrimaryCost) bReached = false;
-			if (GetResource(CheckingTeamId, EResourceType::Secondary) < TargetResources.SecondaryCost) bReached = false;
-			if (GetResource(CheckingTeamId, EResourceType::Tertiary) < TargetResources.TertiaryCost) bReached = false;
-			if (GetResource(CheckingTeamId, EResourceType::Rare) < TargetResources.RareCost) bReached = false;
-			if (GetResource(CheckingTeamId, EResourceType::Epic) < TargetResources.EpicCost) bReached = false;
-			if (GetResource(CheckingTeamId, EResourceType::Legendary) < TargetResources.LegendaryCost) bReached = false;
-
-			if (bReached)
+			bool bAdvancedInLoop = true;
+			while (bAdvancedInLoop)
 			{
-				bool bWonTriggered = (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount);
-				
-				if (bWonTriggered)
+				bAdvancedInLoop = false;
+				FWinConditionData CurrentWinData = Config->GetCurrentWinConditionData();
+				EWinLoseCondition CurrentWinCondition = CurrentWinData.Condition;
+
+				bool bReachedWin = false;
+				if (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount)
+				{
+					const FBuildingCost& Target = CurrentWinData.TargetResourceCount;
+					if (GetResource(CheckingTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Rare) >= Target.RareCost &&
+						GetResource(CheckingTeamId, EResourceType::Epic) >= Target.EpicCost &&
+						GetResource(CheckingTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					{
+						bReachedWin = true;
+					}
+				}
+
+				if (bReachedWin)
 				{
 					if (!Config->IsLastWinCondition())
 					{
 						Config->AdvanceToNextWinCondition();
-						break; // Move to next condition for this config
+						UpdateTagProgressForConfig(Config); // Refresh data for the next step immediately
+						bAdvancedInLoop = true;
+						continue; // Re-check the next condition immediately
+					}
+					else
+					{
+						// Final Win
+						bWinLoseTriggered = true;
+						for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+						{
+							ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+							if (!PC) continue;
+
+							int32 PlayerTeamId = PC->SelectableTeamId;
+							bool bPlayerWon = (PlayerTeamId == CheckingTeamId);
+
+							if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
+							TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
+						}
+
+						if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
+						if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
+						return;
 					}
 				}
 
-				// If we reach here, it's either the final Win or a Lose
-				bWinLoseTriggered = true;
-				
-				for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+				// If Win didn't trigger, check Lose Condition (top-level, non-sequential)
+				if (Config->LoseCondition == EWinLoseCondition::TeamReachedResourceCount)
 				{
-					ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
-					if (!PC) continue;
+					const FBuildingCost& Target = Config->TargetResourceCount;
+					if (GetResource(CheckingTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
+						GetResource(CheckingTeamId, EResourceType::Rare) >= Target.RareCost &&
+						GetResource(CheckingTeamId, EResourceType::Epic) >= Target.EpicCost &&
+						GetResource(CheckingTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					{
+						bWinLoseTriggered = true;
+						for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+						{
+							ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+							if (!PC) continue;
 
-					int32 PlayerTeamId = PC->SelectableTeamId;
-					bool bPlayerWon = bWonTriggered ? (PlayerTeamId == CheckingTeamId) : (PlayerTeamId != CheckingTeamId);
+							int32 PlayerTeamId = PC->SelectableTeamId;
+							bool bPlayerWon = (PlayerTeamId != CheckingTeamId);
 
-					if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
+							if (bPlayerWon) bAnyWon = true; else bAnyLost = true;
+							TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
+						}
 
-					TriggerWinLoseForPlayer(PC, bPlayerWon, Config);
+						if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
+						if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
+						return;
+					}
 				}
-
-				if (bAnyWon) Config->OnYouWonTheGame.Broadcast();
-				if (bAnyLost) Config->OnYouLostTheGame.Broadcast();
-				
-				return; // Game ended
 			}
 		}
 	}

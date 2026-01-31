@@ -38,6 +38,15 @@ struct FTimerHandleMapping
 	UPROPERTY(VisibleAnywhere, Category = "Timer")
 	bool SkipTimer = false;
 };
+USTRUCT()
+struct FTagCountMap
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TMap<FGameplayTag, int32> TagCounts;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 {
@@ -99,6 +108,26 @@ public:
 	bool bWinLoseTriggered = false;
 	bool bInitialSpawnFinished = false;
 	bool bBuildingsEverExisted = false;
+
+	UPROPERTY()
+	TMap<FGameplayTag, int32> TagsDestroyedCountMap;
+
+	UPROPERTY()
+	TMap<FGameplayTag, int32> TagsAliveCountMap;
+
+	UPROPERTY()
+	TMap<int32, FTagCountMap> TeamTagsDestroyedCountMap;
+
+	UPROPERTY()
+	TMap<int32, FTagCountMap> TeamTagsAliveCountMap;
+
+	bool IsAnyUnitWithTagAlive(const FGameplayTag& Tag, const TMap<FGameplayTag, int32>& AliveTagCounts) const;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void InitializeWinLoseConfigActors();
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void UpdateTagProgressForConfig(AWinLoseConfigActor* Config);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
 	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);

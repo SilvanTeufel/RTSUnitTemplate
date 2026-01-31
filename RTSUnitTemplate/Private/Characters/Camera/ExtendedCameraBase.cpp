@@ -91,24 +91,19 @@ void AExtendedCameraBase::BeginPlay()
 			OnTeamIdChanged_Internal(MyPC->SelectableTeamId);
 		}
 	}
-	
-	// Optional fallback timer in case controller is not yet possessed
-	FTimerHandle InitialShowTimer;
-	GetWorldTimerManager().SetTimer(InitialShowTimer, [this]()
-	{
-		ACameraControllerBase* MyPC2 = Cast<ACameraControllerBase>(GetController());
-		if (MyPC2 && MyPC2->SelectableTeamId != -1)
-		{
-			OnTeamIdChanged_Internal(MyPC2->SelectableTeamId);
-		}
-	}, 2.0f, false);
 }
 
 void AExtendedCameraBase::OnTeamIdChanged_Internal(int32 NewTeamId)
 {
-	AWinLoseConfigActor* BestConfig = nullptr;
-	AWinLoseConfigActor* GlobalConfig = nullptr;
+	InitializeWinConditionDisplay();
+}
 
+void AExtendedCameraBase::InitializeWinConditionDisplay()
+{
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
+
+	// Always bind to all config actors' changes
 	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
 	{
 		AWinLoseConfigActor* Config = *It;
@@ -116,16 +111,34 @@ void AExtendedCameraBase::OnTeamIdChanged_Internal(int32 NewTeamId)
 		{
 			Config->OnWinConditionChanged.RemoveDynamic(this, &AExtendedCameraBase::OnWinConditionChanged);
 			Config->OnWinConditionChanged.AddDynamic(this, &AExtendedCameraBase::OnWinConditionChanged);
-                
-			if (Config->TeamId == NewTeamId) BestConfig = Config;
-			else if (Config->TeamId == 0) GlobalConfig = Config;
+			Config->OnTagProgressUpdated.RemoveDynamic(this, &AExtendedCameraBase::OnTagProgressUpdated);
+			Config->OnTagProgressUpdated.AddDynamic(this, &AExtendedCameraBase::OnTagProgressUpdated);
 		}
 	}
 
-	AWinLoseConfigActor* TargetConfig = BestConfig ? BestConfig : GlobalConfig;
+	AWinLoseConfigActor* TargetConfig = AWinLoseConfigActor::GetWinLoseConfigForTeam(this, MyTeamId);
 	if (TargetConfig)
 	{
-		ShowWinConditionWidget(TargetConfig->GameStartDisplayDuration);
+		float Delay = TargetConfig->InitialDisplayDelay;
+		float Duration = TargetConfig->GameStartDisplayDuration;
+
+		GetWorldTimerManager().ClearTimer(InitialWinConditionDelayTimerHandle);
+		
+		if (Delay > 0)
+		{
+			TWeakObjectPtr<AExtendedCameraBase> WeakThis(this);
+			GetWorldTimerManager().SetTimer(InitialWinConditionDelayTimerHandle, [WeakThis, Duration]()
+			{
+				if (AExtendedCameraBase* StrongThis = WeakThis.Get())
+				{
+					StrongThis->ShowWinConditionWidget(Duration);
+				}
+			}, Delay, false);
+		}
+		else
+		{
+			ShowWinConditionWidget(Duration);
+		}
 	}
 }
 
@@ -152,6 +165,20 @@ void AExtendedCameraBase::HideWinConditionWidget()
 }
 
 void AExtendedCameraBase::OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition)
+{
+	if (!Config) return;
+
+	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
+
+	// Only show if the config is relevant to us
+	if (Config->TeamId == MyTeamId || Config->TeamId == 0)
+	{
+		ShowWinConditionWidget(Config->WinConditionDisplayDuration);
+	}
+}
+
+void AExtendedCameraBase::OnTagProgressUpdated(AWinLoseConfigActor* Config)
 {
 	if (!Config) return;
 

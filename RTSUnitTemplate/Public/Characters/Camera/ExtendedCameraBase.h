@@ -128,14 +128,21 @@ public:
 	UWinConditionWidget* WinConditionWidget;
 
 	FTimerHandle WinConditionDisplayTimerHandle;
+	FTimerHandle InitialWinConditionDelayTimerHandle;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShowWinConditionWidget(float Duration);
 
 	void HideWinConditionWidget();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void InitializeWinConditionDisplay();
+
 	UFUNCTION()
 	void OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition);
+
+	UFUNCTION()
+	void OnTagProgressUpdated(AWinLoseConfigActor* Config);
 
 	UFUNCTION()
 	void OnTeamIdChanged_Internal(int32 NewTeamId);

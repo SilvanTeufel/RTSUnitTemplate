@@ -44,24 +44,13 @@ void ARTSGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	TagsDestroyedCountMap.Empty();
+	TagsAliveCountMap.Empty();
+	TeamTagsDestroyedCountMap.Empty();
+	TeamTagsAliveCountMap.Empty();
 	bWinLoseTriggered = false;
 
 	FillUnitArrays();
-
-	// Find all WinLoseConfigActors in the world
-	WinLoseConfigActors.Empty();
-	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
-	{
-		AWinLoseConfigActor* Config = *It;
-		if (Config)
-		{
-			WinLoseConfigActors.Add(Config);
-			if (!WinLoseConfigActor)
-			{
-				WinLoseConfigActor = Config;
-			}
-		}
-	}
 
 	FTimerHandle TimerHandleGatherController;
 	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
@@ -104,6 +93,24 @@ void ARTSGameModeBase::BeginPlay()
 	GetWorldTimerManager().SetTimer(WinLoseTimerHandle, this, &ARTSGameModeBase::CheckWinLoseConditionTimer, 1.0f, true);
 }
 
+void ARTSGameModeBase::InitializeWinLoseConfigActors()
+{
+	// Find all WinLoseConfigActors in the world
+	WinLoseConfigActors.Empty();
+	for (TActorIterator<AWinLoseConfigActor> It(GetWorld()); It; ++It)
+	{
+		AWinLoseConfigActor* Config = *It;
+		if (Config)
+		{
+			WinLoseConfigActors.Add(Config);
+			if (!WinLoseConfigActor)
+			{
+				WinLoseConfigActor = Config;
+			}
+		}
+	}
+}
+
 void ARTSGameModeBase::CheckWinLoseConditionTimer()
 {
 	CheckWinLoseCondition(nullptr);
@@ -144,42 +151,199 @@ void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool b
 	}, bWon ? Config->WinDelay : Config->LoseDelay, false);
 }
 
+bool ARTSGameModeBase::IsAnyUnitWithTagAlive(const FGameplayTag& Tag, const TMap<FGameplayTag, int32>& AliveTagCounts) const
+{
+	return Tag.IsValid() && AliveTagCounts.Contains(Tag) && AliveTagCounts[Tag] > 0;
+}
+
+void ARTSGameModeBase::UpdateTagProgressForConfig(AWinLoseConfigActor* Config)
+{
+	if (!Config) return;
+
+	FWinConditionData CurrentWinData = Config->GetCurrentWinConditionData();
+	if (CurrentWinData.Condition == EWinLoseCondition::TaggedUnitsDestroyed || CurrentWinData.Condition == EWinLoseCondition::TaggedUnitsSpawned)
+	{
+		TArray<FTagProgress> NewTagProgress;
+		const FGameplayTagContainer& TargetTags = CurrentWinData.WinLoseTargetTags.Num() > 0 ? CurrentWinData.WinLoseTargetTags : Config->WinLoseTargetTags;
+
+		// Use a set to collect all tags we should track progress for
+		TSet<FGameplayTag> AllTagsToTrack;
+		for (auto TagIt = TargetTags.CreateConstIterator(); TagIt; ++TagIt)
+		{
+			AllTagsToTrack.Add(*TagIt);
+		}
+		for (const FGameplayTagCount& TagCount : CurrentWinData.TargetTagCounts)
+		{
+			AllTagsToTrack.Add(TagCount.Tag);
+		}
+
+		for (const FGameplayTag& TargetTag : AllTagsToTrack)
+		{
+			int32 AliveCount = 0;
+			int32 DestroyedCount = 0;
+
+			if (Config->TeamId != 0)
+			{
+				if (CurrentWinData.Condition == EWinLoseCondition::TaggedUnitsDestroyed)
+				{
+					for (auto& Pair : TeamTagsAliveCountMap)
+					{
+						if (Pair.Key != Config->TeamId)
+						{
+							AliveCount += Pair.Value.TagCounts.Contains(TargetTag) ? Pair.Value.TagCounts[TargetTag] : 0;
+						}
+					}
+					for (auto& Pair : TeamTagsDestroyedCountMap)
+					{
+						if (Pair.Key != Config->TeamId)
+						{
+							DestroyedCount += Pair.Value.TagCounts.Contains(TargetTag) ? Pair.Value.TagCounts[TargetTag] : 0;
+						}
+					}
+				}
+				else // TaggedUnitsSpawned or other
+				{
+					if (TeamTagsAliveCountMap.Contains(Config->TeamId))
+					{
+						AliveCount = TeamTagsAliveCountMap[Config->TeamId].TagCounts.Contains(TargetTag) ? TeamTagsAliveCountMap[Config->TeamId].TagCounts[TargetTag] : 0;
+					}
+					if (TeamTagsDestroyedCountMap.Contains(Config->TeamId))
+					{
+						DestroyedCount = TeamTagsDestroyedCountMap[Config->TeamId].TagCounts.Contains(TargetTag) ? TeamTagsDestroyedCountMap[Config->TeamId].TagCounts[TargetTag] : 0;
+					}
+				}
+			}
+			else
+			{
+				AliveCount = TagsAliveCountMap.Contains(TargetTag) ? TagsAliveCountMap[TargetTag] : 0;
+				DestroyedCount = TagsDestroyedCountMap.Contains(TargetTag) ? TagsDestroyedCountMap[TargetTag] : 0;
+			}
+
+			int32 TotalCount = AliveCount + DestroyedCount;
+
+			FTagProgress Progress;
+			Progress.Tag = TargetTag;
+			Progress.AliveCount = AliveCount;
+			Progress.TotalCount = TotalCount;
+
+			// Determine TargetCount
+			int32 TargetCount = 0;
+			for (const FGameplayTagCount& TagCount : CurrentWinData.TargetTagCounts)
+			{
+				if (TagCount.Tag == TargetTag)
+				{
+					TargetCount = TagCount.Count;
+					break;
+				}
+			}
+			
+			// Fallback to 1 if it's in the container but not in the count array
+			if (TargetCount == 0 && TargetTags.HasTagExact(TargetTag))
+			{
+				TargetCount = 1;
+			}
+
+			Progress.TargetCount = TargetCount;
+			NewTagProgress.Add(Progress);
+		}
+		Config->TagProgress = NewTagProgress;
+	}
+}
+
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (!bInitialSpawnFinished || GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
+	if (DestroyedUnit)
+	{
+		for (auto TagIt = DestroyedUnit->UnitTags.CreateConstIterator(); TagIt; ++TagIt)
+		{
+			TagsDestroyedCountMap.FindOrAdd(*TagIt)++;
+			TeamTagsDestroyedCountMap.FindOrAdd(DestroyedUnit->TeamId).TagCounts.FindOrAdd(*TagIt)++;
+		}
+	}
+
 	if (bWinLoseTriggered) return;
 	if (WinLoseConfigActors.Num() == 0) return;
 
 	TArray<ABuildingBase*> AllBuildings;
+	TagsAliveCountMap.Empty();
+	TeamTagsAliveCountMap.Empty();
 	bool bNeedBuildings = false;
+	bool bNeedTags = false;
+
 	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
 		if (Config->GetCurrentWinCondition() == EWinLoseCondition::AllBuildingsDestroyed || 
 			Config->LoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
 		{
 			bNeedBuildings = true;
-			break;
+		}
+		
+		if (Config->LoseCondition == EWinLoseCondition::TaggedUnitsDestroyed || 
+			Config->LoseCondition == EWinLoseCondition::TaggedUnitsSpawned ||
+			Config->WinLoseTargetTags.Num() > 0)
+		{
+			bNeedTags = true;
+		}
+
+		for (const FWinConditionData& ConditionData : Config->WinConditions)
+		{
+			if (ConditionData.Condition == EWinLoseCondition::TaggedUnitsDestroyed || 
+				ConditionData.Condition == EWinLoseCondition::TaggedUnitsSpawned ||
+				ConditionData.WinLoseTargetTags.Num() > 0 ||
+				ConditionData.TargetTagCounts.Num() > 0)
+			{
+				bNeedTags = true;
+				break;
+			}
 		}
 	}
 
-	if (bNeedBuildings)
+	if (bNeedBuildings || bNeedTags)
 	{
-		for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+		for (TActorIterator<ASpawnerUnit> It(GetWorld()); It; ++It)
 		{
-			ABuildingBase* Building = *It;
-			if (Building && Building != DestroyedUnit && Building->GetUnitState() != UnitData::Dead)
+			ASpawnerUnit* Spawner = *It;
+			if (Spawner && Spawner != DestroyedUnit)
 			{
-				AllBuildings.Add(Building);
+				// Check if it's dead (if it has a state)
+				if (AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(Spawner))
+				{
+					if (AbilityUnit->GetUnitState() == UnitData::Dead)
+					{
+						continue;
+					}
+				}
+
+				if (ABuildingBase* Building = Cast<ABuildingBase>(Spawner))
+				{
+					AllBuildings.Add(Building);
+				}
+				
+				for (auto TagIt = Spawner->UnitTags.CreateConstIterator(); TagIt; ++TagIt)
+				{
+					TagsAliveCountMap.FindOrAdd(*TagIt)++;
+					TeamTagsAliveCountMap.FindOrAdd(Spawner->TeamId).TagCounts.FindOrAdd(*TagIt)++;
+				}
 			}
 		}
 
-		if (!bBuildingsEverExisted && AllBuildings.Num() > 0)
+		if (bNeedBuildings)
 		{
-			bBuildingsEverExisted = true;
+			if (!bBuildingsEverExisted && AllBuildings.Num() > 0)
+			{
+				bBuildingsEverExisted = true;
+			}
 		}
-
-		if (!bBuildingsEverExisted) return; // Wait until at least one building is detected
 	}
+
+	// Update TagProgress for ALL configs so UI is correct even during delay
+	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
+	{
+		UpdateTagProgressForConfig(Config);
+	}
+
+	if (!bInitialSpawnFinished) return;
+	if (GetWorld()->GetTimeSeconds() < (float)GatherControllerTimer + 10.f + DelaySpawnTableTime) return;
 
 	bool bAnyWon = false;
 	bool bAnyLost = false;
@@ -202,59 +366,115 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			bool bWon = false;
 
 			// 1. Check Win Condition
-			EWinLoseCondition CurrentWinCondition = Config->GetCurrentWinCondition();
-			if (CurrentWinCondition == EWinLoseCondition::AllBuildingsDestroyed)
+			bool bAdvancedInLoop = true;
+			while (bAdvancedInLoop)
 			{
-				bool bFriendlyBuildingsExist = false;
-				bool bEnemyBuildingsExist = false;
+				bAdvancedInLoop = false;
+				FWinConditionData CurrentWinData = Config->GetCurrentWinConditionData();
+				EWinLoseCondition CurrentWinCondition = CurrentWinData.Condition;
 
-				for (ABuildingBase* Building : AllBuildings)
-				{
-					if (Building->TeamId == PlayerTeamId) bFriendlyBuildingsExist = true;
-					else bEnemyBuildingsExist = true;
-				}
+				bool bStepMet = false;
+				bool bStepWon = false;
 
-				if (!bEnemyBuildingsExist && bFriendlyBuildingsExist)
+				if (CurrentWinCondition == EWinLoseCondition::AllBuildingsDestroyed)
 				{
-					bLocalTriggered = true;
-					bWon = true;
-				}
-			}
-			else if (CurrentWinCondition == EWinLoseCondition::TaggedUnitDestroyed)
-			{
-				if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(Config->WinLoseTargetTag))
-				{
-					bLocalTriggered = true;
-					bWon = (DestroyedUnit->TeamId != PlayerTeamId);
-				}
-			}
-			else if (CurrentWinCondition == EWinLoseCondition::TeamReachedGameTime)
-			{
-				float CurrentTime = GetWorld()->GetTimeSeconds();
-				if (AResourceGameState* GS = GetGameState<AResourceGameState>())
-				{
-					if (GS->MatchStartTime > 0)
+					bool bFriendlyBuildingsExist = false;
+					bool bEnemyBuildingsExist = false;
+
+					for (ABuildingBase* Building : AllBuildings)
 					{
-						CurrentTime = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+						if (Building->TeamId == PlayerTeamId) bFriendlyBuildingsExist = true;
+						else bEnemyBuildingsExist = true;
+					}
+
+					if (!bEnemyBuildingsExist && bFriendlyBuildingsExist)
+					{
+						bStepMet = true;
+						bStepWon = true;
+					}
+				}
+				else if (CurrentWinCondition == EWinLoseCondition::TaggedUnitsDestroyed)
+				{
+					bool bAllTagsMet = true;
+					bool bLastDestroyedWasFriendly = false;
+
+					const FGameplayTagContainer& TargetTags = CurrentWinData.WinLoseTargetTags.Num() > 0 ? CurrentWinData.WinLoseTargetTags : Config->WinLoseTargetTags;
+					if (TargetTags.Num() == 0 || Config->TagProgress.Num() == 0) bAllTagsMet = false;
+
+					for (const FTagProgress& Progress : Config->TagProgress)
+					{
+						if (Progress.TotalCount > 0 && Progress.AliveCount == 0)
+						{
+							if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(Progress.Tag) && DestroyedUnit->TeamId == PlayerTeamId)
+							{
+								bLastDestroyedWasFriendly = true;
+							}
+						}
+						else
+						{
+							bAllTagsMet = false;
+						}
+					}
+
+					if (bAllTagsMet)
+					{
+						bStepMet = true;
+						bStepWon = !bLastDestroyedWasFriendly;
+					}
+				}
+				else if (CurrentWinCondition == EWinLoseCondition::TaggedUnitsSpawned)
+				{
+					bool bAllTagsMet = true;
+					if (Config->TagProgress.Num() == 0) bAllTagsMet = false;
+
+					for (const FTagProgress& Progress : Config->TagProgress)
+					{
+						if (Progress.TotalCount < Progress.TargetCount)
+						{
+							bAllTagsMet = false;
+							break;
+						}
+					}
+
+					if (bAllTagsMet)
+					{
+						bStepMet = true;
+						bStepWon = true;
+					}
+				}
+				else if (CurrentWinCondition == EWinLoseCondition::TeamReachedGameTime)
+				{
+					float CurrentTime = GetWorld()->GetTimeSeconds();
+					if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+					{
+						if (GS->MatchStartTime > 0)
+						{
+							CurrentTime = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+						}
+					}
+
+					if (CurrentTime >= CurrentWinData.TargetGameTime)
+					{
+						bStepMet = true;
+						bStepWon = (PlayerTeamId == Config->TeamId || Config->TeamId == 0);
 					}
 				}
 
-				if (CurrentTime >= Config->TargetGameTime)
+				if (bStepMet && bStepWon)
 				{
-					bLocalTriggered = true;
-					bWon = (PlayerTeamId == Config->TeamId || Config->TeamId == 0);
-				}
-			}
-
-			// Sequential win logic
-			if (bLocalTriggered && bWon)
-			{
-				if (!Config->IsLastWinCondition())
-				{
-					Config->AdvanceToNextWinCondition();
-					AdvancedConfigs.Add(Config);
-					bLocalTriggered = false; // Don't end yet
-					bWon = false;
+					if (!Config->IsLastWinCondition())
+					{
+						Config->AdvanceToNextWinCondition();
+						AdvancedConfigs.Add(Config);
+						UpdateTagProgressForConfig(Config); // Refresh data for the next step immediately
+						bAdvancedInLoop = true;
+					}
+					else
+					{
+						bLocalTriggered = true;
+						bWon = true;
+						break;
+					}
 				}
 			}
 
@@ -279,15 +499,47 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 						bWon = false;
 					}
 				}
-				else if (Config->LoseCondition == EWinLoseCondition::TaggedUnitDestroyed)
+				else if (Config->LoseCondition == EWinLoseCondition::TaggedUnitsDestroyed)
 				{
-					if (DestroyedUnit && DestroyedUnit->UnitTags.HasTagExact(Config->WinLoseTargetTag))
+					bool bAllTagsMet = true;
+					if (Config->WinLoseTargetTags.Num() == 0) bAllTagsMet = false;
+
+					for (auto TagIt = Config->WinLoseTargetTags.CreateConstIterator(); TagIt; ++TagIt)
 					{
-						if (DestroyedUnit->TeamId == PlayerTeamId)
+						const FGameplayTag& TargetTag = *TagIt;
+						int32 AliveCount = 0;
+						int32 DestroyedCount = 0;
+
+						if (Config->TeamId != 0)
 						{
-							bLocalTriggered = true;
-							bWon = false;
+							if (TeamTagsAliveCountMap.Contains(Config->TeamId))
+							{
+								AliveCount = TeamTagsAliveCountMap[Config->TeamId].TagCounts.Contains(TargetTag) ? TeamTagsAliveCountMap[Config->TeamId].TagCounts[TargetTag] : 0;
+							}
+							if (TeamTagsDestroyedCountMap.Contains(Config->TeamId))
+							{
+								DestroyedCount = TeamTagsDestroyedCountMap[Config->TeamId].TagCounts.Contains(TargetTag) ? TeamTagsDestroyedCountMap[Config->TeamId].TagCounts[TargetTag] : 0;
+							}
 						}
+						else
+						{
+							AliveCount = TagsAliveCountMap.Contains(TargetTag) ? TagsAliveCountMap[TargetTag] : 0;
+							DestroyedCount = TagsDestroyedCountMap.Contains(TargetTag) ? TagsDestroyedCountMap[TargetTag] : 0;
+						}
+
+						int32 TotalCount = AliveCount + DestroyedCount;
+
+						if (!(TotalCount > 0 && AliveCount == 0))
+						{
+							bAllTagsMet = false;
+							break;
+						}
+					}
+
+					if (bAllTagsMet)
+					{
+						bLocalTriggered = true;
+						bWon = false;
 					}
 				}
 				else if (Config->LoseCondition == EWinLoseCondition::TeamReachedGameTime)
@@ -928,6 +1180,14 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	}
 
 	NavInitialisation();
+	InitializeWinLoseConfigActors();
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+	{
+		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+		{
+			PC->Client_InitializeWinLoseSystem();
+		}
+	}
 }
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
