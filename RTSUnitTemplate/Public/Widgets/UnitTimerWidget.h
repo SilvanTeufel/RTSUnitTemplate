@@ -31,6 +31,9 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 		class UProgressBar* TimerBar;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+		class UTextBlock* TransportText;
+
 	
 public:
 

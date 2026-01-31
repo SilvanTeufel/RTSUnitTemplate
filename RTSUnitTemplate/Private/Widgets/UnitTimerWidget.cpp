@@ -5,6 +5,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include <Components/ProgressBar.h>
+#include "Components/TextBlock.h"
 #include "Components/Widget.h"
 
 void UUnitTimerWidget::NativeConstruct()
@@ -12,6 +13,10 @@ void UUnitTimerWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	TimerBar->SetVisibility(ESlateVisibility::Collapsed);
+	if (TransportText)
+	{
+		TransportText->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	//TimerBar->SetVisibility(ESlateVisibility::Visible);
 }
 
@@ -94,6 +99,12 @@ void UUnitTimerWidget::TimerTick()
 				TimerBar->SetPercent(Percent);
 				TimerBar->SetFillColorAndOpacity(TransportColor);
 				MyWidgetIsVisible = (UnitBase->CurrentUnitsLoaded > 0);
+
+				if (TransportText)
+				{
+					const FString LoadString = FString::Printf(TEXT("%d/%d"), UnitBase->CurrentUnitsLoaded, UnitBase->MaxTransportUnits);
+					TransportText->SetText(FText::FromString(LoadString));
+				}
 			}
 			else
 			{
@@ -108,10 +119,20 @@ void UUnitTimerWidget::TimerTick()
 	if(!MyWidgetIsVisible)
 	{
 		TimerBar->SetVisibility(ESlateVisibility::Collapsed);
+		if (TransportText) TransportText->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	else
 	{
-		TimerBar->SetVisibility(ESlateVisibility::Visible);
+		if (UnitBase && UnitBase->IsATransporter && TransportText)
+		{
+			TransportText->SetVisibility(ESlateVisibility::Visible);
+			TimerBar->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			TimerBar->SetVisibility(ESlateVisibility::Visible);
+			if (TransportText) TransportText->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 	
 }
