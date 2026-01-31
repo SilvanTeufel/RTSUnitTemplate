@@ -1180,6 +1180,16 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	}
 
 	NavInitialisation();
+
+	// Initialize MainHUD
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+	{
+		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+		{
+			PC->Client_InitializeMainHUD();
+		}
+	}
+	
 	InitializeWinLoseConfigActors();
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{

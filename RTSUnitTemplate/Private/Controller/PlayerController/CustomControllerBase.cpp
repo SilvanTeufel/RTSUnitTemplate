@@ -39,6 +39,7 @@
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "GAS/AttributeSetBase.h"
+#include "Blueprint/UserWidget.h"
 
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -2534,6 +2535,69 @@ void ACustomControllerBase::Server_ShowFriendlyHealthbars_Implementation(const T
 			Unit->bShowLevelOnly = false;
 			GetWorld()->GetTimerManager().SetTimer(Unit->HealthWidgetTimerHandle, Unit, &ALevelUnit::HideHealthWidget, Unit->HealthWidgetDisplayDuration, false);
 		}
+	}
+}
+
+void ACustomControllerBase::Client_InitializeMainHUD_Implementation()
+{
+	if (!IsLocalController()) return;
+
+	if (MainHUDs.Num() > 0)
+	{
+		TSubclassOf<UUserWidget> HUDClass = nullptr;
+		if (MainHUDs.IsValidIndex(SelectableTeamId) && MainHUDs[SelectableTeamId])
+		{
+			HUDClass = MainHUDs[SelectableTeamId];
+		}
+		else if (MainHUDs[0])
+		{
+			HUDClass = MainHUDs[0];
+		}
+
+		if (HUDClass)
+		{
+			MainHUDInstance = CreateWidget<UUserWidget>(this, HUDClass);
+			if (MainHUDInstance)
+			{
+				MainHUDInstance->AddToViewport();
+			}
+		}
+	}
+
+	MainHUDRetryCount = 0;
+	GetWorldTimerManager().SetTimer(MainHUDRetryTimerHandle, this, &ACustomControllerBase::Retry_InitializeMainHUD, 0.5f, true);
+}
+
+void ACustomControllerBase::Retry_InitializeMainHUD()
+{
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+	if (Camera)
+	{
+		bool bAllSuccess = true;
+		bAllSuccess &= Camera->InitUnitSelectorWidgetController(this);
+		bAllSuccess &= Camera->InitTaggedSelectorWidgetController(this);
+		bAllSuccess &= Camera->InitAbiltiyChooserWidgetController(this);
+		bAllSuccess &= Camera->InitializeWinConditionDisplay();
+		bAllSuccess &= Camera->SetupResourceWidget(this);
+
+		if (bAllSuccess)
+		{
+			Camera->TabMode = 1;
+			Camera->UpdateTabModeUI();
+			GetWorldTimerManager().ClearTimer(MainHUDRetryTimerHandle);
+			return;
+		}
+	}
+
+	MainHUDRetryCount++;
+	if (MainHUDRetryCount >= 5)
+	{
+		if (Camera)
+		{
+			Camera->TabMode = 1;
+			Camera->UpdateTabModeUI();
+		}
+		GetWorldTimerManager().ClearTimer(MainHUDRetryTimerHandle);
 	}
 }
 

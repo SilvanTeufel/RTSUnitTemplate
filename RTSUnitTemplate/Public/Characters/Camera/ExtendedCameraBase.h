@@ -36,7 +36,7 @@ public:
 	
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetupResourceWidget(AExtendedControllerBase* CameraControllerBase);
+	bool SetupResourceWidget(AExtendedControllerBase* CameraControllerBase);
 	// Override the Tick function
 	virtual void Tick(float DeltaTime) override;
 	
@@ -136,7 +136,7 @@ public:
 	void HideWinConditionWidget();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void InitializeWinConditionDisplay();
+	bool InitializeWinConditionDisplay();
 
 	UFUNCTION()
 	void OnWinConditionChanged(AWinLoseConfigActor* Config, EWinLoseCondition NewCondition);

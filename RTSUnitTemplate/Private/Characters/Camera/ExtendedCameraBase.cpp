@@ -77,9 +77,6 @@ void AExtendedCameraBase::BeginPlay()
 	// Call the base class BeginPlay
 	Super::BeginPlay();
 
-	TabMode = 1;
-	UpdateTabModeUI();
-
 	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
 	if (MyPC)
 	{
@@ -98,7 +95,7 @@ void AExtendedCameraBase::OnTeamIdChanged_Internal(int32 NewTeamId)
 	InitializeWinConditionDisplay();
 }
 
-void AExtendedCameraBase::InitializeWinConditionDisplay()
+bool AExtendedCameraBase::InitializeWinConditionDisplay()
 {
 	ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
 	int32 MyTeamId = MyPC ? MyPC->SelectableTeamId : -1;
@@ -139,7 +136,9 @@ void AExtendedCameraBase::InitializeWinConditionDisplay()
 		{
 			ShowWinConditionWidget(Duration);
 		}
+		return true;
 	}
+	return false;
 }
 
 void AExtendedCameraBase::ShowWinConditionWidget(float Duration)
@@ -281,7 +280,7 @@ void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelecto
 	UpdateTabModeUI();
 }
 
-void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
+bool AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraControllerBase)
 {
 		if(ResourceWidget)
 		{
@@ -289,8 +288,10 @@ void AExtendedCameraBase::SetupResourceWidget(AExtendedControllerBase* CameraCon
 			{
 				ResourceWidget->SetTeamId(CameraControllerBase->SelectableTeamId);
 				ResourceWidget->StartUpdateTimer();
+				return true;
 			}
 		}
+		return false;
 }
 
 // Tick implementation
@@ -492,9 +493,12 @@ bool AExtendedCameraBase::InitUnitSelectorWidgetController(ACustomControllerBase
 	if (!WithPC)
 		return false;
 	
-	if (UnitSelectorWidget && !UnitSelectorWidget->ControllerBase)
+	if (UnitSelectorWidget)
 	{
-		UnitSelectorWidget->InitWidget(WithPC);
+		if (!UnitSelectorWidget->ControllerBase)
+		{
+			UnitSelectorWidget->InitWidget(WithPC);
+		}
 		return true;
 	}
 	
@@ -507,9 +511,12 @@ bool AExtendedCameraBase::InitTaggedSelectorWidgetController(ACustomControllerBa
 	if (!WithPC)
 		return false;
 	
-	if (TaggedSelectorWidget && !TaggedSelectorWidget->ControllerBase)
+	if (TaggedSelectorWidget)
 	{
-		TaggedSelectorWidget->InitWidget(WithPC);
+		if (!TaggedSelectorWidget->ControllerBase)
+		{
+			TaggedSelectorWidget->InitWidget(WithPC);
+		}
 		return true;
 	}
 	
@@ -522,9 +529,12 @@ bool AExtendedCameraBase::InitAbiltiyChooserWidgetController(ACustomControllerBa
 	if (!WithPC)
 		return false;
 	
-	if (AbilityChooserWidget && !AbilityChooserWidget->ControllerBase)
+	if (AbilityChooserWidget)
 	{
-		AbilityChooserWidget->InitWidget(WithPC);
+		if (!AbilityChooserWidget->ControllerBase)
+		{
+			AbilityChooserWidget->InitWidget(WithPC);
+		}
 		return true;
 	}
 	

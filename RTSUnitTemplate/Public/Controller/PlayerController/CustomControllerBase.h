@@ -47,6 +47,9 @@ protected:
 	TWeakObjectPtr<AUnitBase> PendingFollowTarget;
 	bool PendingFollowAttackT = false;
 
+	FTimerHandle MainHUDRetryTimerHandle;
+	int32 MainHUDRetryCount = 0;
+
 	// Helpers for follow-target deferral
 	bool IsFollowCommandReady(const TArray<AUnitBase*>& Units);
 	void ScheduleFollowRetry(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT, int32 MaxAttempts = 8, float DelaySeconds = 0.5f);
@@ -247,4 +250,15 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_ShowFriendlyHealthbars(const TArray<AUnitBase*>& Units);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<TSubclassOf<class UUserWidget>> MainHUDs;
+
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	class UUserWidget* MainHUDInstance;
+
+	UFUNCTION(Client, Reliable)
+	void Client_InitializeMainHUD();
+
+	void Retry_InitializeMainHUD();
 };
