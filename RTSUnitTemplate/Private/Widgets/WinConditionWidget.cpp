@@ -274,7 +274,7 @@ void UWinConditionWidget::UpdateConditionText()
 				}
 				TagString = SplitPascalCase(TagString);
 
-				TagTexts.Add(FText::Format(TaggedUnitsSpawnedFormat, FText::AsNumber(Progress.TotalCount), FText::AsNumber(Progress.TargetCount), FText::FromString(TagString)));
+				TagTexts.Add(FText::Format(TaggedUnitsSpawnedFormat, FText::AsNumber(Progress.AliveCount), FText::AsNumber(Progress.TargetCount), FText::FromString(TagString)));
 			}
 			FText CombinedTags = FText::Join(FText::FromString(TEXT("\n")), TagTexts);
 			DescriptionBody = FText::Format(TaggedUnitsSpawnedText, CombinedTags);

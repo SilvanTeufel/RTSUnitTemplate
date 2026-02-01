@@ -257,7 +257,7 @@ float ARTSGameModeBase::GetResource(int32 TeamId, EResourceType ResourceType) co
 
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (DestroyedUnit)
+	if (DestroyedUnit && bInitialSpawnFinished)
 	{
 		for (auto TagIt = DestroyedUnit->UnitTags.CreateConstIterator(); TagIt; ++TagIt)
 		{
@@ -470,12 +470,12 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				else if (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount)
 				{
 					const FBuildingCost& Target = CurrentWinData.TargetResourceCount;
-					if (GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost &&
-						GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost &&
-						GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					if ((Target.PrimaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost) &&
+						(Target.SecondaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost) &&
+						(Target.TertiaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost) &&
+						(Target.RareCost <= 0 || GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost) &&
+						(Target.EpicCost <= 0 || GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost) &&
+						(Target.LegendaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost))
 					{
 						bStepMet = true;
 						bStepWon = true;
@@ -587,12 +587,12 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 				else if (Config->LoseCondition == EWinLoseCondition::TeamReachedResourceCount)
 				{
 					const FBuildingCost& Target = Config->TargetResourceCount;
-					if (GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost &&
-						GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost &&
-						GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost &&
-						GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost)
+					if ((Target.PrimaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Primary) >= Target.PrimaryCost) &&
+						(Target.SecondaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Secondary) >= Target.SecondaryCost) &&
+						(Target.TertiaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Tertiary) >= Target.TertiaryCost) &&
+						(Target.RareCost <= 0 || GetResource(PlayerTeamId, EResourceType::Rare) >= Target.RareCost) &&
+						(Target.EpicCost <= 0 || GetResource(PlayerTeamId, EResourceType::Epic) >= Target.EpicCost) &&
+						(Target.LegendaryCost <= 0 || GetResource(PlayerTeamId, EResourceType::Legendary) >= Target.LegendaryCost))
 					{
 						bLocalTriggered = true;
 						bWon = false;
