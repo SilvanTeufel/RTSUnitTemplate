@@ -222,9 +222,15 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             if (Action->HasField(TEXT("camera_state")))
             {
                 NewCameraState = static_cast<int32>(Action->GetNumberField(TEXT("camera_state")));
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Camera State to: %d"), NewCameraState);
+                // UE_LOG(LogTemp, Log, TEXT("[ARLAgent] NewCameraState: %d"), NewCameraState);
             }
 
+            /*
+            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Pre-Action State: ActionName=%s, SelectedUnits=%d, IsCtrl=%s, Alt=%s"), 
+                *ActionName, ExtendedController->SelectedUnits.Num(), 
+                ExtendedController->IsCtrlPressed ? TEXT("True") : TEXT("False"), 
+                ExtendedController->AltIsPressed ? TEXT("True") : TEXT("False"));
+            */
 
             if(ActionName.StartsWith("move_camera"))
             {
@@ -327,20 +333,55 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
             {
-                if (ExtendedController->SelectedUnits.Num() &&
+                if (ExtendedController->SelectedUnits.Num() > 0 &&
+                    ExtendedController->SelectedUnits[0] &&
                     ExtendedController->SelectedUnits[0]->BuildArea != nullptr)
                 {
                     UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Cannot perform action while unit is Building."));
                     return;
                 }
                 
-                SwitchControllerStateMachine(InputActionValue, NewCameraState);
+                bool bSkipSwitch = false;
+                // If this is an ability action, check if the unit is already busy with another ability.
+                if (ActionName.StartsWith("switch_camera_state_ability") && NewCameraState >= 21 && NewCameraState <= 26)
+                {
+                    if (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0])
+                    {
+                            // If it's a worker, we don't skip, because it might be a multi-step ability activation (e.g. build -> place)
+                            if (ExtendedController->SelectedUnits[0]->ActivatedAbilityInstance != nullptr && !ExtendedController->SelectedUnits[0]->IsWorker)
+                            {
+                                bSkipSwitch = true;
+                            }
+                    }
+                }
+                
+                if (!bSkipSwitch)
+                {
+                    SwitchControllerStateMachine(InputActionValue, NewCameraState);
+                }
+
+                // UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Post-Switch State: SelectedUnits=%d"), ExtendedController->SelectedUnits.Num());
                 
                 if (ActionName.StartsWith("switch_camera_state_ability"))
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
-                    ExtendedController->SetWorkArea(GetActorTransform());
-                    ExtendedController->DropWorkAreaForUnit(ExtendedController->SelectedUnits[0], false, ExtendedController->DropWorkAreaFailedSound);
+                    // If we have a worker selected, we perform the specialized "Drop Work Area" logic.
+                    // If NOT a worker (e.g., a building), SwitchControllerStateMachine already triggered ExecuteOnAbilityInputDetected,
+                    // so we skip the worker-specific drop logic to avoid conflicts.
+                    bool bIsWorker = (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0] && ExtendedController->SelectedUnits[0]->IsWorker);
+
+                    if (bIsWorker)
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
+                        ExtendedController->SetWorkArea(GetActorTransform());
+                        if (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0])
+                        {
+                            ExtendedController->DropWorkAreaForUnit(ExtendedController->SelectedUnits[0], false, ExtendedController->DropWorkAreaFailedSound);
+                        }
+                        else
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] switch_camera_state_ability: No unit selected to drop work area for."));
+                        }
+                    }
                 }
             }
             else if (ActionName == "left_click")
@@ -424,7 +465,8 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
     
     if (!ExtendedController->CheckClickOnTransportUnit(HitResult))
     {
-        if (!ExtendedController->SelectedUnits.Num() || !ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
+        if (ExtendedController->SelectedUnits.Num() == 0 ||
+            (ExtendedController->SelectedUnits[0] && !ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea))
         {
             if (!ExtendedController->CheckClickOnWorkArea(HitResult))
             {
@@ -434,7 +476,7 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
         }
     }
  
-    if (ExtendedController->SelectedUnits.Num() && ExtendedController->SelectedUnits[0] && ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
+    if (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0] && ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea)
     {
         ExtendedController->DestroyDraggedArea(ExtendedController->SelectedUnits[0]);
     }
@@ -807,6 +849,13 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
         GameState.RareResource = GameMode->GetResource(MyTeamId, EResourceType::Rare);
         GameState.EpicResource = GameMode->GetResource(MyTeamId, EResourceType::Epic);
         GameState.LegendaryResource = GameMode->GetResource(MyTeamId, EResourceType::Legendary);
+
+        GameState.MaxPrimaryResource = GameMode->GetMaxResource(EResourceType::Primary, MyTeamId);
+        GameState.MaxSecondaryResource = GameMode->GetMaxResource(EResourceType::Secondary, MyTeamId);
+        GameState.MaxTertiaryResource = GameMode->GetMaxResource(EResourceType::Tertiary, MyTeamId);
+        GameState.MaxRareResource = GameMode->GetMaxResource(EResourceType::Rare, MyTeamId);
+        GameState.MaxEpicResource = GameMode->GetMaxResource(EResourceType::Epic, MyTeamId);
+        GameState.MaxLegendaryResource = GameMode->GetMaxResource(EResourceType::Legendary, MyTeamId);
     }
 
     return GameState;

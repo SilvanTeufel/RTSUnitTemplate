@@ -187,7 +187,7 @@ void AControllerBase::ShiftReleased()
 void AControllerBase::SelectUnit(int Index)
 {
 	
-	if (SelectedUnits[Index] == 0) return;
+	if (SelectedUnits[Index] == nullptr) return;
 	
 	CurrentUnitWidgetIndex = Index;
 	HUDBase->DeselectAllUnits();

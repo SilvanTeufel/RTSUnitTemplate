@@ -37,6 +37,25 @@ public:
 	UPROPERTY(EditAnywhere, Category="Blackboard")
 	FName TertiaryResourceKey = TEXT("TertiaryResource");
 	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName RareResourceKey = TEXT("RareResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName EpicResourceKey = TEXT("EpicResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName LegendaryResourceKey = TEXT("LegendaryResource");
+
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxPrimaryResourceKey = TEXT("MaxPrimaryResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxSecondaryResourceKey = TEXT("MaxSecondaryResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxTertiaryResourceKey = TEXT("MaxTertiaryResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxRareResourceKey = TEXT("MaxRareResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxEpicResourceKey = TEXT("MaxEpicResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
+	FName MaxLegendaryResourceKey = TEXT("MaxLegendaryResource");
+	UPROPERTY(EditAnywhere, Category="Blackboard")
 	FName AgentPositionKey = TEXT("AgentPosition");
 	UPROPERTY(EditAnywhere, Category="Blackboard")
 	FName AverageEnemyPositionKey = TEXT("AverageEnemyPosition");

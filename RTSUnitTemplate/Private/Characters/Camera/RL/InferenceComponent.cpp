@@ -182,6 +182,10 @@ void UInferenceComponent::ExecuteActionFromJSON(const FString& Json)
     };
 
     // Detect array vs object quickly
+    if (Json.Len() == 0)
+    {
+        return;
+    }
     const TCHAR FirstChar = Json[0];
     if (FirstChar == '[')
     {

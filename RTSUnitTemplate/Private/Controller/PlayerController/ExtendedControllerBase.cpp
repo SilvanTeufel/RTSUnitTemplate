@@ -444,6 +444,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityI
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
+
+	if (AltIsPressed) return;
+	if (IsCtrlPressed) return;
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
@@ -3493,7 +3496,6 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 
 void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
-	UE_LOG(LogTemp, Warning, TEXT("!!!SelectUnitsWithTag_Implementation!!!!"));
 	if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
 
 	AbilityArrayIndex = 0;
@@ -3537,9 +3539,14 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	}
 	UE_LOG(LogTemp, Warning, TEXT("!!!NewSelection.Num(): %d!!!!"), NewSelection.Num());
 	UE_LOG(LogTemp, Warning, TEXT("!!!TeamId: %d!!!!"), TeamId);
-	// Update the HUD with the sorted selection
 
-	// Call this on Server
+	// Update the controller's selected units on the server immediately
+	// so that subsequent actions in the same frame/sequence (like Ability execution) can see it.
+	SelectedUnits = NewSelection;
+	CurrentUnitWidgetIndex = 0;
+
+	// Update the HUD with the sorted selection
+	// Call this on Server to sync to Client
 	Client_UpdateHUDSelection(NewSelection, TeamId);
 }
 
@@ -3566,6 +3573,7 @@ void AExtendedControllerBase::Server_AssignTagToSelectedUnits_Implementation(FGa
 
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
+	UE_LOG(LogTemp, Log, TEXT("Client_UpdateHUDSelection: NewSelection.Num=%d, TeamId=%d, SelectableTeamId=%d"), NewSelection.Num(), TeamId, SelectableTeamId);
 	if (SelectableTeamId != TeamId)
 	{
 		return;
@@ -3573,6 +3581,7 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 	
 	if (!HUDBase)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Client_UpdateHUDSelection: HUDBase is null!"));
 		return;
 	}
 	

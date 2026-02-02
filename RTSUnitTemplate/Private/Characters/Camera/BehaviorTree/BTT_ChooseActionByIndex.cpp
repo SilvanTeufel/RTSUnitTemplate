@@ -30,7 +30,7 @@ EBTNodeResult::Type UBTT_ChooseActionByIndex::ExecuteTask(UBehaviorTreeComponent
     }
 
     // Use the component's public function to get the JSON for the specified index
-    FString JsonString = InferenceComp->GetActionAsJSON(ActionIndex);
+    FString JsonString = InferenceComp->GetActionAsJSON((int32)Action);
 
     // Write the resulting JSON into the Blackboard key specified in the BT
     BlackboardComp->SetValueAsString(GetSelectedBlackboardKey(), JsonString);

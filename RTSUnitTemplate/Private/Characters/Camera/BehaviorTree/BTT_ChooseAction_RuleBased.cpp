@@ -100,68 +100,105 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     }
 
     FGameStateData GS;
-    GS.MyUnitCount = BB->GetValueAsInt(MyUnitCountKey);
-    GS.EnemyUnitCount = BB->GetValueAsInt(EnemyUnitCountKey);
-    GS.PrimaryResource = BB->GetValueAsFloat(PrimaryResourceKey);
-    GS.SecondaryResource = BB->GetValueAsFloat(SecondaryResourceKey);
-    GS.TertiaryResource = BB->GetValueAsFloat(TertiaryResourceKey);
-    // Additional resources (provided by BT service/component under fixed keys)
-    GS.RareResource = BB->GetValueAsFloat(TEXT("RareResource"));
-    GS.EpicResource = BB->GetValueAsFloat(TEXT("EpicResource"));
-    GS.LegendaryResource = BB->GetValueAsFloat(TEXT("LegendaryResource"));
+
+    auto SafeGetBBFloat = [&](FName KeyName) -> float
+    {
+        if (KeyName.IsNone()) return 0.0f;
+        float Val = BB->GetValueAsFloat(KeyName);
+        if (Val == 0.0f)
+        {
+            // Try reading as Int in case the user defined it as Int in Blackboard
+            Val = (float)BB->GetValueAsInt(KeyName);
+        }
+        return Val;
+    };
+
+    auto SafeGetBBInt = [&](FName KeyName) -> int32
+    {
+        if (KeyName.IsNone()) return 0;
+        return BB->GetValueAsInt(KeyName);
+    };
+
+    GS.MyUnitCount = SafeGetBBInt(MyUnitCountKey);
+    GS.EnemyUnitCount = SafeGetBBInt(EnemyUnitCountKey);
+    GS.PrimaryResource = SafeGetBBFloat(PrimaryResourceKey);
+    GS.SecondaryResource = SafeGetBBFloat(SecondaryResourceKey);
+    GS.TertiaryResource = SafeGetBBFloat(TertiaryResourceKey);
+    GS.RareResource = SafeGetBBFloat(RareResourceKey);
+    GS.EpicResource = SafeGetBBFloat(EpicResourceKey);
+    GS.LegendaryResource = SafeGetBBFloat(LegendaryResourceKey);
+
+    GS.MaxPrimaryResource = SafeGetBBFloat(MaxPrimaryResourceKey);
+    GS.MaxSecondaryResource = SafeGetBBFloat(MaxSecondaryResourceKey);
+    GS.MaxTertiaryResource = SafeGetBBFloat(MaxTertiaryResourceKey);
+    GS.MaxRareResource = SafeGetBBFloat(MaxRareResourceKey);
+    GS.MaxEpicResource = SafeGetBBFloat(MaxEpicResourceKey);
+    GS.MaxLegendaryResource = SafeGetBBFloat(MaxLegendaryResourceKey);
+
+    if (bLogExecution)
+    {
+        UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: Reading Blackboard Keys:"));
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxPrimaryResourceKey.ToString(), GS.MaxPrimaryResource);
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxSecondaryResourceKey.ToString(), GS.MaxSecondaryResource);
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxTertiaryResourceKey.ToString(), GS.MaxTertiaryResource);
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxRareResourceKey.ToString(), GS.MaxRareResource);
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxEpicResourceKey.ToString(), GS.MaxEpicResource);
+        UE_LOG(LogTemp, Log, TEXT("  %s = %.2f"), *MaxLegendaryResourceKey.ToString(), GS.MaxLegendaryResource);
+    }
     GS.AgentPosition = BB->GetValueAsVector(AgentPositionKey);
     GS.AverageEnemyPosition = BB->GetValueAsVector(AverageEnemyPositionKey);
     GS.AverageFriendlyPosition = BB->GetValueAsVector(TEXT("AverageFriendlyPosition"));
 
     // Additional totals
-    GS.MyTotalHealth = BB->GetValueAsFloat(TEXT("MyTotalHealth"));
-    GS.EnemyTotalHealth = BB->GetValueAsFloat(TEXT("EnemyTotalHealth"));
+    GS.MyTotalHealth = SafeGetBBFloat(TEXT("MyTotalHealth"));
+    GS.EnemyTotalHealth = SafeGetBBFloat(TEXT("EnemyTotalHealth"));
 
     // Populate friendly tag counts
-    GS.Alt1TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"));
-    GS.Alt2TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt2TagFriendlyUnitCount"));
-    GS.Alt3TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt3TagFriendlyUnitCount"));
-    GS.Alt4TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt4TagFriendlyUnitCount"));
-    GS.Alt5TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt5TagFriendlyUnitCount"));
-    GS.Alt6TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Alt6TagFriendlyUnitCount"));
+    GS.Alt1TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt1TagFriendlyUnitCount"));
+    GS.Alt2TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt2TagFriendlyUnitCount"));
+    GS.Alt3TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt3TagFriendlyUnitCount"));
+    GS.Alt4TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt4TagFriendlyUnitCount"));
+    GS.Alt5TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt5TagFriendlyUnitCount"));
+    GS.Alt6TagFriendlyUnitCount = SafeGetBBInt(TEXT("Alt6TagFriendlyUnitCount"));
 
-    GS.Ctrl1TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl1TagFriendlyUnitCount"));
-    GS.Ctrl2TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl2TagFriendlyUnitCount"));
-    GS.Ctrl3TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl3TagFriendlyUnitCount"));
-    GS.Ctrl4TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl4TagFriendlyUnitCount"));
-    GS.Ctrl5TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl5TagFriendlyUnitCount"));
-    GS.Ctrl6TagFriendlyUnitCount = BB->GetValueAsInt(TEXT("Ctrl6TagFriendlyUnitCount"));
+    GS.Ctrl1TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl1TagFriendlyUnitCount"));
+    GS.Ctrl2TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl2TagFriendlyUnitCount"));
+    GS.Ctrl3TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl3TagFriendlyUnitCount"));
+    GS.Ctrl4TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl4TagFriendlyUnitCount"));
+    GS.Ctrl5TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl5TagFriendlyUnitCount"));
+    GS.Ctrl6TagFriendlyUnitCount = SafeGetBBInt(TEXT("Ctrl6TagFriendlyUnitCount"));
 
-    GS.CtrlQTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlQTagFriendlyUnitCount"));
-    GS.CtrlWTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlWTagFriendlyUnitCount"));
-    GS.CtrlETagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlETagFriendlyUnitCount"));
-    GS.CtrlRTagFriendlyUnitCount = BB->GetValueAsInt(TEXT("CtrlRTagFriendlyUnitCount"));
+    GS.CtrlQTagFriendlyUnitCount = SafeGetBBInt(TEXT("CtrlQTagFriendlyUnitCount"));
+    GS.CtrlWTagFriendlyUnitCount = SafeGetBBInt(TEXT("CtrlWTagFriendlyUnitCount"));
+    GS.CtrlETagFriendlyUnitCount = SafeGetBBInt(TEXT("CtrlETagFriendlyUnitCount"));
+    GS.CtrlRTagFriendlyUnitCount = SafeGetBBInt(TEXT("CtrlRTagFriendlyUnitCount"));
 
     // Populate enemy tag counts
-    GS.Alt1TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt1TagEnemyUnitCount"));
-    GS.Alt2TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt2TagEnemyUnitCount"));
-    GS.Alt3TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt3TagEnemyUnitCount"));
-    GS.Alt4TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt4TagEnemyUnitCount"));
-    GS.Alt5TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt5TagEnemyUnitCount"));
-    GS.Alt6TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Alt6TagEnemyUnitCount"));
+    GS.Alt1TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt1TagEnemyUnitCount"));
+    GS.Alt2TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt2TagEnemyUnitCount"));
+    GS.Alt3TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt3TagEnemyUnitCount"));
+    GS.Alt4TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt4TagEnemyUnitCount"));
+    GS.Alt5TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt5TagEnemyUnitCount"));
+    GS.Alt6TagEnemyUnitCount = SafeGetBBInt(TEXT("Alt6TagEnemyUnitCount"));
 
-    GS.Ctrl1TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl1TagEnemyUnitCount"));
-    GS.Ctrl2TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl2TagEnemyUnitCount"));
-    GS.Ctrl3TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl3TagEnemyUnitCount"));
-    GS.Ctrl4TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl4TagEnemyUnitCount"));
-    GS.Ctrl5TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl5TagEnemyUnitCount"));
-    GS.Ctrl6TagEnemyUnitCount = BB->GetValueAsInt(TEXT("Ctrl6TagEnemyUnitCount"));
+    GS.Ctrl1TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl1TagEnemyUnitCount"));
+    GS.Ctrl2TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl2TagEnemyUnitCount"));
+    GS.Ctrl3TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl3TagEnemyUnitCount"));
+    GS.Ctrl4TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl4TagEnemyUnitCount"));
+    GS.Ctrl5TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl5TagEnemyUnitCount"));
+    GS.Ctrl6TagEnemyUnitCount = SafeGetBBInt(TEXT("Ctrl6TagEnemyUnitCount"));
 
-    GS.CtrlQTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlQTagEnemyUnitCount"));
-    GS.CtrlWTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlWTagEnemyUnitCount"));
-    GS.CtrlETagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlETagEnemyUnitCount"));
-    GS.CtrlRTagEnemyUnitCount = BB->GetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"));
+    GS.CtrlQTagEnemyUnitCount = SafeGetBBInt(TEXT("CtrlQTagEnemyUnitCount"));
+    GS.CtrlWTagEnemyUnitCount = SafeGetBBInt(TEXT("CtrlWTagEnemyUnitCount"));
+    GS.CtrlETagEnemyUnitCount = SafeGetBBInt(TEXT("CtrlETagEnemyUnitCount"));
+    GS.CtrlRTagEnemyUnitCount = SafeGetBBInt(TEXT("CtrlRTagEnemyUnitCount"));
 
     // Detailed Blackboard snapshot logs (multi-line)
     UE_LOG(LogTemp, Log, TEXT("BTT_ChooseAction_RuleBased: GS Snapshot -> MyUnits=%d, EnemyUnits=%d, MyHP=%.1f, EnemyHP=%.1f"),
         GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
-    UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.2f Sec=%.2f Ter=%.2f Rare=%.2f Epic=%.2f Leg=%.2f"),
-        GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource, GS.RareResource, GS.EpicResource, GS.LegendaryResource);
+    UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.2f/%.2f Sec=%.2f/%.2f Ter=%.2f/%.2f Rare=%.2f/%.2f Epic=%.2f/%.2f Leg=%.2f/%.2f"),
+        GS.PrimaryResource, GS.MaxPrimaryResource, GS.SecondaryResource, GS.MaxSecondaryResource, GS.TertiaryResource, GS.MaxTertiaryResource,
+        GS.RareResource, GS.MaxRareResource, GS.EpicResource, GS.MaxEpicResource, GS.LegendaryResource, GS.MaxLegendaryResource);
     UE_LOG(LogTemp, Log, TEXT("  Positions -> Agent=(%.1f,%.1f,%.1f) AvgFriendly=(%.1f,%.1f,%.1f) AvgEnemy=(%.1f,%.1f,%.1f)"),
         GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
         GS.AverageFriendlyPosition.X, GS.AverageFriendlyPosition.Y, GS.AverageFriendlyPosition.Z,

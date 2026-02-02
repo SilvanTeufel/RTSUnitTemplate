@@ -755,7 +755,6 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 
     if (CameraControllerBase)
     {
-
     	if (CameraControllerBase->AltIsPressed)
     	{  switch (NewCameraState)
     		{

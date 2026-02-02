@@ -36,7 +36,7 @@ EBTNodeResult::Type UBTT_ExampleDecideAction::ExecuteTask(UBehaviorTreeComponent
     const int32 Diff = MyCount - EnemyCount;
     const bool bAdvantage = Diff >= AdvantageThreshold;
 
-    const int32 ChosenIndex = bAdvantage ? ActionIfAdvantage : ActionIfDisadvantage;
+    const ERTSAIAction ChosenAction = bAdvantage ? ActionIfAdvantage : ActionIfDisadvantage;
 
     // Get InferenceComponent to translate index -> JSON
     UInferenceComponent* InferenceComp = Pawn->FindComponentByClass<UInferenceComponent>();
@@ -46,7 +46,7 @@ EBTNodeResult::Type UBTT_ExampleDecideAction::ExecuteTask(UBehaviorTreeComponent
         return EBTNodeResult::Failed;
     }
 
-    const FString Json = InferenceComp->GetActionAsJSON(ChosenIndex);
+    const FString Json = InferenceComp->GetActionAsJSON((int32)ChosenAction);
 
     // Write to the selected blackboard key (should be SelectedActionJSON)
     BB->SetValueAsString(GetSelectedBlackboardKey(), Json);

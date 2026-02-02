@@ -4,8 +4,25 @@
 #include "Components/ActorComponent.h"
 #include "Templates/SubclassOf.h"
 #include "Engine/DataTable.h"
+#include "Core/UnitData.h" // for FBuildingCost
 #include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData and UInferenceComponent
 #include "RTSRuleBasedDeciderComponent.generated.h"
+
+USTRUCT(BlueprintType)
+struct FRTSUnitCountCap
+{
+	GENERATED_BODY()
+
+	// The tag to check (e.g., "Alt1", "CtrlQ")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	ERTSUnitTag Tag = ERTSUnitTag::Alt1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	int32 MinCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	int32 MaxCount = 999;
+};
 
 USTRUCT(BlueprintType)
 struct FRTSRuleRow : public FTableRowBase
@@ -22,17 +39,7 @@ struct FRTSRuleRow : public FTableRowBase
 
 	// Resource thresholds. All must be met or exceeded (>=) to trigger the rule.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float PrimaryThreshold = 100.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float SecondaryThreshold = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float TertiaryThreshold = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float RareThreshold = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float EpicThreshold = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
-	float LegendaryThreshold = 0.f;
+	FBuildingCost ResourceThresholds;
 
 	// Caps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
@@ -40,51 +47,15 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	int32 MinFriendlyUnitCount = 0;
 
-	// Per-tag caps for friendly unit counts (defaults = 999)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMaxFriendlyUnitCount = 999;
+	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	TArray<FRTSUnitCountCap> UnitCaps;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMaxFriendlyUnitCount = 999;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMaxFriendlyUnitCount = 999;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMaxFriendlyUnitCount = 999;
-
-	// Per-tag minimums for friendly unit counts (defaults = 0)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 0;
-
-	// Output actions (indices into InferenceComponent's ActionSpace)
+	// Output actions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
-	int32 SelectionActionIndex = 10;
+	ERTSAIAction SelectionAction = ERTSAIAction::Ability1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
-	int32 AbilityActionIndex = 10;
+	ERTSAIAction AbilityAction = ERTSAIAction::Ability1;
 };
 
 
@@ -101,25 +72,9 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
 	FName RuleName;
 
-	// Per-tag caps for friendly unit counts (defaults = 999)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt1TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt2TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt3TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt4TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt5TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Alt6TagMinFriendlyUnitCount = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl1TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl2TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl3TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl4TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl5TagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 Ctrl6TagMinFriendlyUnitCount = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlQTagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlWTagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlETagMinFriendlyUnitCount = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps") int32 CtrlRTagMinFriendlyUnitCount = 0;
+	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	TArray<FRTSUnitCountCap> UnitCaps;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
@@ -192,17 +147,17 @@ public:
 	// Directional action indices to use when biasing (configure to match your action mapping)
 	// Defaults correspond to ActionSpace indices 17..20 (move_camera 1..4)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveUpIndex = 19;
+	ERTSAIAction MoveUpAction = ERTSAIAction::MoveDirection3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveDownIndex = 20;
+	ERTSAIAction MoveDownAction = ERTSAIAction::MoveDirection4;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveLeftIndex = 18;
+	ERTSAIAction MoveLeftAction = ERTSAIAction::MoveDirection2;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander|Directional", meta=(EditCondition="bBiasTowardEnemy"))
-	int32 MoveRightIndex = 17;
+	ERTSAIAction MoveRightAction = ERTSAIAction::MoveDirection1;
 
 	// If no bias, pick randomly from this set
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")
-	TArray<int32> RandomWanderIndices;
+	TArray<ERTSAIAction> RandomWanderActions;
 
 	// Minimal distance to consider we have a meaningful direction to the enemy (units)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")
@@ -212,10 +167,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")
 	bool bWanderTwoStep = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(EditCondition="bWanderTwoStep"))
-	int32 WanderSelectionActionIndex = 27; // left_click 1 by default
-	// If you want a specific ability after wander selection, set this to 10..15. If left at INDEX_NONE, the second action is the movement itself.
+	ERTSAIAction WanderSelectionAction = ERTSAIAction::LeftClick1; // left_click 1 by default
+	// If you want a specific ability after wander selection, set this to 10..15. If left at None, the second action is the movement itself.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(EditCondition="bWanderTwoStep"))
-	int32 WanderAbilityActionIndex = INDEX_NONE;
+	ERTSAIAction WanderAbilityAction = ERTSAIAction::None;
 	// Minimum number of consecutive wander moves to keep in the same direction before switching
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(ClampMin="1"))
 	int32 WanderMinSameDirectionRepeats = 3;

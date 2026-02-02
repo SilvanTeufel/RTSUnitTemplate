@@ -99,6 +99,14 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
 	float LegendaryResource = 0.0f;
 
+	// Max Resource caps
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxPrimaryResource = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxSecondaryResource = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxTertiaryResource = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxRareResource = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxEpicResource = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxLegendaryResource = 0.0f;
+
 	// Per-tag unit counts (friendly/enemy) for selection/ability groups
 	// Alt1..Alt6
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagFriendlyUnitCount = 0;
@@ -137,6 +145,91 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagEnemyUnitCount = 0;
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagFriendlyUnitCount = 0;
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagEnemyUnitCount = 0;
+};
+
+UENUM(BlueprintType)
+enum class ERTSAIAction : uint8
+{
+	// Ctrl + Q, W, E, R
+	CtrlR = 0    UMETA(DisplayName = "CTRL+R"),
+	CtrlQ = 1    UMETA(DisplayName = "CTRL+Q"),
+	CtrlE = 2    UMETA(DisplayName = "CTRL+E"),
+	CtrlW = 3    UMETA(DisplayName = "CTRL+W"),
+
+	// Ctrl + 1-6
+	Ctrl1 = 4    UMETA(DisplayName = "CTRL+1"),
+	Ctrl2 = 5    UMETA(DisplayName = "CTRL+2"),
+	Ctrl3 = 6    UMETA(DisplayName = "CTRL+3"),
+	Ctrl4 = 7    UMETA(DisplayName = "CTRL+4"),
+	Ctrl5 = 8    UMETA(DisplayName = "CTRL+5"),
+	Ctrl6 = 9    UMETA(DisplayName = "CTRL+6"),
+
+	// No Modifier + Use Ability 1-6
+	Ability1 = 10  UMETA(DisplayName = "Use Ability 1"),
+	Ability2 = 11  UMETA(DisplayName = "Use Ability 2"),
+	Ability3 = 12  UMETA(DisplayName = "Use Ability 3"),
+	Ability4 = 13  UMETA(DisplayName = "Use Ability 4"),
+	Ability5 = 14  UMETA(DisplayName = "Use Ability 5"),
+	Ability6 = 15  UMETA(DisplayName = "Use Ability 6"),
+
+	// Change Ability Index
+	ChangeAbilityIndex = 16 UMETA(DisplayName = "Change Ability Index"),
+
+	// No Modifier + Move Camera
+	MoveDirection1 = 17 UMETA(DisplayName = "Move Camera 1"),
+	MoveDirection2 = 18 UMETA(DisplayName = "Move Camera 2"),
+	MoveDirection3 = 19 UMETA(DisplayName = "Move Camera 3"),
+	MoveDirection4 = 20 UMETA(DisplayName = "Move Camera 4"),
+
+	// Set workers to Resource
+	AssignResource1 = 21 UMETA(DisplayName = "Assign Workers Resource 1"),
+	AssignResource2 = 22 UMETA(DisplayName = "Assign Workers Resource 2"),
+	AssignResource3 = 23 UMETA(DisplayName = "Assign Workers Resource 3"),
+	AssignResource4 = 24 UMETA(DisplayName = "Assign Workers Resource 4"),
+	AssignResource5 = 25 UMETA(DisplayName = "Assign Workers Resource 5"),
+	AssignResource6 = 26 UMETA(DisplayName = "Assign Workers Resource 6"),
+
+	// No Modifier + Left Click (Move and Attack)
+	LeftClick1 = 27 UMETA(DisplayName = "Left Click 1 (Move)"),
+	LeftClick2 = 28 UMETA(DisplayName = "Left Click 2 (Attack)"),
+
+	// No Modifier + Right Click
+	RightClick1 = 29 UMETA(DisplayName = "Right Click 1"),
+
+	// Alt + 1-6
+	Alt1 = 30 UMETA(DisplayName = "ALT+1"),
+	Alt2 = 31 UMETA(DisplayName = "ALT+2"),
+	Alt3 = 32 UMETA(DisplayName = "ALT+3"),
+	Alt4 = 33 UMETA(DisplayName = "ALT+4"),
+	Alt5 = 34 UMETA(DisplayName = "ALT+5"),
+	Alt6 = 35 UMETA(DisplayName = "ALT+6"),
+
+	None = 255 UMETA(DisplayName = "None")
+};
+
+UENUM(BlueprintType)
+enum class ERTSUnitTag : uint8
+{
+	Alt1 UMETA(DisplayName = "ALT+1"),
+	Alt2 UMETA(DisplayName = "ALT+2"),
+	Alt3 UMETA(DisplayName = "ALT+3"),
+	Alt4 UMETA(DisplayName = "ALT+4"),
+	Alt5 UMETA(DisplayName = "ALT+5"),
+	Alt6 UMETA(DisplayName = "ALT+6"),
+
+	Ctrl1 UMETA(DisplayName = "CTRL+1"),
+	Ctrl2 UMETA(DisplayName = "CTRL+2"),
+	Ctrl3 UMETA(DisplayName = "CTRL+3"),
+	Ctrl4 UMETA(DisplayName = "CTRL+4"),
+	Ctrl5 UMETA(DisplayName = "CTRL+5"),
+	Ctrl6 UMETA(DisplayName = "CTRL+6"),
+
+	CtrlQ UMETA(DisplayName = "CTRL+Q"),
+	CtrlW UMETA(DisplayName = "CTRL+W"),
+	CtrlE UMETA(DisplayName = "CTRL+E"),
+	CtrlR UMETA(DisplayName = "CTRL+R"),
+
+	None = 255 UMETA(DisplayName = "None")
 };
 
 UENUM(BlueprintType)

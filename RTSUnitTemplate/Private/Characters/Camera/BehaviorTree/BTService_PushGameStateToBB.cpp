@@ -154,19 +154,49 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 
 	const FGameStateData GS = RLAgent->GatherGameState(TeamId);
 
-	BB->SetValueAsInt(MyUnitCountKey, GS.MyUnitCount);
-	BB->SetValueAsInt(EnemyUnitCountKey, GS.EnemyUnitCount);
-	BB->SetValueAsFloat(MyTotalHealthKey, GS.MyTotalHealth);
-	BB->SetValueAsFloat(EnemyTotalHealthKey, GS.EnemyTotalHealth);
-	BB->SetValueAsFloat(PrimaryResourceKey, GS.PrimaryResource);
-	BB->SetValueAsFloat(SecondaryResourceKey, GS.SecondaryResource);
-	BB->SetValueAsFloat(TertiaryResourceKey, GS.TertiaryResource);
-	BB->SetValueAsFloat(TEXT("RareResource"), GS.RareResource);
-	BB->SetValueAsFloat(TEXT("EpicResource"), GS.EpicResource);
-	BB->SetValueAsFloat(TEXT("LegendaryResource"), GS.LegendaryResource);
-	BB->SetValueAsVector(AgentPositionKey, GS.AgentPosition);
-	BB->SetValueAsVector(AverageFriendlyPositionKey, GS.AverageFriendlyPosition);
-	BB->SetValueAsVector(AverageEnemyPositionKey, GS.AverageEnemyPosition);
+	auto SafeSetBBFloat = [&](FName KeyName, float Value)
+	{
+		if (KeyName.IsNone()) return;
+		if (BB->GetKeyID(KeyName) == FBlackboard::InvalidKey)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
+			return;
+		}
+		BB->SetValueAsFloat(KeyName, Value);
+	};
+
+	auto SafeSetBBInt = [&](FName KeyName, int32 Value)
+	{
+		if (KeyName.IsNone()) return;
+		if (BB->GetKeyID(KeyName) == FBlackboard::InvalidKey)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
+			return;
+		}
+		BB->SetValueAsInt(KeyName, Value);
+	};
+
+	SafeSetBBInt(MyUnitCountKey, GS.MyUnitCount);
+	SafeSetBBInt(EnemyUnitCountKey, GS.EnemyUnitCount);
+	SafeSetBBFloat(MyTotalHealthKey, GS.MyTotalHealth);
+	SafeSetBBFloat(EnemyTotalHealthKey, GS.EnemyTotalHealth);
+	SafeSetBBFloat(PrimaryResourceKey, GS.PrimaryResource);
+	SafeSetBBFloat(SecondaryResourceKey, GS.SecondaryResource);
+	SafeSetBBFloat(TertiaryResourceKey, GS.TertiaryResource);
+	SafeSetBBFloat(RareResourceKey, GS.RareResource);
+	SafeSetBBFloat(EpicResourceKey, GS.EpicResource);
+	SafeSetBBFloat(LegendaryResourceKey, GS.LegendaryResource);
+
+	SafeSetBBFloat(MaxPrimaryResourceKey, GS.MaxPrimaryResource);
+	SafeSetBBFloat(MaxSecondaryResourceKey, GS.MaxSecondaryResource);
+	SafeSetBBFloat(MaxTertiaryResourceKey, GS.MaxTertiaryResource);
+	SafeSetBBFloat(MaxRareResourceKey, GS.MaxRareResource);
+	SafeSetBBFloat(MaxEpicResourceKey, GS.MaxEpicResource);
+	SafeSetBBFloat(MaxLegendaryResourceKey, GS.MaxLegendaryResource);
+	
+	if (!AgentPositionKey.IsNone()) BB->SetValueAsVector(AgentPositionKey, GS.AgentPosition);
+	if (!AverageFriendlyPositionKey.IsNone()) BB->SetValueAsVector(AverageFriendlyPositionKey, GS.AverageFriendlyPosition);
+	if (!AverageEnemyPositionKey.IsNone()) BB->SetValueAsVector(AverageEnemyPositionKey, GS.AverageEnemyPosition);
 
 	// Per-tag unit counts (friendly/enemy)
 	BB->SetValueAsInt(TEXT("Alt1TagFriendlyUnitCount"), GS.Alt1TagFriendlyUnitCount);
@@ -210,8 +240,9 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
      LastDebugPrintTime = Now;
      UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB -> MyUnits=%d EnemyUnits=%d MyHP=%.1f EnemyHP=%.1f"),
          GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
-     UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.1f Sec=%.1f Ter=%.1f Rare=%.1f Epic=%.1f Leg=%.1f"),
-         GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource, GS.RareResource, GS.EpicResource, GS.LegendaryResource);
+     UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.1f/%.1f Sec=%.1f/%.1f Ter=%.1f/%.1f Rare=%.1f/%.1f Epic=%.1f/%.1f Leg=%.1f/%.1f"),
+         GS.PrimaryResource, GS.MaxPrimaryResource, GS.SecondaryResource, GS.MaxSecondaryResource, GS.TertiaryResource, GS.MaxTertiaryResource,
+         GS.RareResource, GS.MaxRareResource, GS.EpicResource, GS.MaxEpicResource, GS.LegendaryResource, GS.MaxLegendaryResource);
      UE_LOG(LogTemp, Log, TEXT("  Positions -> Agent=(%.0f,%.0f,%.0f) AvgFriendly=(%.0f,%.0f,%.0f) AvgEnemy=(%.0f,%.0f,%.0f)"),
          GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
          GS.AverageFriendlyPosition.X, GS.AverageFriendlyPosition.Y, GS.AverageFriendlyPosition.Z,
