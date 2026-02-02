@@ -14,6 +14,7 @@
 ARTSBTController::ARTSBTController()
 {
     PrimaryActorTick.bCanEverTick = true; // Enable if you want to poll BB each frame
+    OrchestratorTeamId = -1;
     // Increase watchdog timeout to avoid premature fallback during startup
     BBServiceWatchdogTimeout = 2.0f;
 }
@@ -158,18 +159,38 @@ void ARTSBTController::Tick(float DeltaSeconds)
         {
             TArray<AActor*> Found;
             UGameplayStatics::GetAllActorsOfClass(World, ARLAgent::StaticClass(), Found);
-            if (Found.Num() > 0)
+            ARLAgent* TargetedAgent = nullptr;
+            for (AActor* Actor : Found)
             {
-                if (ARLAgent* RLAgent = Cast<ARLAgent>(Found[0]))
+                if (ARLAgent* Candidate = Cast<ARLAgent>(Actor))
                 {
-                    if (UInferenceComponent* Inf = RLAgent->FindComponentByClass<UInferenceComponent>())
+                    // If we have a team ID, try to find the agent belonging to that team
+                    if (AExtendedControllerBase* CandidatePC = Cast<AExtendedControllerBase>(Candidate->GetController()))
                     {
-                        Inf->ExecuteActionFromJSON(Action);
+                        if (CandidatePC->SelectableTeamId == OrchestratorTeamId)
+                        {
+                            TargetedAgent = Candidate;
+                            break;
+                        }
                     }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("RTSBTController: RLAgent has no UInferenceComponent; cannot execute action."));
-                    }
+                }
+            }
+
+            // Fallback to first one if no team match found
+            if (!TargetedAgent && Found.Num() > 0)
+            {
+                TargetedAgent = Cast<ARLAgent>(Found[0]);
+            }
+
+            if (TargetedAgent)
+            {
+                if (UInferenceComponent* Inf = TargetedAgent->FindComponentByClass<UInferenceComponent>())
+                {
+                    Inf->ExecuteActionFromJSON(Action);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Targeted RLAgent has no UInferenceComponent; cannot execute action."));
                 }
             }
         }
@@ -238,17 +259,45 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
         }
     }
 
-    // Locate a RLAgent in the world to gather game state (your existing GatherGameState lives there)
+    // Locate a RLAgent in the world to gather game state
     ARLAgent* RLAgent = nullptr;
+    int32 TeamId = OrchestratorTeamId;
+
     if (UWorld* World = GetWorld())
     {
         TArray<AActor*> Found;
         UGameplayStatics::GetAllActorsOfClass(World, ARLAgent::StaticClass(), Found);
-        if (Found.Num() > 0)
+        
+        for (AActor* Actor : Found)
+        {
+            if (ARLAgent* Candidate = Cast<ARLAgent>(Actor))
+            {
+                // If we don't have a team ID yet, pick the first one we find
+                if (TeamId < 0)
+                {
+                    RLAgent = Candidate;
+                    break;
+                }
+
+                // If we have a team ID, find the agent belonging to that team
+                if (AExtendedControllerBase* CandidatePC = Cast<AExtendedControllerBase>(Candidate->GetController()))
+                {
+                    if (CandidatePC->SelectableTeamId == TeamId)
+                    {
+                        RLAgent = Candidate;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Fallback to first found if no team match
+        if (!RLAgent && Found.Num() > 0)
         {
             RLAgent = Cast<ARLAgent>(Found[0]);
         }
     }
+
     if (!RLAgent)
     {
         if (Now - LastPawnWarnTime > 1.0)
@@ -259,42 +308,113 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
         return;
     }
 
-    AExtendedControllerBase* PlayerCtrl = RLAgent->GetController() ? Cast<AExtendedControllerBase>(RLAgent->GetController()) : nullptr;
-    if (!PlayerCtrl)
+    if (TeamId < 0)
     {
-        if (Now - LastPawnWarnTime > 1.0)
+        AExtendedControllerBase* PlayerCtrl = Cast<AExtendedControllerBase>(RLAgent->GetController());
+        if (PlayerCtrl)
         {
-            UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BB updater early return: RLAgent has no AExtendedControllerBase controller (team id unknown)."));
-            LastPawnWarnTime = Now;
+            TeamId = PlayerCtrl->SelectableTeamId;
         }
-        return;
     }
 
-    const int32 TeamId = PlayerCtrl->SelectableTeamId;
+    if (TeamId < 0)
+    {
+        return;
+    }
 
     // Gather the latest game state via RLAgent's existing helper
     const FGameStateData GS = RLAgent->GatherGameState(TeamId);
 
+    auto SafeSetBBFloat = [&](FName KeyName, float Value)
+    {
+        if (KeyName.IsNone()) return;
+        if (BlackboardComp->GetKeyID(KeyName) == FBlackboard::InvalidKey)
+        {
+            return;
+        }
+        BlackboardComp->SetValueAsFloat(KeyName, Value);
+    };
+
+    auto SafeSetBBInt = [&](FName KeyName, int32 Value)
+    {
+        if (KeyName.IsNone()) return;
+        if (BlackboardComp->GetKeyID(KeyName) == FBlackboard::InvalidKey)
+        {
+            return;
+        }
+        BlackboardComp->SetValueAsInt(KeyName, Value);
+    };
+
     // Write required keys for Rule-Based task
-    BlackboardComp->SetValueAsInt(TEXT("MyUnitCount"), GS.MyUnitCount);
-    BlackboardComp->SetValueAsInt(TEXT("EnemyUnitCount"), GS.EnemyUnitCount);
-    BlackboardComp->SetValueAsFloat(TEXT("MyTotalHealth"), GS.MyTotalHealth);
-    BlackboardComp->SetValueAsFloat(TEXT("EnemyTotalHealth"), GS.EnemyTotalHealth);
-    BlackboardComp->SetValueAsFloat(TEXT("PrimaryResource"), GS.PrimaryResource);
-    BlackboardComp->SetValueAsFloat(TEXT("SecondaryResource"), GS.SecondaryResource);
-    BlackboardComp->SetValueAsFloat(TEXT("TertiaryResource"), GS.TertiaryResource);
+    SafeSetBBInt(TEXT("TeamId"), TeamId);
+    SafeSetBBInt(TEXT("MyUnitCount"), GS.MyUnitCount);
+    SafeSetBBInt(TEXT("EnemyUnitCount"), GS.EnemyUnitCount);
+    SafeSetBBFloat(TEXT("MyTotalHealth"), GS.MyTotalHealth);
+    SafeSetBBFloat(TEXT("EnemyTotalHealth"), GS.EnemyTotalHealth);
+    
+    SafeSetBBFloat(TEXT("PrimaryResource"), GS.PrimaryResource);
+    SafeSetBBFloat(TEXT("SecondaryResource"), GS.SecondaryResource);
+    SafeSetBBFloat(TEXT("TertiaryResource"), GS.TertiaryResource);
+    SafeSetBBFloat(TEXT("RareResource"), GS.RareResource);
+    SafeSetBBFloat(TEXT("EpicResource"), GS.EpicResource);
+    SafeSetBBFloat(TEXT("LegendaryResource"), GS.LegendaryResource);
+
+    SafeSetBBFloat(TEXT("MaxPrimaryResource"), GS.MaxPrimaryResource);
+    SafeSetBBFloat(TEXT("MaxSecondaryResource"), GS.MaxSecondaryResource);
+    SafeSetBBFloat(TEXT("MaxTertiaryResource"), GS.MaxTertiaryResource);
+    SafeSetBBFloat(TEXT("MaxRareResource"), GS.MaxRareResource);
+    SafeSetBBFloat(TEXT("MaxEpicResource"), GS.MaxEpicResource);
+    SafeSetBBFloat(TEXT("MaxLegendaryResource"), GS.MaxLegendaryResource);
+
     BlackboardComp->SetValueAsVector(TEXT("AgentPosition"), GS.AgentPosition);
     BlackboardComp->SetValueAsVector(TEXT("AverageFriendlyPosition"), GS.AverageFriendlyPosition);
     BlackboardComp->SetValueAsVector(TEXT("AverageEnemyPosition"), GS.AverageEnemyPosition);
+
+    // Per-tag unit counts (friendly/enemy)
+    SafeSetBBInt(TEXT("Alt1TagFriendlyUnitCount"), GS.Alt1TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt1TagEnemyUnitCount"), GS.Alt1TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Alt2TagFriendlyUnitCount"), GS.Alt2TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt2TagEnemyUnitCount"), GS.Alt2TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Alt3TagFriendlyUnitCount"), GS.Alt3TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt3TagEnemyUnitCount"), GS.Alt3TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Alt4TagFriendlyUnitCount"), GS.Alt4TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt4TagEnemyUnitCount"), GS.Alt4TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Alt5TagFriendlyUnitCount"), GS.Alt5TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt5TagEnemyUnitCount"), GS.Alt5TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Alt6TagFriendlyUnitCount"), GS.Alt6TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Alt6TagEnemyUnitCount"), GS.Alt6TagEnemyUnitCount);
+
+    SafeSetBBInt(TEXT("Ctrl1TagFriendlyUnitCount"), GS.Ctrl1TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl1TagEnemyUnitCount"), GS.Ctrl1TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl2TagFriendlyUnitCount"), GS.Ctrl2TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl2TagEnemyUnitCount"), GS.Ctrl2TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl3TagFriendlyUnitCount"), GS.Ctrl3TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl3TagEnemyUnitCount"), GS.Ctrl3TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl4TagFriendlyUnitCount"), GS.Ctrl4TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl4TagEnemyUnitCount"), GS.Ctrl4TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl5TagFriendlyUnitCount"), GS.Ctrl5TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl5TagEnemyUnitCount"), GS.Ctrl5TagEnemyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl6TagFriendlyUnitCount"), GS.Ctrl6TagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("Ctrl6TagEnemyUnitCount"), GS.Ctrl6TagEnemyUnitCount);
+
+    SafeSetBBInt(TEXT("CtrlQTagFriendlyUnitCount"), GS.CtrlQTagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("CtrlQTagEnemyUnitCount"), GS.CtrlQTagEnemyUnitCount);
+    SafeSetBBInt(TEXT("CtrlWTagFriendlyUnitCount"), GS.CtrlWTagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("CtrlWTagEnemyUnitCount"), GS.CtrlWTagEnemyUnitCount);
+    SafeSetBBInt(TEXT("CtrlETagFriendlyUnitCount"), GS.CtrlETagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("CtrlETagEnemyUnitCount"), GS.CtrlETagEnemyUnitCount);
+    SafeSetBBInt(TEXT("CtrlRTagFriendlyUnitCount"), GS.CtrlRTagFriendlyUnitCount);
+    SafeSetBBInt(TEXT("CtrlRTagEnemyUnitCount"), GS.CtrlRTagEnemyUnitCount);
 
     // Periodic debug log (~1s)
     BBPushTickCounter++;
     if (BBPushTickCounter % 10 == 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Pushed BB -> MyUnits=%d EnemyUnits=%d Prim=%.1f Sec=%.1f Ter=%.1f AgentPos=(%.0f,%.0f,%.0f) AvgEnemy=(%.0f,%.0f,%.0f)"),
-            GS.MyUnitCount, GS.EnemyUnitCount, GS.PrimaryResource, GS.SecondaryResource, GS.TertiaryResource,
-            GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z,
-            GS.AverageEnemyPosition.X, GS.AverageEnemyPosition.Y, GS.AverageEnemyPosition.Z);
+        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Pushed BB (TeamId=%d) -> MyUnits=%d EnemyUnits=%d Prim=%.1f/%.1f Rare=%.1f/%.1f AgentPos=(%.0f,%.0f,%.0f)"),
+            TeamId, GS.MyUnitCount, GS.EnemyUnitCount, 
+            GS.PrimaryResource, GS.MaxPrimaryResource,
+            GS.RareResource, GS.MaxRareResource,
+            GS.AgentPosition.X, GS.AgentPosition.Y, GS.AgentPosition.Z);
     }
 }
 

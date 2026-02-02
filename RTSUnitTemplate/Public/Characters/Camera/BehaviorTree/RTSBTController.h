@@ -27,6 +27,10 @@ class RTSUNITTEMPLATE_API ARTSBTController : public AAIController
 public:
 	ARTSBTController();
 
+	// Team ID this AI belongs to. Used to gather game state from its perspective.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI")
+	int32 OrchestratorTeamId = -1;
+
 	// Assign your BT asset in defaults or in the editor (or from a BP derived from this controller)
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	TObjectPtr<UBehaviorTree> StrategyBehaviorTree = nullptr;

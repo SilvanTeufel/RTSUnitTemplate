@@ -77,11 +77,11 @@ public:
 	FName AgentPawnKey = TEXT("AgentPawn");
 
 	// Optional: get TeamId from Blackboard instead of controller (set to name of an Int key). If None, other methods are used.
-	UPROPERTY(EditAnywhere, Category = "Blackboard")
-	FName TeamIdBBKey;
+	UPROPERTY(VisibleAnywhere, Category = "Blackboard")
+	FName TeamIdBBKey = TEXT("TeamId");
 
 	// Force a specific TeamId (>=0) and bypass controller lookup. Leave at -1 to auto-resolve.
-	UPROPERTY(EditAnywhere, Category = "Config")
+	UPROPERTY(VisibleAnywhere, Category = "Config")
 	int32 ForcedTeamId = -1;
 
 	// Allow console override via cvar r.RTSBT.ForcedTeamId when true

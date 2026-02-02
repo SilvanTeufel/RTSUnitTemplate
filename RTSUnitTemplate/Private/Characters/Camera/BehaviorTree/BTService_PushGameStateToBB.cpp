@@ -76,35 +76,26 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		return;
 	}
 
-	// Find an RLAgent that can provide the aggregated FGameStateData
-	ARLAgent* RLAgent = nullptr;
+	// Resolve TeamId in a robust order: Owner Controller -> Forced -> Blackboard -> RLAgent's controller -> World fallback
+	int32 TeamId = -1;
+
+	if (AController* OwnerController = Cast<AController>(OwnerComp.GetOwner()))
 	{
-		TArray<AActor*> Found;
-		UGameplayStatics::GetAllActorsOfClass(World, ARLAgent::StaticClass(), Found);
-		if (Found.Num() > 0)
+		if (ARTSBTController* RTSBT = Cast<ARTSBTController>(OwnerController))
 		{
-			RLAgent = Cast<ARLAgent>(Found[0]);
+			TeamId = RTSBT->OrchestratorTeamId;
+		}
+		else if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(OwnerController))
+		{
+			TeamId = ExtPC->SelectableTeamId;
 		}
 	}
-	if (!RLAgent)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, no ARLAgent found in world to provide GameState."));
-		return;
-	}
 
-	// Optionally expose the agent pawn to the Blackboard so BT tasks can fetch it
-	if (!AgentPawnKey.IsNone())
-	{
-		BB->SetValueAsObject(AgentPawnKey, RLAgent);
-	}
-
-	// Resolve TeamId in a robust order: Forced -> Blackboard -> RLAgent's controller -> World fallback
-	int32 TeamId = -1;
-	if (ForcedTeamId >= 0)
+	if (TeamId < 0 && ForcedTeamId >= 0)
 	{
 		TeamId = ForcedTeamId;
 	}
-	else if (bAllowConsoleForcedTeamId)
+	else if (TeamId < 0 && bAllowConsoleForcedTeamId)
 	{
 		const int32 CVarTeam = CVarRTSBTForcedTeamId.GetValueOnAnyThread();
 		if (CVarTeam >= 0)
@@ -121,6 +112,49 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: TeamIdBBKey '%s' is set but value is %d. Will try other sources."), *TeamIdBBKey.ToString(), TeamId);
 		}
+	}
+
+	// Find an RLAgent that can provide the aggregated FGameStateData
+	ARLAgent* RLAgent = nullptr;
+	{
+		TArray<AActor*> Found;
+		UGameplayStatics::GetAllActorsOfClass(World, ARLAgent::StaticClass(), Found);
+		
+		for (AActor* Actor : Found)
+		{
+			if (ARLAgent* Candidate = Cast<ARLAgent>(Actor))
+			{
+				// If we have a team ID, try to find the agent belonging to that team
+				if (TeamId >= 0)
+				{
+					if (AExtendedControllerBase* CandidatePC = Cast<AExtendedControllerBase>(Candidate->GetController()))
+					{
+						if (CandidatePC->SelectableTeamId == TeamId)
+						{
+							RLAgent = Candidate;
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		if (!RLAgent && Found.Num() > 0)
+		{
+			RLAgent = Cast<ARLAgent>(Found[0]);
+		}
+	}
+
+	if (!RLAgent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, no ARLAgent found in world to provide GameState."));
+		return;
+	}
+
+	// Optionally expose the agent pawn to the Blackboard so BT tasks can fetch it
+	if (!AgentPawnKey.IsNone())
+	{
+		BB->SetValueAsObject(AgentPawnKey, RLAgent);
 	}
 
 	if (TeamId < 0)
@@ -178,6 +212,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 
 	SafeSetBBInt(MyUnitCountKey, GS.MyUnitCount);
 	SafeSetBBInt(EnemyUnitCountKey, GS.EnemyUnitCount);
+	SafeSetBBInt(TeamIdBBKey, TeamId);
 	SafeSetBBFloat(MyTotalHealthKey, GS.MyTotalHealth);
 	SafeSetBBFloat(EnemyTotalHealthKey, GS.EnemyTotalHealth);
 	SafeSetBBFloat(PrimaryResourceKey, GS.PrimaryResource);
@@ -238,8 +273,8 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
  if (Now - LastDebugPrintTime >= DebugPrintInterval)
  {
      LastDebugPrintTime = Now;
-     UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB -> MyUnits=%d EnemyUnits=%d MyHP=%.1f EnemyHP=%.1f"),
-         GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
+     UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB (TeamId=%d) -> MyUnits=%d EnemyUnits=%d MyHP=%.1f EnemyHP=%.1f"),
+         TeamId, GS.MyUnitCount, GS.EnemyUnitCount, GS.MyTotalHealth, GS.EnemyTotalHealth);
      UE_LOG(LogTemp, Log, TEXT("  Resources -> Prim=%.1f/%.1f Sec=%.1f/%.1f Ter=%.1f/%.1f Rare=%.1f/%.1f Epic=%.1f/%.1f Leg=%.1f/%.1f"),
          GS.PrimaryResource, GS.MaxPrimaryResource, GS.SecondaryResource, GS.MaxSecondaryResource, GS.TertiaryResource, GS.MaxTertiaryResource,
          GS.RareResource, GS.MaxRareResource, GS.EpicResource, GS.MaxEpicResource, GS.LegendaryResource, GS.MaxLegendaryResource);

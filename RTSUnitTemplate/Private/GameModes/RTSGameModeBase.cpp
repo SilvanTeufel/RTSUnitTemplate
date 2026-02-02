@@ -1157,40 +1157,43 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		}
 		
 		// Spawn a non-possessing AIController that runs the Behavior Tree as an orchestrator
-	  UClass* OrchestratorClass = AIOrchestratorClass ? *AIOrchestratorClass : ARTSBTController::StaticClass();
+		UClass* OrchestratorClass = AIOrchestratorClass ? *AIOrchestratorClass : (UClass*)ARTSBTController::StaticClass();
 		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-   AActor* OrchestratorActor = GetWorld()->SpawnActor<AActor>(OrchestratorClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-			ARTSBTController* Orchestrator = Cast<ARTSBTController>(OrchestratorActor);
+			FTransform OrchestratorTransform = FTransform::Identity;
+			ARTSBTController* Orchestrator = GetWorld()->SpawnActorDeferred<ARTSBTController>(OrchestratorClass, OrchestratorTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			
 			if (Orchestrator)
-		{
-			UE_LOG(LogTemp, Log, TEXT("[GM] Spawned ARTSBTController orchestrator: %s (no possession)"), *GetNameSafe(Orchestrator));
-
-			// If the orchestrator doesn't have a BT assigned, but the GameMode provides one, wire it up now
-			if (!Orchestrator->StrategyBehaviorTree && AIBehaviorTree)
 			{
-				Orchestrator->StrategyBehaviorTree = AIBehaviorTree;
-				UBlackboardComponent* OutBB = nullptr;
-				if (Orchestrator->UseBlackboard(AIBehaviorTree->BlackboardAsset, OutBB))
+				// Set the TeamId on the orchestrator BEFORE FinishSpawning (so it's ready in BeginPlay)
+				Orchestrator->OrchestratorTeamId = TeamId;
+				UGameplayStatics::FinishSpawningActor(Orchestrator, OrchestratorTransform);
+
+				UE_LOG(LogTemp, Log, TEXT("[GM] Spawned ARTSBTController orchestrator: %s (no possession) with TeamId=%d"), *GetNameSafe(Orchestrator), TeamId);
+
+				// If the orchestrator doesn't have a BT assigned, but the GameMode provides one, wire it up now
+				if (!Orchestrator->StrategyBehaviorTree && AIBehaviorTree)
 				{
-					const bool bStarted = Orchestrator->RunBehaviorTree(AIBehaviorTree);
-					if (!bStarted)
+					Orchestrator->StrategyBehaviorTree = AIBehaviorTree;
+					UBlackboardComponent* OutBB = nullptr;
+					if (Orchestrator->UseBlackboard(AIBehaviorTree->BlackboardAsset, OutBB))
 					{
-						UE_LOG(LogTemp, Error, TEXT("[GM] RunBehaviorTree failed when starting orchestrator with provided AIBehaviorTree '%s'"), *GetNameSafe(AIBehaviorTree));
+						const bool bStarted = Orchestrator->RunBehaviorTree(AIBehaviorTree);
+						if (!bStarted)
+						{
+							UE_LOG(LogTemp, Error, TEXT("[GM] RunBehaviorTree failed when starting orchestrator with provided AIBehaviorTree '%s'"), *GetNameSafe(AIBehaviorTree));
+						}
+					}
+					else
+					{
+						UE_LOG(LogTemp, Error, TEXT("[GM] UseBlackboard failed for orchestrator. Ensure AIBehaviorTree has a Blackboard asset assigned."));
 					}
 				}
-				else
-				{
-					UE_LOG(LogTemp, Error, TEXT("[GM] UseBlackboard failed for orchestrator. Ensure AIBehaviorTree has a Blackboard asset assigned."));
-				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[GM] Failed to spawn ARTSBTController orchestrator for Team %d"), TeamId);
 			}
 		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[GM] Failed to spawn ARTSBTController orchestrator for Team %d"), TeamId);
-		}
-	}
 
 		// Apply customizations and set team/waypoint
 		ApplyCustomizationsFromPlayerStart(AIPC, Start);
