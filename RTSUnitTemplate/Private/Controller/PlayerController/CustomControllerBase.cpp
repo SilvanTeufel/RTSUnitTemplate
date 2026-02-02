@@ -1105,10 +1105,11 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 
 bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPawn)
 {
-	// If we clicked on a friendly unit while having a selection, assign follow and early return
+	// If we clicked on a unit while having a selection, assign follow or attack and early return
 	if (SelectedUnits.Num() > 0 && HitPawn.bBlockingHit)
 	{
 		if (!Cast<AConstructionUnit>(HitPawn.GetActor()))
+		{
 			if (AUnitBase* HitUnit = Cast<AUnitBase>(HitPawn.GetActor()))
 			{
 				const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
@@ -1117,7 +1118,26 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 					Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
 					return true;
 				}
+				else
+				{
+					// If it's an enemy unit, issue an attack command (chase/focus logic)
+					TArray<FVector> Locations;
+					for (int32 i = 0; i < SelectedUnits.Num(); ++i)
+					{
+						Locations.Add(HitPawn.Location);
+					}
+					LeftClickAttackMass(SelectedUnits, Locations, false, HitUnit);
+
+					// Play attack sound if available
+					if (AttackSound)
+					{
+						UGameplayStatics::PlaySound2D(this, AttackSound, GetSoundMultiplier());
+					}
+
+					return true;
+				}
 			}
+		}
 	}
 	
 	if (SelectedUnits.Num() > 0)
