@@ -13,6 +13,7 @@
 #include "EngineUtils.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
 #include "GameplayAbilitySpec.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/EngineTypes.h"
@@ -34,6 +35,19 @@ static TMap<TWeakObjectPtr<UAbilitySystemComponent>, TSet<FString>> GForceEnable
 
 // Registry of executed ability classes within the current play session
 static TSet<TWeakObjectPtr<UClass>> GExecutedAbilityClasses;
+
+struct FUpgradeData
+{
+	TSubclassOf<UGameplayEffect> UpgradeEffect;
+	FGameplayTag Tag;
+
+	bool operator==(const FUpgradeData& Other) const
+	{
+		return UpgradeEffect == Other.UpgradeEffect && Tag == Other.Tag;
+	}
+};
+
+static TMap<int32, TArray<FUpgradeData>> GActiveUpgradesByTeam;
 
 // Ensure static registries are cleared between play sessions (PIE/Standalone)
 namespace
@@ -62,6 +76,7 @@ namespace
 			GDisabledAbilityKeysByOwner.Reset();
 			GForceEnabledAbilityKeysByOwner.Reset();
 			GExecutedAbilityClasses.Reset();
+			GActiveUpgradesByTeam.Reset();
 		}
 
 		static void HandlePostWorldInit(UWorld* World, const UWorld::InitializationValues IVS)
@@ -780,6 +795,80 @@ bool UGameplayAbilityBase::WasThisAbilityClassExecuted() const
 	return UGameplayAbilityBase::WasAbilityClassExecuted(GetClass());
 }
 
+
+
+void UGameplayAbilityBase::UpgradeUnits(TSubclassOf<UGameplayEffect> UpgradeEffect, int32 TeamId, FGameplayTag Tag)
+{
+	if (!UpgradeEffect || TeamId == INDEX_NONE || !Tag.IsValid())
+	{
+		return;
+	}
+
+	// Store for future units
+	TArray<FUpgradeData>& Upgrades = GActiveUpgradesByTeam.FindOrAdd(TeamId);
+	FUpgradeData NewUpgrade{ UpgradeEffect, Tag };
+	if (!Upgrades.Contains(NewUpgrade))
+	{
+		Upgrades.Add(NewUpgrade);
+	}
+
+	// Apply to existing units on the field
+	if (!GEngine) return;
+
+	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	{
+		UWorld* World = Context.World();
+		if (World && !World->IsNetMode(NM_Client)) // Server or Standalone
+		{
+			for (TActorIterator<AUnitBase> It(World); It; ++It)
+			{
+				AUnitBase* Unit = *It;
+				if (Unit && Unit->TeamId == TeamId && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)))
+				{
+					if (UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent())
+					{
+						FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+						EffectContext.AddSourceObject(Unit);
+						FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(UpgradeEffect, 1.0f, EffectContext);
+						if (SpecHandle.IsValid())
+						{
+							ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void UGameplayAbilityBase::ApplyActiveUpgradesToUnit(AUnitBase* Unit)
+{
+	if (!Unit || !Unit->HasAuthority())
+	{
+		return;
+	}
+
+	int32 TeamId = Unit->TeamId;
+	if (TArray<FUpgradeData>* Upgrades = GActiveUpgradesByTeam.Find(TeamId))
+	{
+		if (UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent())
+		{
+			for (const FUpgradeData& Upgrade : *Upgrades)
+			{
+				if (Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Upgrade.Tag)))
+				{
+					FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+					EffectContext.AddSourceObject(Unit);
+					FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Upgrade.UpgradeEffect, 1.0f, EffectContext);
+					if (SpecHandle.IsValid())
+					{
+						ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+					}
+				}
+			}
+		}
+	}
+}
 
 void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMultiplier, float PitchMultiplier)
 {

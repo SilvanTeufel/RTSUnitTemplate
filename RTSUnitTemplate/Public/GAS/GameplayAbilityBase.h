@@ -148,6 +148,13 @@ public:
 	// Returns true if the given ability BP class was ever executed in this play session
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static bool WasAbilityClassExecuted(TSubclassOf<UGameplayAbilityBase> AbilityClass);
+
+	// Upgrade units by applying a Gameplay Effect to all units of a certain team and matching a specific tag.
+	// Also ensures that future units matching these conditions will receive the effect upon spawning.
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	static void UpgradeUnits(TSubclassOf<class UGameplayEffect> UpgradeEffect, int32 TeamId, FGameplayTag Tag);
+
+	static void ApplyActiveUpgradesToUnit(class AUnitBase* Unit);
 		
 	// Debug: dump disabled/force-enabled keys per team to log
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

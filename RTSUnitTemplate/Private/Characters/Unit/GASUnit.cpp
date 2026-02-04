@@ -83,6 +83,7 @@ void AGASUnit::InitializeAttributes()
 			FActiveGameplayEffectHandle GEHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 		}
 	}
+	UGameplayAbilityBase::ApplyActiveUpgradesToUnit(Cast<AUnitBase>(this));
 }
 
 void AGASUnit::GiveAbilities()
