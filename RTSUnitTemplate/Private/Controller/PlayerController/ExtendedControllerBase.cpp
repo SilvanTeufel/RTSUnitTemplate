@@ -19,6 +19,9 @@
 #include "Hud/HUDBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/UnitBase.h"
+#include "AbilitySystemComponent.h"
+#include "GameplayAbilitySpec.h"
+#include "GAS/GameplayAbilityBase.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
@@ -289,6 +292,50 @@ TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArr
 	default:
 		return SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities;
 	}
+}
+
+TArray<UGameplayAbilityBase*> AExtendedControllerBase::GetAbilityObjectArrayByIndex()
+{
+
+	if (!SelectedUnits.Num()) return TArray<UGameplayAbilityBase*>();
+	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return TArray<UGameplayAbilityBase*>();
+	if (!SelectedUnits[CurrentUnitWidgetIndex]) return TArray<UGameplayAbilityBase*>();
+
+	TArray<UGameplayAbilityBase*> AbilityObjects;
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityClasses = GetAbilityArrayByIndex();
+
+	AUnitBase* Unit = SelectedUnits[CurrentUnitWidgetIndex];
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	if (!ASC) return AbilityObjects;
+
+	const TArray<FGameplayAbilitySpec>& Specs = ASC->GetActivatableAbilities();
+
+	for (const TSubclassOf<UGameplayAbilityBase>& AbilityClass : AbilityClasses)
+	{
+		if (!AbilityClass) continue;
+
+		UGameplayAbilityBase* AbilityInstance = nullptr;
+
+		for (const FGameplayAbilitySpec& Spec : Specs)
+		{
+			if (Spec.Ability && Spec.Ability->GetClass() == AbilityClass)
+			{
+				AbilityInstance = Cast<UGameplayAbilityBase>(Spec.GetPrimaryInstance());
+				if (!AbilityInstance)
+				{
+					AbilityInstance = Cast<UGameplayAbilityBase>(Spec.Ability);
+				}
+				break;
+			}
+		}
+
+		if (AbilityInstance)
+		{
+			AbilityObjects.Add(AbilityInstance);
+		}
+	}
+
+	return AbilityObjects;
 }
 
 void AExtendedControllerBase::AddAbilityIndex(int Add)

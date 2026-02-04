@@ -40,6 +40,7 @@ struct FUpgradeData
 {
 	TSubclassOf<UGameplayEffect> UpgradeEffect;
 	FGameplayTag Tag;
+	int32 ExecutionCount = 1;
 
 	bool operator==(const FUpgradeData& Other) const
 	{
@@ -806,8 +807,12 @@ void UGameplayAbilityBase::UpgradeUnits(TSubclassOf<UGameplayEffect> UpgradeEffe
 
 	// Store for future units
 	TArray<FUpgradeData>& Upgrades = GActiveUpgradesByTeam.FindOrAdd(TeamId);
-	FUpgradeData NewUpgrade{ UpgradeEffect, Tag };
-	if (!Upgrades.Contains(NewUpgrade))
+	FUpgradeData NewUpgrade{ UpgradeEffect, Tag, 1 };
+	if (FUpgradeData* Existing = Upgrades.FindByKey(NewUpgrade))
+	{
+		Existing->ExecutionCount++;
+	}
+	else
 	{
 		Upgrades.Add(NewUpgrade);
 	}
@@ -823,7 +828,7 @@ void UGameplayAbilityBase::UpgradeUnits(TSubclassOf<UGameplayEffect> UpgradeEffe
 			for (TActorIterator<AUnitBase> It(World); It; ++It)
 			{
 				AUnitBase* Unit = *It;
-				if (Unit && Unit->TeamId == TeamId && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)))
+				if (Unit && Unit->TeamId == TeamId && Unit->UnitTags.HasTag(Tag))
 				{
 					if (UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent())
 					{
@@ -855,14 +860,17 @@ void UGameplayAbilityBase::ApplyActiveUpgradesToUnit(AUnitBase* Unit)
 		{
 			for (const FUpgradeData& Upgrade : *Upgrades)
 			{
-				if (Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Upgrade.Tag)))
+				if (Unit->UnitTags.HasTag(Upgrade.Tag))
 				{
-					FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
-					EffectContext.AddSourceObject(Unit);
-					FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Upgrade.UpgradeEffect, 1.0f, EffectContext);
-					if (SpecHandle.IsValid())
+					for (int32 i = 0; i < Upgrade.ExecutionCount; ++i)
 					{
-						ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+						FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+						EffectContext.AddSourceObject(Unit);
+						FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Upgrade.UpgradeEffect, 1.0f, EffectContext);
+						if (SpecHandle.IsValid())
+						{
+							ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+						}
 					}
 				}
 			}

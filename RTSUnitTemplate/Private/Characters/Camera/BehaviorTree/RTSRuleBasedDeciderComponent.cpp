@@ -12,6 +12,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameStates/ResourceGameState.h"
+#include "EngineUtils.h"
 
 URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 {
@@ -25,10 +26,24 @@ void URTSRuleBasedDeciderComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (AttackPositionSourceClass)
+	if (bUseAttackDataTableRules && AttackRulesDataTable)
 	{
-		FTimerHandle PopulateTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(PopulateTimerHandle, this, &URTSRuleBasedDeciderComponent::PopulateAttackPositions, AttackPositionUpdateDelay, false);
+		bool bAnyRowHasClasses = false;
+		TArray<FName> RowNames = AttackRulesDataTable->GetRowNames();
+		for (const FName& Name : RowNames)
+		{
+			const FRTSAttackRuleRow* Row = AttackRulesDataTable->FindRow<FRTSAttackRuleRow>(Name, TEXT("RTSAttackRules"));
+			if (Row && Row->AttackPositionSourceClasses.Num() > 0)
+			{
+				bAnyRowHasClasses = true;
+				break;
+			}
+		}
+
+		if (bAnyRowHasClasses)
+		{
+			GetWorld()->GetTimerManager().SetTimer(AttackPositionRefreshTimerHandle, this, &URTSRuleBasedDeciderComponent::PopulateAttackPositions, AttackPositionUpdateDelay, false);
+		}
 	}
 }
 
@@ -222,16 +237,63 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	if (!(GS.MyUnitCount >= Row.MinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount min: %d < %d"), *RowLabel, GS.MyUnitCount, Row.MinFriendlyUnitCount); return TEXT("{}"); }
 
 	// Per-tag friendly unit caps
-	for (const FRTSUnitCountCap& Cap : Row.UnitCaps)
+	if (Row.UnitCaps.Num() > 0)
 	{
-		const int32 Count = GetTagCount(GS, Cap.Tag);
-		if (Count >= Cap.MaxCount) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed tag cap: %d >= %d"), *RowLabel, Count, Cap.MaxCount); return TEXT("{}"); }
-		if (Count < Cap.MinCount) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed tag min: %d < %d"), *RowLabel, Count, Cap.MinCount); return TEXT("{}"); }
+		bool bCapsPassed = (Row.UnitCapLogic == ERTSUnitCapLogic::AndLogic);
+
+		for (const FRTSUnitCountCap& Cap : Row.UnitCaps)
+		{
+			const int32 Count = GetTagCount(GS, Cap.Tag);
+			const bool bMatch = (Count >= Cap.MinCount && Count < Cap.MaxCount);
+
+			if (Row.UnitCapLogic == ERTSUnitCapLogic::AndLogic)
+			{
+				if (!bMatch)
+				{
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed tag cap (AND): tag=%d, count=%d, min=%d, max=%d"), *RowLabel, (int32)Cap.Tag, Count, Cap.MinCount, Cap.MaxCount);
+					bCapsPassed = false;
+					break;
+				}
+			}
+			else // OrLogic
+			{
+				if (bMatch)
+				{
+					bCapsPassed = true;
+					break;
+				}
+			}
+		}
+
+		if (!bCapsPassed)
+		{
+			if (Row.UnitCapLogic == ERTSUnitCapLogic::OrLogic)
+			{
+				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed all tag caps (OR)."), *RowLabel);
+			}
+			return TEXT("{}");
+		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Ability=%d"), *RowLabel, (int32)Row.SelectionAction, (int32)Row.AbilityAction);
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Intermediate=%d Ability=%d"), 
+		*RowLabel, (int32)Row.SelectionAction, (int32)Row.IntermediateAction, (int32)Row.AbilityAction);
+
 	// Build output
-	return BuildCompositeActionJSON({ (int32)Row.SelectionAction, (int32)Row.AbilityAction }, Inference);
+	TArray<int32> ActionIndices;
+	if (Row.SelectionAction != ERTSAIAction::None)
+	{
+		ActionIndices.Add((int32)Row.SelectionAction);
+	}
+	if (Row.IntermediateAction != ERTSAIAction::None)
+	{
+		ActionIndices.Add((int32)Row.IntermediateAction);
+	}
+	if (Row.AbilityAction != ERTSAIAction::None)
+	{
+		ActionIndices.Add((int32)Row.AbilityAction);
+	}
+
+	return BuildCompositeActionJSON(ActionIndices, Inference);
 }
 
 FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference) const
@@ -370,17 +432,13 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		return false;
 	}
 
-	// Choose attack position: class array override if enabled and index exists, otherwise row's position
+	// Choose attack position: class override if enabled and valid, otherwise row's default position
 	FVector DesiredAttackPos = Row.AttackPosition;
-	if (Row.UseClassAttackPositions)
+	if (Row.UseClassAttackPositions && Row.AttackPositionSourceClasses.Num() > 0)
 	{
 		if (AttackPositions.IsValidIndex(TableRowIndex))
 		{
 			DesiredAttackPos = AttackPositions[TableRowIndex];
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: AttackRow '%s' requested class AttackPositions[%d], but index is out of range (Num=%d). Falling back to row.AttackPosition."), *RowLabel, TableRowIndex, AttackPositions.Num());
 		}
 	}
 
@@ -560,13 +618,36 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 		// but since it depends on many factors, we'll do a quick check here similar to what it does.
 		
 		bool bHasSelections = false;
-		for (const FRTSUnitCountCap& Cap : Row->UnitCaps)
+		if (Row->UnitCaps.Num() > 0)
 		{
-			const int32 Count = GetTagCount(GS, Cap.Tag);
-			if (Count > 0 && Count >= Cap.MinCount && Count < Cap.MaxCount)
+			if (Row->UnitCapLogic == ERTSUnitCapLogic::AndLogic)
 			{
 				bHasSelections = true;
-				break;
+				bool bHasAnyUnitsToSend = false;
+				for (const FRTSUnitCountCap& Cap : Row->UnitCaps)
+				{
+					const int32 Count = GetTagCount(GS, Cap.Tag);
+					if (Count < Cap.MinCount || Count >= Cap.MaxCount)
+					{
+						bHasSelections = false;
+						break;
+					}
+					if (Count > 0) bHasAnyUnitsToSend = true;
+				}
+				// Fail AND rule if literally 0 units would be sent (even if all 0 counts are within [Min, Max] ranges)
+				if (!bHasAnyUnitsToSend) bHasSelections = false;
+			}
+			else // OrLogic
+			{
+				for (const FRTSUnitCountCap& Cap : Row->UnitCaps)
+				{
+					const int32 Count = GetTagCount(GS, Cap.Tag);
+					if (Count > 0 && Count >= Cap.MinCount && Count < Cap.MaxCount)
+					{
+						bHasSelections = true;
+						break;
+					}
+				}
 			}
 		}
 
@@ -614,7 +695,7 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 
 void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 {
-	if (!AttackPositionSourceClass)
+	if (!bUseAttackDataTableRules || !AttackRulesDataTable)
 	{
 		return;
 	}
@@ -625,19 +706,105 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		return;
 	}
 
-	TArray<AActor*> FoundActors;
-	UGameplayStatics::GetAllActorsOfClass(World, AttackPositionSourceClass, FoundActors);
-
-	AttackPositions.Empty();
-	for (AActor* Actor : FoundActors)
+	TArray<FName> RowNames = AttackRulesDataTable->GetRowNames();
+	if (RowNames.Num() == 0)
 	{
-		if (Actor)
+		return;
+	}
+
+	// 1. Collect unique classes and prepare per-row class lists
+	TSet<TSubclassOf<AActor>> UniqueClasses;
+	TArray<const FRTSAttackRuleRow*> Rows;
+	Rows.Reserve(RowNames.Num());
+
+	for (const FName& Name : RowNames)
+	{
+		const FRTSAttackRuleRow* Row = AttackRulesDataTable->FindRow<FRTSAttackRuleRow>(Name, TEXT("RTSAttackRules"));
+		Rows.Add(Row);
+		if (Row)
 		{
-			AttackPositions.Add(Actor->GetActorLocation());
+			for (const TSubclassOf<AActor>& Cls : Row->AttackPositionSourceClasses)
+			{
+				if (Cls)
+				{
+					UniqueClasses.Add(Cls);
+				}
+			}
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Populated %d AttackPositions from class %s"), AttackPositions.Num(), *AttackPositionSourceClass->GetName());
+	// 2. Efficiently find all actors of these classes (Single pass over actors as requested)
+	TMap<TSubclassOf<AActor>, TArray<FVector>> FoundLocationsMap;
+	for (const TSubclassOf<AActor>& Cls : UniqueClasses)
+	{
+		FoundLocationsMap.Add(Cls, TArray<FVector>());
+	}
+
+	if (UniqueClasses.Num() > 0)
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (!Actor) continue;
+
+			UClass* ActorClass = Actor->GetClass();
+			// We check if the actor matches any of our target classes or their subclasses
+			for (auto& Pair : FoundLocationsMap)
+			{
+				if (ActorClass->IsChildOf(Pair.Key))
+				{
+					Pair.Value.Add(Actor->GetActorLocation());
+				}
+			}
+		}
+	}
+
+	// 3. Update AttackPositions (one per row)
+	AttackPositions.SetNum(RowNames.Num());
+	bool bAnyRowHasClasses = false;
+
+	for (int32 i = 0; i < RowNames.Num(); ++i)
+	{
+		const FRTSAttackRuleRow* Row = Rows[i];
+		if (Row && Row->AttackPositionSourceClasses.Num() > 0)
+		{
+			bAnyRowHasClasses = true;
+
+			// Pick all possible locations from all requested classes for this specific row
+			TArray<FVector> PossibleLocations;
+			for (const TSubclassOf<AActor>& Cls : Row->AttackPositionSourceClasses)
+			{
+				if (const TArray<FVector>* Locs = FoundLocationsMap.Find(Cls))
+				{
+					PossibleLocations.Append(*Locs);
+				}
+			}
+
+			if (PossibleLocations.Num() > 0)
+			{
+				const int32 RandIdx = FMath::RandRange(0, PossibleLocations.Num() - 1);
+				AttackPositions[i] = PossibleLocations[RandIdx];
+			}
+			else
+			{
+				// Fallback to row position if no actors found
+				AttackPositions[i] = Row->AttackPosition;
+			}
+		}
+		else if (Row)
+		{
+			// No classes specified for this row, use its default position
+			AttackPositions[i] = Row->AttackPosition;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Refreshed AttackPositions for %d rows. Unique target classes searched: %d"), RowNames.Num(), UniqueClasses.Num());
+
+	// 4. Setup next refresh if needed
+	if (bAnyRowHasClasses && AttackPositionRefreshInterval > 0.0f)
+	{
+		World->GetTimerManager().SetTimer(AttackPositionRefreshTimerHandle, this, &URTSRuleBasedDeciderComponent::PopulateAttackPositions, AttackPositionRefreshInterval, false);
+	}
 }
 
 FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStateData& GameState)

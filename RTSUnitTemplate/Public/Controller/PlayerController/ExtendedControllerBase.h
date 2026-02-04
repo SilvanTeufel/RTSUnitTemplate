@@ -8,6 +8,7 @@ class UStaticMeshComponent;
 class USoundBase;
 class AUnitBase;
 class AAbilityIndicator;
+class UGameplayAbilityBase;
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
@@ -230,6 +231,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	TArray<UGameplayAbilityBase*> GetAbilityObjectArrayByIndex();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddAbilityIndex(int Add);

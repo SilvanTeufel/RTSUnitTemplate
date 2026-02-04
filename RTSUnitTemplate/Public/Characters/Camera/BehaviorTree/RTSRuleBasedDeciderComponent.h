@@ -8,6 +8,13 @@
 #include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData and UInferenceComponent
 #include "RTSRuleBasedDeciderComponent.generated.h"
 
+UENUM(BlueprintType)
+enum class ERTSUnitCapLogic : uint8
+{
+	AndLogic UMETA(DisplayName = "AND (All must match)"),
+	OrLogic  UMETA(DisplayName = "OR (At least one must match)")
+};
+
 USTRUCT(BlueprintType)
 struct FRTSUnitCountCap
 {
@@ -47,10 +54,14 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	int32 MinFriendlyUnitCount = 0;
 
+	// How to connect the UnitCaps in this row
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	ERTSUnitCapLogic UnitCapLogic = ERTSUnitCapLogic::AndLogic;
+
 	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
-
+	
 	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
 	float Frequency = 100.0f;
@@ -58,6 +69,11 @@ struct FRTSRuleRow : public FTableRowBase
 	// Output actions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	ERTSAIAction SelectionAction = ERTSAIAction::Ability1;
+
+	// Optional action between selection and ability (e.g., ChangeAbilityIndex). Ignored if None.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	ERTSAIAction IntermediateAction = ERTSAIAction::None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	ERTSAIAction AbilityAction = ERTSAIAction::Ability1;
 };
@@ -76,6 +92,11 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
 	FName RuleName;
 
+	// How to connect the UnitCaps in this row. 
+	// Default to OR to maintain current aggressive behavior, or AND for coordinated strikes.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	ERTSUnitCapLogic UnitCapLogic = ERTSUnitCapLogic::OrLogic;
+
 	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
@@ -86,6 +107,10 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
+
+	// If provided, we will search for actors of these classes and pick one randomly as the attack position.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	TArray<TSubclassOf<AActor>> AttackPositionSourceClasses;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	bool UseClassAttackPositions = false;
@@ -137,13 +162,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	TArray<FVector> AttackPositions;
 
-	// Class of actors to find at game start to populate AttackPositions.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
-	TSubclassOf<AActor> AttackPositionSourceClass;
-
-	// Delay in seconds after game start before searching for AttackPositionSourceClass actors.
+	// Delay in seconds after game start before initial attack position search.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	float AttackPositionUpdateDelay = 2.0f;
+
+	// Interval in seconds between refreshing AttackPositions from classes during runtime. If <= 0.0, no repeating timer is used.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	float AttackPositionRefreshInterval = 10.0f;
 
 
 	// ---------------- Wander (small movement) fallback ----------------
@@ -201,11 +226,11 @@ private:
 	// If a RulesDataTable is set, iterate rows and return the first matching rule's JSON
 	FString EvaluateRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference) const;
 
-	// Attack rules evaluation/execution: returns true if an attack rule executed actions
+	// Evaluates attack rules and executes them if conditions are met.
 	bool EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference);
 	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference);
 
-	// Finds all actors of AttackPositionSourceClass and fills AttackPositions with their locations.
+	// Refreshes the cached AttackPositions by searching for actors of classes specified in the DataTable rows.
 	void PopulateAttackPositions();
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
@@ -213,6 +238,8 @@ private:
 
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;
+
+	FTimerHandle AttackPositionRefreshTimerHandle;
 
 	// While true, block ChooseJsonActionRuleBased from returning any action until the return timer completes
 	bool bAttackReturnBlockActive = false;
