@@ -19,6 +19,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Blackboard")
 	FName AgentPositionKey = TEXT("AgentPosition");
 
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	bool bDebug = false;
+
 protected:
 	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
 };

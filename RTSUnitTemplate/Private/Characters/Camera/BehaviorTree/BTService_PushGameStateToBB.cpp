@@ -33,7 +33,7 @@ UBTService_PushGameStateToBB::UBTService_PushGameStateToBB()
 void UBTService_PushGameStateToBB::OnBecomeRelevant(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
 	Super::OnBecomeRelevant(OwnerComp, NodeMemory);
-	UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: BecomeRelevant on %s (owner=%s) Interval=%.3f RandDev=%.3f bCallTickOnSearchStart=%s bRestartTimerOnEachActivation=%s"),
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: BecomeRelevant on %s (owner=%s) Interval=%.3f RandDev=%.3f bCallTickOnSearchStart=%s bRestartTimerOnEachActivation=%s"),
 		*GetNameSafe(OwnerComp.GetCurrentTree()), *GetNameSafe(OwnerComp.GetOwner()),
 		Interval, RandomDeviation, bCallTickOnSearchStart ? TEXT("true") : TEXT("false"), bRestartTimerOnEachActivation ? TEXT("true") : TEXT("false"));
 	// Do an immediate push so we get data even if the branch deactivates quickly
@@ -43,7 +43,7 @@ void UBTService_PushGameStateToBB::OnBecomeRelevant(UBehaviorTreeComponent& Owne
 void UBTService_PushGameStateToBB::OnCeaseRelevant(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
 	Super::OnCeaseRelevant(OwnerComp, NodeMemory);
-	UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: CeaseRelevant on %s (owner=%s)"),
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: CeaseRelevant on %s (owner=%s)"),
 		*GetNameSafe(OwnerComp.GetCurrentTree()), *GetNameSafe(OwnerComp.GetOwner()));
 }
 
@@ -52,7 +52,7 @@ void UBTService_PushGameStateToBB::TickNode(UBehaviorTreeComponent& OwnerComp, u
 	Super::TickNode(OwnerComp, NodeMemory, DeltaSeconds);
 
 	TickCounter++;
-	if (TickCounter % 10 == 1)
+	if (bDebug && TickCounter % 10 == 1)
 	{
 		UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: TickNode entered (count=%d)"), TickCounter);
 	}
@@ -65,14 +65,14 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 	UWorld* World = OwnerComp.GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, World is null."));
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, World is null."));
 		return;
 	}
 
 	UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent();
 	if (!BB)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, BlackboardComponent is null. Ensure UseBlackboard was called and a valid Blackboard asset is set on the BT."));
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, BlackboardComponent is null. Ensure UseBlackboard was called and a valid Blackboard asset is set on the BT."));
 		return;
 	}
 
@@ -101,7 +101,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		if (CVarTeam >= 0)
 		{
 			TeamId = CVarTeam;
-			UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Using TeamId from cvar r.RTSBT.ForcedTeamId=%d"), TeamId);
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Using TeamId from cvar r.RTSBT.ForcedTeamId=%d"), TeamId);
 		}
 	}
 
@@ -110,7 +110,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		TeamId = BB->GetValueAsInt(TeamIdBBKey);
 		if (TeamId < 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: TeamIdBBKey '%s' is set but value is %d. Will try other sources."), *TeamIdBBKey.ToString(), TeamId);
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: TeamIdBBKey '%s' is set but value is %d. Will try other sources."), *TeamIdBBKey.ToString(), TeamId);
 		}
 	}
 
@@ -147,7 +147,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 
 	if (!RLAgent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, no ARLAgent found in world to provide GameState."));
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, no ARLAgent found in world to provide GameState."));
 		return;
 	}
 
@@ -175,14 +175,14 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 			if (AExtendedControllerBase* AnyCtrl = Cast<AExtendedControllerBase>(AllCtrls[0]))
 			{
 				TeamId = AnyCtrl->SelectableTeamId;
-				UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Using world-fallback controller '%s' team id %d."), *GetNameSafe(AnyCtrl), TeamId);
+				if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Using world-fallback controller '%s' team id %d."), *GetNameSafe(AnyCtrl), TeamId);
 			}
 		}
 	}
 
 	if (TeamId < 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, could not resolve TeamId. Consider setting ForcedTeamId or TeamIdBBKey on the service."));
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Early return, could not resolve TeamId. Consider setting ForcedTeamId or TeamIdBBKey on the service."));
 		return;
 	}
 
@@ -193,7 +193,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		if (KeyName.IsNone()) return;
 		if (BB->GetKeyID(KeyName) == FBlackboard::InvalidKey)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
 			return;
 		}
 		BB->SetValueAsFloat(KeyName, Value);
@@ -204,7 +204,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 		if (KeyName.IsNone()) return;
 		if (BB->GetKeyID(KeyName) == FBlackboard::InvalidKey)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTService_PushGameStateToBB: Key '%s' NOT FOUND in Blackboard!"), *KeyName.ToString());
 			return;
 		}
 		BB->SetValueAsInt(KeyName, Value);
@@ -270,7 +270,7 @@ void UBTService_PushGameStateToBB::PushOnce(UBehaviorTreeComponent& OwnerComp)
 	BB->SetValueAsInt(TEXT("CtrlRTagEnemyUnitCount"), GS.CtrlRTagEnemyUnitCount);
 
 	const double Now = World->GetTimeSeconds();
- if (Now - LastDebugPrintTime >= DebugPrintInterval)
+ if (bDebug && (Now - LastDebugPrintTime >= DebugPrintInterval))
  {
      LastDebugPrintTime = Now;
      UE_LOG(LogTemp, Log, TEXT("BTService_PushGameStateToBB: Pushed BB (TeamId=%d) -> MyUnits=%d EnemyUnits=%d MyHP=%.1f EnemyHP=%.1f"),

@@ -76,8 +76,8 @@ public:
 	bool bAlsoWriteToBB = false;
 
 	// Extra logs around execution
-	UPROPERTY(EditAnywhere, Category="Execution")
-	bool bLogExecution = true;
+	UPROPERTY(EditAnywhere, Category="Debug")
+	bool bDebug = false;
 
 protected:
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;

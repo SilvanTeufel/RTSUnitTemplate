@@ -27,7 +27,7 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 void ARLAgent::BeginPlay()
 {
     Super::BeginPlay();
-    UE_LOG(LogTemp, Log, TEXT("[RLAgent] BeginPlay on %s Controller=%s HasAuthority=%s"), *GetNameSafe(this), *GetNameSafe(GetController()), HasAuthority() ? TEXT("true") : TEXT("false"));
+    if (bDebug) UE_LOG(LogTemp, Log, TEXT("[RLAgent] BeginPlay on %s Controller=%s HasAuthority=%s"), *GetNameSafe(this), *GetNameSafe(GetController()), HasAuthority() ? TEXT("true") : TEXT("false"));
 }
 
 
@@ -51,13 +51,13 @@ void ARLAgent::AgentInitialization()
             // Create SharedMemoryManager only if explicitly enabled
             if (bEnableSharedMemoryIO)
             {
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Creating SharedMemoryManager (bEnableSharedMemoryIO=true)."));
+                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Creating SharedMemoryManager (bEnableSharedMemoryIO=true)."));
                 SharedMemoryManager = new FSharedMemoryManager(*MemoryName, sizeof(SharedData));
             }
             else
             {
                 SharedMemoryManager = nullptr;
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemory disabled (bEnableSharedMemoryIO=false), skipping creation."));
+                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemory disabled (bEnableSharedMemoryIO=false), skipping creation."));
             }
         }
 
@@ -71,7 +71,7 @@ void ARLAgent::AgentInitialization()
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("ARLAgent: Skipping InferenceComponent::InitializeBehaviorTree because controller is not an AAIController. Expect ARTSBTController::OnPossess to start the BT."));
+                if (bDebug) UE_LOG(LogTemp, Warning, TEXT("ARLAgent: Skipping InferenceComponent::InitializeBehaviorTree because controller is not an AAIController. Expect ARTSBTController::OnPossess to start the BT."));
             }
         }
     }
@@ -82,11 +82,11 @@ void ARLAgent::AgentInitialization()
     {
         if (SharedMemoryManager)
         {
-            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *MemoryName, MemorySizeNeeded);
+            if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] SharedMemoryManager created successfully with name: %s and size: %lld."), *MemoryName, MemorySizeNeeded);
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Failed to create SharedMemoryManager."));
+            if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Failed to create SharedMemoryManager."));
         }
     }
 
@@ -102,7 +102,7 @@ void ARLAgent::AgentInitialization()
     // In BT mode (or whenever SharedMemory IO is disabled), expect a BT Service to feed the Blackboard.
     if (!bEnableSharedMemoryIO)
     {
-        UE_LOG(LogTemp, Log, TEXT("ARLAgent: Expecting BT Service (UBTService_PushGameStateToBB) to feed Blackboard (no agent-side or controller-side BB timer)."));
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("ARLAgent: Expecting BT Service (UBTService_PushGameStateToBB) to feed Blackboard (no agent-side or controller-side BB timer)."));
     }
 }
 
@@ -166,7 +166,7 @@ void ARLAgent::Tick(float DeltaTime)
 void ARLAgent::ReceiveRLAction(FString ActionJSON)
 {
 
-    UE_LOG(LogTemp, Warning, TEXT("ARLAgent::ReceiveRLAction: %s"), *ActionJSON);
+    if (bDebug) UE_LOG(LogTemp, Warning, TEXT("ARLAgent::ReceiveRLAction: %s"), *ActionJSON);
     const FString UTF8_BOM = TEXT("\xEF\xBB\xBF");
     
     if (!ActionJSON.IsEmpty())
@@ -186,7 +186,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
         {
             if (!Action.IsValid())
             {
-                UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Received invalid Action JSON."));
+                if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Received invalid Action JSON."));
                 return;
             }
 
@@ -197,7 +197,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             AExtendedControllerBase* ExtendedController = Cast<AExtendedControllerBase>(GetController());
             if (!ExtendedController)
             {
-                UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase."));
+                if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase."));
                 return;
             }
             
@@ -205,28 +205,28 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             if (Action->HasField(TEXT("input_value")))
             {
                 InputActionValue = FInputActionValue(static_cast<float>(Action->GetNumberField(TEXT("input_value"))));
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Input Value to: %.2f"), InputActionValue.Get<float>());
+                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Input Value to: %.2f"), InputActionValue.Get<float>());
             }
             if (Action->HasField(TEXT("alt")))
             {
                 ExtendedController->AltIsPressed = Action->GetBoolField(TEXT("alt"));
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Alt to: %s"), ExtendedController->AltIsPressed ? TEXT("True") : TEXT("False"));
+                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Alt to: %s"), ExtendedController->AltIsPressed ? TEXT("True") : TEXT("False"));
             }
             if (Action->HasField(TEXT("ctrl")))
             {
                 ExtendedController->IsCtrlPressed = Action->GetBoolField(TEXT("ctrl"));
-                UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Ctrl to: %s"), ExtendedController->IsCtrlPressed ? TEXT("True") : TEXT("False"));
+                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Setting Ctrl to: %s"), ExtendedController->IsCtrlPressed ? TEXT("True") : TEXT("False"));
             }
             // ExtendedController->SetModifierKeys(AltIsPressed, CtrlIsPressed);
 
             if (Action->HasField(TEXT("camera_state")))
             {
                 NewCameraState = static_cast<int32>(Action->GetNumberField(TEXT("camera_state")));
-                // UE_LOG(LogTemp, Log, TEXT("[ARLAgent] NewCameraState: %d"), NewCameraState);
+                // if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] NewCameraState: %d"), NewCameraState);
             }
 
             /*
-            UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Pre-Action State: ActionName=%s, SelectedUnits=%d, IsCtrl=%s, Alt=%s"), 
+            if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Pre-Action State: ActionName=%s, SelectedUnits=%d, IsCtrl=%s, Alt=%s"), 
                 *ActionName, ExtendedController->SelectedUnits.Num(), 
                 ExtendedController->IsCtrlPressed ? TEXT("True") : TEXT("False"), 
                 ExtendedController->AltIsPressed ? TEXT("True") : TEXT("False"));
@@ -265,7 +265,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                                         const FBoxSphereBounds B = Prim->Bounds;
                                         BoundsBox = FBox(B.Origin - B.BoxExtent, B.Origin + B.BoxExtent);
                                         bHasBounds = true;
-                                        UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Component tag on: %s.%s"), *BoundsActor->GetName(), *Comp->GetName());
+                                        if (bDebug) UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Component tag on: %s.%s"), *BoundsActor->GetName(), *Comp->GetName());
                                     }
                                     else
                                     {
@@ -274,7 +274,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                                         BoundsActor->GetActorBounds(true, Origin, Extent);
                                         BoundsBox = FBox(Origin - Extent, Origin + Extent);
                                         bHasBounds = true;
-                                        UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from non-primitive Component tag on: %s.%s (using owner bounds)"), *BoundsActor->GetName(), *Comp->GetName());
+                                        if (bDebug) UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from non-primitive Component tag on: %s.%s (using owner bounds)"), *BoundsActor->GetName(), *Comp->GetName());
                                     }
                                     break;
                                 }
@@ -287,7 +287,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                                 BoundsActor->GetActorBounds(true, Origin, Extent);
                                 BoundsBox = FBox(Origin - Extent, Origin + Extent);
                                 bHasBounds = true;
-                                UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Actor tag on: %s (no tagged component found; using actor bounds)"), *BoundsActor->GetName());
+                                if (bDebug) UE_LOG(LogTemp, Log, TEXT("[RLAgent] Camera bounds from Actor tag on: %s (no tagged component found; using actor bounds)"), *BoundsActor->GetName());
                             }
                         }
                     }
@@ -337,7 +337,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     ExtendedController->SelectedUnits[0] &&
                     ExtendedController->SelectedUnits[0]->BuildArea != nullptr)
                 {
-                    UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Cannot perform action while unit is Building."));
+                    if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Cannot perform action while unit is Building."));
                     return;
                 }
                 
@@ -360,7 +360,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     SwitchControllerStateMachine(InputActionValue, NewCameraState);
                 }
 
-                // UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Post-Switch State: SelectedUnits=%d"), ExtendedController->SelectedUnits.Num());
+                // if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Post-Switch State: SelectedUnits=%d"), ExtendedController->SelectedUnits.Num());
                 
                 if (ActionName.StartsWith("switch_camera_state_ability"))
                 {
@@ -371,7 +371,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
 
                     if (bIsWorker)
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
+                        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
                         ExtendedController->SetWorkArea(GetActorTransform());
                         if (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0])
                         {
@@ -379,7 +379,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                         }
                         else
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] switch_camera_state_ability: No unit selected to drop work area for."));
+                            if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] switch_camera_state_ability: No unit selected to drop work area for."));
                         }
                     }
                 }
@@ -402,7 +402,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Left Click: No ground hit found."));
+                    if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Left Click: No ground hit found."));
                 }
         
                 //if (NewCameraState == 2)
@@ -422,7 +422,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Right Click: No ground hit found."));
+                    if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] Right Click: No ground hit found."));
                 }
             }  else if (ActionName == "resource_management")
             {
@@ -441,7 +441,7 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             }
         } else
         {
-            UE_LOG(LogTemp, Warning, TEXT("JSON Error: %s"), *JsonReader->GetErrorMessage());
+            if (bDebug) UE_LOG(LogTemp, Warning, TEXT("JSON Error: %s"), *JsonReader->GetErrorMessage());
         }
     }
 
@@ -456,7 +456,7 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
     ACustomControllerBase* ExtendedController = Cast<ACustomControllerBase>(GetController());
     if (!ExtendedController)
     {
-        UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformRightClickAction."));
+        if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformRightClickAction."));
         return;
     }
 
@@ -549,7 +549,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     ACustomControllerBase* CustomControllerBase = Cast<ACustomControllerBase>(GetController());
     if (!CustomControllerBase)
     {
-        UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformLeftClickAction."));
+        if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Could not cast Controller to AExtendedControllerBase in PerformLeftClickAction."));
         return;
     }
     
@@ -674,20 +674,20 @@ void ARLAgent::RemoveWorkerFromResource(EResourceType ResourceType, int TeamId)
 void ARLAgent::Server_PlayGame_Implementation(int32 SelectableTeamId)
 {
     // Log entry point of the function
-    UE_LOG(LogTemp, Log, TEXT("ARLAgent::Server_PlayGame_Implementation --- Called for Team ID: %d ---"), SelectableTeamId);
+    if (bDebug) UE_LOG(LogTemp, Log, TEXT("ARLAgent::Server_PlayGame_Implementation --- Called for Team ID: %d ---"), SelectableTeamId);
 
     // 1. Get the current game state (you need to implement this part)
     FGameStateData GameState = GatherGameState(SelectableTeamId);
-    UE_LOG(LogTemp, Log, TEXT("Step 1/3: Game state gathered."));
+    if (bDebug) UE_LOG(LogTemp, Log, TEXT("Step 1/3: Game state gathered."));
 
     // 2. Get the action JSON from the inference component
     FString ActionJSON = InferenceComponent->ChooseJsonAction(GameState);
 
     // Log the action chosen by the model. This is the most important log.
-    UE_LOG(LogTemp, Log, TEXT("Step 2/3: Inference component returned ActionJSON: %s"), *ActionJSON);
+    if (bDebug) UE_LOG(LogTemp, Log, TEXT("Step 2/3: Inference component returned ActionJSON: %s"), *ActionJSON);
 
     // 3. Process the action using your existing function
-    UE_LOG(LogTemp, Log, TEXT("Step 3/3: Passing ActionJSON to ReceiveRLAction for processing."));
+    if (bDebug) UE_LOG(LogTemp, Log, TEXT("Step 3/3: Passing ActionJSON to ReceiveRLAction for processing."));
     ReceiveRLAction(ActionJSON);
 }
 
@@ -718,7 +718,7 @@ void ARLAgent::Client_ReceiveGameState_Implementation(const FGameStateData& Game
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
+        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("SharedMemoryManager is not valid, cannot write game state."));
     }
     
     // Check for new actions

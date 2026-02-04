@@ -36,11 +36,11 @@ void ARTSBTController::BeginPlay()
                 BehaviorComp = Cast<UBehaviorTreeComponent>(GetBrainComponent());
                 if (bStarted)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("RTSBTController: Behavior Tree started in BeginPlay: %s"), *StrategyBehaviorTree->GetName());
+                    if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Behavior Tree started in BeginPlay: %s"), *StrategyBehaviorTree->GetName());
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Error, TEXT("RTSBTController: RunBehaviorTree failed in BeginPlay for '%s'"), *GetNameSafe(StrategyBehaviorTree));
+                    if (bDebug) UE_LOG(LogTemp, Error, TEXT("RTSBTController: RunBehaviorTree failed in BeginPlay for '%s'"), *GetNameSafe(StrategyBehaviorTree));
                 }
 
                 // Do not auto-start controller-owned BB updates unless enabled
@@ -48,7 +48,7 @@ void ARTSBTController::BeginPlay()
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("RTSBTController: UseBlackboard failed in BeginPlay. Ensure the BT's Blackboard asset is set."));
+                if (bDebug) UE_LOG(LogTemp, Error, TEXT("RTSBTController: UseBlackboard failed in BeginPlay. Ensure the BT's Blackboard asset is set."));
             }
         }
     }
@@ -57,7 +57,7 @@ void ARTSBTController::BeginPlay()
 void ARTSBTController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
-    UE_LOG(LogTemp, Warning, TEXT("!!!!!!!RTSBTController: OnPossess!!!!"));
+    if (bDebug) UE_LOG(LogTemp, Warning, TEXT("!!!!!!!RTSBTController: OnPossess!!!!"));
 
     if (!ensure(InPawn))
     {
@@ -67,7 +67,7 @@ void ARTSBTController::OnPossess(APawn* InPawn)
     // Optional: ensure the pawn has an inference component (used by your BT task)
     if (!InPawn->FindComponentByClass<UInferenceComponent>())
     {
-        UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Possessed pawn has no UInferenceComponent. BT tasks like BTT_ChooseActionByIndex may require it."));
+        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Possessed pawn has no UInferenceComponent. BT tasks like BTT_ChooseActionByIndex may require it."));
     }
 
     if (StrategyBehaviorTree)
@@ -79,23 +79,23 @@ void ARTSBTController::OnPossess(APawn* InPawn)
             const bool bStarted = RunBehaviorTree(StrategyBehaviorTree);
             if (!bStarted)
             {
-                UE_LOG(LogTemp, Error, TEXT("RTSBTController: RunBehaviorTree failed for '%s'"), *StrategyBehaviorTree->GetName());
+                if (bDebug) UE_LOG(LogTemp, Error, TEXT("RTSBTController: RunBehaviorTree failed for '%s'"), *StrategyBehaviorTree->GetName());
             }
             BehaviorComp = Cast<UBehaviorTreeComponent>(GetBrainComponent());
 
-            UE_LOG(LogTemp, Log, TEXT("RTSBTController: Behavior Tree started: %s"), *StrategyBehaviorTree->GetName());
+            if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Behavior Tree started: %s"), *StrategyBehaviorTree->GetName());
 
             // Start controller-owned Blackboard updates based on mode
             StartControllerBBUpdates();
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("RTSBTController: UseBlackboard failed. Ensure the BT's Blackboard asset is set."));
+            if (bDebug) UE_LOG(LogTemp, Error, TEXT("RTSBTController: UseBlackboard failed. Ensure the BT's Blackboard asset is set."));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("RTSBTController: StrategyBehaviorTree is not assigned."));
+        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: StrategyBehaviorTree is not assigned."));
     }
 }
 
@@ -143,7 +143,7 @@ void ARTSBTController::Tick(float DeltaSeconds)
         {
             bEnableControllerBBUpdates = true;
             bControllerBBFallbackEngaged = true;
-            UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BT Service watchdog timed out (last=%.3f, now=%.3f, timeout=%.3f). Enabling controller-owned Blackboard updates."), LastBBServiceTickTime, Now, BBServiceWatchdogTimeout);
+            if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BT Service watchdog timed out (last=%.3f, now=%.3f, timeout=%.3f). Enabling controller-owned Blackboard updates."), LastBBServiceTickTime, Now, BBServiceWatchdogTimeout);
             StartControllerBBUpdates();
         }
     }
@@ -152,7 +152,7 @@ void ARTSBTController::Tick(float DeltaSeconds)
     const FString Action = ConsumeSelectedActionJSON();
     if (!Action.IsEmpty())
     {
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Consumed SelectedActionJSON: %s"), *Action);
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Consumed SelectedActionJSON: %s"), *Action);
 
         // Dispatch action to the RLAgent's InferenceComponent to actually execute it
         if (UWorld* World = GetWorld())
@@ -190,7 +190,7 @@ void ARTSBTController::Tick(float DeltaSeconds)
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Targeted RLAgent has no UInferenceComponent; cannot execute action."));
+                    if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Targeted RLAgent has no UInferenceComponent; cannot execute action."));
                 }
             }
         }
@@ -218,7 +218,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
     // Entry log (rate-limited)
     static int32 EntryCounter = 0;
     EntryCounter++;
-    if (EntryCounter % 10 == 1)
+    if (bDebug && EntryCounter % 10 == 1)
     {
         UE_LOG(LogTemp, Log, TEXT("RTSBTController: BB updater tick entered (count=%d)"), EntryCounter);
     }
@@ -228,7 +228,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
 
     if (!BlackboardComp)
     {
-        if (Now - LastBBWarnTime > 1.0)
+        if (bDebug && (Now - LastBBWarnTime > 1.0))
         {
             UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BB updater early return: BlackboardComp is null."));
             LastBBWarnTime = Now;
@@ -241,7 +241,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
     {
         if (bRequirePossessedPawnForBBUpdates)
         {
-            if (Now - LastPawnWarnTime > 1.0)
+            if (bDebug && (Now - LastPawnWarnTime > 1.0))
             {
                 UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BB updater early return: Pawn is null (not possessing a pawn yet)."));
                 LastPawnWarnTime = Now;
@@ -251,7 +251,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
         else
         {
             // Informative (throttled) but continue without a pawn
-            if (Now - LastPawnWarnTime > 1.0)
+            if (bDebug && (Now - LastPawnWarnTime > 1.0))
             {
                 UE_LOG(LogTemp, Warning, TEXT("RTSBTController: Proceeding with BB update without a possessed Pawn (bRequirePossessedPawnForBBUpdates=false)."));
                 LastPawnWarnTime = Now;
@@ -300,7 +300,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
 
     if (!RLAgent)
     {
-        if (Now - LastPawnWarnTime > 1.0)
+        if (bDebug && (Now - LastPawnWarnTime > 1.0))
         {
             UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BB updater early return: No ARLAgent found in world to provide GameState."));
             LastPawnWarnTime = Now;
@@ -408,7 +408,7 @@ void ARTSBTController::PushBlackboardFromGameState_ControllerOwned()
 
     // Periodic debug log (~1s)
     BBPushTickCounter++;
-    if (BBPushTickCounter % 10 == 0)
+    if (bDebug && (BBPushTickCounter % 10 == 0))
     {
         UE_LOG(LogTemp, Log, TEXT("RTSBTController: Pushed BB (TeamId=%d) -> MyUnits=%d EnemyUnits=%d Prim=%.1f/%.1f Rare=%.1f/%.1f AgentPos=(%.0f,%.0f,%.0f)"),
             TeamId, GS.MyUnitCount, GS.EnemyUnitCount, 
@@ -449,7 +449,7 @@ void ARTSBTController::NotifyBBServiceTick()
     LastBBServiceTickTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     if (bControllerBBFallbackEngaged)
     {
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Received BT Service ping after fallback engaged. Keeping controller-owned updates enabled."));
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Received BT Service ping after fallback engaged. Keeping controller-owned updates enabled."));
     }
 }
 
@@ -470,24 +470,24 @@ void ARTSBTController::StartControllerBBUpdates()
 {
     if (!GetWorld())
     {
-        UE_LOG(LogTemp, Warning, TEXT("RTSBTController: No World available; cannot start BB updates."));
+        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: No World available; cannot start BB updates."));
         return;
     }
     if (!GetEffectiveBlackboard())
     {
-        UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BlackboardComp is null after UseBlackboard; cannot start BB updates."));
+        if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RTSBTController: BlackboardComp is null after UseBlackboard; cannot start BB updates."));
         return;
     }
 
     if (!bEnableControllerBBUpdates)
     {
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Controller-owned BB updates disabled. Expect a BT Service (UBTService_PushGameStateToBB) to feed the Blackboard."));
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Controller-owned BB updates disabled. Expect a BT Service (UBTService_PushGameStateToBB) to feed the Blackboard."));
         return;
     }
 
     if (bUseTickForBBUpdates)
     {
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Using Tick-driven Blackboard updates every %.3fs (no timer)."), BlackboardUpdateInterval);
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Using Tick-driven Blackboard updates every %.3fs (no timer)."), BlackboardUpdateInterval);
         // Tick() will drive updates
     }
     else
@@ -495,7 +495,7 @@ void ARTSBTController::StartControllerBBUpdates()
         GetWorldTimerManager().SetTimer(BBUpdateTimerHandle, this, &ARTSBTController::PushBlackboardFromGameState_ControllerOwned, BlackboardUpdateInterval, true);
         const bool bActive = GetWorldTimerManager().IsTimerActive(BBUpdateTimerHandle);
         const bool bPaused = GetWorldTimerManager().IsTimerPaused(BBUpdateTimerHandle);
-        UE_LOG(LogTemp, Log, TEXT("RTSBTController: Started controller-owned Blackboard update timer (%.3fs). Active=%s Paused=%s"), BlackboardUpdateInterval, bActive ? TEXT("true") : TEXT("false"), bPaused ? TEXT("true") : TEXT("false"));
+        if (bDebug) UE_LOG(LogTemp, Log, TEXT("RTSBTController: Started controller-owned Blackboard update timer (%.3fs). Active=%s Paused=%s"), BlackboardUpdateInterval, bActive ? TEXT("true") : TEXT("false"), bPaused ? TEXT("true") : TEXT("false"));
 
         // Defer the first push to the next tick to avoid early GetPawn() races
         FTimerHandle OneShot;

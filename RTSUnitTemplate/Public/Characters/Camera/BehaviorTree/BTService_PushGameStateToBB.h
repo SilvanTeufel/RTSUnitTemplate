@@ -96,6 +96,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Debug")
 	float DebugPrintInterval = 1.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	bool bDebug = false;
+
 private:
 	double LastDebugPrintTime = -1000.0;
 	int32 TickCounter = 0;

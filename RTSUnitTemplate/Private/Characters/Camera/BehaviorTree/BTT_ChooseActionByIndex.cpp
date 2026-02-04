@@ -25,7 +25,7 @@ EBTNodeResult::Type UBTT_ChooseActionByIndex::ExecuteTask(UBehaviorTreeComponent
     UInferenceComponent* InferenceComp = Pawn->FindComponentByClass<UInferenceComponent>();
     if (!InferenceComp)
     {
-        UE_LOG(LogTemp, Error, TEXT("BTT_ChooseActionByIndex: Could not find InferenceComponent on Pawn."));
+        if (bDebug) UE_LOG(LogTemp, Error, TEXT("BTT_ChooseActionByIndex: Could not find InferenceComponent on Pawn."));
         return EBTNodeResult::Failed;
     }
 

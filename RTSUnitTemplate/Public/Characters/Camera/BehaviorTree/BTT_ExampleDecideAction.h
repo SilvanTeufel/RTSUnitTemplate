@@ -39,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Blackboard")
 	FName EnemyUnitCountKey = TEXT("EnemyUnitCount");
 
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	bool bDebug = false;
+
 protected:
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 };

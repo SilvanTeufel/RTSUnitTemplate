@@ -187,7 +187,7 @@ static int32 GetTagCount(const FGameStateData& GS, ERTSUnitTag Tag)
 FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const
 {
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<Unnamed>") : Row.RuleName.ToString();
-	if (!Row.bEnabled)
+	if (bDebug && !Row.bEnabled)
 	{
 		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' is disabled."), *RowLabel);
 		return TEXT("{}");
@@ -209,7 +209,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 		{
 			if (Current + (float)Cost > Max)
 			{
-				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed %s (Supply): %.2f + %d > %.2f"), *RowLabel, *Name, Current, Cost, Max);
+				if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed %s (Supply): %.2f + %d > %.2f"), *RowLabel, *Name, Current, Cost, Max);
 				return false;
 			}
 		}
@@ -217,7 +217,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 		{
 			if (Current < (float)Cost)
 			{
-				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed %s: %.2f < Thr %d"), *RowLabel, *Name, Current, Cost);
+				if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed %s: %.2f < Thr %d"), *RowLabel, *Name, Current, Cost);
 				return false;
 			}
 		}
@@ -233,8 +233,8 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	if (!CheckResource(GS.LegendaryResource, GS.MaxLegendaryResource, Row.ResourceThresholds.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
 
 	// Caps
-	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
-	if (!(GS.MyUnitCount >= Row.MinFriendlyUnitCount)) { UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount min: %d < %d"), *RowLabel, GS.MyUnitCount, Row.MinFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
+	if (!(GS.MyUnitCount >= Row.MinFriendlyUnitCount)) { if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount min: %d < %d"), *RowLabel, GS.MyUnitCount, Row.MinFriendlyUnitCount); return TEXT("{}"); }
 
 	// Per-tag friendly unit caps
 	if (Row.UnitCaps.Num() > 0)
@@ -250,7 +250,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 			{
 				if (!bMatch)
 				{
-					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed tag cap (AND): tag=%d, count=%d, min=%d, max=%d"), *RowLabel, (int32)Cap.Tag, Count, Cap.MinCount, Cap.MaxCount);
+					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed tag cap (AND): tag=%d, count=%d, min=%d, max=%d"), *RowLabel, (int32)Cap.Tag, Count, Cap.MinCount, Cap.MaxCount);
 					bCapsPassed = false;
 					break;
 				}
@@ -269,13 +269,13 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 		{
 			if (Row.UnitCapLogic == ERTSUnitCapLogic::OrLogic)
 			{
-				UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed all tag caps (OR)."), *RowLabel);
+				if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed all tag caps (OR)."), *RowLabel);
 			}
 			return TEXT("{}");
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Intermediate=%d Ability=%d"), 
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' PASSED. Selection=%d Intermediate=%d Ability=%d"), 
 		*RowLabel, (int32)Row.SelectionAction, (int32)Row.IntermediateAction, (int32)Row.AbilityAction);
 
 	// Build output
@@ -300,13 +300,13 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 {
 	if (!RulesDataTable)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: RulesDataTable is null; skipping table evaluation."));
+		if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: RulesDataTable is null; skipping table evaluation."));
 		return TEXT("{}");
 	}
 	TArray<FName> RowNames = RulesDataTable->GetRowNames();
 	if (RowNames.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: RulesDataTable has 0 rows."));
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: RulesDataTable has 0 rows."));
 		return TEXT("{}");
 	}
 
@@ -319,13 +319,13 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 	TArray<FMatchingRule> MatchingRules;
 	float TotalFrequency = 0.0f;
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d DataTable rules."), RowNames.Num());
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d DataTable rules."), RowNames.Num());
 	for (const FName& Name : RowNames)
 	{
 		const FRTSRuleRow* Row = RulesDataTable->FindRow<FRTSRuleRow>(Name, TEXT("RTSRules"));
 		if (!Row)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: DataTable row '%s' not found or mismatched type."), *Name.ToString());
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
 
@@ -349,18 +349,18 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 				CumulativeFrequency += Match.Frequency;
 				if (RandomValue <= CumulativeFrequency)
 				{
-					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
+					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
 					return Match.Output;
 				}
 			}
 		}
 		
 		// Fallback to first matching if total frequency is 0
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (fallback to first, total frequency was 0)."), *MatchingRules[0].Name.ToString());
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (fallback to first, total frequency was 0)."), *MatchingRules[0].Name.ToString());
 		return MatchingRules[0].Output;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No DataTable rule matched."));
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No DataTable rule matched."));
 	return TEXT("{}");
 }
 
@@ -369,7 +369,7 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<UnnamedAttack>") : Row.RuleName.ToString();
 	if (!Row.bEnabled)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' is disabled."), *RowLabel);
+		if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' is disabled."), *RowLabel);
 		return false;
 	}
 	if (!Inference)
@@ -420,7 +420,7 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 	if (Indices.Num() == 0)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' had no qualifying selections (no actions)."), *RowLabel);
+		if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' had no qualifying selections (no actions)."), *RowLabel);
 		return false;
 	}
 
@@ -428,7 +428,7 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	ARLAgent* RLAgent = OwnerPawn ? Cast<ARLAgent>(OwnerPawn) : nullptr;
 	if (!RLAgent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: AttackRow '%s' could not execute: owner is not ARLAgent."), *RowLabel);
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: AttackRow '%s' could not execute: owner is not ARLAgent."), *RowLabel);
 		return false;
 	}
 
@@ -477,12 +477,12 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	};
 	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
 	RLAgent->SetActorLocation(AdjustedAttackLoc);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Adjusted attack move to (%.1f, %.1f, %.1f) from desired (%.1f, %.1f, %.1f)"),
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Adjusted attack move to (%.1f, %.1f, %.1f) from desired (%.1f, %.1f, %.1f)"),
 		AdjustedAttackLoc.X, AdjustedAttackLoc.Y, AdjustedAttackLoc.Z,
 		DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
 
 	const FString Json = BuildCompositeActionJSON(Indices, Inference);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
 	Inference->ExecuteActionFromJSON(Json);
 
 	// Schedule return to original location after delay
@@ -559,7 +559,7 @@ void URTSRuleBasedDeciderComponent::FinalizeAttackReturn()
 	}
 
 	Agent->SetActorLocation(FinalLoc);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: RLAgent returned to adjusted location (%.1f, %.1f, %.1f) after attack."), FinalLoc.X, FinalLoc.Y, FinalLoc.Z);
 
 	// Post-return action: left_click 1
 	if (UInferenceComponent* PostInf = Agent->FindComponentByClass<UInferenceComponent>())
@@ -567,7 +567,7 @@ void URTSRuleBasedDeciderComponent::FinalizeAttackReturn()
 		const ERTSAIAction PostReturnAction = ERTSAIAction::LeftClick1;
 		const FString ClickJson = PostInf->GetActionAsJSON((int32)PostReturnAction);
 		PostInf->ExecuteActionFromJSON(ClickJson);
-		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), (int32)PostReturnAction);
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Post-return action executed: left_click 1 (index %d)."), (int32)PostReturnAction);
 	}
 
 	bAttackReturnBlockActive = false;
@@ -596,14 +596,14 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 	TArray<FMatchingAttackRule> MatchingRules;
 	float TotalFrequency = 0.0f;
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d Attack DataTable rows."), RowNames.Num());
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d Attack DataTable rows."), RowNames.Num());
 	for (int32 i = 0; i < RowNames.Num(); ++i)
 	{
 		const FName& Name = RowNames[i];
 		const FRTSAttackRuleRow* Row = AttackRulesDataTable->FindRow<FRTSAttackRuleRow>(Name, TEXT("RTSAttackRules"));
 		if (!Row)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack DataTable row '%s' not found or mismatched type."), *Name.ToString());
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
 
@@ -684,12 +684,12 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 
 		if (SelectedMatch && ExecuteAttackRuleRow(*(SelectedMatch->Row), SelectedMatch->OriginalIndex, GS, Inference))
 		{
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *SelectedMatch->Name.ToString(), SelectedMatch->Frequency, TotalFrequency);
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *SelectedMatch->Name.ToString(), SelectedMatch->Frequency, TotalFrequency);
 			return true;
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No Attack DataTable rule matched."));
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No Attack DataTable rule matched."));
 	return false;
 }
 
@@ -798,7 +798,7 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Refreshed AttackPositions for %d rows. Unique target classes searched: %d"), RowNames.Num(), UniqueClasses.Num());
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Refreshed AttackPositions for %d rows. Unique target classes searched: %d"), RowNames.Num(), UniqueClasses.Num());
 
 	// 4. Setup next refresh if needed
 	if (bAnyRowHasClasses && AttackPositionRefreshInterval > 0.0f)
@@ -812,7 +812,7 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	UInferenceComponent* Inference = GetInferenceComponent();
 	if (!Inference)
 	{
-		UE_LOG(LogTemp, Error, TEXT("URTSRuleBasedDeciderComponent: No UInferenceComponent found on owning pawn. Returning {}."));
+		if (bDebug) UE_LOG(LogTemp, Error, TEXT("URTSRuleBasedDeciderComponent: No UInferenceComponent found on owning pawn. Returning {}."));
 		return TEXT("{}");
 	}
 
@@ -825,13 +825,13 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 			if (Now < AttackReturnBlockUntilTimeSeconds)
 			{
 				const float Remaining = AttackReturnBlockUntilTimeSeconds - Now;
-				UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Blocking actions during attack return (%.2fs remaining)."), Remaining);
+				if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Blocking actions during attack return (%.2fs remaining)."), Remaining);
 				return TEXT("{}");
 			}
 
 			// Safety: block expired but timer didn't clear it yet.
 			// Force return move now and clear the block.
-			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack return block expired via safety; forcing return now."));
+			if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack return block expired via safety; forcing return now."));
 			FinalizeAttackReturn();
 
 			// Fall through to evaluate rules normally now that we are supposedly back
@@ -855,7 +855,7 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 		}
 		else
 		{
-			UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Skipping AttackRules (cooldown %.1fs left)."), AttackRuleCheckIntervalSeconds - SinceLast);
+			if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Skipping AttackRules (cooldown %.1fs left)."), AttackRuleCheckIntervalSeconds - SinceLast);
 		}
 	}
 
@@ -899,7 +899,7 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 				LastWanderActionIndex = ChosenIdx;
 				WanderActionRepeatCount = 1;
 			}
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander path. Base=%d, Chosen=%d, Repeats=%d/%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), BaseIdx, ChosenIdx, WanderActionRepeatCount, WanderMinSameDirectionRepeats, bWanderTwoStep?TEXT("true"):TEXT("false"), (int32)WanderSelectionAction, (int32)WanderAbilityAction);
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Wander path. Base=%d, Chosen=%d, Repeats=%d/%d, TwoStep=%s (SelIdx=%d, AbIdx=%d)"), BaseIdx, ChosenIdx, WanderActionRepeatCount, WanderMinSameDirectionRepeats, bWanderTwoStep?TEXT("true"):TEXT("false"), (int32)WanderSelectionAction, (int32)WanderAbilityAction);
 			if (bWanderTwoStep)
 			{
 				TArray<int32> Steps;
@@ -938,7 +938,7 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 
 	if (Result.IsEmpty() || Result == TEXT("{}"))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Neither DataTable nor Wander produced an action (table=%s, wander=%s). Returning {}."),
+		if (bDebug) UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Neither DataTable nor Wander produced an action (table=%s, wander=%s). Returning {}."),
 			(bUseDataTableRules && RulesDataTable)?TEXT("enabled"):TEXT("disabled"), bEnableWander?TEXT("enabled"):TEXT("disabled"));
 	}
 	return Result;

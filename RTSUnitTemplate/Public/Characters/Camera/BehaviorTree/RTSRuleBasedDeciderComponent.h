@@ -129,6 +129,9 @@ class RTSUNITTEMPLATE_API URTSRuleBasedDeciderComponent : public UActorComponent
 public:
 	URTSRuleBasedDeciderComponent();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+	bool bDebug = false;
+
 protected:
 	virtual void BeginPlay() override;
 

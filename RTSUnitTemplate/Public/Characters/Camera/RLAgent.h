@@ -47,6 +47,10 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
     float FallbackBounceDelta = 1000.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+    bool bDebug = false;
+
     // Setup input (optional – you might not bind physical input if RL supplies values)
     //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
     

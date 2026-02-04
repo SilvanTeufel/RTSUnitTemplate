@@ -42,7 +42,7 @@ EBTNodeResult::Type UBTT_ExampleDecideAction::ExecuteTask(UBehaviorTreeComponent
     UInferenceComponent* InferenceComp = Pawn->FindComponentByClass<UInferenceComponent>();
     if (!InferenceComp)
     {
-        UE_LOG(LogTemp, Error, TEXT("BTT_ExampleDecideAction: Pawn has no UInferenceComponent."));
+        if (bDebug) UE_LOG(LogTemp, Error, TEXT("BTT_ExampleDecideAction: Pawn has no UInferenceComponent."));
         return EBTNodeResult::Failed;
     }
 

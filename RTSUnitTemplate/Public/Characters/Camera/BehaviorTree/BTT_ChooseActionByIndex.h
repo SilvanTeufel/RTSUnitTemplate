@@ -18,6 +18,9 @@ public:
     UPROPERTY(EditAnywhere, Category = "Action")
     ERTSAIAction Action;
 
+    UPROPERTY(EditAnywhere, Category = "Debug")
+    bool bDebug = false;
+
 protected:
     virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 };

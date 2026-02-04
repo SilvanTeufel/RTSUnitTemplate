@@ -39,6 +39,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	FName SelectedActionJSONKey = TEXT("SelectedActionJSON");
 
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	bool bDebug = false;
+
 	// Enable controller-owned Blackboard updates. When false (default), expect a BT Service to feed the Blackboard.
 	UPROPERTY(EditDefaultsOnly, Category = "AI|BlackboardUpdate")
 	bool bEnableControllerBBUpdates = false;
