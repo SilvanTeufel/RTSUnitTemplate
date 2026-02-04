@@ -247,27 +247,57 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 		UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: RulesDataTable has 0 rows."));
 		return TEXT("{}");
 	}
-	// Randomize which row is evaluated first by picking a random start index and iterating circularly
-	const int32 StartIndex = FMath::RandRange(0, RowNames.Num() - 1);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d DataTable rules (start index=%d)."), RowNames.Num(), StartIndex);
-	for (int32 Offset = 0; Offset < RowNames.Num(); ++Offset)
+
+	struct FMatchingRule
 	{
-		const int32 EvalIdx = (StartIndex + Offset) % RowNames.Num();
-		const FName& Name = RowNames[EvalIdx];
-		UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: Evaluating row[%d]='%s'"), EvalIdx, *Name.ToString());
+		FName Name;
+		float Frequency;
+		FString Output;
+	};
+	TArray<FMatchingRule> MatchingRules;
+	float TotalFrequency = 0.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d DataTable rules."), RowNames.Num());
+	for (const FName& Name : RowNames)
+	{
 		const FRTSRuleRow* Row = RulesDataTable->FindRow<FRTSRuleRow>(Name, TEXT("RTSRules"));
 		if (!Row)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
+
 		const FString Out = EvaluateRuleRow(*Row, GS, Inference);
 		if (!Out.IsEmpty() && Out != TEXT("{}"))
 		{
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired."), *Name.ToString());
-			return Out;
+			float Freq = FMath::Max(0.0f, Row->Frequency);
+			MatchingRules.Add({ Name, Freq, Out });
+			TotalFrequency += Freq;
 		}
 	}
+
+	if (MatchingRules.Num() > 0)
+	{
+		if (TotalFrequency > 0.0f)
+		{
+			float RandomValue = FMath::FRandRange(0.0f, TotalFrequency);
+			float CumulativeFrequency = 0.0f;
+			for (const FMatchingRule& Match : MatchingRules)
+			{
+				CumulativeFrequency += Match.Frequency;
+				if (RandomValue <= CumulativeFrequency)
+				{
+					UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
+					return Match.Output;
+				}
+			}
+		}
+		
+		// Fallback to first matching if total frequency is 0
+		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (fallback to first, total frequency was 0)."), *MatchingRules[0].Name.ToString());
+		return MatchingRules[0].Output;
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No DataTable rule matched."));
 	return TEXT("{}");
 }
@@ -497,24 +527,87 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 	{
 		return false;
 	}
-	const int32 StartIndex = FMath::RandRange(0, RowNames.Num() - 1);
-	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d Attack DataTable rows (start index=%d)."), RowNames.Num(), StartIndex);
-	for (int32 Offset = 0; Offset < RowNames.Num(); ++Offset)
+
+	struct FMatchingAttackRule
 	{
-		const int32 EvalIdx = (StartIndex + Offset) % RowNames.Num();
-		const FName& Name = RowNames[EvalIdx];
+		FName Name;
+		const FRTSAttackRuleRow* Row;
+		int32 OriginalIndex;
+		float Frequency;
+	};
+	TArray<FMatchingAttackRule> MatchingRules;
+	float TotalFrequency = 0.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Evaluating %d Attack DataTable rows."), RowNames.Num());
+	for (int32 i = 0; i < RowNames.Num(); ++i)
+	{
+		const FName& Name = RowNames[i];
 		const FRTSAttackRuleRow* Row = AttackRulesDataTable->FindRow<FRTSAttackRuleRow>(Name, TEXT("RTSAttackRules"));
 		if (!Row)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: Attack DataTable row '%s' not found or mismatched type."), *Name.ToString());
 			continue;
 		}
-		if (ExecuteAttackRuleRow(*Row, EvalIdx, GS, Inference))
+
+		if (!Row->bEnabled)
 		{
-			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (row index %d)."), *Name.ToString(), EvalIdx);
+			continue;
+		}
+
+		// Check if the rule is executable (has valid selections)
+		// Note: We need a lightweight way to check this without executing.
+		// For now, let's see if we can refactor ExecuteAttackRuleRow to separate check and execute, 
+		// but since it depends on many factors, we'll do a quick check here similar to what it does.
+		
+		bool bHasSelections = false;
+		for (const FRTSUnitCountCap& Cap : Row->UnitCaps)
+		{
+			const int32 Count = GetTagCount(GS, Cap.Tag);
+			if (Count > 0 && Count >= Cap.MinCount && Count < Cap.MaxCount)
+			{
+				bHasSelections = true;
+				break;
+			}
+		}
+
+		if (bHasSelections)
+		{
+			float Freq = FMath::Max(0.0f, Row->Frequency);
+			MatchingRules.Add({ Name, Row, i, Freq });
+			TotalFrequency += Freq;
+		}
+	}
+
+	if (MatchingRules.Num() > 0)
+	{
+		const FMatchingAttackRule* SelectedMatch = nullptr;
+		if (TotalFrequency > 0.0f)
+		{
+			float RandomValue = FMath::FRandRange(0.0f, TotalFrequency);
+			float CumulativeFrequency = 0.0f;
+			for (const FMatchingAttackRule& Match : MatchingRules)
+			{
+				CumulativeFrequency += Match.Frequency;
+				if (RandomValue <= CumulativeFrequency)
+				{
+					SelectedMatch = &Match;
+					break;
+				}
+			}
+		}
+
+		if (!SelectedMatch)
+		{
+			SelectedMatch = &MatchingRules[0];
+		}
+
+		if (SelectedMatch && ExecuteAttackRuleRow(*(SelectedMatch->Row), SelectedMatch->OriginalIndex, GS, Inference))
+		{
+			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *SelectedMatch->Name.ToString(), SelectedMatch->Frequency, TotalFrequency);
 			return true;
 		}
 	}
+
 	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: No Attack DataTable rule matched."));
 	return false;
 }

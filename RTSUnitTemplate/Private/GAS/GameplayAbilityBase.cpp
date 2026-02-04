@@ -19,6 +19,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/GASUnit.h"
 #include "GameModes/ResourceGameMode.h"
 
@@ -808,16 +809,31 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 			{
 				if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(InitiatorPC))
 				{
-					if (ExtPC->IsLocalController())
+					if (ExtPC->SelectableTeamId == TeamId)
 					{
-						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
+						// If the initiator is an AI agent (ARLAgent), we do not play sounds.
+						if (ExtPC->GetPawn() && ExtPC->GetPawn()->IsA(ARLAgent::StaticClass()))
+						{
+							return;
+						}
+
+						if (ExtPC->IsLocalPlayerController())
+						{
+							UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
+						}
+						else
+						{
+							ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+						}
+						return;
 					}
-					else
-					{
-						ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
-					}
-					return;
 				}
+			}
+			else
+			{
+				// If there is no instigator, it's likely an AI or automated action.
+				// For UI/Local sounds, we skip it to prevent AI actions from being heard by human players.
+				return;
 			}
 		}
 
@@ -828,7 +844,7 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 			{
 				if (ExtPC->SelectableTeamId == TeamId)
 				{
-					if (ExtPC->IsLocalController())
+					if (ExtPC->IsLocalPlayerController())
 					{
 						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
 					}

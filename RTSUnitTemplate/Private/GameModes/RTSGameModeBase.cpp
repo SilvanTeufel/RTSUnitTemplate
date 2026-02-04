@@ -1115,6 +1115,7 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		AIPawn->AIControllerClass = nullptr;
 
 		AIPC->Possess(AIPawn);
+		AIPC->SoundMultiplier = 0.0f;
 
 		// Ensure the AI PlayerController has a HUD (use the standard HUDClass from this GameMode)
 		if (!AIPC->GetHUD())

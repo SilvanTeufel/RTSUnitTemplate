@@ -75,6 +75,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	float GetSoundMultiplier() const;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float SoundMultiplier = 1.0f;
+
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	APathProviderHUD* HUDBase;
 

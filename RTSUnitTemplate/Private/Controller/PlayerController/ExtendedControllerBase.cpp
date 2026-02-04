@@ -1702,6 +1702,97 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
     return true;
 }
 
+void AExtendedControllerBase::PerformWorkAreaDistanceResolution(AWorkArea* DraggedWorkArea, bool bWorkAreaIsSnapped)
+{
+    if (!DraggedWorkArea) return;
+
+    const int32 MaxIterations = 12;
+    const float Padding = 1.0f; // small gap to avoid re-trigger
+    const float MinStep = 0.1f;
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    // Build neighbor list once
+    TArray<AActor*> Neighbors;
+    for (TActorIterator<AWorkArea> ItWA(World); ItWA; ++ItWA)
+    {
+        if (*ItWA && *ItWA != DraggedWorkArea) Neighbors.Add(*ItWA);
+    }
+    for (TActorIterator<ABuildingBase> ItBD(World); ItBD; ++ItBD)
+    {
+        if (*ItBD) Neighbors.Add(*ItBD);
+    }
+
+    FVector WorkingLoc = DraggedWorkArea->GetActorLocation();
+    for (int32 Iter = 0; Iter < MaxIterations; ++Iter)
+    {
+        DraggedWorkArea->SetActorLocation(WorkingLoc);
+
+        FVector DragC, DragE;
+        if (!GetActorBoundsForSnap(DraggedWorkArea, DragC, DragE))
+        {
+            break; // cannot evaluate
+        }
+        const float DragR = FMath::Max(DragE.X, DragE.Y);
+
+        bool bAnyViolation = false;
+        FVector AccumulatedPush = FVector::ZeroVector;
+
+        for (AActor* N : Neighbors)
+        {
+            if (!N) continue;
+            FVector NC, NE;
+            if (!GetActorBoundsForSnap(N, NC, NE)) continue;
+            const float NR = FMath::Max(NE.X, NE.Y);
+            
+            // Required distance: if snapped, we allow zero clearance; otherwise use SnapGap
+            float Required = DragR + NR + (bWorkAreaIsSnapped ? 0.f : SnapGap);
+
+            // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
+            if (DraggedWorkArea->DenyPlacementCloseToResources)
+            {
+                if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
+                {
+                    const WorkAreaData::WorkAreaType T = NeighborWA->Type;
+                    const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+                    if (bIsResourceType)
+                    {
+                        Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
+                    }
+                }
+            }
+            const float D = FVector::Dist2D(DragC, NC);
+            if (D < Required)
+            {
+                bAnyViolation = true;
+                FVector Dir = (DragC - NC);
+                Dir.Z = 0.f;
+                if (Dir.IsNearlyZero(1e-3f))
+                {
+                    Dir = FVector(1.f, 0.f, 0.f);
+                }
+                Dir.Normalize();
+                const float Push = (Required - D) + Padding;
+                AccumulatedPush += Dir * Push;
+            }
+        }
+
+        if (!bAnyViolation)
+        {
+            break;
+        }
+
+        if (AccumulatedPush.Size2D() < MinStep)
+        {
+            break;
+        }
+
+        WorkingLoc += FVector(AccumulatedPush.X, AccumulatedPush.Y, 0.f);
+    }
+
+    DraggedWorkArea->SetActorLocation(WorkingLoc);
+}
+
 // ------------------------------------------------------------------------------------------
 
 void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
@@ -3237,15 +3328,22 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 {
 	if (!UnitBase) return false;
 
-	if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->PlannedBuilding == false)
+	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
+	if (DraggedWorkArea && DraggedWorkArea->PlannedBuilding == false)
 	{
+		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
+		DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
+		PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+
+		// 2. Final check for valid placement
 		TArray<AActor*> OverlappingActors;
+		DraggedWorkArea->GetOverlappingActors(OverlappingActors);
 
 		bool bIsOverlappingWithValidArea = false;
 		bool bIsNoBuildZone = false;
-		// Determine initiating building to ignore when placing an Extension Area
 		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
-		const bool bIsExtensionArea = UnitBase->CurrentDraggedWorkArea->IsExtensionArea;
+		const bool bIsExtensionArea = DraggedWorkArea->IsExtensionArea;
+
 		for (AActor* OverlappedActor : OverlappingActors)
 		{
 			if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
@@ -3260,31 +3358,62 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					bIsNoBuildZone = true;
 				}
 				bIsOverlappingWithValidArea = true;
-				break;
+				// After resolution, we do NOT tolerate any overlap if not explicitly snapped
+				if (!bWorkAreaIsSnapped) break;
 			}
 		}
 
-	
+		bool bTooCloseToResources = false;
+		if (DraggedWorkArea->DenyPlacementCloseToResources)
+		{
+			for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+			{
+				AWorkArea* ResWA = *ItWA;
+				if (ResWA && ResWA != DraggedWorkArea)
+				{
+					const WorkAreaData::WorkAreaType T = ResWA->Type;
+					const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+					if (bIsResourceType)
+					{
+						if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
+						{
+							bTooCloseToResources = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+
 		bool bNeedsBeaconOutOfRange = false;
-		if (UnitBase && UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->NeedsBeacon)
+		if (DraggedWorkArea->NeedsBeacon)
 		{
 			UWorld* WorldCtx = GetWorld();
 			if (WorldCtx)
 			{
-				const FVector Pos = UnitBase->CurrentDraggedWorkArea->GetActorLocation();
+				const FVector Pos = DraggedWorkArea->GetActorLocation();
 				bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
 			}
 		}
 
-		// && !bWorkAreaIsSnapped
-		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange)
+		bool bOffNavMesh = false;
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+		{
+			FNavLocation NavLoc;
+			if (!NavSys->ProjectPointToNavigation(DraggedWorkArea->GetActorLocation(), NavLoc, FVector(200.f, 200.f, 1000.f)))
+			{
+				bOffNavMesh = true;
+			}
+		}
+
+		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
 		{
 			if (InDropWorkAreaFailedSound)
 			{
 				Client_PlaySound2D(InDropWorkAreaFailedSound);
 			}
 
-			UnitBase->CurrentDraggedWorkArea->Destroy();
+			DraggedWorkArea->Destroy();
 			UnitBase->BuildArea = nullptr;
 			UnitBase->CurrentDraggedWorkArea = nullptr;
 			CancelCurrentAbility(UnitBase);
@@ -3299,12 +3428,11 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				Client_PlaySound2D(DropWorkAreaSound);
 			}
 
- 		if (UnitBase->CurrentDraggedWorkArea)
+			if (UnitBase->CurrentDraggedWorkArea)
 			{
 				Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 					UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			}
-			// If this is an extension area, spawn its ConstructionUnit now on the server
 			SendWorkerToWork(UnitBase);
 			return true;
 		}
@@ -3963,7 +4091,7 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 	FRotator CameraRotation = FRotator::ZeroRotator;
 	GetPlayerViewPoint(CameraLocation, CameraRotation);
 
-	float SoundMultiplier = GetSoundMultiplier();
+	float CurrentSoundMultiplier = GetSoundMultiplier();
 
 	// Mapping to store active work area per resource type for this frame
 	TMap<EResourceType, AWorkArea*> ActiveAreas;
@@ -4020,7 +4148,7 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 
 		if (ActiveArea && ActiveArea->ExtractionSound)
 		{
-			float FinalVolume = SoundMultiplier * ActiveArea->ExtractionSoundVolume;
+			float FinalVolume = CurrentSoundMultiplier * ActiveArea->ExtractionSoundVolume;
 
 			if (!IsValid(AudioComp))
 			{

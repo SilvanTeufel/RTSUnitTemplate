@@ -51,6 +51,10 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
 
+	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
+	float Frequency = 100.0f;
+
 	// Output actions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	ERTSAIAction SelectionAction = ERTSAIAction::Ability1;
@@ -75,6 +79,10 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
+
+	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
+	float Frequency = 100.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
@@ -109,12 +117,14 @@ public:
 	// If true and RulesDataTable is assigned, the component evaluates rows to choose actions.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table")
 	bool bUseDataTableRules = false;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table", meta=(EditCondition="bUseDataTableRules"))
 	UDataTable* RulesDataTable = nullptr;
 
 	// Attack rule DataTable: executes selection + attack at a target position, then returns camera after a delay
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	bool bUseAttackDataTableRules = false;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(EditCondition="bUseAttackDataTableRules"))
 	UDataTable* AttackRulesDataTable = nullptr;
 	// Time to wait before returning the RLAgent to its original location after issuing attack orders

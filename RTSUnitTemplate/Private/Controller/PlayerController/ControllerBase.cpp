@@ -80,12 +80,12 @@ void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 
 float AControllerBase::GetSoundMultiplier() const
 {
-	float Multiplier = 1.0f;
+	float Multiplier = SoundMultiplier;
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
 		{
-			Multiplier = Queue->GetGlobalSoundMultiplier() * Queue->GetDefaultSoundVolume();
+			Multiplier *= Queue->GetGlobalSoundMultiplier() * Queue->GetDefaultSoundVolume();
 		}
 	}
 	return Multiplier;

@@ -286,6 +286,7 @@ public:
 	bool TrySnapViaProximity(AWorkArea* DraggedWorkArea, const FVector& MouseGround);
 	void MoveDraggedAreaFreely(AWorkArea* DraggedWorkArea, const FVector& MouseGround, const FHitResult& HitResult);
 	bool MoveWorkArea_Local_Simplified(float DeltaSeconds);
+	void PerformWorkAreaDistanceResolution(AWorkArea* DraggedWorkArea, bool bWorkAreaIsSnapped);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AActor* CheckForSnapOverlap(AWorkArea* DraggedActor, const FVector& TestLocation);
