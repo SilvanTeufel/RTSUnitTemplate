@@ -33,6 +33,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	bool Debug = false;
+
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	FVector BuildingSpawnTrace = FVector(0.f, 0.f, 2500.f);
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler
@@ -219,7 +222,7 @@ private:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
-								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint);
+								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint, bool bDoGroundTrace = true);
 
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

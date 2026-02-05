@@ -2166,14 +2166,24 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								SpawnParameter.StatePlaceholder = UnitData::Idle;
 								SpawnParameter.Material = nullptr;
 
-								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation() + FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
+								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
+
+								bool bDoGroundTrace = true;
+								if (UnitBase->BuildArea->IsExtensionArea)
+								{
+									ABuildingBase* OriginBuilding = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
+									if (OriginBuilding && !OriginBuilding->ExtensionGroundTrace)
+									{
+										bDoGroundTrace = false;
+									}
+								}
 
     							if(!ControllerBase)
     							{
 									ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 								}
 
-								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
+								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr, bDoGroundTrace);
 
 								// If spawn failed, allow future attempts (keep single-spawn guarantee only on success)
 								if (!NewUnit)
@@ -2223,7 +2233,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									{
 										SpawnedBuilding->Origin = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
 										SpawnedBuilding->Origin->Extension = SpawnedBuilding;
-
+										
 										if (UnitBase->BuildArea->KillOrigin)
 										{
 											SpawnedBuilding->Origin->Destroy(false, true);
@@ -2257,15 +2267,12 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     FVector Location,
     AUnitBase* UnitToChase,
     int TeamId,
-    AWaypoint* Waypoint)
+    AWaypoint* Waypoint,
+	bool bDoGroundTrace)
 {
     // 1) Transformation with preliminary spawn location and desired rotation
     FTransform EnemyTransform;
-    EnemyTransform.SetLocation(
-        FVector(Location.X + SpawnParameter.UnitOffset.X,
-                Location.Y + SpawnParameter.UnitOffset.Y,
-                Location.Z + SpawnParameter.UnitOffset.Z)
-    );
+    EnemyTransform.SetLocation(Location); // Preliminary
     EnemyTransform.SetRotation(FQuat(SpawnParameter.ServerMeshRotation));
 
     // 2) Deferrten Actor-Spawn starten
@@ -2283,82 +2290,78 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
         return nullptr;
     }
 	
-    // 3) (Optional) AI-Controller spawnen und zuweisen
-	/*
-    if (SpawnParameter.UnitControllerBaseClass)
-    {
-        AAIController* UnitController = GetWorld()->SpawnActor<AAIController>(
-            SpawnParameter.UnitControllerBaseClass, 
-            FTransform()
-        );
-        if (!UnitController) 
-        {
-            return nullptr;
-        }
-        UnitController->Possess(UnitBase);
-    }*/
+	if (TeamId)
+	{
+		UnitBase->TeamId = TeamId;
+	}
 
     // --------------------------------------------
     // 4) Hier folgt nun der Part mit dem LineTrace
     // --------------------------------------------
 
-    // Wir versuchen, das Mesh zu holen (falls vorhanden),
-    // um dessen Bounds und Höhe zu bestimmen
-    USkeletalMeshComponent* MeshComponent = UnitBase->GetMesh();
-    if (MeshComponent)
-    {
-        // Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
-        FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
-        float HalfHeight = MeshBounds.BoxExtent.Z;
-
-        // Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
-        FVector TraceStart = Location + FVector(0.f, 0.f, 100.f);
-        FVector TraceEnd   = Location - FVector(0.f, 0.f, 100.f);
-
-        FHitResult HitResult;
-        FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
-        TraceParams.bTraceComplex = true;
-        TraceParams.AddIgnoredActor(UnitBase);
-    	
-    	if (ControllerBase)
-    		TraceParams.AddIgnoredActor(ControllerBase->GetPawn());
-
-        // Use an object-type trace that only considers WorldStatic geometry (e.g., terrain, static meshes)
-        // to avoid hitting Pawns or other dynamic actors which can make buildings spawn mid-air.
-        FCollisionObjectQueryParams ObjectParams;
-        ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
-        bool bHit = GetWorld()->LineTraceSingleByObjectType(
-            HitResult,
-            TraceStart,
-            TraceEnd,
-            ObjectParams,
-            TraceParams
-        );
-
-        if (bHit)
-        {
-            // Wenn wir etwas treffen (z.B. Boden),
-            // setzen wir den Z-Wert so, dass die Unterseite des Meshes
-            // auf der Boden-Kollisionsstelle aufsitzt.
-            // -> ImpactPoint.Z plus "halbe Mesh-Höhe"
-            Location.Z = HitResult.ImpactPoint.Z + HalfHeight;
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("SpawnSingleUnit: Kein Boden getroffen, verwende Standard-Z"));
-        }
-
-        // Aktualisiere EnemyTransform mit dem angepassten Z-Wert
-        EnemyTransform.SetLocation(Location);
-    }
+	FVector FinalLocation = Location;
 	
-	if (TeamId)
+	if (bDoGroundTrace)
 	{
-		UnitBase->TeamId = TeamId;
+		// Wir versuchen, das Mesh zu holen (falls vorhanden),
+		// um dessen Bounds und Höhe zu bestimmen
+		UPrimitiveComponent* SelectedComponent = nullptr;
+		if (UnitBase->bUseSkeletalMovement)
+		{
+			SelectedComponent = UnitBase->GetMesh();
+		}else
+		{
+			SelectedComponent = UnitBase->ISMComponent;
+		}
+		
+		if (SelectedComponent)
+		{
+			// Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
+			FBoxSphereBounds MeshBounds = SelectedComponent->Bounds;
+			
+			// Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
+			FVector TraceStart = Location + BuildingSpawnTrace;
+			FVector TraceEnd   = Location - BuildingSpawnTrace;
+
+			FHitResult HitResult;
+			FCollisionQueryParams TraceParams(FName(TEXT("UnitSpawnTrace")), true, UnitBase);
+			TraceParams.bTraceComplex = true;
+			TraceParams.AddIgnoredActor(UnitBase);
+    	
+			if (ControllerBase)
+				TraceParams.AddIgnoredActor(ControllerBase->GetPawn());
+
+			// Use an object-type trace that only considers WorldStatic geometry (e.g., terrain, static meshes)
+			// to avoid hitting Pawns or other dynamic actors which can make buildings spawn mid-air.
+			FCollisionObjectQueryParams ObjectParams;
+			ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+			bool bHit = GetWorld()->LineTraceSingleByObjectType(
+				HitResult,
+				TraceStart,
+				TraceEnd,
+				ObjectParams,
+				TraceParams
+			);
+
+			if (bHit)
+			{
+				// New robust calculation: NewZ = CurrentZ + (GroundZ - BottomZ)
+				//FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z - (MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z));
+				FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("SpawnSingleUnit: Kein Boden getroffen, verwende Standard-Z"));
+			}
+		}
 	}
+
+	// 5) Always add SpawnParameter.UnitOffset at the end (Requirement #4)
+	FinalLocation += SpawnParameter.UnitOffset;
+	EnemyTransform.SetLocation(FinalLocation);
 	
     // --------------------------------------------
-    // 5) Jetzt wird der Actor final in die Welt gesetzt
+    // 6) Jetzt wird der Actor final in die Welt gesetzt
     // --------------------------------------------
     UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
