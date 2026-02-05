@@ -222,7 +222,7 @@ private:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		AUnitBase* SpawnSingleUnit(FUnitSpawnParameter SpawnParameter, FVector Location,
-								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint, bool bDoGroundTrace = true);
+								AUnitBase* UnitToChase, int TeamId, AWaypoint* Waypoint, bool bDoGroundTrace = true, class AWorkArea* BuildArea = nullptr);
 
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

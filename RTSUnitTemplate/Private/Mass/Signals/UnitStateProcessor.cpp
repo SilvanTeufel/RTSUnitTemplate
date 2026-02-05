@@ -2183,7 +2183,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
 								}
 
-								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr, bDoGroundTrace);
+								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr, bDoGroundTrace, UnitBase->BuildArea);
 
 								// If spawn failed, allow future attempts (keep single-spawn guarantee only on success)
 								if (!NewUnit)
@@ -2268,7 +2268,8 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     AUnitBase* UnitToChase,
     int TeamId,
     AWaypoint* Waypoint,
-	bool bDoGroundTrace)
+	bool bDoGroundTrace,
+	AWorkArea* BuildArea)
 {
     // 1) Transformation with preliminary spawn location and desired rotation
     FTransform EnemyTransform;
@@ -2305,20 +2306,35 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 	{
 		// Wir versuchen, das Mesh zu holen (falls vorhanden),
 		// um dessen Bounds und Höhe zu bestimmen
-		UPrimitiveComponent* SelectedComponent = nullptr;
-		if (UnitBase->bUseSkeletalMovement)
+		FBoxSphereBounds MeshBounds;
+		bool bBoundsFound = false;
+
+		if (BuildArea && IsValid(BuildArea) && BuildArea->Mesh)
 		{
-			SelectedComponent = UnitBase->GetMesh();
-		}else
+			MeshBounds = BuildArea->Mesh->Bounds;
+			bBoundsFound = true;
+		}
+		else
 		{
-			SelectedComponent = UnitBase->ISMComponent;
+			UPrimitiveComponent* SelectedComponent = nullptr;
+			if (UnitBase->bUseSkeletalMovement)
+			{
+				SelectedComponent = UnitBase->GetMesh();
+			}
+			else
+			{
+				SelectedComponent = UnitBase->ISMComponent;
+			}
+
+			if (SelectedComponent)
+			{
+				MeshBounds = SelectedComponent->Bounds;
+				bBoundsFound = true;
+			}
 		}
 		
-		if (SelectedComponent)
+		if (bBoundsFound)
 		{
-			// Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
-			FBoxSphereBounds MeshBounds = SelectedComponent->Bounds;
-			
 			// Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
 			FVector TraceStart = Location + BuildingSpawnTrace;
 			FVector TraceEnd   = Location - BuildingSpawnTrace;
@@ -2347,11 +2363,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 			{
 				// New robust calculation: NewZ = CurrentZ + (GroundZ - BottomZ)
 				//FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z - (MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z));
-				FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("SpawnSingleUnit: Kein Boden getroffen, verwende Standard-Z"));
+				FinalLocation.Z = HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z;
 			}
 		}
 	}

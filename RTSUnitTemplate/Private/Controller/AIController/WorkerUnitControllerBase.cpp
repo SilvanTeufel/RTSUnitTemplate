@@ -645,15 +645,14 @@ void AWorkerUnitControllerBase:: Build(AUnitBase* UnitBase, float DeltaSeconds)
 			//UE_LOG(LogTemp, Warning, TEXT("Spawn Building!"));
 
 			FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
+			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr, UnitBase->BuildArea);
+
 			if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
 			{
 				UnitBase->BuildArea->RemoveAreaFromGroup();
 				UnitBase->BuildArea->Destroy(false, true);
 				UnitBase->BuildArea = nullptr;
 			}
-			
-
-			AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr);
 
 			if (NewUnit && ControllerBase)
 			{
@@ -801,7 +800,8 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
     FVector Location,
     AUnitBase* UnitToChase,
     int TeamId,
-    AWaypoint* Waypoint)
+    AWaypoint* Waypoint,
+    AWorkArea* BuildArea)
 {
     // 1) Transformation mit (vorläufigem) Spawn-Ort
     FTransform EnemyTransform;
@@ -832,11 +832,35 @@ AUnitBase* AWorkerUnitControllerBase::SpawnSingleUnit(
 
     // Wir versuchen, das Mesh zu holen (falls vorhanden),
     // um dessen Bounds und Höhe zu bestimmen
-    USkeletalMeshComponent* MeshComponent = UnitBase->GetMesh();
-    if (MeshComponent)
+    FBoxSphereBounds MeshBounds;
+    bool bBoundsFound = false;
+
+    if (BuildArea && IsValid(BuildArea) && BuildArea->Mesh)
     {
-        // Bounds in Weltkoordinaten (inkl. eventuell eingestellter Scale)
-        FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
+        MeshBounds = BuildArea->Mesh->Bounds;
+        bBoundsFound = true;
+    }
+    else
+    {
+        UPrimitiveComponent* SelectedComponent = nullptr;
+        if (UnitBase->bUseSkeletalMovement)
+        {
+            SelectedComponent = UnitBase->GetMesh();
+        }
+        else
+        {
+            SelectedComponent = UnitBase->ISMComponent;
+        }
+
+        if (SelectedComponent)
+        {
+            MeshBounds = SelectedComponent->Bounds;
+            bBoundsFound = true;
+        }
+    }
+
+    if (bBoundsFound)
+    {
         float HalfHeight = MeshBounds.BoxExtent.Z;
 
         // Wir machen einen sehr simplen Trace von "hoch oben" nach "weit unten"
