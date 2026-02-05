@@ -45,10 +45,6 @@ void UGoToRepairStateProcessor::InitializeInternal(UObject& Owner, const TShared
 {
     Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
-    if (Owner.GetWorld())
-    {
-        UE_LOG(LogTemp, Log, TEXT("[GoToRepairStateProcessor] Initialized (NetMode=%d)"), (int32)Owner.GetWorld()->GetNetMode());
-    }
 }
 
 void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -71,7 +67,7 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         [this, &EntityManager, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        UE_LOG(LogTemp, Verbose, TEXT("[GoToRepairStateProcessor] Processing chunk with %d entities"), NumEntities);
+        
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();

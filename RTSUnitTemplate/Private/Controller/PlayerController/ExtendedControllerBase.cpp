@@ -3190,7 +3190,6 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 {
 
-	UE_LOG(LogTemp, Warning, TEXT("!!!SendWorkerToWork!!!"));
 	if (!Worker)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Worker is null! Cannot proceed."));
@@ -3712,8 +3711,6 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 			return A.GetName() < B.GetName(); // Fallback sorting
 		});
 	}
-	UE_LOG(LogTemp, Warning, TEXT("!!!NewSelection.Num(): %d!!!!"), NewSelection.Num());
-	UE_LOG(LogTemp, Warning, TEXT("!!!TeamId: %d!!!!"), TeamId);
 
 	// Update the controller's selected units on the server immediately
 	// so that subsequent actions in the same frame/sequence (like Ability execution) can see it.

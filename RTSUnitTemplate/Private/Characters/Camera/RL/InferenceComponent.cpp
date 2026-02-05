@@ -166,12 +166,7 @@ void UInferenceComponent::ExecuteActionFromJSON(const FString& Json)
     auto ProcessObject = [RLAgent](const TSharedPtr<FJsonObject>& Obj)
     {
         if (!Obj.IsValid()) return;
-
-        // Log a compact summary for diagnostics
-        const FString Type = Obj->HasField(TEXT("type")) ? Obj->GetStringField(TEXT("type")) : TEXT("?");
-        const FString Action = Obj->HasField(TEXT("action")) ? Obj->GetStringField(TEXT("action")) : TEXT("?");
-        UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Forwarding Parsed Action to RLAgent -> type=%s action=%s"), *Type, *Action);
-
+        
         // Serialize this object back to a compact JSON string
         FString OutJson;
         TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);

@@ -2127,7 +2127,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
     			//    - We are on the Game Thread.
     			//    - We have validated Worker and Worker->ResourcePlace pointers.
     			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-    			FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+    			//FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
     			if (ActorFragPtr)
     			{
     				AActor* Actor = ActorFragPtr->GetMutable(); 
@@ -2167,12 +2167,6 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								SpawnParameter.Material = nullptr;
 
 								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation() + FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
-								/*if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild)
-								{
-									UnitBase->BuildArea->RemoveAreaFromGroup();
-									UnitBase->BuildArea->Destroy(false, true);
-									UnitBase->BuildArea = nullptr;
-								}*/
 
     							if(!ControllerBase)
     							{
