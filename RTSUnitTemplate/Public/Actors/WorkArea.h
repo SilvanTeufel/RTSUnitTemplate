@@ -15,6 +15,7 @@
 
 class AUnitBase;
 class AWorkingUnitBase;
+class UMaterialInstanceDynamic;
 
 UCLASS()
 class RTSUNITTEMPLATE_API AWorkArea : public AActor
@@ -121,10 +122,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Building;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildTime = 5.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float CurrentBuildTime = 0.0f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -203,7 +204,33 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TemporarilyChangeMaterial();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName MaterializeParameterName = FName(TEXT("Materialize Amount"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName OffsetParameterName = FName(TEXT("Materialize Amount"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	float OffsetParameterValue = 0.f;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	float MaterializePower = 3.0f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MIDEnabled)
+	bool bMIDEnabled = false;
+
+	UFUNCTION()
+	void OnRep_MIDEnabled();
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* WorkAreaMID;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EnableMID();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UMaterialInterface* BuildMaterial;
 public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddWorkerToArray(class AWorkingUnitBase* Worker);
@@ -221,6 +248,8 @@ protected:
     
 	/** Called by a timer to revert the material back to its original state. */
 	void RevertMaterial();
+
+	void SetupMID();
 
 	// Internal: timer callback to process overflow workers and shrink the array to MaxWorkerCount
 	void OnOverflowTimer();

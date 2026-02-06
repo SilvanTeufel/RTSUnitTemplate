@@ -8,6 +8,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Characters\Unit\WorkingUnitBase.h"
 
 
@@ -188,6 +189,12 @@ void AWorkArea::Tick(float DeltaTime)
 		}
 		ControlTimer = 0.f;
 	}
+
+	if (bMIDEnabled && WorkAreaMID)
+	{
+		float Value = (BuildTime > 0.f) ? FMath::Pow(FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f), MaterializePower) : 0.0f;
+		WorkAreaMID->SetScalarParameterValue(MaterializeParameterName, Value);
+	}
 	
 }
 
@@ -202,6 +209,9 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, ConstructionUnit);
 	DOREPLIFETIME(AWorkArea, IsExtensionArea);
 	DOREPLIFETIME(AWorkArea, Workers);
+	DOREPLIFETIME(AWorkArea, bMIDEnabled);
+	DOREPLIFETIME(AWorkArea, BuildTime);
+	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
 }
 
 void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -532,6 +542,41 @@ void AWorkArea::RevertMaterial()
 
     // It's good practice to clear the handle after the timer has finished its job.
     GetWorld()->GetTimerManager().ClearTimer(ChangeMaterialTimerHandle);
+}
+
+void AWorkArea::EnableMID()
+{
+	if (!bMIDEnabled)
+	{
+		bMIDEnabled = true;
+		SetupMID();
+	}
+}
+
+void AWorkArea::OnRep_MIDEnabled()
+{
+	SetupMID();
+}
+
+void AWorkArea::SetupMID()
+{
+	if (Mesh && !WorkAreaMID)
+	{
+		UMaterialInterface* SourceMaterial = BuildMaterial ? BuildMaterial : Mesh->GetMaterial(0);
+		if (SourceMaterial)
+		{
+			WorkAreaMID = Mesh->CreateDynamicMaterialInstance(0, SourceMaterial);
+			WorkAreaMID->SetScalarParameterValue(OffsetParameterName, OffsetParameterValue);
+			if (!GetWorld()->GetTimerManager().IsTimerActive(ChangeMaterialTimerHandle))
+			{
+				Mesh->SetMaterial(0, WorkAreaMID);
+			}
+			else
+			{
+				OriginalMaterial = WorkAreaMID;
+			}
+		}
+	}
 }
 
 void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
