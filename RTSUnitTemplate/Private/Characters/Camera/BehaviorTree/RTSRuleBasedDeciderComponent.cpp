@@ -13,6 +13,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameStates/ResourceGameState.h"
 #include "EngineUtils.h"
+#include "NavigationSystem.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
+#include "Characters/Camera/BehaviorTree/RTSBTController.h"
 
 URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 {
@@ -191,6 +195,17 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	{
 		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' is disabled."), *RowLabel);
 		return TEXT("{}");
+	}
+
+	// Game time check
+	if (UWorld* World = GetWorld())
+	{
+		float CurrentTime = World->GetTimeSeconds();
+		if (CurrentTime < Row.GameTimeCap.Min || CurrentTime > Row.GameTimeCap.Max)
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed GameTime check: %.2f not in [%.2f, %.2f]"), *RowLabel, CurrentTime, Row.GameTimeCap.Min, Row.GameTimeCap.Max);
+			return TEXT("{}");
+		}
 	}
 
 	AResourceGameState* RGState = GetWorld() ? GetWorld()->GetGameState<AResourceGameState>() : nullptr;
@@ -473,7 +488,27 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 				OutZ = GroundZ + CapsuleHalfHeight;
 			}
 		}
-		return FVector(TargetXYOnly.X, TargetXYOnly.Y, OutZ);
+		
+		FVector AdjustedLoc = FVector(TargetXYOnly.X, TargetXYOnly.Y, OutZ);
+		
+		// NavMesh correction as requested: land on the NavMesh
+		UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+		if (NavSys)
+		{
+			FNavLocation NavLoc;
+			// 1. Try with the provided extent
+			if (NavSys->ProjectPointToNavigation(AdjustedLoc, NavLoc, NavMeshProjectionExtent))
+			{
+				AdjustedLoc = NavLoc.Location;
+			}
+			// 2. Wide projection fallback if the provided extent fails (mirroring CustomControllerBase logic)
+			else if (NavSys->ProjectPointToNavigation(AdjustedLoc, NavLoc, FVector(1500.f, 1500.f, 1500.f)))
+			{
+				AdjustedLoc = NavLoc.Location;
+			}
+		}
+		
+		return AdjustedLoc;
 	};
 	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
 	RLAgent->SetActorLocation(AdjustedAttackLoc);
@@ -612,6 +647,17 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 			continue;
 		}
 
+		// Game time check
+		if (UWorld* World = GetWorld())
+		{
+			float CurrentTime = World->GetTimeSeconds();
+			if (CurrentTime < Row->GameTimeCap.Min || CurrentTime > Row->GameTimeCap.Max)
+			{
+				if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' failed GameTime check: %.2f not in [%.2f, %.2f]"), *Name.ToString(), CurrentTime, Row->GameTimeCap.Min, Row->GameTimeCap.Max);
+				continue;
+			}
+		}
+
 		// Check if the rule is executable (has valid selections)
 		// Note: We need a lightweight way to check this without executing.
 		// For now, let's see if we can refactor ExecuteAttackRuleRow to separate check and execute, 
@@ -740,12 +786,38 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		FoundLocationsMap.Add(Cls, TArray<FVector>());
 	}
 
+	int32 MyTeamId = -1;
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (OwnerPawn)
+	{
+		if (ARTSBTController* BTC = Cast<ARTSBTController>(OwnerPawn->GetController()))
+		{
+			MyTeamId = BTC->OrchestratorTeamId;
+		}
+		else if (AControllerBase* CB = Cast<AControllerBase>(OwnerPawn->GetController()))
+		{
+			MyTeamId = CB->SelectableTeamId;
+		}
+	}
+
 	if (UniqueClasses.Num() > 0)
 	{
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
 			if (!Actor) continue;
+
+			// Team filtering: skip units on our own team
+			if (MyTeamId != -1)
+			{
+				if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
+				{
+					if (Unit->TeamId == MyTeamId)
+					{
+						continue;
+					}
+				}
+			}
 
 			UClass* ActorClass = Actor->GetClass();
 			// We check if the actor matches any of our target classes or their subclasses
@@ -763,9 +835,13 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 	AttackPositions.SetNum(RowNames.Num());
 	bool bAnyRowHasClasses = false;
 
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+
 	for (int32 i = 0; i < RowNames.Num(); ++i)
 	{
 		const FRTSAttackRuleRow* Row = Rows[i];
+		FVector ChosenPos = FVector::ZeroVector;
+
 		if (Row && Row->AttackPositionSourceClasses.Num() > 0)
 		{
 			bAnyRowHasClasses = true;
@@ -783,19 +859,54 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 			if (PossibleLocations.Num() > 0)
 			{
 				const int32 RandIdx = FMath::RandRange(0, PossibleLocations.Num() - 1);
-				AttackPositions[i] = PossibleLocations[RandIdx];
+				ChosenPos = PossibleLocations[RandIdx];
 			}
 			else
 			{
 				// Fallback to row position if no actors found
-				AttackPositions[i] = Row->AttackPosition;
+				ChosenPos = Row->AttackPosition;
 			}
 		}
 		else if (Row)
 		{
 			// No classes specified for this row, use its default position
-			AttackPositions[i] = Row->AttackPosition;
+			ChosenPos = Row->AttackPosition;
 		}
+
+		// Apply LineTrace to ground and NavMesh correction for the chosen position
+		FVector FinalPos = ChosenPos;
+		
+		// 1. LineTrace to ground
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(PopulateAttackPosGroundTrace), false);
+		if (OwnerPawn) Params.AddIgnoredActor(OwnerPawn);
+
+		// Trace from high up to find ground
+		const FVector TraceStart(ChosenPos.X, ChosenPos.Y, ChosenPos.Z + 10000.f);
+		const FVector TraceEnd(ChosenPos.X, ChosenPos.Y, ChosenPos.Z - 10000.f);
+		
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
+		{
+			FinalPos.Z = Hit.ImpactPoint.Z;
+		}
+
+		// 2. NavMesh correction
+		if (NavSys)
+		{
+			FNavLocation NavLoc;
+			// 1. Try with the provided extent
+			if (NavSys->ProjectPointToNavigation(FinalPos, NavLoc, NavMeshProjectionExtent))
+			{
+				FinalPos = NavLoc.Location;
+			}
+			// 2. Wide projection fallback if the provided extent fails (mirroring CustomControllerBase logic)
+			else if (NavSys->ProjectPointToNavigation(FinalPos, NavLoc, FVector(1500.f, 1500.f, 1500.f)))
+			{
+				FinalPos = NavLoc.Location;
+			}
+		}
+
+		AttackPositions[i] = FinalPos;
 	}
 
 	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Refreshed AttackPositions for %d rows. Unique target classes searched: %d"), RowNames.Num(), UniqueClasses.Num());

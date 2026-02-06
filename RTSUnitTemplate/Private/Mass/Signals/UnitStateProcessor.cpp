@@ -1593,8 +1593,10 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // Checking range inside the Async task is risky and inefficient. Do it now.
                 const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
+                FMassCombatStatsFragment* TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
+                const FMassCombatStatsFragment* AttackerStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
 
-                if (!TargetTransformFrag || !TargetCharFrag) continue;
+                if (!TargetTransformFrag || !TargetCharFrag || !TargetStatsFrag || !AttackerStats) continue;
 
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
                 float RangeWithCapsule = AttackerRange + CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
@@ -1610,6 +1612,38 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     AttackerStateFrag->SwitchingState = false;
                     continue;
                 }
+
+                // --- DAMAGE CALCULATION ---
+                bool bIsMagicDamage = AttackerUnitBase->IsDoingMagicDamage;
+                float BaseDamage = AttackerStats->AttackDamage;
+                float Defense = bIsMagicDamage ? TargetStatsFrag->MagicResistance : TargetStatsFrag->Armor;
+                float DamageAfterDefense = FMath::Max(0.0f, BaseDamage - Defense);
+
+                // Z-Position Check
+                if (AttackerLoc.Z < TargetLoc.Z - RangedZPositionThreshold)
+                {
+                    DamageAfterDefense *= RangedZPositionDamageMultiplier;
+                }
+
+                float DamageToApply = DamageAfterDefense;
+                float ShieldDamage = 0.0f;
+                float HealthDamage = 0.0f;
+
+                // Calculate Shield/Health splits
+                if (TargetStatsFrag->Shield > 0)
+                {
+                    ShieldDamage = FMath::Min(TargetStatsFrag->Shield, DamageToApply);
+                    TargetStatsFrag->Shield -= ShieldDamage;
+                    DamageToApply -= ShieldDamage;
+                }
+                if (DamageToApply > 0)
+                {
+                    HealthDamage = FMath::Min(TargetStatsFrag->Health, DamageToApply);
+                    TargetStatsFrag->Health -= HealthDamage;
+                }
+
+                // Clamp Health
+                TargetStatsFrag->Health = FMath::Max(0.0f, TargetStatsFrag->Health);
 
                 // 4. CAPTURE DATA FOR ASYNC
                 // We know we are in range and valid. Capture what we need for the Visuals/Gameplay.
@@ -1634,7 +1668,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // 6. DISPATCH VISUAL/GAMEPLAY TASK
                 AsyncTask(ENamedThreads::GameThread, [this, Entity, TargetEntity, WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
-                    AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable
+                    AttackAbilities, ThrowAbilities, OffensiveAbilities, HealthDamage, ShieldDamage]() mutable
                 {
                     if (!EntitySubsystem) return; // Safety Check
 
@@ -1643,6 +1677,25 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     
                     if (StrongAttacker && StrongTarget)
                     {
+                        // Update Actor specific attributes (Syncing Mass data to Actor)
+                        if (ShieldDamage > 0)
+                        {
+                            StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
+                        }
+                        if (HealthDamage > 0)
+                        {
+                            StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
+                        }
+
+                        // UI Update
+                        if(StrongTarget->HealthWidgetComp)
+                        {
+                            if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(StrongTarget->HealthWidgetComp->GetUserWidgetObject()))
+                            {
+                                HealthBarWidget->UpdateWidget();
+                            }
+                        }
+
                         // --- Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
                         

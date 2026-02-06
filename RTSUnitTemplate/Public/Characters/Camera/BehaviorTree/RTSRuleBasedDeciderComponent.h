@@ -32,6 +32,18 @@ struct FRTSUnitCountCap
 };
 
 USTRUCT(BlueprintType)
+struct FRTSGameTimeCap
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	float Min = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule")
+	float Max = 9000.f;
+};
+
+USTRUCT(BlueprintType)
 struct FRTSRuleRow : public FTableRowBase
 {
 	GENERATED_BODY()
@@ -61,6 +73,10 @@ struct FRTSRuleRow : public FTableRowBase
 	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
+
+	// Game time constraints (in seconds). Only execute if Min <= GameTime <= Max.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	FRTSGameTimeCap GameTimeCap;
 	
 	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
@@ -100,6 +116,10 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	// Per-tag caps for friendly unit counts. If a tag is not in this array, it's not checked (Min=0, Max=999).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	TArray<FRTSUnitCountCap> UnitCaps;
+
+	// Game time constraints (in seconds). Only execute if Min <= GameTime <= Max.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	FRTSGameTimeCap GameTimeCap;
 
 	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
@@ -173,6 +193,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	float AttackPositionRefreshInterval = 10.0f;
 
+	/** The extent used when projecting a point to the NavMesh to validate attack/move commands. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Rules|AttackTable")
+	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
 
 	// ---------------- Wander (small movement) fallback ----------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")

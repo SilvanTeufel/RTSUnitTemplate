@@ -36,6 +36,12 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	FVector BuildingSpawnTrace = FVector(0.f, 0.f, 2500.f);
+
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	float RangedZPositionThreshold = 300.f;
+
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	float RangedZPositionDamageMultiplier = 0.75f;
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler
