@@ -23,6 +23,13 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, WorkArea);
 }
 
+void AConstructionUnit::BeginPlay()
+{
+	Super::BeginPlay();
+	OpenHealthWidget = true;
+	bShowLevelOnly = false;
+}
+
 void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
 {
 	Super::SetCharacterVisibility(desiredVisibility);

@@ -2,6 +2,7 @@
 
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
 #include "Actors/Waypoint.h"
 #include "GAS/AttributeSetBase.h"
 #include "AbilitySystemComponent.h"
@@ -596,7 +597,8 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
                 {
                     // Führe hier die Logik aus, die den GameThread benötigt
                     ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-                    if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)) // Verwende StrongThis->Member
+                    const bool bIsConstruction = StrongThis->IsA(AConstructionUnit::StaticClass());
+                    if((OldHealth != NewHealth && NewHealth >= 0.f) && (bIsConstruction || (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount))) // Verwende StrongThis->Member
                     {
                        StrongThis->OpenHealthWidget = true;
                        StrongThis->bShowLevelOnly = false;
@@ -620,7 +622,8 @@ void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
         if (World && IsValid(this)) // Sicherheitschecks beibehalten
         {
         	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-        	if((OldHealth != NewHealth && NewHealth >= 0.f) && (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount))
+        	const bool bIsConstruction = IsA(AConstructionUnit::StaticClass());
+        	if((OldHealth != NewHealth && NewHealth >= 0.f) && (bIsConstruction || (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount)))
         	{
                 OpenHealthWidget = true;
                 bShowLevelOnly = false;
@@ -1272,11 +1275,11 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     }
 
     // Ground/Flying detection restrictions:
-    if (CanOnlyAttackGround && DetectedUnit->IsFlying)
+    if (CanOnlyAttackGround && DetectedUnit && DetectedUnit->IsFlying)
     {
         return;
     }
-    if (CanOnlyAttackFlying && !DetectedUnit->IsFlying)
+    if (CanOnlyAttackFlying && DetectedUnit && !DetectedUnit->IsFlying)
     {
         return;
     }

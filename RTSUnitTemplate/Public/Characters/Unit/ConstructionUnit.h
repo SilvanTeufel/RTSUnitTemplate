@@ -16,6 +16,7 @@ class RTSUNITTEMPLATE_API AConstructionUnit : public AUnitBase
 public:
 	AConstructionUnit(const FObjectInitializer& ObjectInitializer);
 
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetCharacterVisibility(bool desiredVisibility) override;

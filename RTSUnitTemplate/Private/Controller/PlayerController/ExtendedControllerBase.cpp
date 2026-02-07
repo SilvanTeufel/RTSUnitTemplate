@@ -3087,6 +3087,16 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 		{
 			NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
 			NewConstruction->InitializeAttributes();
+			
+			// Start construction with minimal health/shield so it progresses over time
+			if (NewConstruction->Attributes)
+			{
+				NewConstruction->SetHealth(1.f);
+				NewConstruction->SetShield(1.f);
+				NewConstruction->OpenHealthWidget = true;
+				NewConstruction->bShowLevelOnly = false;
+				NewConstruction->UpdateWidget();
+			}
 		}
 		NewConstruction->SetMeshRotationServer();
 		// Fit/ground-align and visuals same as before

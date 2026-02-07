@@ -3317,6 +3317,11 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 	{
 		return true; // handled (skip worker path)
 	}
+
+	// Ensure visibility while construction is active
+	Construction->OpenHealthWidget = true;
+	Construction->bShowLevelOnly = false;
+
 	// Keep timers in sync with WA
 	if (WA->CurrentBuildTime > Construction->UnitControlTimer)
 	{
@@ -3328,37 +3333,43 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 		WA->CurrentBuildTime = Construction->UnitControlTimer;
 	}
 	// If CU died, hide and lock out respawn
-	if (WA->ConstructionUnit && WA->ConstructionUnit->Attributes)
+	if (Construction->Attributes)
 	{
-		if (WA->ConstructionUnit->Attributes->GetHealth() <= 0.f)
+		if (Construction->Attributes->GetHealth() <= 0.f)
 		{
-			WA->ConstructionUnit->SetHidden(true);
+			Construction->SetHidden(true);
 			WA->bConstructionUnitSpawned = true;
 			return true; // handled
 		}
 	}
 	// Health/shield growth based on progress
 	const float Progress = FMath::Clamp(Construction->UnitControlTimer / FMath::Max(0.001f, WA->BuildTime), 0.f, 1.f);
-	if (WA->ConstructionUnit && WA->ConstructionUnit->Attributes)
+	if (Construction->Attributes)
 	{
-		const float MaxHP = WA->ConstructionUnit->Attributes->GetMaxHealth();
-		const float MaxShield = WA->ConstructionUnit->Attributes->GetMaxShield();
+		const float MaxHP = Construction->Attributes->GetMaxHealth();
+		const float MaxShield = Construction->Attributes->GetMaxShield();
 		float PreviousProgress = WA->LastAppliedBuildProgress;
-		const float CurrentHealth = WA->ConstructionUnit->Attributes->GetHealth();
-		const float CurrentShield = WA->ConstructionUnit->Attributes->GetShield();
+		const float CurrentHealth = Construction->Attributes->GetHealth();
+		const float CurrentShield = Construction->Attributes->GetShield();
+		
+		// If LastAppliedBuildProgress is still 0 but health is already significant,
+		// initialize it from health to prevent a progress "jump" on the first sync.
 		if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
 		{
 			PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
+			WA->LastAppliedBuildProgress = PreviousProgress;
 		}
+		
 		const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
 		if (StepProgress > 0.f)
 		{
 			const float StepHealth = MaxHP * StepProgress;
 			const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
-			WA->ConstructionUnit->SetHealth(NewHealth);
+			Construction->SetHealth(NewHealth);
 			const float StepShield = MaxShield * StepProgress;
 			const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
-			WA->ConstructionUnit->SetShield(NewShield);
+			Construction->SetShield(NewShield);
+			Construction->UpdateWidget();
 			WA->LastAppliedBuildProgress = Progress;
 		}
 	}
@@ -3553,6 +3564,9 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					const float MaxShield = NewConstruction->Attributes->GetMaxShield();
 					NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
 					NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+					NewConstruction->OpenHealthWidget = true;
+					NewConstruction->bShowLevelOnly = false;
+					NewConstruction->UpdateWidget();
 					UnitBase->BuildArea->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f);
 				}
 			}
@@ -3584,6 +3598,9 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				const float StepShield = MaxShield * StepProgress;
 				const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
 				UnitBase->BuildArea->ConstructionUnit->SetShield(NewShield);
+				UnitBase->BuildArea->ConstructionUnit->OpenHealthWidget = true;
+				UnitBase->BuildArea->ConstructionUnit->bShowLevelOnly = false;
+				UnitBase->BuildArea->ConstructionUnit->UpdateWidget();
 				UnitBase->BuildArea->LastAppliedBuildProgress = Progress;
 			}
 		}
