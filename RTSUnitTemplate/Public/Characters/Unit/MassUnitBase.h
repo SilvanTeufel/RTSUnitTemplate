@@ -241,6 +241,10 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastRotateActorLinear(UStaticMeshComponent* MeshToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
 
+	// Rotate an arbitrary niagara component smoothly over time (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastRotateNiagaraLinear(UNiagaraComponent* NiagaraToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
+
 	// Move the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent);
@@ -375,6 +379,13 @@ protected:
 	
 	// Active tweens indexed by component; allows rotating multiple static meshes in parallel
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshRotateTween> ActiveStaticMeshTweens;
+
+	// Timer step for rotating arbitrary niagara components
+	void NiagaraRotations_Step();
+	FTimerHandle NiagaraRotateTimerHandle;
+
+	// Active tweens indexed by component; allows rotating multiple niagara components in parallel
+	TMap<TWeakObjectPtr<UNiagaraComponent>, FStaticMeshRotateTween> ActiveNiagaraTweens;
 
 	// Continuous yaw-follow state per static mesh
 	struct FYawFollowData

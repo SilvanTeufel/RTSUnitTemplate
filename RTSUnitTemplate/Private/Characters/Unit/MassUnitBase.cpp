@@ -1578,7 +1578,7 @@ void AMassUnitBase::MulticastRotateActorLinear_Implementation(UStaticMeshCompone
 	}
 
 	// Setup or update tween for this component
- AMassUnitBase::FStaticMeshRotateTween& Tween = ActiveStaticMeshTweens.FindOrAdd(MeshToRotate);
+	AMassUnitBase::FStaticMeshRotateTween& Tween = ActiveStaticMeshTweens.FindOrAdd(MeshToRotate);
 	Tween.Duration = InRotateDuration;
 	Tween.Elapsed = 0.f;
 	Tween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
@@ -1600,6 +1600,98 @@ void AMassUnitBase::MulticastRotateActorLinear_Implementation(UStaticMeshCompone
 	if (!GetWorldTimerManager().IsTimerActive(StaticMeshRotateTimerHandle))
 	{
 		GetWorldTimerManager().SetTimer(StaticMeshRotateTimerHandle, this, &AMassUnitBase::StaticMeshRotations_Step, TimerRate, true);
+	}
+}
+
+void AMassUnitBase::MulticastRotateNiagaraLinear_Implementation(UNiagaraComponent* NiagaraToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent)
+{
+	if (!NiagaraToRotate)
+	{
+		return;
+	}
+
+	// Instant snap if duration <= 0
+	if (InRotateDuration <= 0.f)
+	{
+		NiagaraToRotate->SetRelativeRotation(NewRotation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	// Setup or update tween for this component
+	AMassUnitBase::FStaticMeshRotateTween& Tween = ActiveNiagaraTweens.FindOrAdd(NiagaraToRotate);
+	Tween.Duration = InRotateDuration;
+	Tween.Elapsed = 0.f;
+	Tween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+	Tween.Start = NiagaraToRotate->GetRelativeRotation().Quaternion().GetNormalized();
+	Tween.Target = NewRotation.Quaternion().GetNormalized();
+	// Enforce shortest-arc interpolation: if start and target are on opposite hemispheres, flip target
+	if ((Tween.Start | Tween.Target) < 0.f)
+	{
+		Tween.Target = (-Tween.Target);
+	}
+
+	// Ensure timer is running with a safe non-zero rate
+	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+
+	// Kick an immediate step for responsiveness
+	NiagaraRotations_Step();
+
+	if (!GetWorldTimerManager().IsTimerActive(NiagaraRotateTimerHandle))
+	{
+		GetWorldTimerManager().SetTimer(NiagaraRotateTimerHandle, this, &AMassUnitBase::NiagaraRotations_Step, TimerRate, true);
+	}
+}
+
+void AMassUnitBase::NiagaraRotations_Step()
+{
+	if (ActiveNiagaraTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(NiagaraRotateTimerHandle);
+		return;
+	}
+
+	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	TArray<TWeakObjectPtr<UNiagaraComponent>> ToRemove;
+	for (auto& Pair : ActiveNiagaraTweens)
+	{
+		TWeakObjectPtr<UNiagaraComponent> WeakComp = Pair.Key;
+		FStaticMeshRotateTween& Tween = Pair.Value;
+
+		UNiagaraComponent* Comp = WeakComp.Get();
+		if (!Comp)
+		{
+			ToRemove.Add(WeakComp);
+			continue;
+		}
+
+		Tween.Elapsed += Dt;
+		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
+		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
+		{
+			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
+		}
+
+		const FQuat NewLocal = FQuat::Slerp(Tween.Start, Tween.Target, Alpha).GetNormalized();
+		Comp->SetRelativeRotation(NewLocal.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+
+		if (Alpha >= 1.f)
+		{
+			// Snap to exact final target orientation to avoid drift
+			Comp->SetRelativeRotation(Tween.Target.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+			ToRemove.Add(WeakComp);
+		}
+	}
+
+	for (const auto& Key : ToRemove)
+	{
+		ActiveNiagaraTweens.Remove(Key);
+	}
+
+	if (ActiveNiagaraTweens.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(NiagaraRotateTimerHandle);
 	}
 }
 
@@ -2522,6 +2614,7 @@ void AMassUnitBase::StaticMeshScales_Step()
 	if (ActiveStaticMeshScaleTweens.Num() == 0)
 	{
 		GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
+		GetWorldTimerManager().ClearTimer(NiagaraRotateTimerHandle);
 	}
 }
 

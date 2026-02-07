@@ -130,6 +130,9 @@ void AWorkingUnitBase::ServerSpawnWorkArea_Implementation(TSubclassOf<AWorkArea>
 			}
 			SpawnedWorkArea->TeamId = TeamId;
 			CurrentDraggedWorkArea = SpawnedWorkArea;
+
+			SpawnedWorkArea->ForceNetUpdate();
+			ClientReceiveWorkArea(SpawnedWorkArea);
 		}
 	}
 }
@@ -290,6 +293,9 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 			CurrentDraggedWorkArea = SpawnedWorkArea;
 			//CurrentDraggedWorkArea->SetReplicateMovement(true);
 
+			SpawnedWorkArea->ForceNetUpdate();
+			ClientReceiveWorkArea(SpawnedWorkArea);
+
 			// Store optional construction site class
 			if (CurrentDraggedWorkArea && ConstructionUnitClass)
 			{
@@ -317,6 +323,14 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 
 void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientArea)
 {
+	if (!ClientArea)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ClientReceiveWorkArea: ClientArea is NULL!"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ClientReceiveWorkArea: Successfully received replicated WorkArea: %s"), *ClientArea->GetName());
+	
 	if (!OwningPlayerController)
 	{
 		UE_LOG(LogTemp, Error, TEXT("No OwningPlayerController"));
