@@ -197,28 +197,6 @@ void AConstructionUnit::Server_KillConstructionUnit_Implementation()
 	SetHidden(true);
 }
 
-
-void AConstructionUnit::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent)
-{
-	if (!NiagaraToRotate || !WorkArea || !WorkArea->Origin)
-	{
-		return;
-	}
-
-	const FVector OriginLocation = WorkArea->Origin->GetActorLocation();
-	const FVector NiagaraLocation = NiagaraToRotate->GetComponentLocation();
-	const FVector Direction = OriginLocation - NiagaraLocation;
-
-	// Calculate rotation to face the origin
-	const FRotator FaceOriginRotation = Direction.Rotation();
-
-	// Apply offset
-	const FRotator TargetRotation = FaceOriginRotation + RotationOffset;
-
-	// Call the base class function to handle the smooth rotation
-	MulticastRotateNiagaraLinear(NiagaraToRotate, TargetRotation, InRotateDuration, InRotationEaseExponent);
-}
-
 // --- Pulsating scale (multiplicative on top of base scale) ---
 void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinMultiplier, const FVector& MaxMultiplier, float TimeMinToMax, bool bEnable)
 {

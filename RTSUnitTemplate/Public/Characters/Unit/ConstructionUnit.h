@@ -81,11 +81,7 @@ public:
  // Continuously pulsate actor/component scale around captured base (multicast to clients)
  UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = "Construction|Pulsate")
  void MulticastPulsateScale(const FVector& MinMultiplier, const FVector& MaxMultiplier, float TimeMinToMax, bool bEnable);
-
- // Rotate a Niagara component to face the Origin (AWorkingUnitBase) of the WorkArea, with an optional rotation offset.
- UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Construction)
- void MulticastRotateNiagaraToOrigin(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent);
-
+	
  // Query if the pulsating scale is currently active on this client
  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Construction|Pulsate")
  bool IsPulsatingScaleActive() const { return bPulsateActive; }

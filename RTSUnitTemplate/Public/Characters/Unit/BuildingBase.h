@@ -23,7 +23,12 @@ class RTSUNITTEMPLATE_API ABuildingBase : public AUnitBase
 public:
 
 	// Constructor declaration
-	ABuildingBase(const FObjectInitializer& ObjectInitializer);;
+	ABuildingBase(const FObjectInitializer& ObjectInitializer);
+	
+	// Rotate a Niagara component to face the Origin (AWorkingUnitBase) of the WorkArea, with an optional rotation offset.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Construction)
+	void MulticastRotateNiagaraToOrigin(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent);
+
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HasWaypoint = true;

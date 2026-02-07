@@ -6,6 +6,7 @@
 #include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Components/CapsuleComponent.h"
+#include "Math/RotationMatrix.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "EngineUtils.h"
 
@@ -91,6 +92,27 @@ void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 		HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 	}
 
+}
+
+void ABuildingBase::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent)
+{
+	if (!NiagaraToRotate || !Origin)
+	{
+		return;
+	}
+
+	const FVector OriginLocation = Origin->GetActorLocation();
+	const FVector NiagaraLocation = NiagaraToRotate->GetComponentLocation();
+	const FVector Direction = OriginLocation - NiagaraLocation;
+
+	// Calculate rotation to face the origin (aligning Z axis)
+	const FRotator FaceOriginRotation = FRotationMatrix::MakeFromZ(Direction).Rotator();
+
+	// Apply offset
+	const FRotator TargetRotation = FaceOriginRotation + RotationOffset;
+
+	// Call the base class function to handle the smooth rotation
+	MulticastRotateNiagaraLinear(NiagaraToRotate, TargetRotation, InRotateDuration, InRotationEaseExponent);
 }
 
 void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)

@@ -257,7 +257,7 @@ float ARTSGameModeBase::GetResource(int32 TeamId, EResourceType ResourceType) co
 
 void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 {
-	if (DestroyedUnit && bInitialSpawnFinished)
+	if (DestroyedUnit && bInitialSpawnFinished && !DestroyedUnit->DeadEffectsExecuted)
 	{
 		for (auto TagIt = DestroyedUnit->UnitTags.CreateConstIterator(); TagIt; ++TagIt)
 		{
