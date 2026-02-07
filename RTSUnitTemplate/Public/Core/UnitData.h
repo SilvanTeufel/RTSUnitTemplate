@@ -162,10 +162,10 @@ struct FAbilityCostData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class UGameplayAbilityBase> AbilityClass;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost CurrentCost;
 };
 
@@ -174,22 +174,22 @@ struct FSpeechData_Texts : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int Id;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate, meta = (MultiLine=true))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MultiLine=true))
 	FText Text;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* SpeechSound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BlendPoint_1 = 0;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BlendPoint_2 = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Time = 5.f;
 	
 };
