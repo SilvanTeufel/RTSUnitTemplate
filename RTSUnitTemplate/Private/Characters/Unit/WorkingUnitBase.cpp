@@ -48,6 +48,14 @@ void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(AWorkingUnitBase, BuildArea);
 }
 
+void AWorkingUnitBase::OnRep_CurrentDraggedWorkArea()
+{
+	if (CurrentDraggedWorkArea)
+	{
+		ShowWorkAreaIfNoFog_Implementation(CurrentDraggedWorkArea);
+	}
+}
+
 
 void AWorkingUnitBase::SpawnWorkArea_Implementation(TSubclassOf<AWorkArea> WorkAreaClass, AWaypoint* Waypoint)
 {

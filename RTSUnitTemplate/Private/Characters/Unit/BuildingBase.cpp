@@ -388,30 +388,6 @@ void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit*
 {
 	if (!CanMove && bVisible == false) return;
 	Super::MulticastSetEnemyVisibility_Implementation(DetectingActor, bVisible);
-
-	/*
-	if (!CanMove && bVisible == false) return;
-	if (IsMyTeam) return;
-	if (IsVisibleEnemy == bVisible) return;
-	
-	UWorld* World = GetWorld();
-	if (!World) return;  // Safety check
-
-	if (!OwningPlayerController)
-	{
-		APlayerController* PlayerController = World->GetFirstPlayerController();
-		if (PlayerController) OwningPlayerController = PlayerController;
-	}
-
-	if (OwningPlayerController)
-		if (ACustomControllerBase* MyController = Cast<ACustomControllerBase>(OwningPlayerController))
-		{
-			if (MyController->IsValidLowLevel() && MyController->SelectableTeamId == DetectingActor->TeamId)
-			{
-				IsVisibleEnemy = bVisible;
-			}
-		}
-	*/
 }
 
 bool ABuildingBase::IsInBeaconRange() const

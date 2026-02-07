@@ -70,6 +70,7 @@ namespace UnitSignals
 	const FName UnitExitSight(TEXT("UnitExitSight"));
 	const FName UpdateFogMask(TEXT("UpdateFogMask"));
 	const FName UpdateSelectionCircle(TEXT("UpdateSelectionCircle"));
+	const FName UpdateVisibility(TEXT("UpdateVisibility"));
 
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 

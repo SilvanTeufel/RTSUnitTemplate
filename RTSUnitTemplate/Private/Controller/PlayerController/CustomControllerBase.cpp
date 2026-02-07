@@ -42,6 +42,11 @@
 #include "Blueprint/UserWidget.h"
 
 
+void ACustomControllerBase::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
 {
 	if (!IsLocalController()) return;
@@ -56,16 +61,6 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
 		{
 			NewSelection.Add(Unit);
-		}
-	}
-
-	// And we can create the FogManager
-	for (int32 i = 0; i < NewSelection.Num(); i++)
-	{
-		if (NewSelection[i] && NewSelection[i]->TeamId == SelectableTeamId)
-		{
-			NewSelection[i]->IsMyTeam = true;
-
 		}
 	}
 

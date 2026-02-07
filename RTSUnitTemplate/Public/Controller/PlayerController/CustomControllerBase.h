@@ -60,9 +60,14 @@ protected:
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
 
 public:
+	virtual void BeginPlay() override;
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float VisibilityUpdateInterval = 0.05f;
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetCamLocation(FVector NewLocation);
 

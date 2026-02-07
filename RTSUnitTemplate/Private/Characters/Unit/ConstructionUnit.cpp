@@ -21,6 +21,15 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, WorkArea);
 }
 
+void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
+{
+	Super::SetCharacterVisibility(desiredVisibility);
+	if (WorkArea && WorkArea->Mesh)
+	{
+		WorkArea->Mesh->SetHiddenInGame(!desiredVisibility);
+	}
+}
+
 void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);

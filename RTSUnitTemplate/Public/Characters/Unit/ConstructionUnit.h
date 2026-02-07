@@ -18,6 +18,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void SetCharacterVisibility(bool desiredVisibility) override;
 
 	// The worker assigned to construct this site
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)

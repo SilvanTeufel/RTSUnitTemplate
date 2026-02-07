@@ -5,9 +5,19 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Components/Border.h"
 #include "StoryWidgetBase.generated.h"
 
 class UMaterialInterface;
+
+UENUM(BlueprintType)
+enum class EStoryCursorType : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Normal UMETA(DisplayName = "Normal (|)"),
+	Thick UMETA(DisplayName = "Thick (█)"),
+	LowerDash UMETA(DisplayName = "Lower Dash (_)"),
+};
 
 /**
  * Simple storytelling widget base that can reveal text letter-by-letter and show an image.
@@ -23,6 +33,7 @@ class RTSUNITTEMPLATE_API UStoryWidgetBase : public UUserWidget
 public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	// Start revealing the provided text and optional image or material.
 	UFUNCTION(BlueprintCallable, Category = "Story")
@@ -54,8 +65,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
 	TObjectPtr<UMaterialInterface> DefaultMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
+	EStoryCursorType CursorType = EStoryCursorType::None;
+
 protected:
 	// Optional bindings from BP
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UBorder> StoryBorder;
+
 	UPROPERTY(meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock> StoryText;
 

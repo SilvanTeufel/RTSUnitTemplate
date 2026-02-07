@@ -337,6 +337,29 @@ struct FMassSightFragment : public FMassFragment
 	
 };
 
+USTRUCT()
+struct FMassVisibilityFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	bool bIsMyTeam = false;
+
+	UPROPERTY()
+	bool bIsOnViewport = false;
+
+	UPROPERTY()
+	bool bIsVisibleEnemy = false;
+
+	UPROPERTY()
+	float VisibilityOffset = 150.f;
+
+	// Optimization flags to avoid redundant calls to Actor
+	bool bLastIsMyTeam = false;
+	bool bLastIsOnViewport = false;
+	bool bLastIsVisibleEnemy = false;
+};
+
 //----------------------------------------------------------------------//
 //  AI Target Fragment
 //----------------------------------------------------------------------//

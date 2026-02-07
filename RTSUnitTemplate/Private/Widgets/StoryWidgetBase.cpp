@@ -5,6 +5,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/Border.h"
 
 void UStoryWidgetBase::NativeConstruct()
 {
@@ -14,43 +15,69 @@ void UStoryWidgetBase::NativeConstruct()
 	RevealedCount = 0;
 
 	// Dynamic fallback UI: if bindings are missing, create a basic layout
-	if (!StoryText || !StoryImage)
+	if (!StoryBorder || !StoryText || !StoryImage)
 	{
 		if (WidgetTree && !WidgetTree->RootWidget)
 		{
-			UVerticalBox* RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-			WidgetTree->RootWidget = RootBox;
+			StoryBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("StoryBorder"));
+			WidgetTree->RootWidget = StoryBorder;
 		}
+
 		if (WidgetTree)
 		{
-			UVerticalBox* RootBox = Cast<UVerticalBox>(WidgetTree->RootWidget);
-			if (!RootBox)
+			if (StoryBorder)
+			{
+				// Chat window look: transparent background
+				StoryBorder->SetBrushColor(FLinearColor(0.f, 0.f, 0.f, 0.5f));
+
+				if (StoryBorder->GetContent() == nullptr)
+				{
+					UVerticalBox* ContentBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+					StoryBorder->SetContent(ContentBox);
+				}
+			}
+
+			UVerticalBox* RootBox = StoryBorder ? Cast<UVerticalBox>(StoryBorder->GetContent()) : Cast<UVerticalBox>(WidgetTree->RootWidget);
+			if (!RootBox && WidgetTree->RootWidget && !StoryBorder)
 			{
 				RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 				WidgetTree->RootWidget = RootBox;
 			}
-			if (!StoryImage)
+
+			if (RootBox)
 			{
-				StoryImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("StoryImage"));
-				if (UVerticalBoxSlot* ImgSlot = RootBox->AddChildToVerticalBox(StoryImage))
+				if (!StoryImage)
 				{
-					ImgSlot->SetHorizontalAlignment(HAlign_Center);
+					StoryImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("StoryImage"));
+					if (UVerticalBoxSlot* ImgSlot = RootBox->AddChildToVerticalBox(StoryImage))
+					{
+						ImgSlot->SetHorizontalAlignment(HAlign_Center);
+					}
 				}
-			}
-			if (!StoryText)
-			{
-				StoryText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StoryText"));
-				StoryText->SetAutoWrapText(true);
-				if (UVerticalBoxSlot* TxtSlot = RootBox->AddChildToVerticalBox(StoryText))
+				if (!StoryText)
 				{
-					TxtSlot->SetHorizontalAlignment(HAlign_Fill);
+					StoryText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StoryText"));
+					if (UVerticalBoxSlot* TxtSlot = RootBox->AddChildToVerticalBox(StoryText))
+					{
+						TxtSlot->SetHorizontalAlignment(HAlign_Fill);
+					}
 				}
 			}
 		}
 	}
 
+	if (StoryBorder)
+	{
+		// Ensure chat window look even if bound in BP
+		if (StoryBorder->GetBrushColor().A > 0.9f) // If it's fully opaque or default, make it transparent
+		{
+			StoryBorder->SetBrushColor(FLinearColor(0.f, 0.f, 0.f, 0.5f));
+		}
+	}
+
 	if (StoryText)
 	{
+		StoryText->SetAutoWrapText(true);
 		StoryText->SetText(FText::GetEmpty());
 	}
 	if (StoryImage)
@@ -78,6 +105,42 @@ void UStoryWidgetBase::NativeDestruct()
 		World->GetTimerManager().ClearTimer(RevealTimerHandle);
 	}
 	Super::NativeDestruct();
+}
+
+void UStoryWidgetBase::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (CursorType != EStoryCursorType::None && StoryText && !FullString.IsEmpty())
+	{
+		bool bIsRevealing = RevealTimerHandle.IsValid();
+		if (bIsRevealing)
+		{
+			// Blink at 4Hz
+			bool bCursorVisible = FMath::FloorToInt(GetWorld()->GetTimeSeconds() * 4.0f) % 2 == 0;
+
+			FString DisplayString = FullString.Left(RevealedCount);
+			if (bCursorVisible)
+			{
+				switch (CursorType)
+				{
+				case EStoryCursorType::Normal:
+					DisplayString += TEXT("|");
+					break;
+				case EStoryCursorType::Thick:
+					DisplayString += TEXT("█");
+					break;
+				case EStoryCursorType::LowerDash:
+					DisplayString += TEXT("_");
+					break;
+				default:
+					DisplayString += TEXT("|");
+					break;
+				}
+			}
+			StoryText->SetText(FText::FromString(DisplayString));
+		}
+	}
 }
 
 void UStoryWidgetBase::StartStory(const FText& InFullText, UTexture2D* InImage, UMaterialInterface* InMaterial)
@@ -158,7 +221,7 @@ void UStoryWidgetBase::UpdateTextOnce()
 	}
 
 	RevealedCount = FMath::Clamp(RevealedCount + 1, 0, FullString.Len());
-	if (StoryText)
+	if (StoryText && CursorType == EStoryCursorType::None)
 	{
 		StoryText->SetText(FText::FromString(FullString.Left(RevealedCount)));
 	}
@@ -168,6 +231,11 @@ void UStoryWidgetBase::UpdateTextOnce()
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().ClearTimer(RevealTimerHandle);
+		}
+
+		if (CursorType != EStoryCursorType::None && StoryText)
+		{
+			StoryText->SetText(FText::FromString(FullString));
 		}
 	}
 }

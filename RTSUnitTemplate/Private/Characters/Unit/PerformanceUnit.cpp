@@ -42,28 +42,20 @@ APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):
 	}
 }
 
-void APerformanceUnit::Tick(float DeltaTime)
+
+void APerformanceUnit::UpdateWidgetPositions(const FVector& Location)
 {
-	Super::Tick(DeltaTime);
-	
-	CheckViewport();
-	
-	// Only check team visibility every TeamVisibilityCheckInterval seconds (default 5s)
-	TeamVisibilityCheckTimer += DeltaTime;
-	if (TeamVisibilityCheckTimer >= TeamVisibilityCheckInterval)
+	if (!bUseSkeletalMovement && IsOnViewport && !bUseIsmWithActorMovement)
 	{
-		CheckTeamVisibility();
-		TeamVisibilityCheckTimer = 0.f;
+		if (HealthBarUpdateTriggered && HealthWidgetComp)
+		{
+			HealthWidgetComp->SetWorldLocation(Location + HealthWidgetRelativeOffset);
+		}
+		if (TimerUpdateTriggered && TimerWidgetComp)
+		{
+			TimerWidgetComp->SetWorldLocation(Location + TimerWidgetRelativeOffset);
+		}
 	}
-	
-	if (StopVisibilityTick) return;
-		
-	if(EnableFog)VisibilityTickFog();
-	else SetCharacterVisibility(IsOnViewport);
-	
-	CheckHealthBarVisibility();
-	CheckTimerVisibility();
-	
 }
 
 void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -156,58 +148,6 @@ void APerformanceUnit::VisibilityTickFog()
 	}
 }
 
-void APerformanceUnit::CheckViewport()
-{
-	FVector ALocation = GetMassActorLocation();
-	
-	if (IsInViewport(ALocation, VisibilityOffset))
-	{
-		IsOnViewport = true;
-	}
-	else
-	{
-		IsOnViewport = false;
-	}
-}
-
-void APerformanceUnit::CheckTeamVisibility()
-{
-	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-	{
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-		if(ControllerBase && (ControllerBase->SelectableTeamId == TeamId || ControllerBase->SelectableTeamId == 0))
-		{
-			IsMyTeam = true;
-		}
-		else
-		{
-			IsMyTeam = false;
-		}
-	}
-}
-
-
-bool APerformanceUnit::IsInViewport(FVector WorldPosition, float Offset)
-{
-
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if (!PlayerController) return false;
-
-	FVector2D ScreenPosition;
-	// Check the boolean return value of the function here!
-	if (UGameplayStatics::ProjectWorldToScreen(PlayerController, WorldPosition, ScreenPosition))
-	{
-		int32 ViewportSizeX, ViewportSizeY;
-		PlayerController->GetViewportSize(ViewportSizeX, ViewportSizeY);
-
-		bool IsInViewportRange = ScreenPosition.X >= -Offset && ScreenPosition.X <= ViewportSizeX + Offset &&
-			   ScreenPosition.Y >= -Offset && ScreenPosition.Y <= ViewportSizeY + Offset;
-		
-		return IsInViewportRange;
-	}
-
-	return false;
-}
 
 void APerformanceUnit::HandleSquadHealthBarVisibility()
 {
@@ -688,16 +628,12 @@ void APerformanceUnit::CheckTimerVisibility()
 		if (IsOnViewport && IsMyTeam)
 		{
 			CachedTimerWidget->SetVisibility(ESlateVisibility::Visible);
-
-			if(!bUseSkeletalMovement)
-			{
-				FVector ALocation = GetMassActorLocation()+TimerWidgetRelativeOffset;
-				TimerWidgetComp->SetWorldLocation(ALocation);
-			}
+			TimerUpdateTriggered = true;
 		}
 		else
 		{
 			CachedTimerWidget->SetVisibility(ESlateVisibility::Collapsed);
+			TimerUpdateTriggered = false;
 		}
 	}
 }

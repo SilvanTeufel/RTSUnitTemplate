@@ -162,6 +162,14 @@ protected:
 	// Function called when an ability is activated
 	void OnAbilityActivated(UGameplayAbility* ActivatedAbility);
 
+	// Replicated array to sync costs to all clients
+	UPROPERTY(Replicated)
+	TArray<FAbilityCostData> ReplicatedAbilityCosts;
+
+	// Client-side cache for transient proxy objects (to avoid NewObject every frame)
+	UPROPERTY(Transient)
+	TMap<TSubclassOf<UGameplayAbilityBase>, UGameplayAbilityBase*> AbilityProxyCache;
+
 public:
 
 	void SetupAbilitySystemDelegates();
@@ -180,4 +188,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	const FQueuedAbility GetCurrentSnapshot();
+
+	// Call this on the Server whenever an ability's cost increases
+	UFUNCTION(BlueprintCallable, Category = "GAS|Ability")
+	void UpdateReplicatedAbilityCost(TSubclassOf<UGameplayAbilityBase> AbilityClass, FBuildingCost NewCost);
+
+	// Helper to get a "real object" with the correct cost on any client
+	UFUNCTION(BlueprintCallable, Category = "GAS|Ability")
+	UGameplayAbilityBase* GetAbilityDisplayObject(TSubclassOf<UGameplayAbilityBase> AbilityClass);
 };

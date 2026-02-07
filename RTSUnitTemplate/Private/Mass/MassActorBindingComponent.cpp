@@ -28,6 +28,7 @@
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/PerformanceUnit.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
@@ -264,7 +265,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			bNeedsMassUnitSetup = false;
 			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
 			UnitBase->bIsMassUnit = true;
-			UnitBase->CheckTeamVisibility();
 			UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
 			UnitBase->SyncTranslation();
 			
@@ -392,6 +392,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassCombatStatsFragment::StaticStruct(), 
 		FMassAgentCharacteristicsFragment::StaticStruct(),
     	FMassChargeTimerFragment::StaticStruct(),
+		FMassVisibilityFragment::StaticStruct(),
 
 		FMassWorkerStatsFragment::StaticStruct(),
 		// Actor Representation & Sync
@@ -731,7 +732,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			if (AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner))
 			{
 				UnitBase->bIsMassUnit = true;
-				UnitBase->CheckTeamVisibility();
 			}
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
@@ -1151,6 +1151,20 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
        // Make sure collider type matches expectations (Circle assumed here)
        *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius() + AdditionalCapsuleRadius));
     }
+
+	if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
+	{
+		if (APerformanceUnit* PerfUnit = Cast<APerformanceUnit>(UnitOwner))
+		{
+			VisibilityFrag->bIsMyTeam = PerfUnit->IsMyTeam;
+			VisibilityFrag->bIsOnViewport = PerfUnit->IsOnViewport;
+			VisibilityFrag->bIsVisibleEnemy = PerfUnit->IsVisibleEnemy;
+			VisibilityFrag->VisibilityOffset = PerfUnit->VisibilityOffset;
+			VisibilityFrag->bLastIsMyTeam = PerfUnit->IsMyTeam;
+			VisibilityFrag->bLastIsOnViewport = PerfUnit->IsOnViewport;
+			VisibilityFrag->bLastIsVisibleEnemy = PerfUnit->IsVisibleEnemy;
+		}
+	}
 
 	if(FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle))
 	{

@@ -19,6 +19,7 @@
 #include "Hud/HUDBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/GASUnit.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "GAS/GameplayAbilityBase.h"
@@ -296,42 +297,21 @@ TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArr
 
 TArray<UGameplayAbilityBase*> AExtendedControllerBase::GetAbilityObjectArrayByIndex()
 {
-
 	if (!SelectedUnits.Num()) return TArray<UGameplayAbilityBase*>();
 	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return TArray<UGameplayAbilityBase*>();
 	if (!SelectedUnits[CurrentUnitWidgetIndex]) return TArray<UGameplayAbilityBase*>();
 
+	AGASUnit* Unit = Cast<AGASUnit>(SelectedUnits[CurrentUnitWidgetIndex]);
+	if (!Unit) return TArray<UGameplayAbilityBase*>();
+
 	TArray<UGameplayAbilityBase*> AbilityObjects;
 	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityClasses = GetAbilityArrayByIndex();
 
-	AUnitBase* Unit = SelectedUnits[CurrentUnitWidgetIndex];
-	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
-	if (!ASC) return AbilityObjects;
-
-	const TArray<FGameplayAbilitySpec>& Specs = ASC->GetActivatableAbilities();
-
 	for (const TSubclassOf<UGameplayAbilityBase>& AbilityClass : AbilityClasses)
 	{
-		if (!AbilityClass) continue;
-
-		UGameplayAbilityBase* AbilityInstance = nullptr;
-
-		for (const FGameplayAbilitySpec& Spec : Specs)
+		if (UGameplayAbilityBase* Obj = Unit->GetAbilityDisplayObject(AbilityClass))
 		{
-			if (Spec.Ability && Spec.Ability->GetClass() == AbilityClass)
-			{
-				AbilityInstance = Cast<UGameplayAbilityBase>(Spec.GetPrimaryInstance());
-				if (!AbilityInstance)
-				{
-					AbilityInstance = Cast<UGameplayAbilityBase>(Spec.Ability);
-				}
-				break;
-			}
-		}
-
-		if (AbilityInstance)
-		{
-			AbilityObjects.Add(AbilityInstance);
+			AbilityObjects.Add(Obj);
 		}
 	}
 
@@ -707,7 +687,7 @@ void AExtendedControllerBase::Multicast_ApplyWorkAreaPosition_Implementation(AWo
 
 void AExtendedControllerBase::Client_UpdateWorkAreaPosition_Implementation(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase)
 {
-	if (!DraggedArea) return;
+	if (!DraggedArea || !UnitBase) return;
 	DraggedArea->SetActorTransform(NewActorTransform);
 
 	UnitBase->ShowWorkAreaIfNoFog_Implementation(DraggedArea);

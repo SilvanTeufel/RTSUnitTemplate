@@ -6,6 +6,7 @@
 #include "GAS/AbilitySystemComponentBase.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "GAS/Gas.h"
+#include "GameplayAbilitySpec.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include <GameplayEffectTypes.h>
 
@@ -40,6 +41,7 @@ void AGASUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AGASUnit, CurrentSnapshot);
 	DOREPLIFETIME(AGASUnit, AbilityQueueSize);
 	DOREPLIFETIME(AGASUnit, MaxAbilityQueueSize);
+	DOREPLIFETIME(AGASUnit, ReplicatedAbilityCosts);
 }
 
 
@@ -567,4 +569,53 @@ void AGASUnit::CancelCurrentAbility()
 	}
 	CurrentSnapshot = FQueuedAbility();
 	CurrentInstigatorPC = nullptr;
+}
+
+void AGASUnit::UpdateReplicatedAbilityCost(TSubclassOf<UGameplayAbilityBase> AbilityClass, FBuildingCost NewCost) {
+	if (!HasAuthority()) return;
+
+	for (FAbilityCostData& Data : ReplicatedAbilityCosts) {
+		if (Data.AbilityClass == AbilityClass) {
+			Data.CurrentCost = NewCost;
+			return;
+		}
+	}
+	ReplicatedAbilityCosts.Add({AbilityClass, NewCost});
+}
+
+UGameplayAbilityBase* AGASUnit::GetAbilityDisplayObject(TSubclassOf<UGameplayAbilityBase> AbilityClass) {
+	if (!AbilityClass) return nullptr;
+
+	// 1. Try to find the real instance if we are the owner
+	if (AbilitySystemComponent) {
+		for (const FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities()) {
+			if (Spec.Ability && Spec.Ability->GetClass() == AbilityClass) {
+				UGameplayAbilityBase* Instance = Cast<UGameplayAbilityBase>(Spec.GetPrimaryInstance());
+				return Instance ? Instance : Cast<UGameplayAbilityBase>(Spec.Ability);
+			}
+		}
+	}
+
+	// 2. Otherwise, use a local Proxy object
+	if (!AbilityProxyCache.Contains(AbilityClass)) {
+		// Create a transient instance once
+		AbilityProxyCache.Add(AbilityClass, NewObject<UGameplayAbilityBase>(this, AbilityClass));
+	}
+
+	UGameplayAbilityBase* Proxy = AbilityProxyCache[AbilityClass];
+	
+	// Default to CDO values
+	const UGameplayAbilityBase* CDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+	Proxy->ConstructionCost = CDO->ConstructionCost;
+
+	// Apply replicated override if exists
+	for (const FAbilityCostData& Data : ReplicatedAbilityCosts) {
+		if (Data.AbilityClass == AbilityClass) {
+			Proxy->ConstructionCost = Data.CurrentCost;
+			break;
+		}
+	}
+	
+	Proxy->UpdateTooltipText(); // Refresh text with current cost
+	return Proxy;
 }

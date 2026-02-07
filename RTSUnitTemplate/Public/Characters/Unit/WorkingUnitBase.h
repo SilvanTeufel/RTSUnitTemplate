@@ -74,8 +74,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float RepairHealth = 10.f;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentDraggedWorkArea, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AWorkArea* CurrentDraggedWorkArea;
+
+	UFUNCTION()
+	void OnRep_CurrentDraggedWorkArea();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_Build;

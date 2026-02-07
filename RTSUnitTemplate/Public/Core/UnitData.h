@@ -158,6 +158,18 @@ public:
 };
 
 USTRUCT(BlueprintType)
+struct FAbilityCostData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	TSubclassOf<class UGameplayAbilityBase> AbilityClass;
+
+	UPROPERTY(BlueprintReadWrite)
+	FBuildingCost CurrentCost;
+};
+
+USTRUCT(BlueprintType)
 struct FSpeechData_Texts : public FTableRowBase
 {
 	GENERATED_BODY()

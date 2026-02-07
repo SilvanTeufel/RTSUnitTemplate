@@ -43,8 +43,6 @@ class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase
 
 public:
 	APerformanceUnit(const FObjectInitializer& ObjectInitializer);
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
 	
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
@@ -128,20 +126,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = 150.f;
 
-	// Timer accumulator for CheckTeamVisibility (runs every 5 seconds)
-	float TeamVisibilityCheckTimer = 0.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float TeamVisibilityCheckInterval = 5.f;
+	void UpdateWidgetPositions(const FVector& Location);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void CheckViewport();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void CheckTeamVisibility();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetCharacterVisibility(bool desiredVisibility);
+	virtual void SetCharacterVisibility(bool desiredVisibility);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTickFog();
@@ -173,23 +161,6 @@ public:
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void StopNiagaraByID(int32 ID, float FadeTime = 0.15f);
 		
-	private:
-		
-		UPROPERTY(Transient)
-		TArray<FActiveNiagaraEffect> ActiveNiagara;
-		
-		UPROPERTY(Transient)
-		TArray<TWeakObjectPtr<UAudioComponent>> ActiveAudio;
-		
- 	UPROPERTY(Transient)
-		TArray<FTimerHandle> PendingEffectTimers;
-
-		void StopNiagaraComponent(class UNiagaraComponent* NC, float FadeTime);
-		void StopAudioComponent(class UAudioComponent* AC, bool bFade, float FadeTime);
-		
-		UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-		bool IsInViewport(FVector WorldPosition, float Offset);
-
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckHealthBarVisibility();
 
@@ -199,6 +170,20 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckTimerVisibility();
+		
+	private:
+		
+		UPROPERTY(Transient)
+		TArray<FActiveNiagaraEffect> ActiveNiagara;
+		
+		UPROPERTY(Transient)
+		TArray<TWeakObjectPtr<UAudioComponent>> ActiveAudio;
+		
+	UPROPERTY(Transient)
+		TArray<FTimerHandle> PendingEffectTimers;
+
+		void StopNiagaraComponent(class UNiagaraComponent* NC, float FadeTime);
+		void StopAudioComponent(class UAudioComponent* AC, bool bFade, float FadeTime);
 	
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
