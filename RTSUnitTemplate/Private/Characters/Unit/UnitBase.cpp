@@ -139,6 +139,12 @@ void AUnitBase::BeginPlay()
 		SetMeshRotationServer();
 	}
 	
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UAttributeSetBase::GetHealthAttribute()).AddUObject(this, &AUnitBase::OnAttributeChanged);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UAttributeSetBase::GetShieldAttribute()).AddUObject(this, &AUnitBase::OnAttributeChanged);
+	}
+
 	InitHealthbarOwner();
 }
 
@@ -186,7 +192,6 @@ void AUnitBase::EnsureSquadHealthbarState()
 	{
 		// No alive squadmates: hide this component just in case
 		OpenHealthWidget = false;
-		HealthBarUpdateTriggered = false;
 		if (UUserWidget* UW = HealthWidgetComp->GetUserWidgetObject())
 		{
 			UW->SetVisibility(ESlateVisibility::Collapsed);
@@ -219,7 +224,6 @@ void AUnitBase::EnsureSquadHealthbarState()
 				{
 					HB->SetVisibility(ESlateVisibility::Visible);
 					HB->UpdateWidget();
-					HealthBarUpdateTriggered = true;
 				}
 			}
 		}
@@ -230,7 +234,6 @@ void AUnitBase::EnsureSquadHealthbarState()
 	{
 		// Not owner: collapse and prevent updates
 		OpenHealthWidget = false;
-		HealthBarUpdateTriggered = false;
 		if (UUserWidget* UW = HealthWidgetComp->GetUserWidgetObject())
 		{
 			UW->SetVisibility(ESlateVisibility::Collapsed);
@@ -709,6 +712,18 @@ void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
 }
 
 
+void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
+{
+	if (SquadId > 0)
+	{
+		UpdateSquadHealthBar();
+	}
+	else
+	{
+		UpdateWidget();
+	}
+}
+
 void AUnitBase::UpdateWidget()
 {
 
@@ -719,6 +734,37 @@ void AUnitBase::UpdateWidget()
 	if (HealthBarWidget)
 	{
 		HealthBarWidget->UpdateWidget();
+	}
+}
+
+void AUnitBase::UpdateSquadHealthBar()
+{
+	if (SquadId <= 0) return;
+
+	AUnitBase* Best = nullptr;
+	int32 BestIndex = TNumericLimits<int32>::Max();
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		for (TActorIterator<AUnitBase> It(World); It; ++It)
+		{
+			AUnitBase* U = *It;
+			if (!U || U->TeamId != TeamId || U->SquadId != SquadId) continue;
+			if (U->GetUnitState() == UnitData::Dead) continue;
+			
+			int32 Index = U->UnitIndex;
+			if (Index < 0) Index = INT_MAX - 1;
+			if (!Best || Index < BestIndex)
+			{
+				Best = U;
+				BestIndex = Index;
+			}
+		}
+	}
+
+	if (Best)
+	{
+		Best->UpdateWidget();
 	}
 }
 
@@ -1275,13 +1321,13 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
     }
 
     // Ground/Flying detection restrictions:
-    if (CanOnlyAttackGround && DetectedUnit && DetectedUnit->IsFlying)
+    if (CanOnlyAttackGround)
     {
-        return;
+        if (DetectedUnit->IsFlying) return;
     }
-    if (CanOnlyAttackFlying && DetectedUnit && !DetectedUnit->IsFlying)
+    if (CanOnlyAttackFlying)
     {
-        return;
+        if (!DetectedUnit->IsFlying) return;
     }
     
     // Now check team relationships:

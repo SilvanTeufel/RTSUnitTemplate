@@ -358,6 +358,9 @@ struct FMassVisibilityFragment : public FMassFragment
 	bool bLastIsMyTeam = false;
 	bool bLastIsOnViewport = false;
 	bool bLastIsVisibleEnemy = false;
+
+	bool bLastOpenHealthWidget = false;
+	bool bLastShowLevelOnly = false;
 };
 
 //----------------------------------------------------------------------//

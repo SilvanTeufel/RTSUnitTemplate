@@ -138,7 +138,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				}
 				
 				// 3) Sync back to Unit and check if we need to trigger logic
-				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || (Vis.bIsOnViewport != Vis.bLastIsOnViewport) || (Unit->IsVisibleEnemy != Vis.bLastIsVisibleEnemy);
+				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || (Vis.bIsOnViewport != Vis.bLastIsOnViewport) || (Unit->IsVisibleEnemy != Vis.bLastIsVisibleEnemy)
+								|| (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
 				
 				Unit->IsMyTeam = Vis.bIsMyTeam;
 				Unit->IsOnViewport = Vis.bIsOnViewport;
@@ -150,6 +151,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Vis.bLastIsMyTeam = Vis.bIsMyTeam;
 					Vis.bLastIsOnViewport = Vis.bIsOnViewport;
 					Vis.bLastIsVisibleEnemy = Unit->IsVisibleEnemy;
+					Vis.bLastOpenHealthWidget = Unit->OpenHealthWidget;
+					Vis.bLastShowLevelOnly = Unit->bShowLevelOnly;
 				}
 			}
 

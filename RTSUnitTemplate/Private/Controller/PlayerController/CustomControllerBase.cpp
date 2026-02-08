@@ -2310,7 +2310,6 @@ void ACustomControllerBase::Client_ApplyTeamAbilityKeyToggle_Implementation(int3
 	}
 
 	UGameplayAbilityBase::ApplyTeamAbilityKeyToggle_Local(TeamId, Key, bEnable);
-	UE_LOG(LogTemp, Log, TEXT("[Client_ApplyTeamAbilityKeyToggle] Applied on client. TeamId=%d Key='%s' Enable=%s"), TeamId, *Key, bEnable ? TEXT("true") : TEXT("false"));
 
 	// Refresh the unit selector UI immediately
 	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))

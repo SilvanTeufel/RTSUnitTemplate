@@ -47,7 +47,7 @@ void APerformanceUnit::UpdateWidgetPositions(const FVector& Location)
 {
 	if (!bUseSkeletalMovement && IsOnViewport && !bUseIsmWithActorMovement)
 	{
-		if (HealthBarUpdateTriggered && HealthWidgetComp)
+		if ((OpenHealthWidget || bShowLevelOnly) && HealthWidgetComp)
 		{
 			HealthWidgetComp->SetWorldLocation(Location + HealthWidgetRelativeOffset);
 		}
@@ -197,7 +197,6 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 			UW->SetVisibility(ESlateVisibility::Collapsed);
 		}
 		HealthWidgetComp->SetVisibility(false);
-		HealthBarUpdateTriggered = false;
 		OpenHealthWidget = false;
 		return;
 	}
@@ -226,15 +225,12 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 	USquadHealthBar* SquadHB = Cast<USquadHealthBar>(CachedHealthBarWidget);
 	if (SquadHB)
 	{
-		const bool bShouldShowSquad = IsOnViewport && bFogAllows && SquadHB->bAlwaysShowSquadHealthbar;
-
+		const bool bShouldShowSquad = IsOnViewport && bFogAllows && (SquadHB->bAlwaysShowSquadHealthbar || OpenHealthWidget || bShowLevelOnly);
+		
 		if (bShouldShowSquad)
 		{
-			if (!HealthBarUpdateTriggered)
-			{
-				HealthBarUpdateTriggered = true;
-			}
 			CachedHealthBarWidget->SetVisibility(ESlateVisibility::Visible);
+			CachedHealthBarWidget->bShowLevelOnly = bShowLevelOnly;
 			CachedHealthBarWidget->UpdateWidget();
 			if (!bUseSkeletalMovement)
 			{
@@ -244,10 +240,6 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 		}
 		else
 		{
-			if (HealthBarUpdateTriggered)
-			{
-				HealthBarUpdateTriggered = false;
-			}
 			CachedHealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
@@ -274,21 +266,17 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 
 	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
 
-	if (IsOnViewport && (OpenHealthWidget || bShowLevelOnly) && !HealthBarUpdateTriggered && bFogAllows)
+	const bool bShouldShow = IsOnViewport && (OpenHealthWidget || bShowLevelOnly) && bFogAllows;
+
+	if (bShouldShow)
 	{
 		CachedHealthBarWidget->SetVisibility(ESlateVisibility::Visible);
-		HealthBarUpdateTriggered = true;
-	}
-	else if (HealthBarUpdateTriggered && !OpenHealthWidget && !bShowLevelOnly)
-	{
-		CachedHealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
-		HealthBarUpdateTriggered = false;
-	}
-
-	if (HealthBarUpdateTriggered)
-	{
 		CachedHealthBarWidget->bShowLevelOnly = bShowLevelOnly;
 		CachedHealthBarWidget->UpdateWidget();
+	}
+	else
+	{
+		CachedHealthBarWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	if (!bUseSkeletalMovement && OpenHealthWidget && IsOnViewport)

@@ -259,6 +259,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShieldCollapseCheck(float NewShield, float OldShield);
+
+	void OnAttributeChanged(const struct FOnAttributeChangeData& Data);
 ///////////////////////////////////////////////////////////////////
 
 
@@ -266,6 +268,9 @@ public:
 public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateWidget();
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateSquadHealthBar();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void IncreaseExperience();
