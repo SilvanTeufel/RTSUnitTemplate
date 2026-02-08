@@ -81,7 +81,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	APlayerController* PC = World->GetFirstPlayerController();
 	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
 	
-	const bool bIsClient = (World->GetNetMode() != NM_DedicatedServer);
+	//const bool bIsClient = (World->GetNetMode() != NM_DedicatedServer);
 	const float DeltaTime = Context.GetDeltaTimeSeconds();
 
 	// Throttled update flag
@@ -93,7 +93,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	}
 
 	int32 ViewportSizeX = 0, ViewportSizeY = 0;
-	if (bIsClient && CustomPC && CustomPC->IsLocalController())
+	if (CustomPC && CustomPC->IsLocalController())
 	{
 		CustomPC->GetViewportSize(ViewportSizeX, ViewportSizeY);
 	}
@@ -119,7 +119,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			if (bDoThrottledUpdate)
 			{
-				if (bIsClient && CustomPC && CustomPC->IsLocalController())
+				// bIsClient && 
+				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
 					Vis.bIsMyTeam = (CustomPC->SelectableTeamId == StatsList[i].TeamId || CustomPC->SelectableTeamId == 0);
@@ -135,6 +136,18 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					{
 						Vis.bIsOnViewport = false;
 					}
+
+					// Fix: Prevent server's viewport culling from replicating to clients
+					/*if (World->GetNetMode() == NM_ListenServer)
+					{
+						Vis.bIsOnViewport = true;
+					}*/
+				}
+				else if (bDoThrottledUpdate)
+				{
+					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
+					Vis.bIsOnViewport = true;
+					Vis.bIsMyTeam = true; // Avoid hiding everything on dedicated server if team logic is local-player dependent
 				}
 				
 				// 3) Sync back to Unit and check if we need to trigger logic
@@ -157,7 +170,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			}
 
 			// 4) High-frequency Widget Updates (Client-only)
-			if (bIsClient && !Unit->StopVisibilityTick)
+			if (!Unit->StopVisibilityTick)
 			{
 				Unit->UpdateWidgetPositions(Location);
 			}

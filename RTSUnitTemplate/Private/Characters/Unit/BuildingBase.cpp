@@ -94,7 +94,7 @@ void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 
 }
 
-void ABuildingBase::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent)
+void ABuildingBase::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent, ERotationAxis AxisSelection)
 {
 	if (!NiagaraToRotate || !Origin)
 	{
@@ -109,7 +109,27 @@ void ABuildingBase::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraCompon
 	const FRotator FaceOriginRotation = FRotationMatrix::MakeFromZ(Direction).Rotator();
 
 	// Apply offset
-	const FRotator TargetRotation = FaceOriginRotation + RotationOffset;
+	FRotator TargetRotation = FaceOriginRotation + RotationOffset;
+
+	// Handle axis selection
+	if (AxisSelection != ERotationAxis::Full)
+	{
+		const FRotator CurrentRotation = NiagaraToRotate->GetRelativeRotation();
+		switch (AxisSelection)
+		{
+		case ERotationAxis::RollPitch:
+			TargetRotation.Yaw = CurrentRotation.Yaw;
+			break;
+		case ERotationAxis::PitchYaw:
+			TargetRotation.Roll = CurrentRotation.Roll;
+			break;
+		case ERotationAxis::YawRoll:
+			TargetRotation.Pitch = CurrentRotation.Pitch;
+			break;
+		default:
+			break;
+		}
+	}
 
 	// Call the base class function to handle the smooth rotation
 	MulticastRotateNiagaraLinear(NiagaraToRotate, TargetRotation, InRotateDuration, InRotationEaseExponent);
@@ -410,6 +430,12 @@ void ABuildingBase::MulticastSetEnemyVisibility_Implementation(APerformanceUnit*
 {
 	if (!CanMove && bVisible == false) return;
 	Super::MulticastSetEnemyVisibility_Implementation(DetectingActor, bVisible);
+}
+
+void ABuildingBase::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible)
+{
+	if (!CanMove && bVisible == false) return;
+	Super::SetEnemyVisibility(DetectingActor, bVisible);
 }
 
 bool ABuildingBase::IsInBeaconRange() const

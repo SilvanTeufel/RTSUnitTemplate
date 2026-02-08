@@ -27,7 +27,7 @@ public:
 	
 	// Rotate a Niagara component to face the Origin (AWorkingUnitBase) of the WorkArea, with an optional rotation offset.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Construction)
-	void MulticastRotateNiagaraToOrigin(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent);
+	void MulticastRotateNiagaraToOrigin(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent, ERotationAxis AxisSelection = ERotationAxis::Full);
 
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -96,6 +96,8 @@ public:
 
 
 	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible) override;
+
+	virtual void SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible) override;
 
 	// Returns true if this building's location is within range of any Beacon (any BuildingBase with BeaconRange > 0)
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

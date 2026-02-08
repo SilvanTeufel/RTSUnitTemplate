@@ -83,6 +83,12 @@ void AFogActor::InitFogMaskTexture()
 		check(FogMaskTexture);
 		FogMaskTexture->SRGB = false;
 		FogMaskTexture->CompressionSettings = TC_VectorDisplacementmap;
+		
+		// --- ADD THESE LINES TO PREVENT REPETITION ---
+		FogMaskTexture->AddressX = TA_Clamp;
+		FogMaskTexture->AddressY = TA_Clamp;
+		// ---------------------------------------------
+		
 		FogMaskTexture->AddToRoot();
 		FogMaskTexture->UpdateResource();
 	}

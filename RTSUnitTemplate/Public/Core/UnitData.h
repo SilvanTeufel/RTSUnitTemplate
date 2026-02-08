@@ -111,8 +111,16 @@ namespace UInvestmentData
 	   Armor UMETA(DisplayName = "Armor"),
 	   MagicResistance UMETA(DisplayName = "MagicResistance")
 	};
-
 }
+
+UENUM(BlueprintType)
+enum class ERotationAxis : uint8
+{
+	RollPitch UMETA(DisplayName = "Roll/Pitch"),
+	PitchYaw UMETA(DisplayName = "Pitch/Yaw"),
+	YawRoll UMETA(DisplayName = "Yaw/Roll"),
+	Full UMETA(DisplayName = "Full")
+};
 
 USTRUCT(BlueprintType)
 struct FBuildingCost

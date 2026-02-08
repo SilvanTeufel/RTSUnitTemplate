@@ -103,14 +103,18 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 		NavSys->UpdateActorInNavOctree(*this); // Update NavMesh representation
 	}
 	
-	GetCapsuleComponent()->SetIsReplicated(false);
-	GetMesh()->SetIsReplicated(false);
+
 	bReplicates = true;
 	SetReplicates(true);
 	SetNetUpdateFrequency(2);
 	SetMinNetUpdateFrequency(1);
 	GetCharacterMovement()->SetIsReplicated(false);
 	GetCapsuleComponent()->SetIsReplicated(false);
+	
+	GetCapsuleComponent()->SetIsReplicated(false);
+	GetMesh()->SetIsReplicated(false);
+	ISMComponent->SetIsReplicated(false);
+	
 	NavObstaclePadding = 5.0f;
 }
 

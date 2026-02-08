@@ -197,7 +197,7 @@ public:
 	
 	// Local (non-RPC) visibility setter used by SightProcessor on both client and server
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
+	virtual void SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
 	
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
