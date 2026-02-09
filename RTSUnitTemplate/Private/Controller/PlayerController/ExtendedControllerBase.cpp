@@ -3367,9 +3367,15 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
 	if (DraggedWorkArea && DraggedWorkArea->PlannedBuilding == false)
 	{
+		const bool bIsExtensionArea = DraggedWorkArea->IsExtensionArea;
+		
 		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
-		DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
-		PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+		if (!bIsExtensionArea)
+		{
+			DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
+			PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+
+		}
 
 		// 2. Final check for valid placement
 		TArray<AActor*> OverlappingActors;
@@ -3378,7 +3384,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		bool bIsOverlappingWithValidArea = false;
 		bool bIsNoBuildZone = false;
 		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
-		const bool bIsExtensionArea = DraggedWorkArea->IsExtensionArea;
+
 
 		for (AActor* OverlappedActor : OverlappingActors)
 		{
