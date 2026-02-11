@@ -119,6 +119,27 @@ bool AExtendedCameraBase::InitializeWinConditionDisplay()
 		float Delay = TargetConfig->InitialDisplayDelay;
 		float Duration = TargetConfig->GameStartDisplayDuration;
 
+		// Prolong initial delay while the LoadingWidget is active
+		if (UWorld* World = GetWorld())
+		{
+			if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
+			{
+				const float Now = GS->GetServerWorldTimeSeconds();
+				float ExtraDelay = 0.f;
+				if (GS->MatchStartTime > 0.f)
+				{
+					ExtraDelay = FMath::Max(0.f, GS->MatchStartTime - Now);
+				}
+				else if (GS->LoadingWidgetConfig.Duration > 0.f)
+				{
+					// Fallback if MatchStartTime isn't set yet
+					const float EndTime = GS->LoadingWidgetConfig.ServerWorldTimeStart + GS->LoadingWidgetConfig.Duration;
+					ExtraDelay = FMath::Max(0.f, EndTime - Now);
+				}
+				Delay += ExtraDelay;
+			}
+		}
+
 		GetWorldTimerManager().ClearTimer(InitialWinConditionDelayTimerHandle);
 		
 		if (Delay > 0)
