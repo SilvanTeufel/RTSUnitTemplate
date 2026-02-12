@@ -801,9 +801,11 @@ void AUnitBase::SetSelected()
 
 void AUnitBase::SetDeselected()
 {
-	if (SelectionIcon)
+	if (IsValid(SelectionIcon))
+	{
 		SelectionIcon->HideSelection();
-		
+	}
+	
 	Deselected();
 }
 

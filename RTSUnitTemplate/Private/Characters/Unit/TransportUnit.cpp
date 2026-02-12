@@ -59,7 +59,7 @@ void ATransportUnit::SetCollisionAndVisibility(bool IsVisible)
 	//SetActorEnableCollision(IsVisible);
 	
 	
-	if (!IsVisible)
+	//if (!IsVisible)
 	{
 		RdyForTransport = IsVisible;
 		SetCharacterVisibility(IsVisible);

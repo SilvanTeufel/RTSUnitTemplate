@@ -267,7 +267,15 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 	}
 
 	if (bWinLoseTriggered) return;
-	if (WinLoseConfigActors.Num() == 0) return;
+	
+	// Prune invalid or destroyed config actors to avoid stale pointers
+	WinLoseConfigActors.RemoveAllSwap([](AWinLoseConfigActor* C){ return C == nullptr || !IsValid(C); });
+	
+	if (WinLoseConfigActors.Num() == 0)
+	{
+		InitializeWinLoseConfigActors();
+		if (WinLoseConfigActors.Num() == 0) return;
+	}
 
 	TArray<ABuildingBase*> AllBuildings;
 	TagsAliveCountMap.Empty();
@@ -277,6 +285,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 
 	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
+		if (!IsValid(Config)) { continue; }
 		EWinLoseCondition CurrentWinCondition = Config->GetCurrentWinCondition();
 		if (CurrentWinCondition == EWinLoseCondition::AllBuildingsDestroyed || 
 			Config->LoseCondition == EWinLoseCondition::AllBuildingsDestroyed)
@@ -347,6 +356,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 	// Update TagProgress for ALL configs so UI is correct even during delay
 	for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 	{
+		if (!IsValid(Config)) { continue; }
 		UpdateTagProgressForConfig(Config);
 	}
 
@@ -367,6 +377,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 
 		for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 		{
+			if (!IsValid(Config)) continue;
 			if (AdvancedConfigs.Contains(Config)) continue;
 			if (Config->TeamId != 0 && Config->TeamId != PlayerTeamId) continue;
 
@@ -615,6 +626,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 	{
 		for (AWinLoseConfigActor* Config : WinLoseConfigActors)
 		{
+			if (!IsValid(Config)) continue;
 			if (Config->TeamId == 0) // Global lose condition
 			{
 				TArray<int32> RemainingTeams;
@@ -644,8 +656,8 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		}
 	}
 
-	if (bAnyWon && WinLoseConfigActor) WinLoseConfigActor->OnYouWonTheGame.Broadcast();
-	if (bAnyLost && WinLoseConfigActor) WinLoseConfigActor->OnYouLostTheGame.Broadcast();
+	if (bAnyWon && IsValid(WinLoseConfigActor)) WinLoseConfigActor->OnYouWonTheGame.Broadcast();
+	if (bAnyLost && IsValid(WinLoseConfigActor)) WinLoseConfigActor->OnYouLostTheGame.Broadcast();
 }
 
 void ARTSGameModeBase::Multicast_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)

@@ -691,6 +691,12 @@ void AExtendedCameraBase::Input_Ctrl_Released(const FInputActionValue& InputActi
 
 void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
 {
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		PC->SetInputMode(FInputModeGameAndUI());
+	}
+
 	if(BlockControls) return;
 	
 	TabMode = (TabMode + 1) % 4;
@@ -742,6 +748,12 @@ void AExtendedCameraBase::Input_Shift_Released(const FInputActionValue& InputAct
 
 void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
 {
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		PC->SetInputMode(FInputModeGameAndUI());
+	}
+
 	if (MapMenuWidget)
 	{
 		if (MapMenuWidget->GetVisibility() == ESlateVisibility::Visible)

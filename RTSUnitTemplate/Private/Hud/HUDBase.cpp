@@ -536,32 +536,50 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 
 void AHUDBase::SetUnitSelected(AUnitBase* Unit)
 {
-	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-		SelectedUnits[i]->SetDeselected();
+	// Deselect and prune any invalid pointers first
+	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
+	{
+		AUnitBase* Sel = SelectedUnits.IsValidIndex(i) ? SelectedUnits[i] : nullptr;
+		if (IsValid(Sel))
+		{
+			Sel->SetDeselected();
+		}
+		else
+		{
+			SelectedUnits.RemoveAtSwap(i);
+		}
 	}
 
-	if(SelectedUnits.Num())
 	SelectedUnits.Empty();
-	
-	SelectedUnits.Add(Unit);
 
-	for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-		SelectedUnits[i]->SetSelected();
+	// Add and select the new unit if valid
+	if (IsValid(Unit))
+	{
+		SelectedUnits.Add(Unit);
+		Unit->SetSelected();
+		SelectUnitsFromSameSquad(Unit);
 	}
-
-	SelectUnitsFromSameSquad(Unit);
 }
 
 void AHUDBase::DeselectAllUnits()
 {
-	if(CharacterIsUnSelectable)
-		for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-			if(SelectedUnits[i])
-				SelectedUnits[i]->SetDeselected();
+	if (CharacterIsUnSelectable)
+	{
+		for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
+		{
+			AUnitBase* Sel = SelectedUnits.IsValidIndex(i) ? SelectedUnits[i] : nullptr;
+			if (IsValid(Sel))
+			{
+				Sel->SetDeselected();
+			}
+			else
+			{
+				SelectedUnits.RemoveAtSwap(i);
+			}
 		}
 
-	if(CharacterIsUnSelectable)
 		SelectedUnits.Empty();
+	}
 }
 
 void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
