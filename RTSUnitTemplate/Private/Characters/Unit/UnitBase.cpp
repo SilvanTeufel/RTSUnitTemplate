@@ -1428,21 +1428,7 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 
 	FBox BoundsBox;
 
-	/*
-	if (bUseSkeletalMovement)
-	{
-		if (USkeletalMeshComponent* MeshComp = GetMesh())
-		{
-			BoundsBox = MeshComp->Bounds.GetBox();
-		}
-	}
-	else if (ISMComponent)
-	{
-		BoundsBox = ISMComponent->Bounds.GetBox();
-	}
-	*/
-	//if (!BoundsBox.IsValid)
-	{
+	
 		// Try to find a capsule collision component first…
 		UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
 
@@ -1471,7 +1457,6 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 				return;
 			}
 		}
-	}
 
 	// 2. Pad the bounds slightly to ensure full coverage
 	// Ensure PaddedBounds remains valid even with negative padding

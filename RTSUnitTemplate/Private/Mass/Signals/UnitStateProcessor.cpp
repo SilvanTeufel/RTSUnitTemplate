@@ -45,6 +45,7 @@
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/TransportUnit.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/CapsuleComponent.h"
 
@@ -242,6 +243,9 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
    		UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
+
+		LoadUnitDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::LoadUnit)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleLoadUnit));
 
 		// Follow feature delegates removed: following now uses FriendlyTargetEntity on FMassAITargetFragment
 		}
@@ -2958,6 +2962,71 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	//HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  Worker);
 }
 
+
+void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem) return;
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	for (FMassEntityHandle Entity : Entities)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleLoadUnit received signal for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
+		if (FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
+		{
+			if (EntityManager.IsEntityValid(TargetFrag->FriendlyTargetEntity))
+			{
+				if (FMassActorFragment* TransporterActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(TargetFrag->FriendlyTargetEntity))
+				{
+					if (ATransportUnit* Transporter = Cast<ATransportUnit>(TransporterActorFrag->GetMutable()))
+					{
+						if (FMassActorFragment* UnitActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
+						{
+							if (AUnitBase* UnitToLoad = Cast<AUnitBase>(UnitActorFrag->GetMutable()))
+							{
+								if (UnitToLoad->HasAuthority())
+								{
+									UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Entity [%d:%d] Calling Transporter->LoadUnit for Unit %s"), Entity.Index, Entity.SerialNumber, *UnitToLoad->GetName());
+									Transporter->LoadUnit(UnitToLoad);
+								}
+								
+								// Reset friendly target and stop following since we are now loaded
+								TargetFrag->FriendlyTargetEntity.Reset();
+								UnitToLoad->FollowUnit = nullptr;
+								UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Entity [%d:%d] Reset FriendlyTargetEntity and FollowUnit after loading."), Entity.Index, Entity.SerialNumber);
+							}
+							else
+							{
+								UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] UnitActorFrag found but cast to AUnitBase failed"), Entity.Index, Entity.SerialNumber);
+							}
+						}
+						else
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] FMassActorFragment NOT found for Unit"), Entity.Index, Entity.SerialNumber);
+						}
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] TransporterActorFrag found but cast to ATransportUnit failed"), Entity.Index, Entity.SerialNumber);
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] FMassActorFragment NOT found for FriendlyTargetEntity [%d:%d]"), 
+						Entity.Index, Entity.SerialNumber, TargetFrag->FriendlyTargetEntity.Index, TargetFrag->FriendlyTargetEntity.SerialNumber);
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] FriendlyTargetEntity [%d:%d] is NOT valid"), 
+					Entity.Index, Entity.SerialNumber, TargetFrag->FriendlyTargetEntity.Index, TargetFrag->FriendlyTargetEntity.SerialNumber);
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Entity [%d:%d] FMassAITargetFragment NOT found"), Entity.Index, Entity.SerialNumber);
+		}
+	}
+}
 
 void UUnitStateProcessor::UpdateWorkerMovement(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {

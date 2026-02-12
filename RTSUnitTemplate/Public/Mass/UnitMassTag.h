@@ -60,6 +60,7 @@ USTRUCT() struct FMassStateEvasionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateCastingTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassTransportTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassSoftAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
 // --- Hilfs-Tags ---
@@ -110,6 +111,18 @@ struct FMassChargeTimerFragment : public FMassFragment
 	// Flag to indicate if the original speed was set (optional, for robustness)
 	UPROPERTY()
 	bool bOriginalSpeedSet = false;
+};
+
+USTRUCT()
+struct FMassTransportFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Transport")
+	float InstantLoadRange = 300.f;
+
+	UPROPERTY(EditAnywhere, Category = "Transport")
+	int32 TransportId = 0;
 };
 
 USTRUCT()

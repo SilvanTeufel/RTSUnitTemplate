@@ -148,6 +148,12 @@ public:
 	float FollowOffset = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float InstantLoadRange = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	int32 TransportId = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float VerticalDeathRotationMultiplier = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")

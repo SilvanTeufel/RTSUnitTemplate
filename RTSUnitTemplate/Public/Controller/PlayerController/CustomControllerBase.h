@@ -146,9 +146,6 @@ public:
 	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool CheckClickOnTransportUnitMass(FHitResult Hit_Pawn);
-	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickPressedMass();
 
 
@@ -177,6 +174,9 @@ public:
 
 	/** Validates and adjusts a target location and formation offsets to fit on the NavMesh. */
 	bool ValidateAndAdjustGridLocation(const TArray<AUnitBase*>& Units, FVector& InOutLocation, TArray<FVector>& OutOffsets, float& OutSpacing);
+
+	/** Returns true if the location is within any recently marked dirty area (obstacle). */
+	bool IsLocationInDirtyArea(const FVector& Location) const;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetHoldPositionOnSelectedUnits();

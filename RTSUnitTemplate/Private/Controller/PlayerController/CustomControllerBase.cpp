@@ -191,9 +191,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[SingleMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("[SingleMove] Early return: Target location %s is not on NavMesh or is in a dirty area."), *NewTargetLocation.ToString());
 			return;
 		}
 	}
@@ -305,9 +305,9 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		FNavLocation NavLoc;
 		// Check the first target location as a representative of the move command.
 		// Using a slightly larger extent to account for formation offsets.
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocations[0].ToString());
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Early return: Target location %s is not on NavMesh or is in a dirty area."), *NewTargetLocations[0].ToString());
 			return;
 		}
 	}
@@ -641,9 +641,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent))
+		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[AbilityMove] Early return: Target location %s is not on NavMesh."), *NewTargetLocation.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("[AbilityMove] Early return: Target location %s is not on NavMesh or is in a dirty area."), *NewTargetLocation.ToString());
 			return;
 		}
 	}
@@ -724,12 +724,6 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 {
 		if (Transporter && Transporter->IsATransporter) // Transporter->IsATransporter
 		{
-			// Assign a non-zero TransportId to the clicked transporter (stable identifier)
-			if (Transporter->TransportId == 0)
-			{
-				Transporter->TransportId = Transporter->GetUniqueID();
-			}
-
 			// Set up start and end points for the line trace (downward direction)
 			FVector Start = Transporter->GetMassActorLocation();
 			
@@ -753,7 +747,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
 					// Bind this unit to the clicked transporter so it won't load into others en route
-					UnitsToLoad[i]->TransportId = Transporter->TransportId;
+			
 					UnitsToLoad[i]->RemoveFocusEntityTarget();
 					// Calculate the distance between the selected unit and the transport unit in X/Y space only.
 
@@ -839,57 +833,12 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 				if (UnitsToLoad[i] && UnitsToLoad[i]->UnitState != UnitData::Dead && UnitsToLoad[i]->CanBeTransported)
 				{
 					UnitsToLoad[i]->SetRdyForTransport(false);
-					// Clear any prior transporter assignment since the target transporter is invalid
-					UnitsToLoad[i]->TransportId = 0;
 				}
 			}
 		}
 	
 }
 
-bool ACustomControllerBase::CheckClickOnTransportUnitMass(FHitResult Hit_Pawn)
-{
-	if (!Hit_Pawn.bBlockingHit) return false;
-
-		AActor* HitActor = Hit_Pawn.GetActor();
-		
-		AUnitBase* UnitBase = Cast<AUnitBase>(HitActor);
-	
-		if (!UnitBase || !UnitBase->CanBeSelected) return false;
-	
-	if (UnitBase && UnitBase->IsATransporter){
-		if (UnitBase->Attributes && UnitBase->Attributes->GetHealth() < UnitBase->Attributes->GetMaxHealth())
-		{
-			for (const AUnitBase* SelectedUnit : SelectedUnits)
-			{
-				if (SelectedUnit && SelectedUnit->CanRepair)
-				{
-					return false;
-				}
-			}
-		}
-
-		LoadUnitsMass(SelectedUnits, UnitBase);
-			
-			UnitBase->RemoveFocusEntityTarget();
-			TArray<AUnitBase*> NewSelection;
-
-			NewSelection.Emplace(UnitBase);
-			
-			FTimerHandle TimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(
-				TimerHandle,
-				[this, NewSelection]()
-				{
-					Client_UpdateHUDSelection(NewSelection, SelectableTeamId);
-				},
-				0.25f,  // Delay time in seconds (change as needed)
-				false  // Do not loop
-			);
-			return true;
-		}
-	return false;
-}
 
 void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT)
 {
@@ -1159,21 +1108,17 @@ void ACustomControllerBase::RightClickPressedMass()
 
 	
 	FHitResult Hit;
-	if (!CheckClickOnTransportUnitMass(HitPawn))
+	if (TryHandleFollowOnRightClick(HitPawn))
 	{
-		// Only handle follow if not clicking on a transport unit
-		if (TryHandleFollowOnRightClick(HitPawn))
+		return;
+	}
+
+	if (!SelectedUnits.Num() || !SelectedUnits[0] || !SelectedUnits[0]->CurrentDraggedWorkArea)
+	{
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
+		if (!CheckClickOnWorkArea(Hit))
 		{
-			return;
-		}
-		
-		if (!SelectedUnits.Num() || !SelectedUnits[0] || !SelectedUnits[0]->CurrentDraggedWorkArea)
-		{
-			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-			if (!CheckClickOnWorkArea(Hit))
-			{
-				RunUnitsAndSetWaypointsMass(Hit);
-			}
+			RunUnitsAndSetWaypointsMass(Hit);
 		}
 	}
 
@@ -1555,6 +1500,16 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
         return true;
     }
 
+    // Collect obstacle bounds once per call to avoid repeated actor iteration
+    TArray<FBox> DirtyAreas;
+    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+    {
+        if (IsValid(It->NavObstacleProxy))
+        {
+            DirtyAreas.Add(It->NavObstacleProxy->GetComponentsBoundingBox());
+        }
+    }
+
     // 1. Initial wide projection to find the nearest valid ground
     FNavLocation InitialNavLoc;
     if (NavSys->ProjectPointToNavigation(InOutLocation, InitialNavLoc, FVector(1500.f, 1500.f, 1500.f)))
@@ -1590,7 +1545,22 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
             {
                 FVector TargetP = InOutLocation + Off;
                 FNavLocation NavLoc;
-                if (!NavSys->ProjectPointToNavigation(TargetP, NavLoc, NavMeshProjectionExtent))
+                bool bOnNavMesh = NavSys->ProjectPointToNavigation(TargetP, NavLoc, NavMeshProjectionExtent);
+
+                bool bInDirtyArea = false;
+                if (bOnNavMesh)
+                {
+                    for (const FBox& DirtyBox : DirtyAreas)
+                    {
+                        if (DirtyBox.IsInside(NavLoc.Location))
+                        {
+                            bInDirtyArea = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!bOnNavMesh || bInDirtyArea)
                 {
                     bAllValid = false;
                     // Find nearest nav location for THIS point to calculate a shift for the whole grid
@@ -1630,6 +1600,22 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
     // We return true even if it's not perfectly on NavMesh after all attempts, 
     // to ensure the command is never completely rejected.
     return true; 
+}
+
+bool ACustomControllerBase::IsLocationInDirtyArea(const FVector& Location) const
+{
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		if (IsValid(It->NavObstacleProxy))
+		{
+			FBox Bounds = It->NavObstacleProxy->GetComponentsBoundingBox();
+			if (Bounds.IsInside(Location))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
@@ -1719,7 +1705,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
         U->RemoveFocusEntityTarget();
         U->SetRdyForTransport(false);
-        U->TransportId = 0;
+
         float Speed = U->Attributes->GetBaseRunSpeed();
         bool bSuccess = false;
         SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint, bSuccess);
@@ -2042,7 +2028,6 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 		float Speed = Unit->Attributes->GetBaseRunSpeed();
 		SetUnitState_Replication(Unit, 1);
 		Unit->SetRdyForTransport(false);
-		Unit->TransportId = 0;
 
 		if (Unit->bIsMassUnit)
 		{

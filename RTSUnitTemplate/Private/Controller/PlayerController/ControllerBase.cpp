@@ -217,7 +217,6 @@ void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector
 	SetUnitState_Replication(Unit,1);
 	MoveToLocationUEPathFinding(Unit, Location);
 	Unit->SetRdyForTransport(false);
-	Unit->TransportId = 0;
 }
 
 void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Location)
@@ -237,7 +236,6 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 	Unit->RunLocationArrayIterator = 0;
 	SetRunLocation(Unit, Location);
 	Unit->SetRdyForTransport(false);
-	Unit->TransportId = 0;
 }
 
 
@@ -257,7 +255,6 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 				/// Focus Enemy Units ///
 				Unit->UnitToChase = UnitBase;
 				Unit->SetRdyForTransport(false);
-				Unit->TransportId = 0;
 				SetUnitState_Replication(Unit, 3);
 				
 			}else if(UseUnrealEnginePathFinding)
@@ -565,7 +562,6 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 	SetUnitState_Replication(Unit, 1);
 	SetToggleUnitDetection(Unit, false);
 	Unit->SetRdyForTransport(false);
-	Unit->TransportId = 0;
 }
 
 void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
@@ -595,7 +591,6 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 	SetRunLocation(Unit, Location);
 	Unit->SetToggleUnitDetection(false);
 	Unit->SetRdyForTransport(false);
-	Unit->TransportId = 0;
 
 	float Range = FVector::Dist(UnitLocation, Location);
  

@@ -147,6 +147,7 @@ private:
 	FDelegateHandle FogParametersDelegateHandle;
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
+	FDelegateHandle LoadUnitDelegateHandle;
 
 	
 	// Cached subsystem pointers
@@ -276,6 +277,9 @@ private:
 	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void HandleLoadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities);
 	
 	FDelegateHandle UpdateWorkerMovementDelegateHandle;
 		

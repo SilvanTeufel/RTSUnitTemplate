@@ -12,6 +12,7 @@
 #include "Mass/UnitMassTag.h" // Include your custom tag definition (Adjust path)
 #include "MassEntityUtils.h"
 
+#include "Characters/Unit/TransportUnit.h"
 #include "MassRepresentationSubsystem.h"  
 #include "MassRepresentationTypes.h"
 // -----------------------------
@@ -409,6 +410,15 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	
 	if(UnitBase->AddGameplayEffectFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
+
+	if (ATransportUnit* TransportUnit = Cast<ATransportUnit>(Owner))
+	{
+		if (TransportUnit->IsATransporter)
+		{
+			FragmentsAndTags.Add(FMassTransportFragment::StaticStruct());
+			FragmentsAndTags.Add(FMassTransportTag::StaticStruct());
+		}
+	}
 
 	if (StopSeparation)
 		FragmentsAndTags.Add(FMassStateStopSeparationTag::StaticStruct());
@@ -1171,7 +1181,20 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		TargetFrag->FollowRadius = FollowRadius;
 		TargetFrag->FollowOffset = FollowOffset;
 	}
-	
+
+	if (FMassTransportFragment* TransportFrag = EntityManager.GetFragmentDataPtr<FMassTransportFragment>(EntityHandle))
+	{
+		if (ATransportUnit* TransportUnit = Cast<ATransportUnit>(OwnerActor))
+		{
+			TransportFrag->InstantLoadRange = TransportUnit->InstantLoadRange;
+			TransportFrag->TransportId = TransportUnit->TransportId;
+		}
+		else
+		{
+			TransportFrag->InstantLoadRange = InstantLoadRange;
+			TransportFrag->TransportId = TransportId;
+		}
+	}
 }
 
 void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

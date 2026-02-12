@@ -68,14 +68,16 @@ void ATransportUnit::SetCollisionAndVisibility(bool IsVisible)
 
 void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 {
-	if (!IsATransporter || UnitToLoad == this) return;
+	if (!IsATransporter || UnitToLoad == this || !UnitToLoad) return;
 	if (UnitToLoad->TeamId != TeamId) return;
+
+	if (LoadedUnits.Contains(UnitToLoad)) return;
 
 	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
 
 	// If the unit has been assigned a specific transporter,
 	// only allow loading into that exact transporter.
-	if (UnitToLoad && (UnitToLoad->TransportId == 0 || TransportId != UnitToLoad->TransportId))
+	if (UnitToLoad && (TransportId != 0 && TransportId != UnitToLoad->TransportId))
 	{
 		return;
 	}
@@ -247,8 +249,6 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 	LoadedUnit->IsInitialized = true;
 	LoadedUnit->CanActivateAbilities = true;
 	LoadedUnit->CanBeSelected = true;
-	// Clear any transporter assignment so the unit can be loaded by any transporter next time
-	LoadedUnit->TransportId = 0;
 }
 
 void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToLoad, const FVector& TransporterLocation)
