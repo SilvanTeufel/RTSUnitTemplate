@@ -55,6 +55,7 @@ protected:
 	void ScheduleFollowRetry(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT, int32 MaxAttempts = 8, float DelaySeconds = 0.5f);
 	void Retry_Server_SetUnitsFollowTarget();
 	void ExecuteFollowCommand(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT);
+	void ApplyTransportTags(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget);
 
 	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);

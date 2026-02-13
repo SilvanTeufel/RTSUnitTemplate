@@ -8,6 +8,8 @@
 #include "Widgets/UnitTimerWidget.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "Mass/UnitMassTag.h"
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
 
 void ATransportUnit::BindTransportOverlap()
 {
@@ -74,9 +76,7 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 	if (LoadedUnits.Contains(UnitToLoad)) return;
 
 	if (UnitToLoad->UnitSpaceNeeded > MaxSpacePerUnitAllowed) return;
-
-	// If the unit has been assigned a specific transporter,
-	// only allow loading into that exact transporter.
+	
 	if (UnitToLoad && (TransportId != 0 && TransportId != UnitToLoad->TransportId))
 	{
 		return;
@@ -89,6 +89,23 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 		
 		CurrentUnitsLoaded = CurrentUnitsLoaded + UnitToLoad->UnitSpaceNeeded;
 		LoadedUnits.Add(UnitToLoad);
+
+		// Remove the active transport tag from the unit's Mass entity
+		if (UnitToLoad->MassActorBindingComponent)
+		{
+			const FMassEntityHandle UnitHandle = UnitToLoad->MassActorBindingComponent->GetMassEntityHandle();
+			if (UWorld* World = GetWorld())
+			{
+				if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+				{
+					FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+					if (EM.IsEntityValid(UnitHandle))
+					{
+						EM.Defer().RemoveTag<FMassTransportProcessorActiveTag>(UnitHandle);
+					}
+				}
+			}
+		}
 
 		GetWorld()->GetTimerManager().ClearTimer(UnloadTimerHandle);
 		LoadedUnit(LoadedUnits.Num());
@@ -155,12 +172,6 @@ void ATransportUnit::UnloadNextUnit()
 			
 			// Apply replicated unload effects so all clients update the unit consistently
 			MulticastApplyUnloadEffects(LoadedUnit, FinalUnloadLocation);
-			/*
-			if (UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(LoadedUnit->GetMovementComponent()))
-			{
-				MovementComponent->SetMovementMode(EMovementMode::MOVE_Walking);
-			}
-			*/
 			LoadedUnit->UpdateEntityStateOnUnload(FinalUnloadLocation);
 		}
 		

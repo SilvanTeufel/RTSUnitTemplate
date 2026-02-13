@@ -61,6 +61,7 @@ USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateCastingTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassTransportTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassTransportProcessorActiveTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassSoftAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
 // --- Hilfs-Tags ---
@@ -123,6 +124,9 @@ struct FMassTransportFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Transport")
 	int32 TransportId = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Transport")
+	float DeactivationTimer = 0.f;
 };
 
 USTRUCT()

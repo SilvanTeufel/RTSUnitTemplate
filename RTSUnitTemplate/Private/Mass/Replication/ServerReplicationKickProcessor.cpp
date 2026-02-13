@@ -24,6 +24,7 @@
 #include "GameStates/ResourceGameState.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
@@ -263,23 +264,66 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 				if (bCanRelease)
 				{
-					StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager](FMassExecutionContext& FreezeCtx)
+					TArray<AUnitBase*> UnitsToBatchMove;
+					StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager, &UnitsToBatchMove](FMassExecutionContext& FreezeCtx)
 					{
 						const int32 Num = FreezeCtx.GetNumEntities();
 						TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();
 						const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = FreezeCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
 						for (int32 i = 0; i < Num; ++i)
 						{
-							EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(FreezeCtx.GetEntity(i));
-							if (ACharacter* Character = Cast<ACharacter>(ActorList[i].GetMutable()))
+							FMassEntityHandle Entity = FreezeCtx.GetEntity(i);
+							EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(Entity);
+							if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
 							{
-								if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+								UnitsToBatchMove.Add(Unit);
+								if (UCharacterMovementComponent* MoveComp = Unit->GetCharacterMovement())
 								{
 									MoveComp->SetMovementMode(CharList[i].bIsFlying ? MOVE_Flying : MOVE_Walking);
 								}
 							}
 						}
 					});
+
+					if (UnitsToBatchMove.Num() > 0)
+					{
+						TArray<FVector> NewTargetLocations;
+						TArray<float> DesiredSpeeds;
+						TArray<float> BatchRadii;
+
+						for (AUnitBase* Unit : UnitsToBatchMove)
+						{
+							FVector MassLoc = Unit->GetMassActorLocation();
+							FVector TraceStart = MassLoc + FVector(0.f, 0.f, 5000.f);
+							FVector TraceEnd = MassLoc - FVector(0.f, 0.f, 5000.f);
+
+							FHitResult GroundHit;
+							FCollisionQueryParams Params;
+							Params.AddIgnoredActor(Unit);
+
+							FVector TargetLoc = MassLoc;
+							if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+							{
+								TargetLoc = GroundHit.Location;
+							}
+
+							NewTargetLocations.Add(TargetLoc);
+							DesiredSpeeds.Add(300.f);
+							BatchRadii.Add(50.f);
+						}
+
+						ACustomControllerBase* AnyController = nullptr;
+						for (TActorIterator<ACustomControllerBase> It(World); It; ++It)
+						{
+							AnyController = *It;
+							break;
+						}
+
+						if (AnyController)
+						{
+							AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, UnitsToBatchMove, NewTargetLocations, DesiredSpeeds, BatchRadii, false);
+						}
+					}
 
 					GS->bStartupFreezeReleased = true;
 					UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup freeze released for all units (MatchStartTime reached or skipped. Mode=%d, PC=%d, MatchStartTime=%.2f)."), 

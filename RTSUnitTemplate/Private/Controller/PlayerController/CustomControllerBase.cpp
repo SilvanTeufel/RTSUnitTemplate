@@ -989,11 +989,16 @@ void ACustomControllerBase::Retry_Server_SetUnitsFollowTarget()
 
 void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT)
 {
+	UWorld* World = GetWorld();
+
 	// Apply follow target immediately
 	for (AUnitBase* Unit : Units)
 	{
 		if (!Unit) continue;
-		Unit->ApplyFollowTarget(FollowTarget);
+		if (Unit != FollowTarget)
+		{
+			Unit->ApplyFollowTarget(FollowTarget);
+		}
 
 		if (Unit->IsWorker && FollowTarget)
 		{
@@ -1007,19 +1012,40 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 		}
 	}
 
+	ApplyTransportTags(Units, FollowTarget);
+
 	if (FollowTarget)
 	{
-		const FVector FollowLocation = FollowTarget->GetActorLocation();
+		FVector FollowLocation = FollowTarget->GetActorLocation();
+
+		if (World)
+		{
+			FVector TraceStart = FollowLocation + FVector(0.f, 0.f, 5000.f);
+			FVector TraceEnd = FollowLocation - FVector(0.f, 0.f, 5000.f);
+			FHitResult HitResult;
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActor(FollowTarget);
+			for (AUnitBase* Unit : Units)
+			{
+				if (Unit) QueryParams.AddIgnoredActor(Unit);
+			}
+
+			if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+			{
+				FollowLocation = HitResult.Location;
+			}
+		}
+
 		TArray<AUnitBase*> ValidUnits;
 		TArray<FVector> NewTargetLocations;
 		TArray<float> DesiredSpeeds;
-		ValidUnits.Reserve(Units.Num());
-		NewTargetLocations.Reserve(Units.Num());
-		DesiredSpeeds.Reserve(Units.Num());
+		ValidUnits.Reserve(Units.Num() + 1);
+		NewTargetLocations.Reserve(Units.Num() + 1);
+		DesiredSpeeds.Reserve(Units.Num() + 1);
 
 		for (AUnitBase* Unit : Units)
 		{
-			if (!Unit) continue;
+			if (!Unit || Unit == FollowTarget) continue;
 			const bool bWantsRepair = (Unit->IsWorker && Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired);
 			if (bWantsRepair)
 			{
@@ -1043,6 +1069,78 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 				BatchRadii.Add(Unit->MovementAcceptanceRadius);
 			}
 			Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, BatchRadii, AttackT);
+		}
+	}
+}
+
+void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget)
+{
+	UWorld* World = GetWorld();
+	UMassEntitySubsystem* MassSubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	FMassEntityManager* EntityManager = MassSubsystem ? &MassSubsystem->GetMutableEntityManager() : nullptr;
+
+	if (!EntityManager) return;
+
+	ATransportUnit* Transporter = Cast<ATransportUnit>(FollowTarget);
+	bool bTargetIsTransporter = Transporter && Transporter->IsATransporter;
+	bool bAnyUnitTagged = false;
+
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit || !Unit->MassActorBindingComponent) continue;
+
+		const FMassEntityHandle UnitHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager->IsEntityValid(UnitHandle))
+		{
+			// Clear any existing transport tag as we are issuing a new command
+			EntityManager->RemoveTagFromEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
+		}
+
+		bool bShouldApplyToUnit = false;
+		if (bTargetIsTransporter && Unit->CanBeTransported)
+		{
+			// Check space and transport IDs
+			if ((Transporter->CurrentUnitsLoaded + Unit->UnitSpaceNeeded) <= Transporter->MaxTransportUnits)
+			{
+				if (Unit->TransportId == 0 || Transporter->TransportId == Unit->TransportId)
+				{
+					bShouldApplyToUnit = true;
+				}
+			}
+		}
+
+		// Repair-specific logic: only allow loading if target is full health OR unit is already in repair state
+		if (Unit->CanRepair && FollowTarget)
+		{
+			const bool bFollowTargetHasMaxHealth = FollowTarget->Attributes && FollowTarget->Attributes->GetHealth() >= FollowTarget->Attributes->GetMaxHealth();
+			const bool bIsAlreadyRepairing = DoesEntityHaveTag(*EntityManager, UnitHandle, FMassStateRepairTag::StaticStruct());
+
+			if (!bFollowTargetHasMaxHealth && !bIsAlreadyRepairing)
+			{
+				bShouldApplyToUnit = false;
+			}
+		}
+
+		if (bShouldApplyToUnit)
+		{
+			if (EntityManager->IsEntityValid(UnitHandle))
+			{
+				EntityManager->AddTagToEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
+				bAnyUnitTagged = true;
+			}
+		}
+	}
+
+	if (bAnyUnitTagged && bTargetIsTransporter)
+	{
+		const FMassEntityHandle TransporterHandle = Transporter->MassActorBindingComponent->GetMassEntityHandle();
+		if (EntityManager->IsEntityValid(TransporterHandle))
+		{
+			EntityManager->AddTagToEntity(TransporterHandle, FMassTransportProcessorActiveTag::StaticStruct());
+			if (FMassTransportFragment* TransportFrag = EntityManager->GetFragmentDataPtr<FMassTransportFragment>(TransporterHandle))
+			{
+				TransportFrag->DeactivationTimer = 0.f;
+			}
 		}
 	}
 }

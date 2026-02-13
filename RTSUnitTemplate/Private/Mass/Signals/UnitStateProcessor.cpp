@@ -2993,6 +2993,16 @@ void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHan
 								TargetFrag->FriendlyTargetEntity.Reset();
 								UnitToLoad->FollowUnit = nullptr;
 								UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Entity [%d:%d] Reset FriendlyTargetEntity and FollowUnit after loading."), Entity.Index, Entity.SerialNumber);
+								
+								// Remove the active transport tag from the loaded unit
+								EntityManager.Defer().RemoveTag<FMassTransportProcessorActiveTag>(Entity);
+
+								// If the transporter is now full, remove the active tag from it as well
+								if (Transporter->CurrentUnitsLoaded >= Transporter->MaxTransportUnits)
+								{
+									EntityManager.Defer().RemoveTag<FMassTransportProcessorActiveTag>(TargetFrag->FriendlyTargetEntity);
+									UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Transporter [%d:%d] is full, deactivating TransportProcessor tag."), TargetFrag->FriendlyTargetEntity.Index, TargetFrag->FriendlyTargetEntity.SerialNumber);
+								}
 							}
 							else
 							{
