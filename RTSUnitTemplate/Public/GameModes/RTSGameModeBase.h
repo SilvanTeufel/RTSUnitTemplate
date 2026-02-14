@@ -19,6 +19,7 @@ class ARLAgent;
 class ACameraControllerBase;
 class APlayerStartBase;
 class ARTSBTController;
+class AController;
 class UBehaviorTree;
 class UWorld;
 class AUnitBase;
@@ -159,6 +160,8 @@ public:
 	
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
+	virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+	
 	void SetupLoadingWidgetForPlayer(APlayerController* NewPlayer);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)

@@ -755,6 +755,27 @@ void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 	}
 }
 
+void ARTSGameModeBase::HandleSeamlessTravelPlayer(AController*& C)
+{
+	ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(C);
+	if (CameraPC && CameraPC->bIsAi)
+	{
+		// AI PlayerController should not travel to the new level
+		UE_LOG(LogTemp, Log, TEXT("[GM] AI PlayerController %s detected during seamless travel. Destroying to prevent transition."), *C->GetName());
+		
+		if (APawn* Pawn = CameraPC->GetPawn())
+		{
+			Pawn->Destroy();
+		}
+		CameraPC->Destroy();
+		C = nullptr;
+	}
+	else
+	{
+		Super::HandleSeamlessTravelPlayer(C);
+	}
+}
+
 void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 {
 	if (AResourceGameState* GS = GetGameState<AResourceGameState>())
@@ -1112,6 +1133,8 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			continue;
 		}
 
+		AIPC->bIsAi = true;
+		
 		// Spawn the AI pawn at the PlayerStart
 		FTransform SpawnTransform = Start->GetActorTransform();
 		APawn* AIPawn = GetWorld()->SpawnActor<APawn>(PawnClass, SpawnTransform);
@@ -1828,6 +1851,35 @@ FVector ARTSGameModeBase::CalcLocation(FVector Offset, FVector MinRange, FVector
 
 void ARTSGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (EndPlayReason == EEndPlayReason::LevelTransition || EndPlayReason == EEndPlayReason::Quit)
+	{
+		// Clean up AI-specific actors that might not be handled by the engine transition
+		TArray<AActor*> Orchestrators;
+		UGameplayStatics::GetAllActorsOfClass(this, ARTSBTController::StaticClass(), Orchestrators);
+		for (AActor* Actor : Orchestrators)
+		{
+			if (Actor)
+			{
+				Actor->Destroy();
+			}
+		}
+
+		// AI PlayerControllers are handled in HandleSeamlessTravelPlayer for seamless travel,
+		// but we can ensure they are gone here as well if they were missed or for non-seamless.
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+			if (PC && PC->bIsAi)
+			{
+				if (APawn* Pawn = PC->GetPawn())
+				{
+					Pawn->Destroy();
+				}
+				PC->Destroy();
+			}
+		}
+	}
+
 	Super::EndPlay(EndPlayReason);
 	/*
 	#if WITH_EDITOR
