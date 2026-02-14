@@ -297,22 +297,35 @@ void ACameraControllerBase::BeginPlay()
 
 void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag, int TeamId)
 {
+	UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: Tag=%s, TeamId=%d"), *Tag.ToString(), TeamId);
 	
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
 	if (GameMode)
 	{
+		UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: GameMode found, AllUnits.Num()=%d"), GameMode->AllUnits.Num());
+		bool bFound = false;
 		for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
 		{
 			AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
 			
 			if (Unit && Unit->UnitTags.HasTagExact(Tag) && Unit->TeamId == TeamId)
 			{
+				UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: Found matching unit: %s"), *Unit->GetName());
 				ServerSetCameraUnit(Unit, TeamId);
 				ClientSetCameraUnit(Unit, TeamId);
-				
+				bFound = true;
 			}
 		}
+
+		if (!bFound)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: No unit found with Tag %s and TeamId %d"), *Tag.ToString(), TeamId);
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: GameMode NOT found!"));
 	}
 }
 
