@@ -3029,7 +3029,8 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 	}
 	WA->ServerMeshRotationBuilding = DesiredRot;
 
-	const FTransform SpawnTM(DesiredRot, WA->GetActorLocation());
+		FVector CASpawnLoc = WA->GetActorLocation();
+	const FTransform SpawnTM(DesiredRot, CASpawnLoc);
 	AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (NewConstruction)
 	{
@@ -3080,6 +3081,13 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			CU->Worker = Unit;
 			CU->WorkArea = WA;
 			CU->CastTime = WA->BuildTime;
+
+			if (CU->SetOffsetsDueToWorkAreaBounds && WA->Mesh)
+			{
+				const FBoxSphereBounds MeshBounds = WA->Mesh->CalcBounds(WA->Mesh->GetRelativeTransform());
+				CU->DefaultOscOffsetA.Z = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
+				CU->DefaultOscOffsetB.Z = MeshBounds.Origin.Z + MeshBounds.BoxExtent.Z;
+			}
 		}
 		NewConstruction->ServerMeshRotation = DesiredRot;
 		NewConstruction->FinishSpawning(SpawnTM);
@@ -3121,9 +3129,10 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 							NewScale.Z = ScaleZComp;
 						}
 					}
-					NewConstruction->SetActorScale3D(NewScale * 2.f);
+					NewConstruction->SetActorScale3D(NewScale * 2.f * WA->ScaleConstructionUnit);
 				}
 				
+			/*
 				FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
 				const FVector UnitCenter = ScaledBox.GetCenter();
 				const float BottomZ = ScaledBox.Min.Z;
@@ -3132,6 +3141,7 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 				FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
 				if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
 				NewConstruction->SetActorLocation(FinalLoc);
+			*/
 			}
 			if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
 			{
@@ -3375,94 +3385,96 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
 			PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
 
-		}
+			// 2. Final check for valid placement
+			TArray<AActor*> OverlappingActors;
+			DraggedWorkArea->GetOverlappingActors(OverlappingActors);
 
-		// 2. Final check for valid placement
-		TArray<AActor*> OverlappingActors;
-		DraggedWorkArea->GetOverlappingActors(OverlappingActors);
-
-		bool bIsOverlappingWithValidArea = false;
-		bool bIsNoBuildZone = false;
-		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+			bool bIsOverlappingWithValidArea = false;
+			bool bIsNoBuildZone = false;
+			ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
 
 
-		for (AActor* OverlappedActor : OverlappingActors)
-		{
-			if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
+			for (AActor* OverlappedActor : OverlappingActors)
 			{
-				continue;
-			}
-			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
-			{
-				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
-				if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
+				if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
 				{
-					bIsNoBuildZone = true;
+					continue;
 				}
-				bIsOverlappingWithValidArea = true;
-				// After resolution, we do NOT tolerate any overlap if not explicitly snapped
-				if (!bWorkAreaIsSnapped) break;
-			}
-		}
-
-		bool bTooCloseToResources = false;
-		if (DraggedWorkArea->DenyPlacementCloseToResources)
-		{
-			for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
-			{
-				AWorkArea* ResWA = *ItWA;
-				if (ResWA && ResWA != DraggedWorkArea)
+				if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
 				{
-					const WorkAreaData::WorkAreaType T = ResWA->Type;
-					const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-					if (bIsResourceType)
+					AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
+					if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
 					{
-						if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
+						bIsNoBuildZone = true;
+					}
+					bIsOverlappingWithValidArea = true;
+					// After resolution, we do NOT tolerate any overlap if not explicitly snapped
+					if (!bWorkAreaIsSnapped) break;
+				}
+			}
+
+			bool bTooCloseToResources = false;
+			if (DraggedWorkArea->DenyPlacementCloseToResources)
+			{
+				for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+				{
+					AWorkArea* ResWA = *ItWA;
+					if (ResWA && ResWA != DraggedWorkArea)
+					{
+						const WorkAreaData::WorkAreaType T = ResWA->Type;
+						const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+						if (bIsResourceType)
 						{
-							bTooCloseToResources = true;
-							break;
+							if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
+							{
+								bTooCloseToResources = true;
+								break;
+							}
 						}
 					}
 				}
 			}
-		}
 
-		bool bNeedsBeaconOutOfRange = false;
-		if (DraggedWorkArea->NeedsBeacon)
-		{
-			UWorld* WorldCtx = GetWorld();
-			if (WorldCtx)
+			bool bNeedsBeaconOutOfRange = false;
+			if (DraggedWorkArea->NeedsBeacon)
 			{
-				const FVector Pos = DraggedWorkArea->GetActorLocation();
-				bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
-			}
-		}
-
-		bool bOffNavMesh = false;
-		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
-		{
-			FNavLocation NavLoc;
-			if (!NavSys->ProjectPointToNavigation(DraggedWorkArea->GetActorLocation(), NavLoc, FVector(200.f, 200.f, 1000.f)))
-			{
-				bOffNavMesh = true;
-			}
-		}
-
-		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
-		{
-			if (InDropWorkAreaFailedSound)
-			{
-				Client_PlaySound2D(InDropWorkAreaFailedSound);
+				UWorld* WorldCtx = GetWorld();
+				if (WorldCtx)
+				{
+					const FVector Pos = DraggedWorkArea->GetActorLocation();
+					bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
+				}
 			}
 
-			DraggedWorkArea->Destroy();
-			UnitBase->BuildArea = nullptr;
-			UnitBase->CurrentDraggedWorkArea = nullptr;
-			CancelCurrentAbility(UnitBase);
-			SendWorkerToBase(UnitBase);
-			return true;
-		}
+			bool bOffNavMesh = false;
+			if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+			{
+				FNavLocation NavLoc;
+				if (!NavSys->ProjectPointToNavigation(DraggedWorkArea->GetActorLocation(), NavLoc, FVector(200.f, 200.f, 1000.f)))
+				{
+					bOffNavMesh = true;
+				}
+			}
+			
+		
 
+			if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
+			{
+				if (InDropWorkAreaFailedSound)
+				{
+					Client_PlaySound2D(InDropWorkAreaFailedSound);
+				}
+
+				DraggedWorkArea->Destroy();
+				UnitBase->BuildArea = nullptr;
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+				CancelCurrentAbility(UnitBase);
+				SendWorkerToBase(UnitBase);
+				return true;
+			}
+			
+		}
+	
 		if (UnitBase->IsWorker)
 		{
 			if (DropWorkAreaSound)

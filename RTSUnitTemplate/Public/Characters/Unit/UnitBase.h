@@ -415,6 +415,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateUnitNavigation();
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAbilityEnabledByKey(const FString& Key, bool bEnable);
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void AddUnitToChase(AActor* OtherActor);
 

@@ -16,6 +16,7 @@
 class AUnitBase;
 class AWorkingUnitBase;
 class UMaterialInstanceDynamic;
+class UTexture;
 
 UCLASS()
 class RTSUNITTEMPLATE_API AWorkArea : public AActor
@@ -46,6 +47,9 @@ public:
 	// Pointer to the active construction site actor (if any)
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	class AUnitBase* ConstructionUnit = nullptr;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
+	FVector ScaleConstructionUnit = FVector(1.f, 1.f, 1.f);
 	
 	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveAreaFromGroup();
@@ -216,6 +220,30 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
 	float MaterializePower = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName BaseTexParameterName = FName(TEXT("Base Texture"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	UTexture* BaseTexParameterValue = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName MetallicTexParameterName = FName(TEXT("Metallic Texture"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	UTexture* MetallicTexParameterValue = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName NormalTexParameterName = FName(TEXT("Normal Texture"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	UTexture* NormalTexParameterValue = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	FName SpecTexParameterName = FName(TEXT("Specular Texture"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	UTexture* SpecTexParameterValue = nullptr;
 
 	UPROPERTY(ReplicatedUsing = OnRep_MIDEnabled)
 	bool bMIDEnabled = false;

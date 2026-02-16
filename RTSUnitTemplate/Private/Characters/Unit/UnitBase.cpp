@@ -1296,6 +1296,27 @@ void AUnitBase::UpdateUnitNavigation()
 	
 }
 
+void AUnitBase::SetAbilityEnabledByKey(const FString& Key, bool bEnable)
+{
+	const FString NormalizedKey = NormalizeAbilityKey(Key);
+
+	if (HasAuthority())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
+				if (!CustomPC) continue;
+				if (CustomPC->SelectableTeamId == TeamId)
+				{
+					CustomPC->Client_ApplyOwnerAbilityKeyToggle(this, NormalizedKey, bEnable);
+				}
+			}
+		}
+	}
+}
+
 
 void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
 {

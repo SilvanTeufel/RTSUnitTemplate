@@ -24,6 +24,8 @@ private:
 public:
 	virtual void BeginPlay() override;
 
+	virtual void Destroyed() override;
+
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category=Worker)
@@ -89,6 +91,8 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category="RTSUnitTemplate")
 	void FinishedBuild();
+
+	virtual void SetCharacterVisibility(bool desiredVisibility) override;
 };
 
 

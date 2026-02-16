@@ -198,9 +198,6 @@ private:
 	);
 
 	UFUNCTION()
-	void SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable);
-	
-	UFUNCTION()
 	void HandleGetResource(
 		FName SignalName,
 		TArray<FMassEntityHandle>& Entities

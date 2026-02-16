@@ -12,7 +12,7 @@
 UAreaDecalComponent::UAreaDecalComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.TickInterval = TickInterval; 
+	PrimaryComponentTick.TickInterval = 0.f; 
 	SetIsReplicatedByDefault(true);
 
 	// Initial state is inactive.
@@ -53,26 +53,30 @@ void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bDecalIsVisible) return;
-	
-	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
-
-	// 2. CRITICAL: Check if the cast was successful before using the pointer!
-	if (!OwningUnit)
+	// 1. Visibility check (throttled to VisibilityCheckInterval)
+	TimeSinceLastVisibilityCheck += DeltaTime;
+	if (TimeSinceLastVisibilityCheck >= VisibilityCheckInterval)
 	{
-		UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot interact with Mass."), *GetOwner()->GetName());
-		return;
-	}
+		TimeSinceLastVisibilityCheck = 0.f;
 
-	bool bVisibility = OwningUnit->ComputeLocalVisibility();
+		if (!bDecalIsVisible) return;
 
-	// Only update visibility if the state needs to change to avoid redundant calls.
-	if (IsVisible() != bVisibility)
-	{
-		SetVisibility(bVisibility);
-		SetHiddenInGame(!bVisibility);
+		AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+
+		if (!OwningUnit)
+		{
+			UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot interact with Mass."), *GetOwner()->GetName());
+			return;
+		}
+
+		bool bVisibility = OwningUnit->ComputeLocalVisibility();
+
+		if (IsVisible() != bVisibility)
+		{
+			SetVisibility(bVisibility);
+			SetHiddenInGame(!bVisibility);
+		}
 	}
-	
 }
 
 
@@ -89,7 +93,12 @@ void UAreaDecalComponent::OnRep_DecalColor()
 
 void UAreaDecalComponent::OnRep_DecalRadius()
 {
-	UpdateDecalVisuals();
+	// If we are currently scaling via multicast/timer, don't let OnRep snap the value back.
+	// The timer will finish and set the final CurrentDecalRadius.
+	if (!bIsScaling)
+	{
+		UpdateDecalVisuals();
+	}
 }
 
 void UAreaDecalComponent::UpdateDecalVisuals()
@@ -115,10 +124,9 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		DynamicDecalMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
 	}
 	
-	// Apply the replicated radius. Z is the projection depth, Y and Z are the radius.
+	// Apply the current radius.
 	DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
-
-
+	MarkRenderStateDirty();
 }
 
 
@@ -219,6 +227,11 @@ void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 
 void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadius, float TimeSeconds, bool OwnerIsBeacon)
 {
+	Multicast_ScaleDecalToRadius(EndRadius, TimeSeconds, OwnerIsBeacon);
+}
+
+void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndRadius, float TimeSeconds, bool OwnerIsBeacon)
+{
 	if (EndRadius < 0.f)
 	{
 		EndRadius = 0.f;
@@ -241,7 +254,10 @@ void UAreaDecalComponent::Server_ScaleDecalToRadius_Implementation(float EndRadi
 	if (TimeSeconds <= KINDA_SMALL_NUMBER)
 	{
 		CurrentDecalRadius = EndRadius;
-		UpdateMassEffectRadius(EndRadius);
+		if (GetNetMode() == NM_DedicatedServer)
+		{
+			UpdateMassEffectRadius(EndRadius);
+		}
 		UpdateDecalVisuals();
 
 		// If owner is a beacon, propagate radius immediately
@@ -292,7 +308,13 @@ void UAreaDecalComponent::HandleScaleStep()
 
 	const float NewRadius = FMath::Lerp(ScaleStartRadius, ScaleTargetRadius, Alpha);
 	CurrentDecalRadius = NewRadius;
-	UpdateMassEffectRadius(NewRadius);
+	
+	// Server-only updates
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		UpdateMassEffectRadius(NewRadius);
+	}
+	
 	UpdateDecalVisuals();
 
 	// If the owner is a beacon, update its beacon range every tick with the current radius

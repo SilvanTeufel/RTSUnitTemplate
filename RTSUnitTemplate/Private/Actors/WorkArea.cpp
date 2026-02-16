@@ -10,6 +10,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Characters\Unit\WorkingUnitBase.h"
+#include "Engine/Texture.h"
 
 
 // Sets default values
@@ -207,6 +208,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, IsNoBuildZone);
 	DOREPLIFETIME(AWorkArea, ConstructionUnitClass);
 	DOREPLIFETIME(AWorkArea, ConstructionUnit);
+	DOREPLIFETIME(AWorkArea, ScaleConstructionUnit);
 	DOREPLIFETIME(AWorkArea, IsExtensionArea);
 	DOREPLIFETIME(AWorkArea, Workers);
 	DOREPLIFETIME(AWorkArea, bMIDEnabled);
@@ -567,6 +569,14 @@ void AWorkArea::SetupMID()
 		{
 			WorkAreaMID = Mesh->CreateDynamicMaterialInstance(0, SourceMaterial);
 			WorkAreaMID->SetScalarParameterValue(OffsetParameterName, OffsetParameterValue);
+			if (BaseTexParameterValue)
+				WorkAreaMID->SetTextureParameterValue(BaseTexParameterName, BaseTexParameterValue);
+			if (MetallicTexParameterValue)
+				WorkAreaMID->SetTextureParameterValue(MetallicTexParameterName, MetallicTexParameterValue);
+			if (NormalTexParameterValue)
+				WorkAreaMID->SetTextureParameterValue(NormalTexParameterName, NormalTexParameterValue);
+			if (SpecTexParameterValue)
+				WorkAreaMID->SetTextureParameterValue(SpecTexParameterName, SpecTexParameterValue);
 			if (!GetWorld()->GetTimerManager().IsTimerActive(ChangeMaterialTimerHandle))
 			{
 				Mesh->SetMaterial(0, WorkAreaMID);

@@ -51,10 +51,17 @@ protected:
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	float CurrentDecalRadius;
 
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
-	float TickInterval = 0.5f;
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
+	float ScaleInterpSpeed = 15.f;
 
-	UPROPERTY(EditAnywhere, Transient, ReplicatedUsing = OnRep_DecalRadius, Category = RTSUnitTemplate)
+	float VisualDecalRadius = 0.f;
+
+	UPROPERTY(Transient)
+	float VisibilityCheckInterval = 0.5f;
+
+	float TimeSinceLastVisibilityCheck = 0.f;
+
+	UPROPERTY(EditAnywhere, Transient, Replicated, Category = RTSUnitTemplate)
 	bool bDecalIsVisible = true;
 	/*
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
@@ -109,8 +116,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Area Decal", Server, Reliable)
 	void Server_ScaleDecalToRadius(float EndRadius, float TimeSeconds, bool OwnerIsBeacon = false);
 
-private:
-	// Timer-driven smooth scaling state (server-only)
+	/**
+	 * Multicast version of ScaleDecalToRadius to allow smooth client-side interpolation.
+	 */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ScaleDecalToRadius(float EndRadius, float TimeSeconds, bool OwnerIsBeacon);
+
+protected:
+	// Timer-driven smooth scaling state
 	FTimerHandle ScaleTimerHandle;
 	float ScaleStartRadius = 0.f;
 	float ScaleTargetRadius = 0.f;

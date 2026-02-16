@@ -1920,15 +1920,6 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
-
-                    		ABuildingBase* Building = Cast<ABuildingBase>(UnitBase);
-                    		if (Building && Building->Origin)
-                    		{
-							
-								Building->Origin->Extension = nullptr;
-                    			SetAbilityEnabledByKey(Building->Origin, "ExtensionAbility", true);
-								// Also Enable ExtensionAbility here from Origin
-							}
                     	
                     		if (UnitBase->DestroyAfterDeath)
                     		{
@@ -1941,29 +1932,6 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
     }); // End AsyncTask Lambda
 }
 
-
-void UUnitStateProcessor::SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable)
-{
-	const FString NormalizedKey = NormalizeAbilityKey(Key);
-	
-	if (UnitBase && UnitBase->HasAuthority())
-	{
-		if (World)
-		{
-			int32 SentCount = 0;
-			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
-			{
-				ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(It->Get());
-				if (!CustomPC) continue;
-				if (CustomPC->SelectableTeamId == UnitBase->TeamId)
-				{
-					CustomPC->Client_ApplyOwnerAbilityKeyToggle(UnitBase, NormalizedKey, bEnable);
-					++SentCount;
-				}
-			}
-		}
-	}
-}
 
 void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
@@ -2494,9 +2462,16 @@ void UUnitStateProcessor::SpawnWorkResource(
         return;
     }
 
-    if (!ActorToLockOn->ResourcePlace || !ActorToLockOn->ResourcePlace->Mesh)
+    AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(ActorToLockOn);
+    if (!WorkingUnit)
     {
-        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: ActorToLockOn->ResourcePlace or Mesh is null!"));
+        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: ActorToLockOn is not a WorkingUnitBase!"));
+        return;
+    }
+
+    if (!WorkingUnit->ResourcePlace || !WorkingUnit->ResourcePlace->Mesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnWorkResource: WorkingUnit->ResourcePlace or Mesh is null!"));
         return;
     }
 	
@@ -2506,72 +2481,82 @@ void UUnitStateProcessor::SpawnWorkResource(
         return;
     }
 
-    // -- SETUP TRANSFORM --
-    FTransform SpawnTransform;
-    SpawnTransform.SetLocation(Location);
-    SpawnTransform.SetRotation(FQuat::Identity);
+    AWorkResource* Res = WorkingUnit->WorkResource;
 
-    // -- DEFERRED SPAWN --
-    AWorkResource* NewRes = Cast<AWorkResource>(
-        UGameplayStatics::BeginDeferredActorSpawnFromClass(
-            World,
-            WRClass,
-            SpawnTransform,
-            ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-
-    if (!NewRes)
+    if (Res)
     {
-        UE_LOG(LogTemp, Error, TEXT("SpawnWorkResource: BeginDeferredActorSpawnFromClass returned null!"));
-        return;
+        // Reuse existing resource
+        Res->SetResourceActive(true, ResourceType, Res->Amount, Res->SocketOffset);
+        Res->IsAttached = true;
+    }
+    else
+    {
+        // -- SETUP TRANSFORM --
+        FTransform SpawnTransform;
+        SpawnTransform.SetLocation(Location);
+        SpawnTransform.SetRotation(FQuat::Identity);
+
+        // -- DEFERRED SPAWN --
+        Res = Cast<AWorkResource>(
+            UGameplayStatics::BeginDeferredActorSpawnFromClass(
+                World,
+                WRClass,
+                SpawnTransform,
+                ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+
+        if (!Res)
+        {
+            UE_LOG(LogTemp, Error, TEXT("SpawnWorkResource: BeginDeferredActorSpawnFromClass returned null!"));
+            return;
+        }
+
+        // Initialize properties *before* finishing spawn
+        Res->IsAttached   = true;
+        Res->ResourceType = ResourceType;
+
+        UGameplayStatics::FinishSpawningActor(Res, SpawnTransform);
+        
+        // Initial configuration from maps
+        Res->SetResourceActive(true, ResourceType, Res->Amount, Res->SocketOffset);
+
+        // -- ASSIGN the freshly spawned resource to the unit --
+        WorkingUnit->WorkResource = Res;
     }
 
-    // Initialize properties *before* finishing spawn
-    NewRes->IsAttached   = true;
-    NewRes->ResourceType = ResourceType;
-
-    UGameplayStatics::FinishSpawningActor(NewRes, SpawnTransform);
-
-    // -- TIDY UP any existing resource on the unit --
-    if (ActorToLockOn->WorkResource)
-    {
-        ActorToLockOn->WorkResource->Destroy();
-        ActorToLockOn->WorkResource = nullptr;
-    }
-
-    // -- ASSIGN the freshly spawned resource to the unit --
-    ActorToLockOn->WorkResource = NewRes;
-
-    // -- ATTACH to the unit’s mesh socket FIRST so the worker won't drop it even if the resource place gets destroyed --
+    // -- ATTACH --
     static const FName SocketName(TEXT("ResourceSocket"));
-    if (ActorToLockOn->GetMesh() && ActorToLockOn->GetMesh()->DoesSocketExist(SocketName))
+    if (WorkingUnit->GetMesh() && WorkingUnit->GetMesh()->DoesSocketExist(SocketName))
     {
-        NewRes->AttachToComponent(
-            ActorToLockOn->GetMesh(),
+        Res->AttachToComponent(
+            WorkingUnit->GetMesh(),
             FAttachmentTransformRules::SnapToTargetNotIncludingScale,
             SocketName);
 
         // Offset if needed
-        NewRes->SetActorRelativeLocation(NewRes->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
+        Res->SetActorRelativeLocation(Res->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
     }
 
-    // -- UPDATE the place’s remaining amount --
-    float& Remaining     = ActorToLockOn->ResourcePlace->AvailableResourceAmount;
-    const float MaxRemain = ActorToLockOn->ResourcePlace->MaxAvailableResourceAmount;
+    // Sync visibility with unit
+    Res->SetActorHiddenInGame(!WorkingUnit->ComputeLocalVisibility());
 
-    Remaining = FMath::Max(0.f, Remaining - NewRes->Amount);
+    // -- UPDATE the place’s remaining amount --
+    float& Remaining     = WorkingUnit->ResourcePlace->AvailableResourceAmount;
+    const float MaxRemain = WorkingUnit->ResourcePlace->MaxAvailableResourceAmount;
+
+    Remaining = FMath::Max(0.f, Remaining - Res->Amount);
 
     // If we’ve completely depleted it, destroy the place after we've attached the resource
     if (Remaining <= KINDA_SMALL_NUMBER)
     {
-        ActorToLockOn->ResourcePlace->Destroy();
-        ActorToLockOn->ResourcePlace = nullptr;
+        WorkingUnit->ResourcePlace->Destroy();
+        WorkingUnit->ResourcePlace = nullptr;
     }
     else
     {
         // Otherwise, update the visual scale of the “ResourcePlace” mesh
         float Ratio    = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
         float NewScale = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
-        ActorToLockOn->ResourcePlace->Multicast_SetScale(FVector(NewScale));
+        WorkingUnit->ResourcePlace->Multicast_SetScale(FVector(NewScale));
     }
 }
 
@@ -2579,9 +2564,7 @@ void UUnitStateProcessor::DespawnWorkResource(AWorkResource* WorkResource)
 {
 	if (WorkResource != nullptr)
 	{
-		WorkResource->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-		WorkResource->Destroy();
-		WorkResource = nullptr;
+		WorkResource->SetResourceActive(false);
 	}
 }
 
@@ -3576,6 +3559,13 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				{
 					CU->Worker = UnitBase;
 					CU->WorkArea = UnitBase->BuildArea;
+
+					if (CU->SetOffsetsDueToWorkAreaBounds && UnitBase->BuildArea->Mesh)
+					{
+						const FBoxSphereBounds MeshBounds = UnitBase->BuildArea->Mesh->CalcBounds(UnitBase->BuildArea->Mesh->GetRelativeTransform());
+						CU->DefaultOscOffsetA.Z = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
+						CU->DefaultOscOffsetB.Z = MeshBounds.Origin.Z + MeshBounds.BoxExtent.Z;
+					}
 				}
 				// Finish spawning after initializing properties
 				NewConstruction->FinishSpawning(SpawnTM);
@@ -3608,7 +3598,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 								NewScale.Z = ScaleZ;
 							}
 						}
-						NewConstruction->SetActorScale3D(NewScale*2.f);
+						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
 					}
 					// Recompute bounds after scale and compute single final location
 					FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);

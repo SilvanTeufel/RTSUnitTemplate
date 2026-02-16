@@ -81,6 +81,42 @@ void AWorkResource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 
 
+void AWorkResource::SetResourceActive(bool bActive, EResourceType Type, float InAmount, FVector Offset)
+{
+	ResourceType = Type;
+	Amount = InAmount;
+	SocketOffset = Offset;
+	
+	SetActorHiddenInGame(!bActive);
+	
+	if (bActive)
+	{
+		// Update Mesh and Material if available in the maps
+		if (ResourceMeshes.Contains(Type))
+		{
+			Mesh->SetStaticMesh(ResourceMeshes[Type]);
+		}
+		
+		if (ResourceMaterials.Contains(Type))
+		{
+			Mesh->SetMaterial(0, ResourceMaterials[Type]);
+		}
+
+		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+	else
+	{
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		
+		// Reset state
+		FollowTarget = false;
+		Target = nullptr;
+		IsAttached = false;
+	}
+}
+
 void AWorkResource::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if(OtherActor && !FollowTarget)

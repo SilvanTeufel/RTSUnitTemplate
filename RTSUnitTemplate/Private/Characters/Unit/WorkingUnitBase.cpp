@@ -39,6 +39,16 @@ void AWorkingUnitBase::BeginPlay()
 	
 }
 
+void AWorkingUnitBase::Destroyed()
+{
+	if (WorkResource)
+	{
+		WorkResource->Destroy();
+		WorkResource = nullptr;
+	}
+	Super::Destroyed();
+}
+
 void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -365,5 +375,17 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 		{
 			ClientArea->SetActorLocation(HitResult.Location);
 		}
+	}
+}
+
+void AWorkingUnitBase::SetCharacterVisibility(bool desiredVisibility)
+{
+	Super::SetCharacterVisibility(desiredVisibility);
+	
+	if (WorkResource)
+	{
+		// Only show the resource if the unit is visible AND the resource is supposed to be active (attached)
+		bool bShouldShowResource = desiredVisibility && WorkResource->IsAttached;
+		WorkResource->SetActorHiddenInGame(!bShouldShowResource);
 	}
 }
