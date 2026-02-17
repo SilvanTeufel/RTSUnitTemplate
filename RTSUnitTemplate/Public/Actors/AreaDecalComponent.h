@@ -15,6 +15,8 @@
 
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class URuntimeVirtualTexture;
+class UStaticMeshComponent;
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RTSUNITTEMPLATE_API UAreaDecalComponent : public UDecalComponent
@@ -63,14 +65,32 @@ protected:
 
 	UPROPERTY(EditAnywhere, Transient, Replicated, Category = RTSUnitTemplate)
 	bool bDecalIsVisible = true;
-	/*
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
-	bool AddsFriendlyGameplayEffect = true;
 
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
-	bool AddsEnemyGameplayEffect = true;
+	// --- RVT Support ---
 
-	*/
+	// Schaltet zwischen normalem Decal und RVT-Schreibweise um
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_UseRuntimeVirtualTexture, Category = "RVT")
+	bool bUseRuntimeVirtualTexture = false;
+
+	// Die Ziel-RVT, in die geschrieben werden soll
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	URuntimeVirtualTexture* TargetVirtualTexture;
+
+	// Material für den RVT-Schreibvorgang (sollte ein RVT-Output Material sein)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	UMaterialInterface* RVTWriterMaterial;
+
+	// Custom mesh for RVT writing. If null, a default plane is used.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	class UStaticMesh* RVTWriterCustomMesh;
+
+	// Hilfskomponente zum Schreiben in die RVT
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RVT")
+	UStaticMeshComponent* RVTWriterComponent;
+
+	UPROPERTY(Transient)
+	UMaterialInstanceDynamic* RVTWriterDynamicMaterial;
+	
 	// Called on clients when CurrentMaterial is updated by the server.
 	UFUNCTION()
 	void OnRep_CurrentMaterial();
@@ -82,6 +102,10 @@ protected:
 	// Called on clients when CurrentDecalRadius is updated.
 	UFUNCTION()
 	void OnRep_DecalRadius();
+
+	// Called on clients when bUseRuntimeVirtualTexture is updated.
+	UFUNCTION()
+	void OnRep_UseRuntimeVirtualTexture();
 
 	// Helper function to apply all visual updates based on replicated properties.
 	void UpdateDecalVisuals();

@@ -8,6 +8,13 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "VT/RuntimeVirtualTexture.h"
+#include "UObject/ConstructorHelpers.h"
+#include "VT/RuntimeVirtualTextureEnum.h"
+#include "Kismet/GameplayStatics.h"
+#include "Actors/RSVirtualTextureActor.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
@@ -26,6 +33,24 @@ UAreaDecalComponent::UAreaDecalComponent()
 
 	// Default size, will be overridden by activation.
 	DecalSize = FVector(100.f, 100.f, 100.f); 
+
+	// RVT Writer Setup
+	RVTWriterComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RVTWriterComponent"));
+	RVTWriterComponent->SetupAttachment(this);
+	RVTWriterComponent->SetCastShadow(false);
+	RVTWriterComponent->SetReceivesDecals(false);
+	RVTWriterComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
+	RVTWriterComponent->bRenderInMainPass = false;
+	RVTWriterComponent->SetHiddenInGame(true);
+	RVTWriterComponent->SetVisibility(false);
+	RVTWriterComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Engine/BasicShapes/Plane.Plane"));
+	if (PlaneMeshAsset.Succeeded())
+	{
+		RVTWriterComponent->SetStaticMesh(PlaneMeshAsset.Object);
+	}
 }
 
 void UAreaDecalComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -37,15 +62,53 @@ void UAreaDecalComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME(UAreaDecalComponent, CurrentDecalColor);
 	DOREPLIFETIME(UAreaDecalComponent, CurrentDecalRadius);
 	DOREPLIFETIME(UAreaDecalComponent, bDecalIsVisible);
+	DOREPLIFETIME(UAreaDecalComponent, bUseRuntimeVirtualTexture);
 }
 
 void UAreaDecalComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	SetHiddenInGame(true);
-	
-	UpdateDecalVisuals();
 
+	if (RVTWriterComponent)
+	{
+		// Re-attach to parent to avoid Decal rotation inherited from this component
+		USceneComponent* AttachTarget = GetAttachParent() ? GetAttachParent() : (GetOwner() ? GetOwner()->GetRootComponent() : nullptr);
+		if (AttachTarget && AttachTarget != this)
+		{
+			RVTWriterComponent->AttachToComponent(AttachTarget, FAttachmentTransformRules::KeepRelativeTransform);
+			RVTWriterComponent->SetRelativeLocation(FVector(0.f, 0.f, 2.0f));
+			RVTWriterComponent->SetRelativeRotation(FRotator::ZeroRotator);
+		}
+	}
+	
+	if (bUseRuntimeVirtualTexture)
+	{
+		UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - RVT mode active for '%s'"), *GetOwner()->GetName());
+		
+		// Auto-find RVT Actor if no target texture is set
+		if (!TargetVirtualTexture)
+		{
+			TArray<AActor*> FoundActors;
+			UGameplayStatics::GetAllActorsOfClass(GetWorld(), ARSVirtualTextureActor::StaticClass(), FoundActors);
+			if (FoundActors.Num() > 0)
+			{
+				if (ARSVirtualTextureActor* RVTActor = Cast<ARSVirtualTextureActor>(FoundActors[0]))
+				{
+					TargetVirtualTexture = RVTActor->VirtualTexture;
+					UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - Auto-found RVT Actor: %s (Texture: %s)"), 
+						*RVTActor->GetName(), 
+						TargetVirtualTexture ? *TargetVirtualTexture->GetName() : TEXT("NULL"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("UAreaDecalComponent::BeginPlay - No ARSVirtualTextureActor found in world!"));
+			}
+		}
+	}
+
+	UpdateDecalVisuals();
 }
 
 void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
@@ -71,10 +134,36 @@ void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 		bool bVisibility = OwningUnit->ComputeLocalVisibility();
 
-		if (IsVisible() != bVisibility)
+		if (bUseRuntimeVirtualTexture)
 		{
-			SetVisibility(bVisibility);
-			SetHiddenInGame(!bVisibility);
+			// Keep the regular decal strictly disabled while RVT is active
+			if (IsVisible())
+			{
+				SetVisibility(false);
+				SetHiddenInGame(true);
+			}
+
+			// Only the RVT writer follows the unit visibility
+			if (RVTWriterComponent)
+			{
+				RVTWriterComponent->SetVisibility(bVisibility);
+				RVTWriterComponent->SetHiddenInGame(!bVisibility);
+			}
+		}
+		else
+		{
+			// Regular decal path controls visibility; ensure RVT writer stays hidden
+			if (IsVisible() != bVisibility)
+			{
+				SetVisibility(bVisibility);
+				SetHiddenInGame(!bVisibility);
+			}
+
+			if (RVTWriterComponent)
+			{
+				RVTWriterComponent->SetVisibility(false);
+				RVTWriterComponent->SetHiddenInGame(true);
+			}
 		}
 	}
 }
@@ -101,32 +190,130 @@ void UAreaDecalComponent::OnRep_DecalRadius()
 	}
 }
 
+void UAreaDecalComponent::OnRep_UseRuntimeVirtualTexture()
+{
+	UpdateDecalVisuals();
+}
+
 void UAreaDecalComponent::UpdateDecalVisuals()
 {
-	
-	// If the material is null, the decal should be hidden.
-	if (!CurrentMaterial)
+	// --- Normal Decal Logic ---
+	if (!bUseRuntimeVirtualTexture)
 	{
+		// Hide RVT writer if it exists
+		if (RVTWriterComponent)
+		{
+			RVTWriterComponent->SetHiddenInGame(true);
+			RVTWriterComponent->SetVisibility(false);
+		}
+
+		// If the material is null, the decal should be hidden.
+		if (!CurrentMaterial)
+		{
+			SetHiddenInGame(true);
+			return;
+		}
+
+		SetHiddenInGame(false);
+
+		// Create a dynamic material instance if we don't have one or if the base material has changed.
+		if (!DynamicDecalMaterial || DynamicDecalMaterial->Parent != CurrentMaterial)
+		{
+			DynamicDecalMaterial = UMaterialInstanceDynamic::Create(CurrentMaterial, this);
+			SetDecalMaterial(DynamicDecalMaterial);
+		}
+
+		if (DynamicDecalMaterial)
+		{
+			// Apply the replicated color. Your material needs a Vector Parameter named "Color".
+			DynamicDecalMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
+		}
+		
+		// Apply the current radius.
+		DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
+		MarkRenderStateDirty();
+	}
+	else
+	{
+		// --- RVT Logic ---
+		
+		// Hide the normal decal
 		SetHiddenInGame(true);
-		return;
-	}
+		SetVisibility(false);
 
-	// Create a dynamic material instance if we don't have one or if the base material has changed.
-	if (!DynamicDecalMaterial)
-	{
-		DynamicDecalMaterial = UMaterialInstanceDynamic::Create(CurrentMaterial, this);
-		SetDecalMaterial(DynamicDecalMaterial);
-	}
+		if (!TargetVirtualTexture || !RVTWriterMaterial)
+		{
+			if (RVTWriterComponent)
+			{
+				RVTWriterComponent->SetHiddenInGame(true);
+				RVTWriterComponent->SetVisibility(false);
+			}
+			return;
+		}
 
-	if (DynamicDecalMaterial)
-	{
-		// Apply the replicated color. Your material needs a Vector Parameter named "Color".
-		DynamicDecalMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
+		if (RVTWriterComponent)
+		{
+			// Render Pass setup (should be exclusive to RVT)
+			RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
+			RVTWriterComponent->bRenderInMainPass = false;
+			RVTWriterComponent->SetCastShadow(false);
+			RVTWriterComponent->SetReceivesDecals(false);
+
+			// Only show and write if radius is meaningful
+			bool bShouldBeActive = (CurrentDecalRadius > 0.1f);
+			RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
+			RVTWriterComponent->SetVisibility(bShouldBeActive);
+
+			if (bShouldBeActive)
+			{
+				UE_LOG(LogTemp, Log, TEXT("UpdateDecalVisuals (RVT) - Active for %s. VT: %s, Mat: %s, Radius: %f, Color: %s"), 
+					*GetOwner()->GetName(),
+					*TargetVirtualTexture->GetName(),
+					*RVTWriterMaterial->GetName(),
+					CurrentDecalRadius,
+					*CurrentDecalColor.ToString());
+			}
+
+			// 1. Mesh Update
+			if (RVTWriterCustomMesh)
+			{
+				if (RVTWriterComponent->GetStaticMesh() != RVTWriterCustomMesh)
+				{
+					RVTWriterComponent->SetStaticMesh(RVTWriterCustomMesh);
+				}
+			}
+
+			// 2. Material Update (Dynamic Instance to pass Color)
+			if (!RVTWriterDynamicMaterial || RVTWriterDynamicMaterial->Parent != RVTWriterMaterial)
+			{
+				RVTWriterDynamicMaterial = UMaterialInstanceDynamic::Create(RVTWriterMaterial, this);
+				RVTWriterComponent->SetMaterial(0, RVTWriterDynamicMaterial);
+			}
+
+			if (RVTWriterDynamicMaterial)
+			{
+				RVTWriterDynamicMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
+			}
+			
+			// 3. RVT Assignment
+			RVTWriterComponent->RuntimeVirtualTextures.Empty();
+			RVTWriterComponent->RuntimeVirtualTextures.Add(TargetVirtualTexture);
+			
+			// 4. Scale Logic
+			// Assuming base mesh size is 100 units (like the Engine Plane).
+			// If a custom mesh is used, it might need different scaling, but 100 is a safe default for most marker meshes.
+			float MeshBaseSize = 100.0f;
+			float ScaleFactor = (CurrentDecalRadius * 2.0f) / MeshBaseSize;
+			RVTWriterComponent->SetRelativeScale3D(FVector(ScaleFactor, ScaleFactor, 1.0f));
+			
+			// Slightly offset the writer to avoid being exactly at the same plane as the ground if needed
+			// although with Exclusive pass this usually doesn't matter.
+			RVTWriterComponent->SetRelativeLocation(FVector(0.f, 0.f, 2.0f));
+
+			// Mark render state dirty to ensure RVT update
+			RVTWriterComponent->MarkRenderStateDirty();
+		}
 	}
-	
-	// Apply the current radius.
-	DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
-	MarkRenderStateDirty();
 }
 
 
