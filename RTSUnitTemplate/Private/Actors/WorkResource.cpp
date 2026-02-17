@@ -9,7 +9,7 @@
 // Sets default values
 AWorkResource::AWorkResource()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
@@ -18,17 +18,23 @@ AWorkResource::AWorkResource()
 	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
 	Mesh->SetGenerateOverlapEvents(true);
 
+	// Ensure the mesh component never replicates its own visibility state; we control it per-client
+	if (Mesh)
+	{
+		Mesh->SetIsReplicated(false);
+		Mesh->SetHiddenInGame(true);
+		Mesh->SetVisibility(false, true);
+	}
+
 	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is Pickup Capsule"));
 	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
 	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerCapsule->SetupAttachment(RootComponent);
 	TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkResource::OnOverlapBegin);
 	
-	if (HasAuthority())
-	{
-		bReplicates = true;
-		//SetReplicateMovement(true);
-	}
+	// Replicate the actor itself
+	bReplicates = true;
+	//SetReplicateMovement(true);
 }
 
 // Called when the game starts or when spawned
@@ -76,6 +82,38 @@ void AWorkResource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AWorkResource, FollowTarget); // Added for Build
 	DOREPLIFETIME(AWorkResource, MovementSpeed); // Added for Build
 	DOREPLIFETIME(AWorkResource, Target); // Added for Build
+	DOREPLIFETIME(AWorkResource, IsAttached);
+	DOREPLIFETIME(AWorkResource, ResourceType);
+	DOREPLIFETIME(AWorkResource, Amount);
+	DOREPLIFETIME(AWorkResource, SocketOffset);
+}
+
+void AWorkResource::OnRep_IsAttached()
+{
+	// Default to hidden to avoid client-side flash; per-client logic will reveal if needed
+	if (Mesh)
+	{
+		Mesh->SetHiddenInGame(true);
+		Mesh->SetVisibility(false, true);
+	}
+}
+
+void AWorkResource::OnRep_ResourceType()
+{
+	// Update visuals, keep hidden by default; per-client code will show if visible
+	if (Mesh)
+	{
+		if (ResourceMeshes.Contains(ResourceType))
+		{
+			Mesh->SetStaticMesh(ResourceMeshes[ResourceType]);
+		}
+		if (ResourceMaterials.Contains(ResourceType))
+		{
+			Mesh->SetMaterial(0, ResourceMaterials[ResourceType]);
+		}
+		Mesh->SetHiddenInGame(true);
+		Mesh->SetVisibility(false, true);
+	}
 }
 
 
@@ -87,7 +125,12 @@ void AWorkResource::SetResourceActive(bool bActive, EResourceType Type, float In
 	Amount = InAmount;
 	SocketOffset = Offset;
 	
-	SetActorHiddenInGame(!bActive);
+	// No actor-level hiding. Let clients decide. However, default the mesh to hidden to avoid 1-frame flash on clients.
+	if (Mesh)
+	{
+		Mesh->SetHiddenInGame(true);
+		Mesh->SetVisibility(false, true);
+	}
 	
 	if (bActive)
 	{
@@ -102,13 +145,13 @@ void AWorkResource::SetResourceActive(bool bActive, EResourceType Type, float In
 			Mesh->SetMaterial(0, ResourceMaterials[Type]);
 		}
 
-		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		//Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		//TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 	else
 	{
-		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		//Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		//TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		
 		// Reset state
 		FollowTarget = false;

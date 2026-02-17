@@ -381,11 +381,16 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 void AWorkingUnitBase::SetCharacterVisibility(bool desiredVisibility)
 {
 	Super::SetCharacterVisibility(desiredVisibility);
-	
-	if (WorkResource)
+	// WorkResource mesh visibility is handled in SyncAttachedAssetsVisibility called by UUnitVisibilityProcessor.
+}
+
+void AWorkingUnitBase::SyncAttachedAssetsVisibility()
+{
+	if (WorkResource && WorkResource->Mesh)
 	{
-		// Only show the resource if the unit is visible AND the resource is supposed to be active (attached)
-		bool bShouldShowResource = desiredVisibility && WorkResource->IsAttached;
-		WorkResource->SetActorHiddenInGame(!bShouldShowResource);
+		const bool bCarry = WorkResource->IsAttached;
+		const bool bShow = bCarry && ComputeLocalVisibility();
+		WorkResource->Mesh->SetVisibility(bShow, true);
+		WorkResource->Mesh->SetHiddenInGame(!bShow);
 	}
 }

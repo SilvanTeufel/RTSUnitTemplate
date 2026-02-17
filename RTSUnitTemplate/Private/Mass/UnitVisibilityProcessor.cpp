@@ -6,6 +6,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -59,6 +60,9 @@ void UUnitVisibilityProcessor::HandleVisibilitySignals(FName /*SignalName*/, TAr
 
 			Unit->CheckHealthBarVisibility();
 			Unit->CheckTimerVisibility();
+
+			// Sync attached assets (e.g., WorkResource mesh) via virtual call (client-side)
+			Unit->SyncAttachedAssetsVisibility();
 		}
 	}
 }
@@ -169,11 +173,14 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				}
 			}
 
-			// 4) High-frequency Widget Updates (Client-only)
-			if (!Unit->StopVisibilityTick)
-			{
-				Unit->UpdateWidgetPositions(Location);
-			}
+				// 4) High-frequency Widget Updates (Client-only)
+				if (!Unit->StopVisibilityTick)
+				{
+					Unit->UpdateWidgetPositions(Location);
+
+					// Ensure attached assets visibility is synced every frame (client-side)
+					Unit->SyncAttachedAssetsVisibility();
+				}
 		}
 	});
 

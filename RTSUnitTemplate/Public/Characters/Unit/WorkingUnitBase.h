@@ -49,7 +49,7 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -93,6 +93,7 @@ public:
 	void FinishedBuild();
 
 	virtual void SetCharacterVisibility(bool desiredVisibility) override;
+	virtual void SyncAttachedAssetsVisibility() override;
 };
 
 

@@ -2536,8 +2536,8 @@ void UUnitStateProcessor::SpawnWorkResource(
         Res->SetActorRelativeLocation(Res->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
     }
 
-    // Sync visibility with unit
-    Res->SetActorHiddenInGame(!WorkingUnit->ComputeLocalVisibility());
+    // Visibility of carried resource is controlled per-client in UnitVisibilityProcessor (mesh only)
+    // Res->SetActorHiddenInGame(!WorkingUnit->ComputeLocalVisibility());
 
     // -- UPDATE the place’s remaining amount --
     float& Remaining     = WorkingUnit->ResourcePlace->AvailableResourceAmount;

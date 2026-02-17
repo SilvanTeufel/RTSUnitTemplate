@@ -66,14 +66,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(ReplicatedUsing=OnRep_IsAttached, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsAttached = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(ReplicatedUsing=OnRep_ResourceType, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EResourceType ResourceType = EResourceType::Primary;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Amount = 10.f;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector SocketOffset = FVector(10.0f, 10.0f, 0.0f);
+
+	UFUNCTION()
+	void OnRep_IsAttached();
+
+	UFUNCTION()
+	void OnRep_ResourceType();
 };

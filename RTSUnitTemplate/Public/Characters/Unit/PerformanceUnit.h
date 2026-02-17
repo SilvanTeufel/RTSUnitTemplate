@@ -131,6 +131,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	virtual void SetCharacterVisibility(bool desiredVisibility);
 	
+	/** Synchronizes visibility of any attached assets (e.g. WorkResource mesh) with the unit's local visibility state. */
+	virtual void SyncAttachedAssetsVisibility() {}
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTickFog();
 
