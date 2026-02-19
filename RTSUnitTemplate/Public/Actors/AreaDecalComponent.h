@@ -1,9 +1,4 @@
-/*
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-//
-// This component is designed to create a replicated Area of Effect (AoE) decal
-// that is visually defined by a material and can represent a gameplay effect.
-*/
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -17,8 +12,9 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class URuntimeVirtualTexture;
 class UStaticMeshComponent;
+class UStaticMesh;
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, meta=(BlueprintSpawnableComponent))
 class RTSUNITTEMPLATE_API UAreaDecalComponent : public UDecalComponent
 {
 	GENERATED_BODY()
@@ -31,14 +27,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	// The gameplay effect this decal represents. Set this in the Blueprint.
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSubclassOf<UGameplayEffect> FriendlyEffect;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSubclassOf<UGameplayEffect> EnemyEffect;
 	
 	// The current material being used for the decal. Replicated.
@@ -53,17 +46,15 @@ protected:
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_DecalRadius)
 	float CurrentDecalRadius;
 
-	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	float ScaleInterpSpeed = 15.f;
-
-	float VisualDecalRadius = 0.f;
+	float LastNotifiedRadius = -1.f;
+	FLinearColor LastNotifiedColor = FLinearColor::Transparent;
 
 	UPROPERTY(Transient)
-	float VisibilityCheckInterval = 0.5f;
+	float VisibilityCheckInterval = 10.f;
 
 	float TimeSinceLastVisibilityCheck = 0.f;
 
-	UPROPERTY(EditAnywhere, Transient, Replicated, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, Transient, Replicated, Category = "RTSUnitTemplate")
 	bool bDecalIsVisible = true;
 
 	// --- RVT Support ---
@@ -71,6 +62,21 @@ protected:
 	// Schaltet zwischen normalem Decal und RVT-Schreibweise um
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_UseRuntimeVirtualTexture, Category = "RVT")
 	bool bUseRuntimeVirtualTexture = false;
+
+	// Einstellbare Größe des RVT-Schreib-Meshs (Kantenlänge in Unreal Units). Standard 2000
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	float RVTWriterMeshSize;
+
+	// Einstellbarer Material-Parameterbereich für den Radius (0..0.5 entspricht Mesh-Halbkante)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	float RVTMaterialRadiusMin = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	float RVTMaterialRadiusMax = 0.5f;
+
+	// Number of decimal places for the normalized radius/alpha (Default: 2)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
+	int32 RVTMaterialRadiusPrecision = 4;
 
 	// Die Ziel-RVT, in die geschrieben werden soll
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
@@ -82,7 +88,7 @@ protected:
 
 	// Custom mesh for RVT writing. If null, a default plane is used.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
-	class UStaticMesh* RVTWriterCustomMesh;
+	UStaticMesh* RVTWriterCustomMesh;
 
 	// Hilfskomponente zum Schreiben in die RVT
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RVT")
@@ -140,28 +146,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Area Decal", Server, Reliable)
 	void Server_ScaleDecalToRadius(float EndRadius, float TimeSeconds, bool OwnerIsBeacon = false);
 
+	void SetCurrentDecalRadiusFromMass(float NewRadius);
+
 	/**
 	 * Multicast version of ScaleDecalToRadius to allow smooth client-side interpolation.
 	 */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ScaleDecalToRadius(float EndRadius, float TimeSeconds, bool OwnerIsBeacon);
 
+	// Mass-based scaling helpers
+	UFUNCTION(BlueprintCallable, Category = "Area Decal")
+	void StartMassScaling(float InStartRadius, float InTargetRadius, float InDurationSeconds, bool bInOwnerIsBeacon);
+
+	bool AdvanceMassScaling(float DeltaSeconds, float& OutNewRadius, bool& bOutCompleted);
+	bool IsBeaconScaling() const { return bScaleOwnerIsBeacon; }
+
 protected:
-	// Timer-driven smooth scaling state
-	FTimerHandle ScaleTimerHandle;
 	float ScaleStartRadius = 0.f;
 	float ScaleTargetRadius = 0.f;
 	float ScaleDuration = 0.f;
-	float ScaleStartTime = 0.f;
 	bool bIsScaling = false;
 	bool bScaleOwnerIsBeacon = false; // if true, push current radius to owning Building's beacon range each step
 
-	// Timer tick interval for scaling updates (seconds). Lower is smoother but more network updates.
-	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	float ScaleUpdateInterval = 0.05f;
-
-	UFUNCTION()
-	void HandleScaleStep();
+	// Mass-based scaling elapsed accumulator
+	float MassElapsedTime = 0.f;
 
 	// Helper to propagate radius to Mass fragment when available (server-only)
 	void UpdateMassEffectRadius(float NewRadius);

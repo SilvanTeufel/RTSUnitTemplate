@@ -6,7 +6,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -15,10 +14,12 @@
 #include "VT/RuntimeVirtualTextureEnum.h"
 #include "Kismet/GameplayStatics.h"
 #include "Actors/RSVirtualTextureActor.h"
+#include "Mass/Abilitys/DecalScalingFragments.h"
+#include "MassEntityManager.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+ PrimaryComponentTick.bCanEverTick = false;
 	PrimaryComponentTick.TickInterval = 0.f; 
 	SetIsReplicatedByDefault(true);
 
@@ -45,6 +46,13 @@ UAreaDecalComponent::UAreaDecalComponent()
 	RVTWriterComponent->SetHiddenInGame(true);
 	RVTWriterComponent->SetVisibility(false);
 	RVTWriterComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+	// Anwenderdefinierte Mesh-Kantenlänge (in UU) -> Editor-Property 'RVTWriterMeshSize'
+	if (RVTWriterMeshSize <= 0.f)
+	{
+		RVTWriterMeshSize = 2000.f; // Fallback-Default
+	}
+	const float InitialScale = RVTWriterMeshSize / 100.f; // Engine-Plane ist 100 UU breit
+	RVTWriterComponent->SetRelativeScale3D(FVector(InitialScale, InitialScale, 1.0f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Engine/BasicShapes/Plane.Plane"));
 	if (PlaneMeshAsset.Succeeded())
@@ -84,7 +92,7 @@ void UAreaDecalComponent::BeginPlay()
 	
 	if (bUseRuntimeVirtualTexture)
 	{
-		UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - RVT mode active for '%s'"), *GetOwner()->GetName());
+		//UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - RVT mode active for '%s'"), *GetOwner()->GetName());
 		
 		// Auto-find RVT Actor if no target texture is set
 		if (!TargetVirtualTexture)
@@ -96,14 +104,14 @@ void UAreaDecalComponent::BeginPlay()
 				if (ARSVirtualTextureActor* RVTActor = Cast<ARSVirtualTextureActor>(FoundActors[0]))
 				{
 					TargetVirtualTexture = RVTActor->VirtualTexture;
-					UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - Auto-found RVT Actor: %s (Texture: %s)"), 
+					/*UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - Auto-found RVT Actor: %s (Texture: %s)"), 
 						*RVTActor->GetName(), 
-						TargetVirtualTexture ? *TargetVirtualTexture->GetName() : TEXT("NULL"));
+						TargetVirtualTexture ? *TargetVirtualTexture->GetName() : TEXT("NULL"));*/
 				}
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("UAreaDecalComponent::BeginPlay - No ARSVirtualTextureActor found in world!"));
+				//UE_LOG(LogTemp, Warning, TEXT("UAreaDecalComponent::BeginPlay - No ARSVirtualTextureActor found in world!"));
 			}
 		}
 	}
@@ -111,62 +119,6 @@ void UAreaDecalComponent::BeginPlay()
 	UpdateDecalVisuals();
 }
 
-void UAreaDecalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	// 1. Visibility check (throttled to VisibilityCheckInterval)
-	TimeSinceLastVisibilityCheck += DeltaTime;
-	if (TimeSinceLastVisibilityCheck >= VisibilityCheckInterval)
-	{
-		TimeSinceLastVisibilityCheck = 0.f;
-
-		if (!bDecalIsVisible) return;
-
-		AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
-
-		if (!OwningUnit)
-		{
-			UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot interact with Mass."), *GetOwner()->GetName());
-			return;
-		}
-
-		bool bVisibility = OwningUnit->ComputeLocalVisibility();
-
-		if (bUseRuntimeVirtualTexture)
-		{
-			// Keep the regular decal strictly disabled while RVT is active
-			if (IsVisible())
-			{
-				SetVisibility(false);
-				SetHiddenInGame(true);
-			}
-
-			// Only the RVT writer follows the unit visibility
-			if (RVTWriterComponent)
-			{
-				RVTWriterComponent->SetVisibility(bVisibility);
-				RVTWriterComponent->SetHiddenInGame(!bVisibility);
-			}
-		}
-		else
-		{
-			// Regular decal path controls visibility; ensure RVT writer stays hidden
-			if (IsVisible() != bVisibility)
-			{
-				SetVisibility(bVisibility);
-				SetHiddenInGame(!bVisibility);
-			}
-
-			if (RVTWriterComponent)
-			{
-				RVTWriterComponent->SetVisibility(false);
-				RVTWriterComponent->SetHiddenInGame(true);
-			}
-		}
-	}
-}
 
 
 
@@ -254,25 +206,34 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		if (RVTWriterComponent)
 		{
 			// Render Pass setup (should be exclusive to RVT)
-			RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
-			RVTWriterComponent->bRenderInMainPass = false;
-			RVTWriterComponent->SetCastShadow(false);
-			RVTWriterComponent->SetReceivesDecals(false);
+			if (RVTWriterComponent->VirtualTextureRenderPassType != ERuntimeVirtualTextureMainPassType::Exclusive)
+			{
+				RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
+			}
+			
+			if (RVTWriterComponent->bRenderInMainPass)
+			{
+				RVTWriterComponent->bRenderInMainPass = false;
+			}
+			
+			if (RVTWriterComponent->CastShadow)
+			{
+				RVTWriterComponent->SetCastShadow(false);
+			}
+			
+			if (RVTWriterComponent->bReceivesDecals)
+			{
+				RVTWriterComponent->SetReceivesDecals(false);
+			}
 
 			// Only show and write if radius is meaningful
 			bool bShouldBeActive = (CurrentDecalRadius > 0.1f);
-			RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
-			RVTWriterComponent->SetVisibility(bShouldBeActive);
-
-			if (bShouldBeActive)
+			if (RVTWriterComponent->GetVisibleFlag() != bShouldBeActive)
 			{
-				UE_LOG(LogTemp, Log, TEXT("UpdateDecalVisuals (RVT) - Active for %s. VT: %s, Mat: %s, Radius: %f, Color: %s"), 
-					*GetOwner()->GetName(),
-					*TargetVirtualTexture->GetName(),
-					*RVTWriterMaterial->GetName(),
-					CurrentDecalRadius,
-					*CurrentDecalColor.ToString());
+				RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
+				RVTWriterComponent->SetVisibility(bShouldBeActive);
 			}
+
 
 			// 1. Mesh Update
 			if (RVTWriterCustomMesh)
@@ -283,7 +244,19 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 				}
 			}
 
-			// 2. Material Update (Dynamic Instance to pass Color)
+			// 2. Mesh Scale Update aus Editor-Property
+			if (RVTWriterMeshSize <= 0.f)
+			{
+				RVTWriterMeshSize = 2000.f;
+			}
+			const float TargetScale = RVTWriterMeshSize / 100.0f;
+			if (FMath::Abs(RVTWriterComponent->GetRelativeScale3D().X - TargetScale) > 0.01f)
+			{
+				RVTWriterComponent->SetRelativeScale3D(FVector(TargetScale, TargetScale, 1.0f));
+				RVTWriterComponent->MarkRenderStateDirty();
+			}
+
+			// 3. Material Update (Dynamic Instance to pass Color)
 			if (!RVTWriterDynamicMaterial || RVTWriterDynamicMaterial->Parent != RVTWriterMaterial)
 			{
 				RVTWriterDynamicMaterial = UMaterialInstanceDynamic::Create(RVTWriterMaterial, this);
@@ -293,25 +266,54 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 			if (RVTWriterDynamicMaterial)
 			{
 				RVTWriterDynamicMaterial->SetVectorParameterValue("Color", CurrentDecalColor);
+				
+				// Normalisierung des Radius relativ zur Mesh-Halbkante (0..0.5)
+				const float MeshWidth = RVTWriterComponent->GetRelativeScale3D().X * 100.0f; // 100 UU Basismesh
+				const float RawNormalizedRadius = (MeshWidth > 0.1f) ? (CurrentDecalRadius / MeshWidth) : 0.0f; // 0..0.5 idealerweise
+				const float Alpha = FMath::Clamp(RawNormalizedRadius / 0.5f, 0.f, 1.f);
+				// Bereich auf [RVTMaterialRadiusMin..RVTMaterialRadiusMax] abbilden
+				const float RangeMin = RVTMaterialRadiusMin;
+				const float RangeMax = RVTMaterialRadiusMax > RVTMaterialRadiusMin ? RVTMaterialRadiusMax : RVTMaterialRadiusMin; // Schutz
+				float FinalRadiusParam = FMath::Lerp(RangeMin, RangeMax, Alpha);
+
+				// Optional: quantize the value passed to the material to N decimal places (default 2)
+				int32 Precision = FMath::Clamp(RVTMaterialRadiusPrecision, 0, 4);
+				if (Precision > 0)
+				{
+					const float Step = FMath::Pow(10.0f, -Precision);
+					FinalRadiusParam = FMath::RoundToFloat(FinalRadiusParam / Step) * Step;
+				}
+				RVTWriterDynamicMaterial->SetScalarParameterValue("Radius", FinalRadiusParam);
+
 			}
 			
-			// 3. RVT Assignment
-			RVTWriterComponent->RuntimeVirtualTextures.Empty();
-			RVTWriterComponent->RuntimeVirtualTextures.Add(TargetVirtualTexture);
+			// 3. RVT Assignment (only update if it changed)
+			if (RVTWriterComponent->RuntimeVirtualTextures.Num() != 1 || RVTWriterComponent->RuntimeVirtualTextures[0] != TargetVirtualTexture)
+			{
+				RVTWriterComponent->RuntimeVirtualTextures.Empty();
+				RVTWriterComponent->RuntimeVirtualTextures.Add(TargetVirtualTexture);
+			}
 			
-			// 4. Scale Logic
-			// Assuming base mesh size is 100 units (like the Engine Plane).
-			// If a custom mesh is used, it might need different scaling, but 100 is a safe default for most marker meshes.
-			float MeshBaseSize = 100.0f;
-			float ScaleFactor = (CurrentDecalRadius * 2.0f) / MeshBaseSize;
-			RVTWriterComponent->SetRelativeScale3D(FVector(ScaleFactor, ScaleFactor, 1.0f));
+			// 4. Scale Logic - Disabled to avoid RVT flickering.
+			// The mesh size should be kept constant. Radius is passed as a material parameter "Radius".
 			
-			// Slightly offset the writer to avoid being exactly at the same plane as the ground if needed
-			// although with Exclusive pass this usually doesn't matter.
-			RVTWriterComponent->SetRelativeLocation(FVector(0.f, 0.f, 2.0f));
+			// Position update (only if necessary)
+			FVector TargetLocation = FVector(0.f, 0.f, 2.0f);
+			if (!RVTWriterComponent->GetRelativeLocation().Equals(TargetLocation, 0.1f))
+			{
+				RVTWriterComponent->SetRelativeLocation(TargetLocation);
+			}
 
-			// Mark render state dirty to ensure RVT update
-			RVTWriterComponent->MarkRenderStateDirty();
+			// Mark render state dirty only if active and radius or color changed significantly to avoid flickering
+			bool bColorChanged = !CurrentDecalColor.Equals(LastNotifiedColor, 0.01f);
+			bool bRadiusChanged = FMath::Abs(CurrentDecalRadius - LastNotifiedRadius) > 0.5f;
+
+			if (bShouldBeActive && (bColorChanged || bRadiusChanged))
+			{
+				RVTWriterComponent->MarkRenderStateDirty();
+				LastNotifiedRadius = CurrentDecalRadius;
+				LastNotifiedColor = CurrentDecalColor;
+			}
 		}
 	}
 }
@@ -331,16 +333,7 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 		return;
 	}
 
-	// If we are scaling currently, stop it
-	if (bIsScaling)
-	{
-		bIsScaling = false;
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().ClearTimer(ScaleTimerHandle);
-		}
-	}
-
+	bIsScaling = false;
 	bDecalIsVisible = true;
 	// Update the replicated properties. This will trigger the OnRep functions on all clients.
 	CurrentMaterial = NewMaterial;
@@ -392,15 +385,7 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 
 void UAreaDecalComponent::Server_DeactivateDecal_Implementation()
 {
-	// Stop scaling if active
-	if (bIsScaling)
-	{
-		bIsScaling = false;
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().ClearTimer(ScaleTimerHandle);
-		}
-	}
+	bIsScaling = false;
 
 	// The server hides it immediately.
 	bDecalIsVisible = false;
@@ -424,18 +409,7 @@ void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndR
 		EndRadius = 0.f;
 	}
 
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	// Cancel any previous scaling
-	if (bIsScaling)
-	{
-		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
-		bIsScaling = false;
-	}
+	bIsScaling = false;
 
 	// Immediate set if time <= 0
 	if (TimeSeconds <= KINDA_SMALL_NUMBER)
@@ -458,66 +432,118 @@ void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndR
 		return;
 	}
 
-	// Initialize scaling state
-	ScaleStartRadius = CurrentDecalRadius;
-	ScaleTargetRadius = EndRadius;
-	ScaleDuration = TimeSeconds;
-	ScaleStartTime = World->GetTimeSeconds();
-	bIsScaling = true;
-	bScaleOwnerIsBeacon = OwnerIsBeacon;
+	// Switch to Mass-based scaling: initialize component state and add the processing tag on both server and clients
+	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+	if (!OwningUnit)
+	{
+		return;
+	}
 
-	// Ensure decal visible while scaling
+	// Initialize local scaling state on the component
+	StartMassScaling(CurrentDecalRadius, EndRadius, TimeSeconds, OwnerIsBeacon);
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (OwningUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager && EntityManager->IsEntityValid(EntityHandle))
+	{
+		EntityManager->Defer().AddTag<FMassDecalScalingTag>(EntityHandle);
+	}
+
+	// Make sure decal visuals are enabled while scaling; processor will drive the actual radius
 	bDecalIsVisible = true;
-
-	// Start timer
-	const float Interval = FMath::Max(0.01f, ScaleUpdateInterval);
-	World->GetTimerManager().SetTimer(ScaleTimerHandle, this, &UAreaDecalComponent::HandleScaleStep, Interval, true);
+	UpdateDecalVisuals();
 }
 
-void UAreaDecalComponent::HandleScaleStep()
+void UAreaDecalComponent::StartMassScaling(float InStartRadius, float InTargetRadius, float InDurationSeconds, bool bInOwnerIsBeacon)
 {
-	UWorld* World = GetWorld();
-	if (!World)
+	ScaleStartRadius = InStartRadius;
+	ScaleTargetRadius = InTargetRadius;
+	ScaleDuration = InDurationSeconds;
+	MassElapsedTime = 0.f;
+	bScaleOwnerIsBeacon = bInOwnerIsBeacon;
+	bIsScaling = true;
+	bDecalIsVisible = true;
+	UpdateDecalVisuals();
+}
+
+bool UAreaDecalComponent::AdvanceMassScaling(float DeltaSeconds, float& OutNewRadius, bool& bOutCompleted)
+{
+	if (ScaleDuration <= KINDA_SMALL_NUMBER)
 	{
-		return;
+		OutNewRadius = ScaleTargetRadius;
+		bOutCompleted = true;
+		bIsScaling = false;
+		return true;
 	}
 
-	if (!bIsScaling)
+	MassElapsedTime += DeltaSeconds;
+	float Alpha = FMath::Clamp(MassElapsedTime / ScaleDuration, 0.f, 1.f);
+	OutNewRadius = FMath::Lerp(ScaleStartRadius, ScaleTargetRadius, Alpha);
+	bOutCompleted = (Alpha >= 1.f - KINDA_SMALL_NUMBER);
+	
+	if (bOutCompleted)
 	{
-		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
-		return;
+		bIsScaling = false;
 	}
+	
+	return true;
+}
 
-	const float Now = World->GetTimeSeconds();
-	const float Elapsed = Now - ScaleStartTime;
-	float Alpha = (ScaleDuration > 0.f) ? (Elapsed / ScaleDuration) : 1.f;
-	Alpha = FMath::Clamp(Alpha, 0.f, 1.f);
-
-	const float NewRadius = FMath::Lerp(ScaleStartRadius, ScaleTargetRadius, Alpha);
+void UAreaDecalComponent::SetCurrentDecalRadiusFromMass(float NewRadius)
+{
 	CurrentDecalRadius = NewRadius;
-	
-	// Server-only updates
-	if (GetNetMode() == NM_DedicatedServer)
-	{
-		UpdateMassEffectRadius(NewRadius);
-	}
-	
 	UpdateDecalVisuals();
 
-	// If the owner is a beacon, update its beacon range every tick with the current radius
-	if (bScaleOwnerIsBeacon)
+	// Apply owner-based local visibility whenever radius updates (Mass-driven)
+	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+	if (!OwningUnit)
 	{
-		if (ABuildingBase* Building = Cast<ABuildingBase>(GetOwner()))
-		{
-			Building->SetBeaconRange(NewRadius);
-		}
+		UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot apply visibility."), *GetOwner()->GetName());
+		return;
 	}
 
-	if (Alpha >= 1.f - KINDA_SMALL_NUMBER)
+	// If globally hidden, force-hide both outputs and early out
+	if (!bDecalIsVisible)
 	{
-		// Finish
-		bIsScaling = false;
-		World->GetTimerManager().ClearTimer(ScaleTimerHandle);
+		SetVisibility(false);
+		SetHiddenInGame(true);
+		if (RVTWriterComponent)
+		{
+			RVTWriterComponent->SetVisibility(false);
+			RVTWriterComponent->SetHiddenInGame(true);
+		}
+		return;
+	}
+
+	const bool bVisibility = OwningUnit->ComputeLocalVisibility();
+	if (bUseRuntimeVirtualTexture)
+	{
+		// Ensure regular decal stays disabled while RVT mode is active
+		if (IsVisible())
+		{
+			SetVisibility(false);
+			SetHiddenInGame(true);
+		}
+		// Only the RVT writer follows unit visibility
+		if (RVTWriterComponent)
+		{
+			RVTWriterComponent->SetVisibility(bVisibility);
+			RVTWriterComponent->SetHiddenInGame(!bVisibility);
+		}
+	}
+	else
+	{
+		// Regular decal path follows visibility; make sure RVT writer is hidden
+		if (IsVisible() != bVisibility)
+		{
+			SetVisibility(bVisibility);
+			SetHiddenInGame(!bVisibility);
+		}
+		if (RVTWriterComponent)
+		{
+			RVTWriterComponent->SetVisibility(false);
+			RVTWriterComponent->SetHiddenInGame(true);
+		}
 	}
 }
 
