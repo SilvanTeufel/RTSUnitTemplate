@@ -9,6 +9,9 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavAreas/NavArea_Obstacle.h"
 
 URunStateProcessor::URunStateProcessor(): EntityQuery()
 {
@@ -248,6 +251,51 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     DesiredPos.Y += SinA * OffsetMag;
                 }
                 DesiredPos.Z = FriendlyLoc.Z; // ignore Z while following
+
+                // Ensure DesiredPos is not in a dirty area
+                if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+                {
+                    FNavLocation DesiredNav;
+                    if (NavSys->ProjectPointToNavigation(DesiredPos, DesiredNav, FVector(500.f, 500.f, 500.f)))
+                    {
+                        bool bDesiredDirty = false;
+                        const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+                        if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+                        {
+                            const uint32 PolyAreaID = Recast->GetPolyAreaID(DesiredNav.NodeRef);
+                            const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                            bDesiredDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                        }
+                        
+                        if (bDesiredDirty)
+                        {
+                            // Shift outward until clean
+                            static const float ShiftRadii[] = {100.f, 250.f, 500.f};
+                            for (float Shift : ShiftRadii)
+                            {
+                                FVector Candidate = DesiredPos + Dir2D * Shift;
+                                FNavLocation CandNav;
+                                if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(500.f, 500.f, 500.f)))
+                                {
+                                    if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
+                                    {
+                                        const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+                                        const UClass* AC = RM->GetAreaClass(AID);
+                                        if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+                                        {
+                                            DesiredPos = CandNav.Location;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            DesiredPos = DesiredNav.Location;
+                        }
+                    }
+                }
 
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);

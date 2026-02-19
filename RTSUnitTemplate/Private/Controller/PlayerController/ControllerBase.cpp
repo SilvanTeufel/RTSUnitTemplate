@@ -24,6 +24,10 @@
 #include "GameModes/ResourceGameMode.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "NavAreas/NavArea_Obstacle.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavFilters/NavigationQueryFilter.h"
+#include "AI/Navigation/NavQueryFilter.h"
 
 
 AControllerBase::AControllerBase() {
@@ -48,7 +52,13 @@ void AControllerBase::InitCameraHUDGameMode()
 {
 	CameraBase = Cast<ACameraBase>(GetPawn());
 	HUDBase = Cast<APathProviderHUD>(GetHUD());
-	if (HUDBase && HUDBase->StopLoading && CameraBase) CameraBase->DeSpawnLoadingWidget();
+	if (HUDBase && CameraBase)
+	{
+		if (HUDBase->StopLoading)
+		{
+			CameraBase->DeSpawnLoadingWidget();
+		}
+	}
 	
 	RTSGameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 
@@ -849,6 +859,32 @@ FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModif
     return RunLocation;
 }
 
+bool AControllerBase::IsLocationInDirtyArea(const FVector& Location) const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	const UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	if (!NavSys) return false;
+
+	FNavLocation NavLoc;
+	if (!NavSys->ProjectPointToNavigation(Location, NavLoc, FVector(10.f, 10.f, 100.f)))
+	{
+		return false; // separate "not on navmesh" handling lives at call sites
+	}
+
+	const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+	const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData);
+	if (!Recast)
+	{
+		return false;
+	}
+
+	const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+	const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+	return PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+}
+
 /*
 FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModifier)
 {
@@ -922,6 +958,54 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 			bool HitNavModifier;
 			RunLocation = TraceRunLocation(RunLocation, HitNavModifier);
 			if (HitNavModifier) continue;
+			// If dirty, adjust to nearest projected non-dirty point instead of skipping
+			// if (IsLocationInDirtyArea(RunLocation))
+			{
+				if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+				{
+					FNavLocation CenterNav;
+					bool bOnNav = NavSys->ProjectPointToNavigation(RunLocation, CenterNav, FVector(600.f, 600.f, 5000.f));
+					bool bAdjusted = false;
+					if (bOnNav)
+					{
+						static const float Radii[] = {150.f, 300.f, 600.f, 900.f};
+						static const int32 Slices = 12;
+						for (float R : Radii)
+						{
+							for (int32 s = 0; s < Slices; ++s)
+							{
+								const float Angle = (2 * PI) * (float(s) / float(Slices));
+								const FVector Candidate = RunLocation + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+								FNavLocation CandNav;
+								if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(600.f, 600.f, 5000.f)))
+								{
+									// Accept first projected candidate that is not marked as obstacle area
+									const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+									if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+									{
+										const uint32 AreaID = Recast->GetPolyAreaID(CandNav.NodeRef);
+										const UClass* AreaClass = Recast->GetAreaClass(AreaID);
+										if (!(AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass())))
+										{
+											RunLocation = CandNav.Location;
+											bAdjusted = true;
+											break;
+										}
+									}
+								}
+							}
+							if (bAdjusted == false)
+							{
+								continue; // give up this slot
+							}
+						}
+					}
+					else
+					{
+						continue; // cannot project at all
+					}
+				}
+			}
 			
 			ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[i]);
 			if (BuildingBase && !BuildingBase->CanMove)

@@ -200,6 +200,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector TraceRunLocation(FVector RunLocation, bool& HitNavModifier);
+
+	bool IsLocationInDirtyArea(const FVector& Location) const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RunUnitsAndSetWaypoints(FHitResult Hit);

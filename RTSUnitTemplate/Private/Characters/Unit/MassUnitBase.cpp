@@ -5,6 +5,7 @@
 
 #include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -1256,9 +1257,12 @@ bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float D
 void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 InstIndex,
 	const FTransform& NewTransform)
 {
-	if (ISMComponent && ISMComponent->IsValidInstance(InstIndex))
+	if (ISMComponent)
 	{
-		ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
+		if (ISMComponent->IsValidInstance(InstIndex))
+		{
+			ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
+		}
 	}
 	
 	if (Niagara_A && !Niagara_A->bHiddenInGame)
@@ -2730,6 +2734,47 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 			{
 				AITFrag->FriendlyTargetEntity = TargetHandle;
 				AITFrag->LastKnownFriendlyLocation = NewFollowTarget->GetMassActorLocation();
+
+				// If target is a building, ensure we follow at a safe distance from its obstacle
+				const bool bIsBuilding = Cast<ABuildingBase>(NewFollowTarget) != nullptr;
+				if (bIsBuilding)
+				{
+					float TargetRadius = 300.f;
+					bool bBoundsFound = false;
+					if (NewFollowTarget->NavObstacleProxy)
+					{
+						const FBox ProxyBox = NewFollowTarget->NavObstacleProxy->GetComponentsBoundingBox(true);
+						if (ProxyBox.IsValid)
+						{
+							TargetRadius = ProxyBox.GetExtent().Size2D();
+							bBoundsFound = true;
+						}
+					}
+					
+					if (!bBoundsFound)
+					{
+						const FBox B = NewFollowTarget->GetComponentsBoundingBox(true);
+						if (B.IsValid)
+						{
+							TargetRadius = B.GetExtent().Size2D();
+							bBoundsFound = true;
+						}
+					}
+
+					if (!bBoundsFound)
+					{
+						if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetHandle))
+						{
+							TargetRadius = TargetChar->CapsuleRadius;
+						}
+					}
+					
+					AITFrag->FollowRadius = TargetRadius + 150.f; // Substantial buffer to stay clear of dirty area
+				}
+				else
+				{
+					AITFrag->FollowRadius = 200.f; // Default for regular units
+				}
 			}
 			else
 			{

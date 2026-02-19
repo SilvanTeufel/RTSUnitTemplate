@@ -177,7 +177,6 @@ public:
 	bool ValidateAndAdjustGridLocation(const TArray<AUnitBase*>& Units, FVector& InOutLocation, TArray<FVector>& OutOffsets, float& OutSpacing);
 
 	/** Returns true if the location is within any recently marked dirty area (obstacle). */
-	bool IsLocationInDirtyArea(const FVector& Location) const;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetHoldPositionOnSelectedUnits();

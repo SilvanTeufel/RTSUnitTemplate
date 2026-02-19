@@ -1472,7 +1472,7 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 		else
 		{
 			// Fallback to component bounding box
-			BoundsBox = GetComponentsBoundingBox();
+			BoundsBox = GetComponentsBoundingBox(true);
 			if (!BoundsBox.IsValid)
 			{
 				return;
@@ -1528,7 +1528,7 @@ void AUnitBase::Multicast_UnregisterObstacle_Implementation()
 	if (IsValid(NavObstacleProxy))
 	{
 		// Get the bounds *before* destroying the actor
-		const FBox BoundsToDirty = NavObstacleProxy->GetComponentsBoundingBox();
+		const FBox BoundsToDirty = NavObstacleProxy->GetComponentsBoundingBox(true);
 
 		// Destroy our proxy actor
 		NavObstacleProxy->Destroy();

@@ -8,6 +8,8 @@
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavAreas/NavArea_Obstacle.h"
 
 UUnitSoftAvoidanceProcessor::UUnitSoftAvoidanceProcessor()
 {
@@ -70,29 +72,78 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
             bool bOnNavMesh = NavSys->ProjectPointToNavigation(Location, NavLoc, ProjectionExtent);
             
             bool bHasTag = DoesEntityHaveTag(EntityManager, Entity, FMassSoftAvoidanceTag::StaticStruct());
+
+            // Detect if projected poly is an obstacle (dirty area)
+            bool bInDirtyArea = false;
+            if (bOnNavMesh)
+            {
+                const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+                if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+                {
+                    const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+                    const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                    bInDirtyArea = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                }
+            }
             
-            if (!bOnNavMesh || bHasTag)
+            if (!bOnNavMesh || bHasTag || bInDirtyArea)
             {
                 if (bOnNavMesh)
                 {
-                    FVector ToNavMesh = NavLoc.Location - Location;
-                    ToNavMesh.Z = 0.f;
-                    float Distance = ToNavMesh.Size();
-                    
-                    if (Distance > 5.f || bHasTag) 
+                    FVector Target = NavLoc.Location;
+
+                    // If in dirty area, search a nearby non-dirty projected point
+                    if (bInDirtyArea)
                     {
-                        FVector PushForce = ToNavMesh.GetSafeNormal() * AvoidanceStrength;
+                        static const float Radii[] = {100.f, 200.f, 400.f, 800.f};
+                        static const int32 Slices = 12;
+                        bool bFound = false;
+                        for (float R : Radii)
+                        {
+                            for (int32 s = 0; s < Slices; ++s)
+                            {
+                                const float Angle = (2 * PI) * (float(s) / float(Slices));
+                                const FVector Candidate = Location + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+                                FNavLocation CandNav;
+                                if (NavSys->ProjectPointToNavigation(Candidate, CandNav, ProjectionExtent))
+                                {
+                                    bool bCandDirty = false;
+                                    if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())))
+                                    {
+                                        const uint32 AreaID = Recast->GetPolyAreaID(CandNav.NodeRef);
+                                        const UClass* AreaClass = Recast->GetAreaClass(AreaID);
+                                        bCandDirty = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                                    }
+                                    if (!bCandDirty)
+                                    {
+                                        Target = CandNav.Location;
+                                        bFound = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (bFound) break;
+                        }
+                    }
+
+                    FVector ToNavMesh = Target - Location;
+                    ToNavMesh.Z = 0.f;
+                    const float Distance = ToNavMesh.Size();
+                    
+                    if (Distance > 5.f || bHasTag || bInDirtyArea) 
+                    {
+                        const FVector PushForce = ToNavMesh.GetSafeNormal() * AvoidanceStrength;
                         ForceList[i].Value += PushForce;
                         
                         if (Debug)
                         {
                             DrawDebugSphere(LocalContext.GetWorld(), Location + FVector(0,0,100.f), 20.f, 8, FColor::Blue, false, ExecutionInterval * 2.f);
-                            DrawDebugLine(LocalContext.GetWorld(), Location + FVector(0,0,100.f), NavLoc.Location + FVector(0,0,100.f), FColor::Blue, false, ExecutionInterval * 2.f);
+                            DrawDebugLine(LocalContext.GetWorld(), Location + FVector(0,0,100.f), Target + FVector(0,0,100.f), FColor::Blue, false, ExecutionInterval * 2.f);
                             DrawDebugDirectionalArrow(LocalContext.GetWorld(), Location + FVector(0,0,100.f), Location + FVector(0,0,100.f) + ToNavMesh.GetSafeNormal() * 150.f, 50.f, FColor::Green, false, ExecutionInterval * 2.f, 0, 2.f);
                         }
                     }
                     
-                    if (Distance < 10.f)
+                    if (Distance < 10.f && !bInDirtyArea)
                     {
                          LocalContext.Defer().RemoveTag<FMassSoftAvoidanceTag>(Entity);
                     }

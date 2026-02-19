@@ -27,7 +27,9 @@
 #include "Actors/MinimapActor.h" 
 #include "Characters/Unit/BuildingBase.h"
 #include "NavigationSystem.h"
+#include "NavFilters/NavigationQueryFilter.h"
 #include "NavAreas/NavArea_Null.h"
+#include "NavAreas/NavArea_Obstacle.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "System/PlayerTeamSubsystem.h"
 #include "TimerManager.h"
@@ -187,14 +189,35 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
+	// Start with a mutable final target copy (param may be const)
+	FVector FinalTargetLocation = NewTargetLocation;
+
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
 	if (NavSys)
 	{
 		FNavLocation NavLoc;
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
+		const bool bOnNav = NavSys->ProjectPointToNavigation(FinalTargetLocation, NavLoc, NavMeshProjectionExtent);
+		bool bDirty = false;
+		if (bOnNav)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[SingleMove] Early return: Target location %s is not on NavMesh or is in a dirty area."), *NewTargetLocation.ToString());
-			return;
+			const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+			if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+			{
+				const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+				const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+				bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+			}
+		}
+		if (!bOnNav || bDirty)
+		{
+			// Adjust using formation-style validation for a single unit
+			TArray<AUnitBase*> Single;
+			Single.Add(Unit);
+			TArray<FVector> OutOffsets;
+			float UsedSpacing = 0.f;
+			FVector Center = FinalTargetLocation;
+			ValidateAndAdjustGridLocation(Single, Center, OutOffsets, UsedSpacing);
+			FinalTargetLocation = (OutOffsets.Num() > 0) ? Center + OutOffsets[0] : Center;
 		}
 	}
 
@@ -222,10 +245,10 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
         return;
     }
 	
-	AiStatePtr->StoredLocation = NewTargetLocation;
+	AiStatePtr->StoredLocation = FinalTargetLocation;
 	AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 	
-	UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+	UpdateMoveTarget(*MoveTargetFragmentPtr, FinalTargetLocation, DesiredSpeed, World);
 	MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 	
 	EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
@@ -254,7 +277,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 	// Ensure movement is not blocked by a lingering stop movement tag
-	EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(MassEntityHandle);
+ EntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(MassEntityHandle);
 
 	// Inform every client to predict locally for this single unit
 	if (UWorld* PCWorld = GetWorld())
@@ -264,7 +287,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		TArray<float> SpeedsArr;
 		TArray<float> RadiiArr;
 		UnitsArr.Add(Unit);
-		LocationsArr.Add(NewTargetLocation);
+		LocationsArr.Add(FinalTargetLocation);
 		SpeedsArr.Add(DesiredSpeed);
 		RadiiArr.Add(AcceptanceRadius);
 		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
@@ -300,15 +323,68 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	bool bNeedsFormationAdjust = false;
+	FVector FormationCenter = (NewTargetLocations.Num() > 0) ? NewTargetLocations[0] : FVector::ZeroVector;
+	
 	if (NavSys && NewTargetLocations.Num() > 0)
 	{
-		FNavLocation NavLoc;
-		// Check the first target location as a representative of the move command.
-		// Using a slightly larger extent to account for formation offsets.
-		if (!NavSys->ProjectPointToNavigation(NewTargetLocations[0], NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
+		// Check ALL target locations to see if we need formation adjustment
+		for (const FVector& Loc : NewTargetLocations)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Early return: Target location %s is not on NavMesh or is in a dirty area."), *NewTargetLocations[0].ToString());
-			return;
+			FNavLocation NavLoc;
+			const bool bOnNav = NavSys->ProjectPointToNavigation(Loc, NavLoc, NavMeshProjectionExtent);
+			bool bDirty = false;
+			if (bOnNav)
+			{
+				const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+				if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+				{
+					const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+					const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+					bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+				}
+			}
+			if (!bOnNav || bDirty)
+			{
+				bNeedsFormationAdjust = true;
+				break;
+			}
+		}
+	}
+
+	// If needed, adjust formation center & build new per-unit targets using ValidateAndAdjustGridLocation
+	TArray<FVector> AdjustedTargets;
+	if (bNeedsFormationAdjust)
+	{
+		TArray<FVector> OutOffsets;
+		float UsedSpacing = 0.f;
+		ValidateAndAdjustGridLocation(Units, FormationCenter, OutOffsets, UsedSpacing);
+		
+		// ValidateAndAdjustGridLocation sorts its LocalUnits. 
+		// We need to match the offsets back to the input Units order using a stable sort.
+		TArray<AUnitBase*> SortedUnits = Units;
+		SortedUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
+			float RA = 50.0f;
+			if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+			float RB = 50.0f;
+			if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+			if (FMath::IsNearlyEqual(RA, RB)) return A.GetName() > B.GetName();
+			return RA > RB;
+		});
+
+		TMap<AUnitBase*, FVector> TempOffsets;
+		for (int32 i = 0; i < SortedUnits.Num(); ++i)
+		{
+			if (OutOffsets.IsValidIndex(i))
+			{
+				TempOffsets.Add(SortedUnits[i], OutOffsets[i]);
+			}
+		}
+
+		AdjustedTargets.SetNum(Units.Num());
+		for (int32 i = 0; i < Units.Num(); ++i)
+		{
+			AdjustedTargets[i] = FormationCenter + TempOffsets.FindRef(Units[i]);
 		}
 	}
 
@@ -321,7 +397,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Units[Index];
-		const FVector& NewTargetLocation = NewTargetLocations[Index];
+		const FVector& OriginalTargetLocation = NewTargetLocations[Index];
+		FVector UseLocation = (bNeedsFormationAdjust && AdjustedTargets.IsValidIndex(Index)) ? AdjustedTargets[Index] : OriginalTargetLocation;
 		const float DesiredSpeed = DesiredSpeeds[Index];
 		const float AcceptanceRadius = AcceptanceRadii[Index];
 
@@ -384,10 +461,61 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			continue;
 		}
 		
-		AiStatePtr->StoredLocation = NewTargetLocation;
+		AiStatePtr->StoredLocation = UseLocation;
 		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		
-		UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
+		// Final check: if UseLocation is still invalid, do a last-resort snap
+		if (NavSys)
+		{
+			FNavLocation NavLoc;
+			const bool bOnNav = NavSys->ProjectPointToNavigation(UseLocation, NavLoc, NavMeshProjectionExtent);
+			bool bDirty = false;
+			if (bOnNav)
+			{
+				const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+				if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+				{
+					const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+					const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+					bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+				}
+			}
+			
+			if (!bOnNav || bDirty)
+			{
+				// Radial search for nearest clean spot
+				static const float Radii[] = {150.f, 300.f, 600.f};
+				static const int32 Slices = 8;
+				bool bFound = false;
+				for (float R : Radii)
+				{
+					for (int32 s = 0; s < Slices; ++s)
+					{
+						const float Angle = (2 * PI) * (float(s) / float(Slices));
+						const FVector Candidate = UseLocation + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+						FNavLocation CandNav;
+						if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(1000.f, 1000.f, 1000.f)))
+						{
+							if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())))
+							{
+								const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+								const UClass* AC = RM->GetAreaClass(AID);
+								if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+								{
+									UseLocation = CandNav.Location;
+									bFound = true;
+									break;
+								}
+							}
+						}
+					}
+					if (bFound) break;
+				}
+				if (!bFound && bOnNav) UseLocation = NavLoc.Location; // use dirty projected if nothing else
+			}
+		}
+
+		UpdateMoveTarget(*MoveTargetFragmentPtr, UseLocation, DesiredSpeed, World);
 		MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
 
 		// Tags manipulation
@@ -1034,6 +1162,58 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 			{
 				FollowLocation = HitResult.Location;
 			}
+
+			// Ensure follow point is on navmesh and not a dirty area (e.g., building obstacle)
+			if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+			{
+				FNavLocation CenterNav;
+				bool bOnNav = NavSys->ProjectPointToNavigation(FollowLocation, CenterNav, FVector(600.f, 600.f, 5000.f));
+				bool bDirty = false;
+				if (bOnNav)
+				{
+					const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+					if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+					{
+						const uint32 PolyAreaID = Recast->GetPolyAreaID(CenterNav.NodeRef);
+						const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+						bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+					}
+				}
+
+				if (!bOnNav || bDirty)
+				{
+					// Radial search for nearest non-dirty projected point
+					static const float Radii[] = {150.f, 300.f, 600.f, 900.f};
+					static const int32 Slices = 12;
+					bool bFound = false;
+					for (float R : Radii)
+					{
+						for (int32 s = 0; s < Slices; ++s)
+						{
+							const float Angle = (2 * PI) * (float(s) / float(Slices));
+							const FVector Candidate = FollowLocation + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+							FNavLocation CandNav;
+							if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(600.f, 600.f, 5000.f)))
+							{
+								bool bCandDirty = false;
+								if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())))
+								{
+									const uint32 AreaID = Recast->GetPolyAreaID(CandNav.NodeRef);
+									const UClass* AreaClass = Recast->GetAreaClass(AreaID);
+									bCandDirty = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+								}
+								if (!bCandDirty)
+								{
+									FollowLocation = CandNav.Location;
+									bFound = true;
+									break;
+								}
+							}
+						}
+						if (bFound) break;
+					}
+				}
+			}
 		}
 
 		TArray<AUnitBase*> ValidUnits;
@@ -1042,6 +1222,68 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 		ValidUnits.Reserve(Units.Num() + 1);
 		NewTargetLocations.Reserve(Units.Num() + 1);
 		DesiredSpeeds.Reserve(Units.Num() + 1);
+
+		// Derive authoritative FollowOffset from Proxy bounds > Capsule > Bbox
+		float FollowOffset = 300.f;
+		if (FollowTarget)
+		{
+			bool bFoundBounds = false;
+			if (FollowTarget->NavObstacleProxy)
+			{
+				const FBox ProxyBox = FollowTarget->NavObstacleProxy->GetComponentsBoundingBox(true);
+				if (ProxyBox.IsValid)
+				{
+					const FVector ProxyExt = ProxyBox.GetExtent();
+					FollowOffset = FMath::Max(ProxyExt.X, ProxyExt.Y) + 50.f; // Buffer
+					bFoundBounds = true;
+				}
+			}
+			
+			if (!bFoundBounds)
+			{
+				if (UCapsuleComponent* Cap = FollowTarget->FindComponentByClass<UCapsuleComponent>())
+				{
+					FollowOffset = Cap->GetScaledCapsuleRadius() * 2.f + 10.f;
+				}
+				else
+				{
+					const FBox B = FollowTarget->GetComponentsBoundingBox(true);
+					if (B.IsValid)
+					{
+						const FVector Ext = B.GetExtent();
+						FollowOffset = FMath::Max(Ext.X, Ext.Y) * 2.f + 10.f;
+					}
+				}
+			}
+		}
+
+		// Compute group center of followers to determine approach direction
+		FVector BldCenter = FollowTarget ? FollowTarget->GetActorLocation() : FollowLocation;
+		FVector GroupCenter = FVector::ZeroVector;
+		int32 GroupCount = 0;
+		for (AUnitBase* U : Units)
+		{
+			if (!U || U == FollowTarget) continue;
+			GroupCenter += U->GetActorLocation();
+			++GroupCount;
+		}
+		if (GroupCount > 0)
+		{
+			GroupCenter /= float(GroupCount);
+		}
+		else
+		{
+			GroupCenter = FollowLocation;
+		}
+
+		FVector DirBG = (GroupCenter - BldCenter);
+		DirBG.Z = 0.f;
+		DirBG = DirBG.GetSafeNormal();
+		if (DirBG.IsNearlyZero())
+		{
+			DirBG = FVector(1.f, 0.f, 0.f);
+		}
+		FollowLocation = BldCenter + DirBG * FollowOffset;
 
 		for (AUnitBase* Unit : Units)
 		{
@@ -1295,7 +1537,7 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 
 		bool bNavMod;
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
-		if (bNavMod) continue;
+		if (bNavMod) continue; //  || IsLocationInDirtyArea(RunLocation)
 
 		bool bSuccess = false;
 		SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
@@ -1598,30 +1840,64 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
         return true;
     }
 
-    // Collect obstacle bounds once per call to avoid repeated actor iteration
-    TArray<FBox> DirtyAreas;
-    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+    // 0. Ensure InOutLocation is not in a dirty area before we start
+    FNavLocation CenterNav;
+    if (NavSys->ProjectPointToNavigation(InOutLocation, CenterNav, FVector(1000.f, 1000.f, 1000.f)))
     {
-        if (IsValid(It->NavObstacleProxy))
+        bool bCenterDirty = false;
+        const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+        if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
         {
-            DirtyAreas.Add(It->NavObstacleProxy->GetComponentsBoundingBox());
+            const uint32 PolyAreaID = Recast->GetPolyAreaID(CenterNav.NodeRef);
+            const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+            bCenterDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+        }
+
+        if (bCenterDirty)
+        {
+            // Radial search for nearest non-dirty center
+            static const float Radii[] = {200.f, 400.f, 800.f, 1600.f};
+            static const int32 Slices = 12;
+            bool bFoundCenter = false;
+            for (float R : Radii)
+            {
+                for (int32 s = 0; s < Slices; ++s)
+                {
+                    const float Angle = (2 * PI) * (float(s) / float(Slices));
+                    const FVector Candidate = InOutLocation + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+                    FNavLocation CandNav;
+                    if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(1000.f, 1000.f, 1000.f)))
+                    {
+                        if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
+                        {
+                            const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+                            const UClass* AC = RM->GetAreaClass(AID);
+                            if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+                            {
+                                InOutLocation = CandNav.Location;
+                                bFoundCenter = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (bFoundCenter) break;
+            }
+        }
+        else
+        {
+            InOutLocation = CenterNav.Location;
         }
     }
 
-    // 1. Initial wide projection to find the nearest valid ground
-    FNavLocation InitialNavLoc;
-    if (NavSys->ProjectPointToNavigation(InOutLocation, InitialNavLoc, FVector(1500.f, 1500.f, 1500.f)))
-    {
-        InOutLocation = InitialNavLoc.Location;
-    }
-
-    // 2. Consistency: Sort by radius to match RecalculateFormation
+    // 1. Consistency: Sort by radius to match RecalculateFormation using a stable sort
     TArray<AUnitBase*> LocalUnits = Units;
     LocalUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
         float RA = 50.0f;
         if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
         float RB = 50.0f;
         if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+        if (FMath::IsNearlyEqual(RA, RB)) return A.GetName() > B.GetName();
         return RA > RB;
     });
 
@@ -1645,18 +1921,17 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
                 FNavLocation NavLoc;
                 bool bOnNavMesh = NavSys->ProjectPointToNavigation(TargetP, NavLoc, NavMeshProjectionExtent);
 
-                bool bInDirtyArea = false;
-                if (bOnNavMesh)
-                {
-                    for (const FBox& DirtyBox : DirtyAreas)
-                    {
-                        if (DirtyBox.IsInside(NavLoc.Location))
-                        {
-                            bInDirtyArea = true;
-                            break;
-                        }
-                    }
-                }
+            				bool bInDirtyArea = false;
+            				if (bOnNavMesh)
+            				{
+            					const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+            					if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+            					{
+            						const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+            						const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+            						bInDirtyArea = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+            					}
+            				}
 
                 if (!bOnNavMesh || bInDirtyArea)
                 {
@@ -1684,7 +1959,6 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
             else
             {
                 // Fallback: just project center again with wide extent
-                FNavLocation CenterNav;
                 if (NavSys->ProjectPointToNavigation(InOutLocation, CenterNav, FVector(1000.f, 1000.f, 1000.f)))
                 {
                     InOutLocation = CenterNav.Location;
@@ -1695,26 +1969,76 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
         if (bFinalSuccess) break;
     }
 
-    // We return true even if it's not perfectly on NavMesh after all attempts, 
-    // to ensure the command is never completely rejected.
+    if (!bFinalSuccess)
+    {
+        // Final attempt: individually adjust each point that is still invalid
+        OutOffsets = ComputeSlotOffsets(LocalUnits, OutSpacing);
+        for (int32 i = 0; i < OutOffsets.Num(); ++i)
+        {
+            FVector TargetP = InOutLocation + OutOffsets[i];
+            FNavLocation NavLoc;
+            if (NavSys->ProjectPointToNavigation(TargetP, NavLoc, FVector(1000.f, 1000.f, 1000.f)))
+            {
+                bool bDirty = false;
+                const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+                if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+                {
+                    const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+                    const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                    bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                }
+
+                if (bDirty)
+                {
+                    // Snap to nearest non-dirty
+                    static const float Radii[] = {150.f, 300.f, 600.f, 900.f};
+                    static const int32 Slices = 12;
+                    bool bFoundSafe = false;
+                    for (float R : Radii)
+                    {
+                        for (int32 s = 0; s < Slices; ++s)
+                        {
+                            const float Angle = (2 * PI) * (float(s) / float(Slices));
+                            const FVector Candidate = TargetP + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * R;
+                            FNavLocation CandNav;
+                            if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(1000.f, 1000.f, 1000.f)))
+                            {
+                                if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
+                                {
+                                    const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+                                    const UClass* AC = RM->GetAreaClass(AID);
+                                    if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+                                    {
+                                        OutOffsets[i] = CandNav.Location - InOutLocation;
+                                        bFoundSafe = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (bFoundSafe) break;
+                    }
+                    if (!bFoundSafe)
+                    {
+                        OutOffsets[i] = NavLoc.Location - InOutLocation; // Fallback to dirty projected point if no safe one found
+                    }
+                }
+                else
+                {
+                    OutOffsets[i] = NavLoc.Location - InOutLocation;
+                }
+            }
+            else
+            {
+                // If individual projection fails, fallback to the already-validated formation center
+                OutOffsets[i] = FVector::ZeroVector; 
+            }
+        }
+    }
+
     return true; 
 }
 
-bool ACustomControllerBase::IsLocationInDirtyArea(const FVector& Location) const
-{
-	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
-	{
-		if (IsValid(It->NavObstacleProxy))
-		{
-			FBox Bounds = It->NavObstacleProxy->GetComponentsBoundingBox();
-			if (Bounds.IsInside(Location))
-			{
-				return true;
-			}
-		}
-	}
-	return false;
-}
 
 void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
 {
@@ -1799,7 +2123,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	
         bool bNavMod;
         Loc = TraceRunLocation(Loc, bNavMod);
-        if (bNavMod) continue;
+        if (bNavMod) continue; // || IsLocationInDirtyArea(Loc)
 
         U->RemoveFocusEntityTarget();
         U->SetRdyForTransport(false);
@@ -2546,7 +2870,7 @@ void ACustomControllerBase::HandleAttackMovePressed()
 
         bool bNavMod;
         RunLocation = TraceRunLocation(RunLocation, bNavMod);
-        if (bNavMod) continue;
+        if (bNavMod) continue; // || IsLocationInDirtyArea(RunLocation)
         
         bool bSuccess = false;
         SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
