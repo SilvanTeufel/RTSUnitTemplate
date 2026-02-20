@@ -13,6 +13,7 @@
 #include "MassEntityUtils.h"
 
 #include "Characters/Unit/TransportUnit.h"
+#include "Characters/Unit/ConstructionUnit.h"
 #include "MassRepresentationSubsystem.h"  
 #include "MassRepresentationTypes.h"
 // -----------------------------
@@ -258,9 +259,15 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 
-			if (StopSeparation)
+			if (StopSeparation || Cast<AConstructionUnit>(MyOwner))
 			{
 				EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
+				
+				if (Cast<AConstructionUnit>(MyOwner))
+				{
+					EM.Defer().AddTag<FMassDisableAvoidanceTag>(NewMassEntityHandle);
+					EM.Defer().AddTag<FMassStateDisableObstacleTag>(NewMassEntityHandle);
+				}
 			}
 			
 			bNeedsMassUnitSetup = false;
@@ -420,8 +427,15 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		}
 	}
 
-	if (StopSeparation)
+	if (StopSeparation || Cast<AConstructionUnit>(Owner))
+	{
 		FragmentsAndTags.Add(FMassStateStopSeparationTag::StaticStruct());
+		if (Cast<AConstructionUnit>(Owner))
+		{
+			FragmentsAndTags.Add(FMassDisableAvoidanceTag::StaticStruct());
+			FragmentsAndTags.Add(FMassStateDisableObstacleTag::StaticStruct());
+		}
+	}
 	
     FMassArchetypeCreationParams Params;
 	Params.ChunkMemorySize=0;
@@ -733,9 +747,15 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 
-			if (StopSeparation)
+			if (StopSeparation || Cast<AConstructionUnit>(MyOwner))
 			{
 				EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
+
+				if (Cast<AConstructionUnit>(MyOwner))
+				{
+					EM.Defer().AddTag<FMassDisableAvoidanceTag>(NewMassEntityHandle);
+					EM.Defer().AddTag<FMassStateDisableObstacleTag>(NewMassEntityHandle);
+				}
 			}
 			
 			bNeedsMassBuildingSetup = false;
