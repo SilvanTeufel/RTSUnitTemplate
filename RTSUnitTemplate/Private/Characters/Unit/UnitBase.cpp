@@ -862,41 +862,61 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 {
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
 
-	if (!ProjectileBaseClass) return;
+	if (!ProjectileBaseClass || !ShootingUnit) return;
 
-	
-	
-	if(ShootingUnit)
+	const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+	float TwinDistance = ProjectileCDO->TwinProjectileDistance;
+	int32 HomingCount = ProjectileCDO->HomingMissleCount;
+
+	int32 BaseCount = (HomingCount > 0) ? HomingCount : 1;
+
+	// 2) Figure out the exact world‐space "aim" point
+	FVector AimLocation = Target->GetActorLocation();
+	if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
 	{
-
-		FTransform Transform;
-		Transform.SetLocation(ShootingUnit->GetProjectileSpawnLocation());
-
-
-		// 2) Figure out the exact world‐space "aim" point
-		FVector AimLocation = Target->GetActorLocation();
-		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
-		{
-			if (!UnitTarget->bUseSkeletalMovement)
-				AimLocation = UnitTarget->GetMassActorLocation(); 
-		}
+		if (!UnitTarget->bUseSkeletalMovement)
+			AimLocation = UnitTarget->GetMassActorLocation(); 
+	}
 		
-		FVector Direction = (AimLocation - Transform.GetLocation()).GetSafeNormal();
-		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+	TArray<FVector> SpawnPositions;
+	FVector CenterSpawnPos = ShootingUnit->GetProjectileSpawnLocation();
 
-		Transform.SetRotation(FQuat(InitialRotation));
-		Transform.SetScale3D(ShootingUnit->ProjectileScale);
+	if (TwinDistance > 0.f)
+	{
+		FVector RightOffset = ShootingUnit->GetActorRightVector() * TwinDistance;
+		SpawnPositions.Add(CenterSpawnPos - RightOffset); // Left
+		SpawnPositions.Add(CenterSpawnPos + RightOffset); // Right
+	}
+	else
+	{
+		SpawnPositions.Add(CenterSpawnPos);
+	}
 
-		
-		const auto MyProjectile = Cast<AProjectile>
-							(UGameplayStatics::BeginDeferredActorSpawnFromClass
-							(this, ProjectileBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-		if (MyProjectile != nullptr)
+	for (const FVector& ActualSpawnPos : SpawnPositions)
+	{
+		for (int32 i = 0; i < BaseCount; ++i)
 		{
-			MyProjectile->Init(Target, Attacker);
-			MyProjectile->SetProjectileVisibility();
-			UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-			MyProjectile->SetReplicates(true);
+			FTransform Transform;
+			Transform.SetLocation(ActualSpawnPos);
+
+			FVector Direction = (AimLocation - Transform.GetLocation()).GetSafeNormal();
+			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+
+			Transform.SetRotation(FQuat(InitialRotation));
+			Transform.SetScale3D(ShootingUnit->ProjectileScale);
+
+			const auto MyProjectile = Cast<AProjectile>
+								(UGameplayStatics::BeginDeferredActorSpawnFromClass
+								(this, ProjectileBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+			if (MyProjectile != nullptr)
+			{
+				if (HomingCount > 0) MyProjectile->FollowTarget = true;
+				
+				MyProjectile->Init(Target, Attacker);
+				MyProjectile->SetProjectileVisibility();
+				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+				MyProjectile->SetReplicates(true);
+			}
 		}
 	}
 }
@@ -920,10 +940,16 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     if (!Aim || !Attacker || !ProjectileClass) return;
 
     AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
+    if (!ShootingUnit) return;
     AUnitBase* TargetUnit   = Cast<AUnitBase>(Aim);
 
-	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
-	FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation();  // Default to actor's root location
+    const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
+    float TwinDistance = ProjectileCDO->TwinProjectileDistance;
+    int32 HomingCount = ProjectileCDO->HomingMissleCount;
+
+    int32 BaseCount = (HomingCount > 0) ? HomingCount : ProjectileCount;
+
+    FVector ShootingUnitLocation = ShootingUnit->GetMassActorLocation();
 
     // 1) Determine the true “center” we want to spread around
     FVector AimCenter = Aim->GetActorLocation();
@@ -936,23 +962,40 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     FVector TargetBoxSize = Aim->GetComponentsBoundingBox().GetSize();
     const float HalfHeight = DisableAutoZOffset ? 0.f : TargetBoxSize.Z * 0.5f;
 
-    for (int32 Count = 0; Count < ProjectileCount; ++Count)
+    TArray<FVector> SpawnPositions;
+    FVector CenterSpawnPos = ShootingUnit->GetProjectileSpawnLocation(SpawnOffset);
+
+    if (TwinDistance > 0.f)
     {
-        // alternate left/right spread
-        int32  MultiAngle     = (Count == 0) ? 0 : ((Count & 1) ? 1 : -1);
-        FVector ToCenterDir   = (AimCenter - ShootingUnitLocation).GetSafeNormal();
-        FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
-        FVector SpreadOffset  = PerpOffsetDir * Spread;
+        FVector RightOffset = ShootingUnit->GetActorRightVector() * TwinDistance;
+        SpawnPositions.Add(CenterSpawnPos - RightOffset); // Left
+        SpawnPositions.Add(CenterSpawnPos + RightOffset); // Right
+    }
+    else
+    {
+        SpawnPositions.Add(CenterSpawnPos);
+    }
 
-        // final aim point for this shot
-        FVector LocationToShoot = AimCenter + SpreadOffset;
-        LocationToShoot.Z     += HalfHeight + ZOffset;
-
-        // 3) Build spawn transform
-        if (ShootingUnit)
+    for (const FVector& ActualSpawnPos : SpawnPositions)
+    {
+        for (int32 Count = 0; Count < BaseCount; ++Count)
         {
+            // alternate left/right spread
+            int32  MultiAngle     = (Count == 0) ? 0 : ((Count & 1) ? 1 : -1);
+            FVector ToCenterDir   = (AimCenter - ShootingUnitLocation).GetSafeNormal();
+            FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
+            
+            // For homing missiles, we typically ignore external spread to ensure they start at the same point
+            float ActualSpread = (HomingCount > 0) ? 0.f : Spread;
+            FVector SpreadOffset  = PerpOffsetDir * ActualSpread;
+
+            // final aim point for this shot
+            FVector LocationToShoot = AimCenter + SpreadOffset;
+            LocationToShoot.Z     += HalfHeight + ZOffset;
+
+            // 3) Build spawn transform
             FTransform SpawnXf;
-            SpawnXf.SetLocation(ShootingUnit->GetProjectileSpawnLocation(SpawnOffset));
+            SpawnXf.SetLocation(ActualSpawnPos);
 
             const FVector Dir          = (LocationToShoot - SpawnXf.GetLocation()).GetSafeNormal();
             const FRotator InitialRot  = Dir.Rotation() + ProjectileRotationOffset;
@@ -973,11 +1016,14 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             {
                 // cache our manually computed aim point
                 MyProj->TargetLocation   = LocationToShoot;
+                
+                if (HomingCount > 0) MyProj->FollowTarget = true;
+                else MyProj->FollowTarget = FollowTarget;
+
                 MyProj->InitForAbility(Aim, Attacker);
 
                 //MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
                 MyProj->MaxPiercedTargets = MaxPiercedTargets;
-                MyProj->FollowTarget      = FollowTarget;
                 MyProj->IsBouncingNext    = IsBouncingNext;
                 MyProj->IsBouncingBack    = IsBouncingBack;
 
@@ -1003,61 +1049,84 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 {
     if (!ProjectileClass)
         return;
-	
+
+    const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
+    float TwinDistance = ProjectileCDO->TwinProjectileDistance;
+    int32 HomingCount = ProjectileCDO->HomingMissleCount;
+
+    int32 BaseCount = (HomingCount > 0) ? HomingCount : ProjectileCount;
+
 	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
 	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
 
     // Base spawn‐origin offset
-    FVector SpawnOrigin = GetProjectileSpawnLocation();
+    FVector CenterSpawnOrigin = GetProjectileSpawnLocation();
 
-
-    for (int32 i = 0; i < ProjectileCount; ++i)
+    TArray<FVector> SpawnPositions;
+    if (TwinDistance > 0.f)
     {
-        // Alternate left/right offsets for multi‐shot spread
-        const int   MultiAngle    = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
-        const FVector ToAimDir     = (Aim - SpawnerLocationForAimDir).GetSafeNormal();
-        const FVector SpreadOffset = FRotator(0.f, MultiAngle * 90.f, 0.f)
-                                     .RotateVector(ToAimDir)
-                                     * Spread;
+        FVector RightOffset = GetActorRightVector() * TwinDistance;
+        SpawnPositions.Add(CenterSpawnOrigin - RightOffset); // Left
+        SpawnPositions.Add(CenterSpawnOrigin + RightOffset); // Right
+    }
+    else
+    {
+        SpawnPositions.Add(CenterSpawnOrigin);
+    }
 
-        // Compute this shot’s exact world target point
-        FVector LocationToShoot = Aim + SpreadOffset;
-        // Overwrite Z so we use the Aim.Z (instead of adding our own Z)
-        LocationToShoot.Z = Aim.Z + ZOffset;
-
-        // Build the spawn transform
-        FTransform SpawnXf;
-        SpawnXf.SetLocation(SpawnOrigin);
-
-        const FVector Dir         = (LocationToShoot - SpawnOrigin).GetSafeNormal();
-        const FRotator InitialRot = Dir.Rotation() + ProjectileRotationOffset;
-        SpawnXf.SetRotation(FQuat(InitialRot));
-        SpawnXf.SetScale3D(ProjectileScale * Scale);
-
-        // Spawn deferred so we can Init
-        AProjectile* Proj = Cast<AProjectile>(
-            UGameplayStatics::BeginDeferredActorSpawnFromClass(
-                this,
-                ProjectileClass,
-                SpawnXf,
-                ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-            )
-        );
-
-        if (Proj)
+    for (const FVector& ActualSpawnOrigin : SpawnPositions)
+    {
+        for (int32 i = 0; i < BaseCount; ++i)
         {
-            // Cache our manual location‐aim
-            Proj->TargetLocation    = LocationToShoot;
-            Proj->InitForLocationPosition(LocationToShoot, this);
+            // Alternate left/right offsets for multi‐shot spread
+            const int   MultiAngle    = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
+            const FVector ToAimDir     = (Aim - SpawnerLocationForAimDir).GetSafeNormal();
+            
+            // For homing missiles, we typically ignore external spread to ensure they start at the same point
+            float ActualSpread = (HomingCount > 0) ? 0.f : Spread;
+            const FVector SpreadOffset = FRotator(0.f, MultiAngle * 90.f, 0.f)
+                                         .RotateVector(ToAimDir)
+                                         * ActualSpread;
 
-            //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
-            Proj->MaxPiercedTargets = MaxPiercedTargets;
-            Proj->IsBouncingNext    = IsBouncingNext;
-            Proj->IsBouncingBack    = IsBouncingBack;
+            // Compute this shot’s exact world target point
+            FVector LocationToShoot = Aim + SpreadOffset;
+            // Overwrite Z so we use the Aim.Z (instead of adding our own Z)
+            LocationToShoot.Z = Aim.Z + ZOffset;
 
-            Proj->SetProjectileVisibility();
-            UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
-            Proj->SetReplicates(true);
+            // Build the spawn transform
+            FTransform SpawnXf;
+            SpawnXf.SetLocation(ActualSpawnOrigin);
+
+            const FVector Dir         = (LocationToShoot - ActualSpawnOrigin).GetSafeNormal();
+            const FRotator InitialRot = Dir.Rotation() + ProjectileRotationOffset;
+            SpawnXf.SetRotation(FQuat(InitialRot));
+            SpawnXf.SetScale3D(ProjectileScale * Scale);
+
+            // Spawn deferred so we can Init
+            AProjectile* Proj = Cast<AProjectile>(
+                UGameplayStatics::BeginDeferredActorSpawnFromClass(
+                    this,
+                    ProjectileClass,
+                    SpawnXf,
+                    ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+                )
+            );
+
+            if (Proj)
+            {
+                // Cache our manual location‐aim
+                Proj->TargetLocation    = LocationToShoot;
+                Proj->InitForLocationPosition(LocationToShoot, this);
+
+                //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
+                Proj->MaxPiercedTargets = MaxPiercedTargets;
+                Proj->IsBouncingNext    = IsBouncingNext;
+                Proj->IsBouncingBack    = IsBouncingBack;
+
+                Proj->SetProjectileVisibility();
+                UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
+                Proj->SetReplicates(true);
+            }
         }
     }
 }

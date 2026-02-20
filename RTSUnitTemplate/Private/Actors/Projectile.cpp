@@ -192,13 +192,23 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		else
 		{
 			FTransform InstanceXform;
-			ShootingUnit->ISMComponent->GetInstanceTransform( ShootingUnit->InstanceIndex, /*out*/ InstanceXform, /*worldSpace=*/ true );
+			ShootingUnit->ISMComponent->GetInstanceTransform( ShootingUnit->InstanceIndex, InstanceXform, true );
 			ShooterLocation = InstanceXform.GetLocation();
 		}
 		
-		InitArc(ShooterLocation);
+ 	InitArc(ShooterLocation);
 	}
 	bIsInitialized = true;
+
+	if (HomingMissleCount > 0) {
+		FollowTarget = true;
+		HomingInitialAngle = FMath::RandRange(0.f, 360.f);
+		HomingRotationSpeed *= FMath::RandRange(0.8f, 2.0f);
+		if (FMath::RandBool()) HomingRotationSpeed *= -1.f;
+		HomingMaxSpiralRadius *= FMath::RandRange(0.6f, 1.5f);
+		HomingOffset = FVector::ZeroVector;
+		MovementSpeed += FMath::RandRange(-HomingSpeedVariation, HomingSpeedVariation);
+	}
 }
 
 void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
@@ -239,6 +249,16 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 
 	InitArc(ShooterLocation);
 	bIsInitialized = true;
+
+	if (HomingMissleCount > 0) {
+		FollowTarget = true;
+		HomingInitialAngle = FMath::RandRange(0.f, 360.f);
+		HomingRotationSpeed *= FMath::RandRange(0.8f, 2.0f);
+		if (FMath::RandBool()) HomingRotationSpeed *= -1.f;
+		HomingMaxSpiralRadius *= FMath::RandRange(0.6f, 1.5f);
+		HomingOffset = FVector::ZeroVector;
+		MovementSpeed += FMath::RandRange(-HomingSpeedVariation, HomingSpeedVariation);
+	}
 }
 
 void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
@@ -292,6 +312,16 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 
 	InitArc(ShooterLocation);
 	bIsInitialized = true;
+
+	if (HomingMissleCount > 0) {
+		FollowTarget = true;
+		HomingInitialAngle = FMath::RandRange(0.f, 360.f);
+		HomingRotationSpeed *= FMath::RandRange(0.8f, 2.0f);
+		if (FMath::RandBool()) HomingRotationSpeed *= -1.f;
+		HomingMaxSpiralRadius *= FMath::RandRange(0.6f, 1.5f);
+		HomingOffset = FVector::ZeroVector;
+		MovementSpeed += FMath::RandRange(-HomingSpeedVariation, HomingSpeedVariation);
+	}
 }
 
 
@@ -330,7 +360,14 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, Shooter);
 	DOREPLIFETIME(AProjectile, ArcHeight);
 	DOREPLIFETIME(AProjectile, ArcHeightDistanceFactor);
+	DOREPLIFETIME(AProjectile, TwinProjectileDistance);
+	DOREPLIFETIME(AProjectile, HomingMissleCount);
+	DOREPLIFETIME(AProjectile, HomingOffset);
 
+	DOREPLIFETIME(AProjectile, HomingMaxSpiralRadius);
+	DOREPLIFETIME(AProjectile, HomingRotationSpeed);
+	DOREPLIFETIME(AProjectile, HomingInitialAngle);
+	DOREPLIFETIME(AProjectile, HomingSpeedVariation);
 	DOREPLIFETIME(AProjectile, ImpactSound);
 	DOREPLIFETIME(AProjectile, ImpactVFX);
 	
@@ -370,11 +407,22 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 
 	DOREPLIFETIME(AProjectile, FlightDirection);
 	DOREPLIFETIME(AProjectile, bIsInitialized);
+	DOREPLIFETIME(AProjectile, bImpacted);
 	DOREPLIFETIME(AProjectile, ArcStartLocation);
 	DOREPLIFETIME(AProjectile, ArcTravelTime);
 }
 
 // Implement the new multicast function to update clients
+void AProjectile::OnRep_bImpacted()
+{
+	SetVisibility(false);
+	SetActorHiddenInGame(true);
+	if (ISMComponent)
+	{
+		ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+
 void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& NewTransform)
 {
 	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
@@ -441,7 +489,7 @@ void AProjectile::Tick(float DeltaTime)
 		FTransform CurrentTransform;
 		if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
-			ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/true);
+			ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
 
 			// 2. Calculate the rotation amount (the delta) for this frame.
 			FRotator RotationDelta = FRotator(RotationSpeed.X * DeltaTime, RotationSpeed.Y * DeltaTime, RotationSpeed.Z * DeltaTime);
@@ -450,7 +498,7 @@ void AProjectile::Tick(float DeltaTime)
 			CurrentTransform.ConcatenateRotation(RotationDelta.Quaternion());
 			
 			// 4. Update locally.
-			Multicast_UpdateISMTransform_Implementation(CurrentTransform);
+			Multicast_UpdateISMTransform(CurrentTransform);
 		}
 	}
 	if(LifeTime > MaxLifeTime && !FollowTarget)
@@ -483,6 +531,11 @@ void AProjectile::Tick(float DeltaTime)
 		}
 		if (HasAuthority()) Destroy(true, false);
 	}
+ else if (bImpacted)
+ {
+ 	// Keep moving forward in the last known direction while hidden
+ 	FlyToLocationTarget(DeltaTime);
+ }
 	else if (ArcHeight > 0.f || ArcHeightDistanceFactor > 0.f)
 	{
 		FlyInArc(DeltaTime);
@@ -532,7 +585,7 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     {
         return; // Safety check
     }
-    ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/ true);
+    ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
     const FVector CurrentLocation = CurrentTransform.GetLocation();
 
 
@@ -545,7 +598,50 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
            TargetLocation =  UnitTarget->GetMassActorLocation();
         }
 
-        FlightDirection  = (TargetLocation - CurrentLocation).GetSafeNormal();
+        if (HomingMissleCount > 0)
+        {
+            // 1. Calculate the base direction towards the target
+            const FVector DirToTarget = (TargetLocation - CurrentLocation).GetSafeNormal();
+
+            // 2. Calculate current spiral parameters
+            const float CurrentAngle = HomingInitialAngle + LifeTime * HomingRotationSpeed;
+
+            // 3. Determine Radius: Grow at start, Shrink near target
+            float DesiredRadius = HomingMaxSpiralRadius;
+            const float DistanceToTarget = FVector::Dist(CurrentLocation, TargetLocation);
+
+            // Shrink as we get closer than 500 units
+            if (DistanceToTarget < 500.f)
+            {
+                DesiredRadius *= (DistanceToTarget / 500.f);
+            }
+            // Grow during the first 0.1 seconds of flight
+            const float GrowthTime = 0.1f;
+            if (LifeTime < GrowthTime)
+            {
+                DesiredRadius *= (LifeTime / GrowthTime);
+            }
+
+            // 4. Create spiral offset
+            FVector Right, Up;
+            DirToTarget.FindBestAxisVectors(Right, Up);
+
+            HomingOffset = (Right * FMath::Cos(FMath::DegreesToRadians(CurrentAngle)) +
+                            Up * FMath::Sin(FMath::DegreesToRadians(CurrentAngle))) * DesiredRadius;
+
+            // 5. Compute the final target point including spiral offset
+            const FVector CurrentTarget = TargetLocation + HomingOffset;
+            FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+        }
+        else
+        {
+            // Apply the irregular offset to the target location (old logic / non-spiral)
+            FVector CurrentTarget = TargetLocation + HomingOffset;
+            FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+
+            // Gradually reduce the offset so it converges on the target
+            HomingOffset = FMath::VInterpTo(HomingOffset, FVector::ZeroVector, DeltaSeconds, HomingInterpSpeed);
+        }
     }
 
 
@@ -557,7 +653,7 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     // --- 4. Apply movement locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
-    Multicast_UpdateISMTransform_Implementation(NewTransform);
+    Multicast_UpdateISMTransform(NewTransform);
 
 
     // --- 5. Check for impact (Authority Only) ---
@@ -566,6 +662,9 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
         const float Distance = FVector::Dist(NewTransform.GetLocation(), TargetLocation);
         if (Distance <= FrameSpeed + CollisionRadius)
         {
+           // Snap to target location for precise impact
+           NewTransform.SetLocation(TargetLocation);
+           Multicast_UpdateISMTransform(NewTransform);
            Impact(Target);
         }
     }
@@ -581,12 +680,47 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
     {
         return; // Safety check
     }
-    ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true /* bWorldSpace */);
+    ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
 
     const FVector CurrentLocation = CurrentTransform.GetLocation();
 	
+    if (HomingMissleCount > 0)
+    {
+        // 1. Calculate the base direction towards the target
+        const FVector DirToTarget = (TargetLocation - CurrentLocation).GetSafeNormal();
+
+        // 2. Calculate current spiral parameters
+        const float CurrentAngle = HomingInitialAngle + LifeTime * HomingRotationSpeed;
+
+        // 3. Determine Radius: Grow at start, Shrink near target
+        float DesiredRadius = HomingMaxSpiralRadius;
+        const float DistanceToTarget = FVector::Dist(CurrentLocation, TargetLocation);
+
+        // Shrink as we get closer than 500 units
+        if (DistanceToTarget < 500.f)
+        {
+            DesiredRadius *= (DistanceToTarget / 500.f);
+        }
+        // Grow during the first 0.1 seconds of flight
+        const float GrowthTime = 0.1f;
+        if (LifeTime < GrowthTime)
+        {
+            DesiredRadius *= (LifeTime / GrowthTime);
+        }
+
+        // 4. Create spiral offset
+        FVector Right, Up;
+        DirToTarget.FindBestAxisVectors(Right, Up);
+
+        HomingOffset = (Right * FMath::Cos(FMath::DegreesToRadians(CurrentAngle)) +
+                        Up * FMath::Sin(FMath::DegreesToRadians(CurrentAngle))) * DesiredRadius;
+
+        // 5. Compute the final target point including spiral offset
+        const FVector CurrentTarget = TargetLocation + HomingOffset;
+        FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+    }
 	// Check for a zero vector to prevent getting stuck
-	if (FlightDirection.IsNearlyZero(0.1f))
+	else if (FlightDirection.IsNearlyZero(0.1f))
 	{
 		// The target is the same as the start, destroy the projectile to prevent errors
 		FlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
@@ -604,65 +738,70 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
     // --- 3. Update Transform Locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
-    Multicast_UpdateISMTransform_Implementation(NewTransform);
+    Multicast_UpdateISMTransform(NewTransform);
 
-    if (HasAuthority())
-    {
-        OverlapCheckTimer += DeltaSeconds;
-        if (OverlapCheckTimer >= OverlapCheckInterval)
-        {
-            OverlapCheckTimer = 0.f;
+   	if (HasAuthority())
+   	{
+   		// Once we've impacted something, keep moving forward but do not register further hits.
+   		if (bImpacted)
+   		{
+   			return;
+   		}
+   		OverlapCheckTimer += DeltaSeconds;
+   		if (OverlapCheckTimer >= OverlapCheckInterval)
+   		{
+   			OverlapCheckTimer = 0.f;
 
-            TArray<AActor*> OutActors;
-            TArray<AActor*> ActorsToIgnore;
-            ActorsToIgnore.Add(this);
-            ActorsToIgnore.Add(Shooter);
+   			TArray<AActor*> OutActors;
+   			TArray<AActor*> ActorsToIgnore;
+   			ActorsToIgnore.Add(this);
+   			ActorsToIgnore.Add(Shooter);
 
-            TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
-            ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+   			TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypesToQuery;
+   			ObjectTypesToQuery.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
 
-            // 1. Visualize the overlap area first for debugging
-            if (DebugTargetLocation)
-                DrawDebugSphere(
-                    GetWorld(),
-                    EndLocation,         // Center of the sphere is at the end of the intended path
-                    CollisionRadius,
-                    24,                  // Segments for a smooth sphere
-                    FColor::Red,      // A distinct color for the overlap check
-                    true,
-                    5.0f                 // Lifetime of 5 seconds
-                );
+   			// 1. Visualize the overlap area first for debugging
+   			if (DebugTargetLocation)
+   				DrawDebugSphere(
+   					GetWorld(),
+   					EndLocation,         // Center of the sphere is at the end of the intended path
+   					CollisionRadius,
+   					24,                  // Segments for a smooth sphere
+   					FColor::Red,      // A distinct color for the overlap check
+   					true,
+   					5.0f                 // Lifetime of 5 seconds
+   				);
 
-            // 2. Perform the overlap check
-            UKismetSystemLibrary::SphereOverlapActors(
-                GetWorld(),
-                EndLocation,
-                CollisionRadius,
-                ObjectTypesToQuery,
-                nullptr,             // No specific actor class to filter
-                ActorsToIgnore,
-                OutActors            // Array to be filled with found actors
-            );
+   			// 2. Perform the overlap check
+   			UKismetSystemLibrary::SphereOverlapActors(
+   				GetWorld(),
+   				EndLocation,
+   				CollisionRadius,
+   				ObjectTypesToQuery,
+   				nullptr,             // No specific actor class to filter
+   				ActorsToIgnore,
+   				OutActors            // Array to be filled with found actors
+   			);
 
 
-            for (AActor* HitActor : OutActors)
-            {
-                // An overlap doesn't provide a detailed FHitResult, so we create one manually.
-                FHitResult ManualHitResult;
-                ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
-                ManualHitResult.bBlockingHit = true;   // Best guess for the component
-                // Call the overlap function for each actor found in the sphere
-                OnOverlapBegin_Implementation(
-                    nullptr,          // We don't have an "OverlappedComp" from the projectile
-                    HitActor,         // The actor we hit
-                    nullptr, // The component we hit
-                    -1,               // OtherBodyIndex, not available from an overlap
-                    false,            // This was not from a sweep
-                    ManualHitResult   // The manually created HitResult
-                );
-            }
-        }
-    }
+   			for (AActor* HitActor : OutActors)
+   			{
+   				// An overlap doesn't provide a detailed FHitResult, so we create one manually.
+   				FHitResult ManualHitResult;
+   				ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
+   				ManualHitResult.bBlockingHit = true;   // Best guess for the component
+   				// Call the overlap function for each actor found in the sphere
+   				OnOverlapBegin_Implementation(
+   					nullptr,          // We don't have an "OverlappedComp" from the projectile
+   					HitActor,         // The actor we hit
+   					nullptr, // The component we hit
+   					-1,               // OtherBodyIndex, not available from an overlap
+   					false,            // This was not from a sweep
+   					ManualHitResult   // The manually created HitResult
+   				);
+   			}
+   		}
+   	}
 }
 
 
@@ -674,7 +813,7 @@ void AProjectile::FlyInArc(float DeltaTime)
     {
         return; // Safety check
     }
-    ISMComponent->GetInstanceTransform(InstanceIndex, /*out*/ CurrentTransform, /*worldSpace=*/ true);
+    ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
 
 	if (Shooter)
 	{
@@ -738,7 +877,7 @@ void AProjectile::FlyInArc(float DeltaTime)
     }
 
     // Update locally
-    Multicast_UpdateISMTransform_Implementation(NewTransform);
+    Multicast_UpdateISMTransform(NewTransform);
 
     if (HasAuthority())
     {
@@ -1127,6 +1266,16 @@ void AProjectile::DestroyWhenMaxPierced()
 
 void AProjectile::DestroyProjectileWithDelay()
 {
+	if (HasAuthority())
+	{
+		bImpacted = true;
+		SetVisibility(false);
+		SetActorHiddenInGame(true);
+		if (ISMComponent)
+		{
+			ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
 	FTimerHandle TimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AProjectile::DestroyProjectile, DestructionDelayTime, false);
 }
@@ -1229,17 +1378,18 @@ AUnitBase* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* U
 
 void AProjectile::SetVisibility(bool Visible)
 {
-	//GetMesh()->SetVisibility(Visible);
-	
 	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 	{
 		FTransform InstanceTransform;
-		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, /*bWorldSpace=*/true);
+		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, true);
 
 		// Hide the instance by scaling it to zero, show it by scaling it back to one.
 		InstanceTransform.SetScale3D(Visible ? FVector(1.0f) : FVector::ZeroVector);
         
 		ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceTransform, true, true);
 	}
+
+	if (Niagara_A) Niagara_A->SetVisibility(Visible);
+	if (Niagara_B) Niagara_B->SetVisibility(Visible);
 }
 
