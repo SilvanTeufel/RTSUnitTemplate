@@ -45,10 +45,10 @@ public:
 	float HomingInterpSpeed = 2.0f;
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
-	float HomingRotationSpeed = 1440.0f;
+	float HomingRotationSpeed = 0.0f;
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
-	float HomingMaxSpiralRadius = 600.0f;
+	float HomingMaxSpiralRadius = 200.0f;
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
 	float HomingSpeedVariation = 50.0f;

@@ -648,11 +648,19 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     // --- 3. Calculate this frame's movement ---
     const float FrameSpeed = MovementSpeed * DeltaSeconds * 10.f;
     const FVector FrameMovement = FlightDirection * FrameSpeed;
-
-
+    
+    
     // --- 4. Apply movement locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
+    
+    // Fix: Face movement direction and apply rotation offset
+    if (!FlightDirection.IsNearlyZero())
+    {
+        const FQuat FinalQuat = FlightDirection.Rotation().Quaternion() * RotationOffset.Quaternion();
+        NewTransform.SetRotation(FinalQuat);
+    }
+    
     Multicast_UpdateISMTransform(NewTransform);
 
 
@@ -734,10 +742,18 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
     const FVector FrameMovement = FlightDirection * MovementSpeed * DeltaSeconds * 10.f;
     // The potential new location after this frame's movement
     const FVector EndLocation = CurrentLocation + FrameMovement;
-
+    
     // --- 3. Update Transform Locally ---
     FTransform NewTransform = CurrentTransform;
     NewTransform.AddToTranslation(FrameMovement);
+    
+    // Fix: Face movement direction and apply rotation offset
+    if (!FlightDirection.IsNearlyZero())
+    {
+        const FQuat FinalQuat = FlightDirection.Rotation().Quaternion() * RotationOffset.Quaternion();
+        NewTransform.SetRotation(FinalQuat);
+    }
+    
     Multicast_UpdateISMTransform(NewTransform);
 
    	if (HasAuthority())
@@ -819,10 +835,8 @@ void AProjectile::FlyInArc(float DeltaTime)
 	{
 		if (ArcStartLocation.IsNearlyZero(0.1f))
 		{
-			if (!ShooterLocation.IsNearlyZero(0.1f))
-				ArcStartLocation = ShooterLocation;
-			else
-				ArcStartLocation = Shooter->GetActorLocation();
+			// Use the actual instance's current world location so twin projectiles keep their unique lanes
+			ArcStartLocation = CurrentTransform.GetLocation();
 		}
 
 		if (TargetLocation.IsNearlyZero(0.1f))
@@ -869,10 +883,61 @@ void AProjectile::FlyInArc(float DeltaTime)
     // --- 5. Make the projectile look towards its flight path ---
     if (Alpha < 0.99f) // Don't update rotation at the very end to prevent weird flips
     {
-        FVector Direction = (NewLocation - CurrentTransform.GetLocation()).GetSafeNormal();
+        // Calculate Tangent: Velocity vector along the arc path
+        FVector Chord = TargetLocation - ArcStartLocation;
+        FVector Tangent = Chord;
+        Tangent.Z += PI * FMath::Cos(Alpha * PI) * CurrentArcHeight;
+        
+        FVector CombinedDirection = Tangent;
+
+        // --- Homing Spiral Integration ---
+        // If we are homing, we need the spiral to affect the "up/down" rotation too.
+        if (HomingMissleCount > 0)
+        {
+            // Calculate current spiral parameters (same as in FlyToUnitTarget)
+            const float CurrentAngle = HomingInitialAngle + LifeTime * HomingRotationSpeed;
+            float DesiredRadius = HomingMaxSpiralRadius;
+            const float DistanceToTarget = FVector::Dist(NewLocation, TargetLocation);
+
+            // Shrink as we get closer than 500 units
+            if (DistanceToTarget < 500.f) DesiredRadius *= (DistanceToTarget / 500.f);
+            
+            // Grow during the first 0.1 seconds of flight
+            const float GrowthTime = 0.1f;
+            if (LifeTime < GrowthTime) DesiredRadius *= (LifeTime / GrowthTime);
+
+            // Create spiral offset
+            FVector Right, Up;
+            Tangent.GetSafeNormal().FindBestAxisVectors(Right, Up);
+
+            FVector CurrentHomingOffset = (Right * FMath::Cos(FMath::DegreesToRadians(CurrentAngle)) +
+                            Up * FMath::Sin(FMath::DegreesToRadians(CurrentAngle))) * DesiredRadius;
+
+            // We apply the offset to the location
+            NewLocation += CurrentHomingOffset;
+            NewTransform.SetLocation(NewLocation);
+
+            // And we add the derivative of the spiral to the tangent for better rotation
+            // Derivative of Radius * (Right * Cos(w*t) + Up * Sin(w*t)) is roughly Radius * w * (-Right * Sin + Up * Cos)
+            // But just pointing at the next "spiral target" is often smoother.
+            // Let's approximate the next position to get a better direction
+            float NextAlpha = Alpha + 0.01f;
+            FVector NextBaseLoc = FMath::Lerp(ArcStartLocation, TargetLocation, NextAlpha);
+            NextBaseLoc.Z += FMath::Sin(NextAlpha * PI) * CurrentArcHeight;
+
+            float NextAngle = HomingInitialAngle + (LifeTime + 0.01f) * HomingRotationSpeed;
+            FVector NextHomingOffset = (Right * FMath::Cos(FMath::DegreesToRadians(NextAngle)) +
+                             Up * FMath::Sin(FMath::DegreesToRadians(NextAngle))) * DesiredRadius;
+            FVector NextLocation = NextBaseLoc + NextHomingOffset;
+
+            CombinedDirection = (NextLocation - NewLocation);
+        }
+
+        FVector Direction = CombinedDirection.GetSafeNormal();
         if (!Direction.IsNearlyZero())
         {
-            NewTransform.SetRotation(Direction.Rotation().Quaternion());
+            const FQuat FinalQuat = Direction.Rotation().Quaternion() * RotationOffset.Quaternion();
+            NewTransform.SetRotation(FinalQuat);
         }
     }
 

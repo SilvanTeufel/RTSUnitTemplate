@@ -900,6 +900,17 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			Transform.SetLocation(ActualSpawnPos);
 
 			FVector Direction = (AimLocation - Transform.GetLocation()).GetSafeNormal();
+			
+			// For homing multi-missiles, add a slight spread to the initial direction so they don't overlap perfectly
+			if (HomingCount > 0 && BaseCount > 1)
+			{
+				float SpreadAngle = 10.0f; // degrees
+				float Angle = (360.0f / BaseCount) * i;
+				FVector Right, Up;
+				Direction.FindBestAxisVectors(Right, Up);
+				Direction = (Direction + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+			}
+
 			FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
 
 			Transform.SetRotation(FQuat(InitialRotation));
@@ -908,15 +919,18 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 			const auto MyProjectile = Cast<AProjectile>
 								(UGameplayStatics::BeginDeferredActorSpawnFromClass
 								(this, ProjectileBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-			if (MyProjectile != nullptr)
-			{
-				if (HomingCount > 0) MyProjectile->FollowTarget = true;
-				
-				MyProjectile->Init(Target, Attacker);
-				MyProjectile->SetProjectileVisibility();
-				UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
-				MyProjectile->SetReplicates(true);
-			}
+				if (MyProjectile != nullptr)
+				{
+					if (HomingCount > 0) MyProjectile->FollowTarget = true;
+					
+					// Initialize in-projectile rotation offset so per-frame steering matches mesh forward
+					MyProjectile->RotationOffset = ShootingUnit->ProjectileRotationOffset;
+					
+					MyProjectile->Init(Target, Attacker);
+					MyProjectile->SetProjectileVisibility();
+					UGameplayStatics::FinishSpawningActor(MyProjectile, Transform);
+					MyProjectile->SetReplicates(true);
+				}
 		}
 	}
 }
@@ -986,7 +1000,8 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
             
             // For homing missiles, we typically ignore external spread to ensure they start at the same point
-            float ActualSpread = (HomingCount > 0) ? 0.f : Spread;
+            // but we might want internal spread if spawning multiple homing missiles
+            float ActualSpread = (HomingCount > 0 && ProjectileCount <= 1) ? 0.f : Spread;
             FVector SpreadOffset  = PerpOffsetDir * ActualSpread;
 
             // final aim point for this shot
@@ -997,7 +1012,17 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             FTransform SpawnXf;
             SpawnXf.SetLocation(ActualSpawnPos);
 
-            const FVector Dir          = (LocationToShoot - SpawnXf.GetLocation()).GetSafeNormal();
+            FVector Dir          = (LocationToShoot - SpawnXf.GetLocation()).GetSafeNormal();
+
+            // For homing multi-missiles, add a slight initial direction variance
+            if (HomingCount > 0 && BaseCount > 1)
+            {
+                float Angle = (360.0f / BaseCount) * Count;
+                FVector Right, Up;
+                Dir.FindBestAxisVectors(Right, Up);
+                Dir = (Dir + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+            }
+
             const FRotator InitialRot  = Dir.Rotation() + ProjectileRotationOffset;
             SpawnXf.SetRotation(FQuat(InitialRot));
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
@@ -1012,25 +1037,28 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 )
             );
 
-            if (MyProj)
-            {
-                // cache our manually computed aim point
-                MyProj->TargetLocation   = LocationToShoot;
-                
-                if (HomingCount > 0) MyProj->FollowTarget = true;
-                else MyProj->FollowTarget = FollowTarget;
-
-                MyProj->InitForAbility(Aim, Attacker);
-
-                //MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
-                MyProj->MaxPiercedTargets = MaxPiercedTargets;
-                MyProj->IsBouncingNext    = IsBouncingNext;
-                MyProj->IsBouncingBack    = IsBouncingBack;
-
-                MyProj->SetProjectileVisibility();
-                UGameplayStatics::FinishSpawningActor(MyProj, SpawnXf);
-                MyProj->SetReplicates(true);
-            }
+         			if (MyProj)
+         			{
+         				// cache our manually computed aim point
+         				MyProj->TargetLocation   = LocationToShoot;
+				
+         				if (HomingCount > 0) MyProj->FollowTarget = true;
+         				else MyProj->FollowTarget = FollowTarget;
+				
+         				// Ensure projectile uses the same mesh rotation offset as the shooter
+         				MyProj->RotationOffset = ShootingUnit->ProjectileRotationOffset;
+				
+         				MyProj->InitForAbility(Aim, Attacker);
+				
+         				//MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
+         				MyProj->MaxPiercedTargets = MaxPiercedTargets;
+         				MyProj->IsBouncingNext    = IsBouncingNext;
+         				MyProj->IsBouncingBack    = IsBouncingBack;
+				
+         				MyProj->SetProjectileVisibility();
+         				UGameplayStatics::FinishSpawningActor(MyProj, SpawnXf);
+         				MyProj->SetReplicates(true);
+         			}
         }
     }
 }
@@ -1083,7 +1111,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             const FVector ToAimDir     = (Aim - SpawnerLocationForAimDir).GetSafeNormal();
             
             // For homing missiles, we typically ignore external spread to ensure they start at the same point
-            float ActualSpread = (HomingCount > 0) ? 0.f : Spread;
+            float ActualSpread = (HomingCount > 0 && ProjectileCount <= 1) ? 0.f : Spread;
             const FVector SpreadOffset = FRotator(0.f, MultiAngle * 90.f, 0.f)
                                          .RotateVector(ToAimDir)
                                          * ActualSpread;
@@ -1097,7 +1125,17 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             FTransform SpawnXf;
             SpawnXf.SetLocation(ActualSpawnOrigin);
 
-            const FVector Dir         = (LocationToShoot - ActualSpawnOrigin).GetSafeNormal();
+            FVector Dir         = (LocationToShoot - ActualSpawnOrigin).GetSafeNormal();
+
+            // For homing multi-missiles, add a slight initial direction variance
+            if (HomingCount > 0 && BaseCount > 1)
+            {
+                float Angle = (360.0f / BaseCount) * i;
+                FVector Right, Up;
+                Dir.FindBestAxisVectors(Right, Up);
+                Dir = (Dir + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+            }
+
             const FRotator InitialRot = Dir.Rotation() + ProjectileRotationOffset;
             SpawnXf.SetRotation(FQuat(InitialRot));
             SpawnXf.SetScale3D(ProjectileScale * Scale);
@@ -1112,21 +1150,25 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 )
             );
 
-            if (Proj)
-            {
-                // Cache our manual location‐aim
-                Proj->TargetLocation    = LocationToShoot;
-                Proj->InitForLocationPosition(LocationToShoot, this);
-
-                //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
-                Proj->MaxPiercedTargets = MaxPiercedTargets;
-                Proj->IsBouncingNext    = IsBouncingNext;
-                Proj->IsBouncingBack    = IsBouncingBack;
-
-                Proj->SetProjectileVisibility();
-                UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
-                Proj->SetReplicates(true);
-            }
+         			if (Proj)
+         			{
+         				// Cache our manual location‐aim
+         				Proj->TargetLocation    = LocationToShoot;
+				
+         				// Initialize in-projectile rotation offset from this unit
+         				Proj->RotationOffset = ProjectileRotationOffset;
+				
+         				Proj->InitForLocationPosition(LocationToShoot, this);
+				
+         				//Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
+         				Proj->MaxPiercedTargets = MaxPiercedTargets;
+         				Proj->IsBouncingNext    = IsBouncingNext;
+         				Proj->IsBouncingBack    = IsBouncingBack;
+				
+         				Proj->SetProjectileVisibility();
+         				UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
+         				Proj->SetReplicates(true);
+         			}
         }
     }
 }
