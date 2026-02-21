@@ -1283,7 +1283,9 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 		{
 			DirBG = FVector(1.f, 0.f, 0.f);
 		}
+		const float GroundZ = FollowLocation.Z;
 		FollowLocation = BldCenter + DirBG * FollowOffset;
+		FollowLocation.Z = GroundZ;
 
 		for (AUnitBase* Unit : Units)
 		{

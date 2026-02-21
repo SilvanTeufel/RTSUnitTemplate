@@ -250,7 +250,15 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     DesiredPos.X += CosA * OffsetMag;
                     DesiredPos.Y += SinA * OffsetMag;
                 }
-                DesiredPos.Z = FriendlyLoc.Z; // ignore Z while following
+                // Use grounded Z if the target has characteristic data (buildings)
+                if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    DesiredPos.Z = TargetCharFrag->LastGroundLocation;
+                }
+                else
+                {
+                    DesiredPos.Z = FriendlyLoc.Z; // ignore Z while following
+                }
 
                 // Ensure DesiredPos is not in a dirty area
                 if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))

@@ -1069,23 +1069,27 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->VerticalDeathRotationMultiplier = VerticalDeathRotationMultiplier;
         	CharFrag->GroundAlignment = GroundAlignment;
 
-            // Perform LineTrace to find the ground height at startup
-            FHitResult Hit;
-            FCollisionQueryParams Params;
-            Params.AddIgnoredActor(UnitOwner);
-            FCollisionObjectQueryParams ObjectParams(ECC_WorldStatic);
-
-            FVector ActorLoc = UnitOwner->GetActorLocation();
-            FVector TraceStart = ActorLoc + FVector(0.f, 0.f, 500.f);
-            FVector TraceEnd = ActorLoc - FVector(0.f, 0.f, 2500.f);
-
-            if (UnitOwner->GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+            // Only for buildings! (units handle this in the movement processor)
+            if (!UnitOwner->CanMove)
             {
-                CharFrag->LastGroundLocation = Hit.ImpactPoint.Z;
-            }
-            else
-            {
-                CharFrag->LastGroundLocation = ActorLoc.Z; // Fallback to current Z
+                // Perform LineTrace to find the ground height at startup
+                FHitResult Hit;
+                FCollisionQueryParams Params;
+                Params.AddIgnoredActor(UnitOwner);
+                FCollisionObjectQueryParams ObjectParams(ECC_WorldStatic);
+
+                FVector ActorLoc = UnitOwner->GetActorLocation();
+                FVector TraceStart = ActorLoc + FVector(0.f, 0.f, 500.f);
+                FVector TraceEnd = ActorLoc - FVector(0.f, 0.f, 2500.f);
+
+                if (UnitOwner->GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+                {
+                    CharFrag->LastGroundLocation = Hit.ImpactPoint.Z;
+                }
+                else
+                {
+                    CharFrag->LastGroundLocation = ActorLoc.Z; // Fallback to current Z
+                }
             }
         }
         else // Use default values

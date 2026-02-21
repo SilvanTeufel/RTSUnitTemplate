@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "GAS/AttributeSetBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -2794,7 +2795,15 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 	// Immediately switch to appropriate state so movement starts instantly
 	if (UMassSignalSubsystem* Signals = World->GetSubsystem<UMassSignalSubsystem>())
 	{
-		const bool bWantsRepair = (ThisUnit->IsWorker && ThisUnit->CanRepair && NewFollowTarget && NewFollowTarget->CanBeRepaired);
+		bool bWantsRepair = false;
+		if (ThisUnit->IsWorker && ThisUnit->CanRepair && NewFollowTarget && NewFollowTarget->CanBeRepaired)
+		{
+			if (NewFollowTarget->Attributes && NewFollowTarget->Attributes->GetHealth() < NewFollowTarget->Attributes->GetMaxHealth())
+			{
+				bWantsRepair = true;
+			}
+		}
+
 		if (bWantsRepair)
 		{
 			// Enter dedicated GoToRepair flow; specialized processors will drive follow updates
@@ -2802,6 +2811,18 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 		}
 		else if (NewFollowTarget)
 		{
+			if (ThisUnit->IsWorker)
+			{
+				if (ABuildingBase* Building = Cast<ABuildingBase>(NewFollowTarget))
+				{
+					if (Building->IsBase)
+					{
+						Signals->SignalEntity(UnitSignals::GoToBase, MassEntityHandle);
+						return;
+					}
+				}
+			}
+			
 			Signals->SignalEntity(UnitSignals::Run, MassEntityHandle);
 			/*
 			// Immediately push a MoveTarget towards the follow target's current location to get moving this tick.

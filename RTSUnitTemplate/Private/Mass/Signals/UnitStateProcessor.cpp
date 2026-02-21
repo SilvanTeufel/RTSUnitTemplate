@@ -3255,6 +3255,11 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 					{
 						Goal = FriendlyXform->GetTransform().GetLocation();
 					}
+					
+					if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag->FriendlyTargetEntity))
+					{
+						Goal.Z = TargetCharFrag->LastGroundLocation;
+					}
 				}
 				StateFraggPtr->StoredLocation = Goal;
 				UpdateMoveTarget(MoveTarget, Goal, StatsFrag.RunSpeed, World);

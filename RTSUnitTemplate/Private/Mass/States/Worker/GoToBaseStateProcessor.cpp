@@ -136,7 +136,7 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             }
 
             // --- 2. Movement Logic ---
-            // Use the externally provided helper function
+            UpdateMoveTarget(MoveTargetList[i], WorkerStats.BasePosition, CombatStatsList[i].RunSpeed, World);
         } // End loop through entities
     }); // End ForEachEntityChunk
 }

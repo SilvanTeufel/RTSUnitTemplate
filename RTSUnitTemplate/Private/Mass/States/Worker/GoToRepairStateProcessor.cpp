@@ -131,7 +131,16 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 const float Len = ToSelf2D.Size2D();
                 FVector Dir2D = Len > KINDA_SMALL_NUMBER ? ToSelf2D / Len : FVector::XAxisVector;
                 FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
-                DesiredPos.Z = FriendlyLoc.Z; // ignore Z for follow
+
+                if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    DesiredPos.Z = FriendlyChar->LastGroundLocation;
+                }
+                else
+                {
+                    DesiredPos.Z = FriendlyLoc.Z; // ignore Z for follow
+                }
+                
                 UpdateMoveTarget(MoveTarget, DesiredPos, StatsFrag.RunSpeed, World);
             }
         }
