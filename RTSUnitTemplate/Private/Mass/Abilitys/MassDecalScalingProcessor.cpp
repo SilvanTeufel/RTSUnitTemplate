@@ -23,7 +23,7 @@ void UMassDecalScalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityMa
 {
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassDecalScalingTag>(EMassFragmentPresence::All);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -44,12 +44,12 @@ void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMas
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		TArrayView<FMassGameplayEffectFragment> EffectList = ChunkContext.GetMutableFragmentView<FMassGameplayEffectFragment>();
+		const bool bHasEffectFragment = EffectList.Num() > 0;
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
 			FMassActorFragment& ActorFrag = ActorList[i];
-			FMassGameplayEffectFragment& Effect = EffectList[i];
-
+			
 			bool bDone = false;
 			float NewRadius = 0.f;
 
@@ -59,7 +59,11 @@ void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMas
 				{
 					if (DecalComp->AdvanceMassScaling(AccumulatedDeltaTime, NewRadius, bDone))
 					{
-						Effect.EffectRadius = NewRadius;
+						if (bHasEffectFragment)
+						{
+							EffectList[i].EffectRadius = NewRadius;
+						}
+						
 						DecalComp->SetCurrentDecalRadiusFromMass(NewRadius);
 						if (DecalComp->IsBeaconScaling())
 						{

@@ -28,12 +28,14 @@ UAreaDecalComponent::UAreaDecalComponent()
 	SetHiddenInGame(true);
 	CurrentMaterial = nullptr;
 	CurrentDecalRadius = 0.f;
+	StandardDecalRadiusDivider = 3.f;
+	bDecalIsVisible = false;
 	
 	// Rotate the decal to project downwards onto the ground.
 	SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
 
 	// Default size, will be overridden by activation.
-	DecalSize = FVector(100.f, 100.f, 100.f); 
+	DecalSize = FVector(500.f, 100.f, 100.f); 
 
 	// RVT Writer Setup
 	RVTWriterComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RVTWriterComponent"));
@@ -134,15 +136,17 @@ void UAreaDecalComponent::OnRep_DecalColor()
 
 void UAreaDecalComponent::OnRep_DecalRadius()
 {
-	// If we are currently scaling via multicast/timer, don't let OnRep snap the value back.
-	// The timer will finish and set the final CurrentDecalRadius.
-	if (!bIsScaling)
-	{
-		UpdateDecalVisuals();
-	}
+	// Always update visuals when radius changes, even if scaling.
+	// This ensures that clients see the server's replicated state if their local scaling isn't running.
+	UpdateDecalVisuals();
 }
 
 void UAreaDecalComponent::OnRep_UseRuntimeVirtualTexture()
+{
+	UpdateDecalVisuals();
+}
+
+void UAreaDecalComponent::OnRep_DecalIsVisible()
 {
 	UpdateDecalVisuals();
 }
@@ -160,13 +164,15 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		}
 
 		// If the material is null, the decal should be hidden.
-		if (!CurrentMaterial)
+		if (!CurrentMaterial || !bDecalIsVisible)
 		{
 			SetHiddenInGame(true);
+			SetVisibility(false);
 			return;
 		}
 
 		SetHiddenInGame(false);
+		SetVisibility(true);
 
 		// Create a dynamic material instance if we don't have one or if the base material has changed.
 		if (!DynamicDecalMaterial || DynamicDecalMaterial->Parent != CurrentMaterial)
@@ -182,7 +188,11 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		}
 		
 		// Apply the current radius.
-		DecalSize = FVector(DecalSize.X, CurrentDecalRadius, CurrentDecalRadius);
+		// Note: DecalSize represents the full size of the decal box. 
+		// If CurrentDecalRadius is the radius, we need to set the box width and height to 2 * Radius (the diameter).
+		const float VisualRadius = StandardDecalRadiusDivider > 0.01f ? (CurrentDecalRadius / StandardDecalRadiusDivider) : CurrentDecalRadius;
+		const float Depth = DecalSize.X > 0.1f ? DecalSize.X : 500.f;
+		DecalSize = FVector(Depth, VisualRadius * 2.f, VisualRadius * 2.f);
 		MarkRenderStateDirty();
 	}
 	else
@@ -193,7 +203,7 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 		SetHiddenInGame(true);
 		SetVisibility(false);
 
-		if (!TargetVirtualTexture || !RVTWriterMaterial)
+		if (!TargetVirtualTexture || !RVTWriterMaterial || !bDecalIsVisible)
 		{
 			if (RVTWriterComponent)
 			{
@@ -493,58 +503,6 @@ void UAreaDecalComponent::SetCurrentDecalRadiusFromMass(float NewRadius)
 {
 	CurrentDecalRadius = NewRadius;
 	UpdateDecalVisuals();
-
-	// Apply owner-based local visibility whenever radius updates (Mass-driven)
-	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
-	if (!OwningUnit)
-	{
-		UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot apply visibility."), *GetOwner()->GetName());
-		return;
-	}
-
-	// If globally hidden, force-hide both outputs and early out
-	if (!bDecalIsVisible)
-	{
-		SetVisibility(false);
-		SetHiddenInGame(true);
-		if (RVTWriterComponent)
-		{
-			RVTWriterComponent->SetVisibility(false);
-			RVTWriterComponent->SetHiddenInGame(true);
-		}
-		return;
-	}
-
-	const bool bVisibility = OwningUnit->ComputeLocalVisibility();
-	if (bUseRuntimeVirtualTexture)
-	{
-		// Ensure regular decal stays disabled while RVT mode is active
-		if (IsVisible())
-		{
-			SetVisibility(false);
-			SetHiddenInGame(true);
-		}
-		// Only the RVT writer follows unit visibility
-		if (RVTWriterComponent)
-		{
-			RVTWriterComponent->SetVisibility(bVisibility);
-			RVTWriterComponent->SetHiddenInGame(!bVisibility);
-		}
-	}
-	else
-	{
-		// Regular decal path follows visibility; make sure RVT writer is hidden
-		if (IsVisible() != bVisibility)
-		{
-			SetVisibility(bVisibility);
-			SetHiddenInGame(!bVisibility);
-		}
-		if (RVTWriterComponent)
-		{
-			RVTWriterComponent->SetVisibility(false);
-			RVTWriterComponent->SetHiddenInGame(true);
-		}
-	}
 }
 
 void UAreaDecalComponent::UpdateMassEffectRadius(float NewRadius)

@@ -54,8 +54,11 @@ protected:
 
 	float TimeSinceLastVisibilityCheck = 0.f;
 
-	UPROPERTY(EditAnywhere, Transient, Replicated, Category = "RTSUnitTemplate")
-	bool bDecalIsVisible = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float StandardDecalRadiusDivider = 3.f;
+
+	UPROPERTY(EditAnywhere, Transient, ReplicatedUsing = OnRep_DecalIsVisible, Category = "RTSUnitTemplate")
+	bool bDecalIsVisible = false;
 
 	// --- RVT Support ---
 
@@ -112,6 +115,10 @@ protected:
 	// Called on clients when bUseRuntimeVirtualTexture is updated.
 	UFUNCTION()
 	void OnRep_UseRuntimeVirtualTexture();
+
+	// Called on clients when bDecalIsVisible is updated.
+	UFUNCTION()
+	void OnRep_DecalIsVisible();
 
 	// Helper function to apply all visual updates based on replicated properties.
 	void UpdateDecalVisuals();
