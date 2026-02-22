@@ -883,7 +883,9 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 
 	if (TwinDistance > 0.f)
 	{
-		FVector RightOffset = ShootingUnit->GetActorRightVector() * TwinDistance;
+		FVector DirToTarget = (AimLocation - CenterSpawnPos).GetSafeNormal2D();
+		FVector RightVector = DirToTarget.IsNearlyZero() ? ShootingUnit->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
+		FVector RightOffset = RightVector * TwinDistance;
 		SpawnPositions.Add(CenterSpawnPos - RightOffset); // Left
 		SpawnPositions.Add(CenterSpawnPos + RightOffset); // Right
 	}
@@ -981,7 +983,9 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
 
     if (TwinDistance > 0.f)
     {
-        FVector RightOffset = ShootingUnit->GetActorRightVector() * TwinDistance;
+        FVector DirToTarget = (AimCenter - CenterSpawnPos).GetSafeNormal2D();
+        FVector RightVector = DirToTarget.IsNearlyZero() ? ShootingUnit->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
+        FVector RightOffset = RightVector * TwinDistance;
         SpawnPositions.Add(CenterSpawnPos - RightOffset); // Left
         SpawnPositions.Add(CenterSpawnPos + RightOffset); // Right
     }
@@ -1093,7 +1097,9 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     TArray<FVector> SpawnPositions;
     if (TwinDistance > 0.f)
     {
-        FVector RightOffset = GetActorRightVector() * TwinDistance;
+        FVector DirToTarget = (Aim - CenterSpawnOrigin).GetSafeNormal2D();
+        FVector RightVector = DirToTarget.IsNearlyZero() ? GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
+        FVector RightOffset = RightVector * TwinDistance;
         SpawnPositions.Add(CenterSpawnOrigin - RightOffset); // Left
         SpawnPositions.Add(CenterSpawnOrigin + RightOffset); // Right
     }

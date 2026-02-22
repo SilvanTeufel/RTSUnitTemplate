@@ -185,17 +185,7 @@ void AProjectile::Init(AActor* TargetActor, AActor* ShootingActor)
 		MovementSpeed = ShootingUnit->Attributes->GetProjectileSpeed();
 
 
-		if (ShootingUnit->bUseSkeletalMovement)
-		{
-			ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
-		}
-		else
-		{
-			FTransform InstanceXform;
-			ShootingUnit->ISMComponent->GetInstanceTransform( ShootingUnit->InstanceIndex, InstanceXform, true );
-			ShooterLocation = InstanceXform.GetLocation();
-		}
-		
+		ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
  	InitArc(ShooterLocation);
 	}
 	bIsInitialized = true;
@@ -230,7 +220,7 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	}
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
-	if (ShootingUnit && ShootingUnit->bUseSkeletalMovement)
+	if (ShootingUnit)
 	{
 		ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
 	}
@@ -238,7 +228,6 @@ void AProjectile::InitForAbility(AActor* TargetActor, AActor* ShootingActor)
 	{
 		ShooterLocation = Shooter->GetActorLocation();
 	}
-	
 	
 	if(ShootingUnit)
 	{
@@ -269,7 +258,7 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 	SetOwner(Shooter);
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
-	if (ShootingUnit && ShootingUnit->bUseSkeletalMovement)
+	if (ShootingUnit)
 	{
 		ShooterLocation = ShootingUnit->GetProjectileSpawnLocation();
 	}
@@ -350,7 +339,8 @@ void AProjectile::InitArc(FVector ArcBeginLocation)
 {
 	if (ArcHeight <= 0.f && ArcHeightDistanceFactor <= 0.f) return;
 
-	ArcStartLocation = ArcBeginLocation; // <<< ADD THIS
+	// We no longer set ArcStartLocation here because it might be inaccurate (e.g. missing twin offsets).
+	// FlyInArc will initialize it from the actual spawn location on the first tick.
 }
 
 void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -831,14 +821,14 @@ void AProjectile::FlyInArc(float DeltaTime)
     }
     ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
 
+	if (ArcStartLocation.IsNearlyZero(0.1f))
+	{
+		// Use the actual instance's current world location so twin projectiles keep their unique lanes
+		ArcStartLocation = CurrentTransform.GetLocation();
+	}
+
 	if (Shooter)
 	{
-		if (ArcStartLocation.IsNearlyZero(0.1f))
-		{
-			// Use the actual instance's current world location so twin projectiles keep their unique lanes
-			ArcStartLocation = CurrentTransform.GetLocation();
-		}
-
 		if (TargetLocation.IsNearlyZero(0.1f))
 		{
 			TargetLocation = ArcStartLocation + Shooter->GetActorForwardVector() * 10000.f;
