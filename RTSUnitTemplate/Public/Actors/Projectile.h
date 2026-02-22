@@ -209,6 +209,7 @@ protected:
 
 	UPROPERTY(Replicated)
 	FVector ArcStartLocation;
+	FVector PreviousLocation;
 	float ArcTotalDistance;
 	UPROPERTY(Replicated)
 	float ArcTravelTime = 0.f;

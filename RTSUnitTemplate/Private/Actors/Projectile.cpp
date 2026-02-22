@@ -18,18 +18,11 @@
 
 namespace
 {
-	FVector ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target)
+	FVector ComputeImpactSurfaceXY(const FVector& IncomingLocation, const AActor* Target)
 	{
 		if (!Target)
 		{
 			return FVector::ZeroVector;
-		}
-
-		// Determine attacker location (prefer MassActorLocation if available)
-		FVector AttackerLoc = Attacker ? Attacker->GetActorLocation() : Target->GetActorLocation();
-		if (const AUnitBase* AttackerUnit = Cast<AUnitBase>(Attacker))
-		{
-			AttackerLoc = AttackerUnit->GetMassActorLocation();
 		}
 
 		// Determine target center (prefer MassActorLocation if available)
@@ -39,8 +32,8 @@ namespace
 			TargetCenter = TargetUnit->GetMassActorLocation();
 		}
 
-		// Horizontal direction from attacker to target
-		FVector Dir2D(TargetCenter.X - AttackerLoc.X, TargetCenter.Y - AttackerLoc.Y, 0.f);
+		// Horizontal direction from incoming location to target
+		FVector Dir2D(TargetCenter.X - IncomingLocation.X, TargetCenter.Y - IncomingLocation.Y, 0.f);
 		if (Dir2D.IsNearlyZero())
 		{
 			return TargetCenter;
@@ -64,17 +57,7 @@ namespace
 		}
 
 		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
-		// If attacker is not flying, use attacker Z; otherwise keep target Z
-		bool bAttackerFlying = false;
-		if (const AUnitBase* AttackerUB = Cast<AUnitBase>(Attacker))
-		{
-			bAttackerFlying = AttackerUB->IsFlying;
-		}
-		else if (const AMassUnitBase* AttackerMUB = Cast<AMassUnitBase>(Attacker))
-		{
-			bAttackerFlying = AttackerMUB->IsFlying;
-		}
-		Surface.Z = bAttackerFlying ? TargetCenter.Z : AttackerLoc.Z;
+		Surface.Z = TargetCenter.Z;
 		return Surface;
 	}
 
@@ -469,6 +452,17 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 // Called every frame
 void AProjectile::Tick(float DeltaTime)
 {
+	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+	{
+		FTransform InstanceXform;
+		ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, true);
+		PreviousLocation = InstanceXform.GetLocation();
+	}
+	else
+	{
+		PreviousLocation = GetActorLocation();
+	}
+
 	Super::Tick(DeltaTime);
 	CheckViewport();
 	LifeTime += DeltaTime;
@@ -966,12 +960,25 @@ void AProjectile::FlyInArc(float DeltaTime)
         }
         
         // --- 7. Check for Impact ---
-        // Impact happens when the arc is complete (Alpha is 1.0)
-        if (Alpha >= 1.0f)
+        const float FrameSpeed = MovementSpeed * DeltaTime * 10.f;
+        const float Distance = FVector::Dist(NewLocation, TargetLocation);
+
+        if (Distance <= FrameSpeed + CollisionRadius || Alpha >= 1.0f)
         {
-            // Play impact FX even if we didn't hit a unit (e.g., ground impact)
-            ImpactEvent();
-            DestroyProjectileWithDelay();
+            // Snap to target location for precise impact
+            NewTransform.SetLocation(TargetLocation);
+            Multicast_UpdateISMTransform(NewTransform);
+
+            if (Target && Distance <= FrameSpeed + CollisionRadius)
+            {
+                Impact(Target);
+            }
+            else
+            {
+                // Play impact FX even if we didn't hit a unit (e.g., ground impact)
+                ImpactEvent();
+                DestroyProjectileWithDelay();
+            }
         }
     }
 }
@@ -1040,7 +1047,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		// Spawn impact effects at the surface point so they are visible on large units/buildings
 		if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 		{
-			FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);
 			// Always use the projectile's world Z (ISM instance if available)
 			{
 				FTransform InstanceXform;
@@ -1144,7 +1151,7 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		// Spawn impact effects at the surface point even for heals (so it's on the unit surface)
 		if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 		{
-			FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+			FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);
 			// Always use the projectile's world Z (ISM instance if available)
 			{
 				FTransform InstanceXform;
@@ -1242,7 +1249,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
-				FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);
 				// Always use the projectile's world Z (ISM instance if available)
 				{
 					FTransform InstanceXform;
@@ -1274,7 +1281,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
-				FVector SurfaceLoc = ComputeImpactSurfaceXY(ShootingUnit, UnitToHit);
+				FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);
 				// Always use the projectile's world Z (ISM instance if available)
 				{
 					FTransform InstanceXform;
