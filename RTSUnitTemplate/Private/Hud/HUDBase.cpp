@@ -14,6 +14,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Net/UnrealNetwork.h"
+#include "MassEntitySubsystem.h"
+#include "Mass/UnitMassTag.h"
 
 // Project-Specific Headers
 #include "Characters/Unit/HealingUnit.h"
@@ -169,6 +171,79 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 	}
 }
 
+void AHUDBase::DrawSelectedUnitsMovementLines()
+{
+	if (SelectedUnits.Num() == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Compute group center
+	FVector Sum = FVector::ZeroVector;
+	int32 Count = 0;
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (IsValid(Unit))
+		{
+			Sum += Unit->GetActorLocation();
+			++Count;
+		}
+	}
+	if (Count <= 0)
+	{
+		return;
+	}
+	const FVector GroupCenter = Sum / float(Count);
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		return;
+	}
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+	const FMassUnitPathFragment* FoundPath = nullptr;
+
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (!IsValid(Unit) || !Unit->bIsMassUnit) continue;
+		const FMassEntityHandle Handle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityValid(Handle)) continue;
+		const FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(Handle);
+		if (PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex)
+		{
+			FoundPath = PathFrag;
+			break;
+		}
+	}
+
+	if (!FoundPath)
+	{
+		return;
+	}
+
+	TArray<FVector> Points;
+	Points.Reserve(FoundPath->Waypoints.Num() - FoundPath->CurrentIndex + 1);
+	Points.Add(GroupCenter);
+	for (int32 i = FoundPath->CurrentIndex; i < FoundPath->Waypoints.Num(); ++i)
+	{
+		Points.Add(FoundPath->Waypoints[i]);
+	}
+
+	const FColor LineColor = FoundPath->bAttackMoveDuringPath ? UnitWPLineColorAttackMove : UnitWPLineColorMove;
+
+	for (int32 i = 0; i < Points.Num() - 1; ++i)
+	{
+		DrawDashedLine3D(Points[i], Points[i + 1], UnitWPLineDashLen, UnitWPLineGapLen, LineColor, UnitWPLineThickness, UnitWPLineZOffset);
+	}
+}
+
 void AHUDBase::DrawHUD()
 {
 	Super::DrawHUD();
@@ -186,6 +261,7 @@ void AHUDBase::DrawHUD()
 
 	// Draw dashed links between selected buildings and their waypoints each frame
 	DrawSelectedBuildingWaypointLinks();
+	DrawSelectedUnitsMovementLines();
 
 	if (bSelectFriendly) {
     

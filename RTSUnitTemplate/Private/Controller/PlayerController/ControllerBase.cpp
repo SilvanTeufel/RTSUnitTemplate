@@ -28,6 +28,8 @@
 #include "NavMesh/RecastNavMesh.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "AI/Navigation/NavQueryFilter.h"
+#include "MassEntitySubsystem.h"
+#include "Mass/UnitMassTag.h"
 
 
 AControllerBase::AControllerBase() {
@@ -529,28 +531,52 @@ void AControllerBase::SetToggleUnitDetection_Implementation(AUnitBase* Unit, boo
 }
 void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector Location)
 {
-	
 	if (!Unit) return;
 
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
 		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
-
 		CancelCurrentAbility(Unit);
 	}
-	
-	if(!Unit->RunLocationArray.Num())
-	{
-		SetRunLocation(Unit, Location);
-		Unit->UEPathfindingUsed = false;
 
-		SetUnitState_Replication(Unit,1);
+	// Queue waypoint via Mass fragment for Mass units
+	if (Unit->bIsMassUnit)
+	{
+		if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+		{
+			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+			const FMassEntityHandle EHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+			if (EntityManager.IsEntityValid(EHandle))
+			{
+				if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(EHandle))
+				{
+					if (PathFrag->Waypoints.Num() < 10)
+					{
+						PathFrag->Waypoints.Add(Location);
+						PathFrag->bIgnoreEnemiesDuringPath = true;
+						PathFrag->bAttackMoveDuringPath = false;
+						PathFrag->bAttackToggled = false;
+						EntityManager.Defer().RemoveTag<FMassStateDetectTag>(EHandle);
+						UE_LOG(LogTemp, Warning, TEXT("[RightClickRunShift] Appended WP=%s (Total=%d) for %s. (IgnoreEnemies=1)"), *Location.ToString(), PathFrag->Waypoints.Num(), *GetNameSafe(Unit));
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[RightClickRunShift] Path limit reached (10) for %s. Ignoring waypoint."), *GetNameSafe(Unit));
+					}
+				}
+			}
+		}
+		// Ensure state switches to Run (batch will set MoveTarget for first point if needed)
+		SetUnitState_Replication(Unit, 1);
+		Unit->SetToggleUnitDetection(false);
+		return;
 	}
-						
-	Unit->RunLocationArray.Add(Location);
-	//Unit->UnitsToChase.Empty();
-	//Unit->UnitToChase = nullptr;
+
+	// Fallback for non-mass units: keep legacy immediate run behavior
+	SetRunLocation(Unit, Location);
+	Unit->UEPathfindingUsed = false;
+	SetUnitState_Replication(Unit, 1);
 	Unit->SetToggleUnitDetection(false);
 }
 

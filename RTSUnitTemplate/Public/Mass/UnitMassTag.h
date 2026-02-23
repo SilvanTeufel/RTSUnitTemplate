@@ -631,6 +631,45 @@ struct FMassPatrolFragment : public FMassFragment
     // oder eine TArray<FVector> mit Positionen, je nachdem wie du Waypoints verwaltest.
 };
 
+//----------------------------------------------------------------------//
+//  Unit Path Fragment (queued waypoints)
+//----------------------------------------------------------------------//
+USTRUCT()
+struct FMassUnitPathFragment : public FMassFragment
+{
+    GENERATED_BODY()
+
+    // Queued waypoints in world space
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
+    TArray<FVector> Waypoints;
+
+    // Index of the current waypoint we are moving towards
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
+    int32 CurrentIndex = 0;
+
+    // Acceptance radius for considering a waypoint reached (in cm)
+    UPROPERTY(EditAnywhere, Category = "AI|Path")
+    float AcceptanceRadius = 100.f;
+
+    // Path behavior while waypoints pending
+    UPROPERTY(VisibleAnywhere, Transient)
+    bool bIgnoreEnemiesDuringPath = false;   // Shift + RightClick
+
+    UPROPERTY(VisibleAnywhere, Transient)
+    bool bAttackMoveDuringPath = false;      // Shift + AttackMove
+
+    UPROPERTY(VisibleAnywhere, Transient)
+    bool bAttackToggled = false;
+
+    // Fallback for stuck units
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
+    float StuckTimer = 0.f;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
+    FVector LastLocation = FVector::ZeroVector;
+};
+
+
 inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector& TargetLocation, float Speed, UWorld* World)
 {
 	if (!World)

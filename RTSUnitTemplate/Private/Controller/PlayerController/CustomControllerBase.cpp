@@ -457,6 +457,45 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			continue;
 		}
 
+		// Unless queuing with Shift, clear any existing path waypoints for Mass units before issuing a fresh command
+		FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle);
+		if (!IsShiftPressed && Unit->bIsMassUnit)
+		{
+			if (PathFrag)
+			{
+				PathFrag->Waypoints.Reset();
+				PathFrag->CurrentIndex = 0;
+				PathFrag->bIgnoreEnemiesDuringPath = false;
+				PathFrag->bAttackMoveDuringPath = false;
+			}
+		}
+
+		if (IsShiftPressed && Unit->bIsMassUnit && PathFrag)
+		{
+			if (PathFrag->Waypoints.Num() < 10)
+			{
+				PathFrag->Waypoints.Add(UseLocation);
+				PathFrag->bAttackMoveDuringPath = AttackT;
+				PathFrag->bAttackToggled = AttackT;
+				PathFrag->bIgnoreEnemiesDuringPath = !AttackT;
+
+				if (PathFrag->Waypoints.Num() > 1)
+				{
+					// Already moving on a path, we just appended. The processor will handle the switch once the current WP is reached.
+					if (AttackT) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+					else EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+
+					UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Appended to path (Total=%d) Mode=%s"), *GetNameSafe(Unit), PathFrag->Waypoints.Num(), AttackT ? TEXT("AttackMove") : TEXT("Move"));
+					continue; // Skip setting MoveTarget now; UpdateUnitArrayMovement will pick it up
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Path limit reached (10). Ignoring."), *GetNameSafe(Unit));
+				continue;
+			}
+		}
+
 		FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
 		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 		if (!MoveTargetFragmentPtr || !AiStatePtr)
@@ -693,13 +732,38 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		
 		// Add Run tag so client processors include this entity immediately
 		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
-		// Populate client prediction fragment with location/speed/radius so client can move without editing MoveTarget
+		// Tagging and prediction
 		if (FMassClientPredictionFragment* PredFrag = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(MassEntityHandle))
 		{
 			PredFrag->Location = NewTargetLocation;
 			PredFrag->PredDesiredSpeed = DesiredSpeed;
 			PredFrag->PredAcceptanceRadius = AcceptanceRadii[Index];
 			PredFrag->bHasData = true;
+		}
+
+		// Update path fragment for client-side visualization/logic if Shift is held
+		if (IsShiftPressed && Unit->bIsMassUnit)
+		{
+			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
+			{
+				if (PathFrag->Waypoints.Num() < 10)
+				{
+					PathFrag->Waypoints.Add(NewTargetLocation);
+					PathFrag->bAttackMoveDuringPath = AttackT;
+					PathFrag->bAttackToggled = AttackT;
+					PathFrag->bIgnoreEnemiesDuringPath = !AttackT;
+				}
+			}
+		}
+		else if (!IsShiftPressed && Unit->bIsMassUnit)
+		{
+			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
+			{
+				PathFrag->Waypoints.Reset();
+				PathFrag->CurrentIndex = 0;
+				PathFrag->bIgnoreEnemiesDuringPath = false;
+				PathFrag->bAttackMoveDuringPath = false;
+			}
 		}
 		// Ensure client won't skip movement this tick
 		AiStatePtr->CanMove = true;
@@ -1566,8 +1630,35 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 			DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Red);
 			if (U->bIsMassUnit)
 			{
-				MassUnits.Add(U);
-				MassLocations.Add(RunLocation);
+				if (IsShiftPressed)
+				{
+					// Queue into path fragment; start movement only if not already running
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+						const FMassEntityHandle EHandle = U->MassActorBindingComponent ? U->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+						if (EntityManager.IsEntityValid(EHandle))
+						{
+							if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(EHandle))
+							{
+								if (PathFrag->Waypoints.Num() < 10)
+								{
+									PathFrag->Waypoints.Add(RunLocation);
+								}
+							}
+						}
+					}
+					if (U->GetUnitState() != UnitData::Run)
+					{
+						MassUnits.Add(U);
+						MassLocations.Add(RunLocation);
+					}
+				}
+				else
+				{
+					MassUnits.Add(U);
+					MassLocations.Add(RunLocation);
+				}
 			}
 			else
 			{
@@ -2391,6 +2482,13 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 			{
 				continue;
 			}
+
+			// Unless queuing with Shift, clear any existing path waypoints before chasing
+			if (!IsShiftPressed && Unit->bIsMassUnit)
+			{
+				Unit->ClearPathWaypoints();
+			}
+
 			// Respect ground/flying attack restrictions
 			if (Unit->CanOnlyAttackGround && TargetUnitBase->IsFlying)
 			{

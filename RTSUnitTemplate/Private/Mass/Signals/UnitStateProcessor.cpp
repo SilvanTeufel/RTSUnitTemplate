@@ -39,6 +39,7 @@
 #include "Engine/GameViewportClient.h"
 #include "Mass/States/ChaseStateProcessor.h"
 #include "Async/Async.h"
+#include "NavigationSystem.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "EngineUtils.h"
 #include "MassReplicationFragments.h"
@@ -3122,57 +3123,166 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 {
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-	// Helper to avoid re-entrant writes inside MassSignals by deferring to GT
-	auto SendSignalSafe = [this](const FName InSignal, const FMassEntityHandle InEntity)
-	{
-		TWeakObjectPtr<UMassSignalSubsystem> WeakSignal = SignalSubsystem;
-		AsyncTask(ENamedThreads::GameThread, [WeakSignal, InSignal, InEntity]()
-		{
-			if (UMassSignalSubsystem* Strong = WeakSignal.Get())
-			{
-				Strong->SignalEntity(InSignal, InEntity);
-			}
-		});
-	};
-
 	if (!EntityManager.IsEntityValid(Entity) || !UnitBase)
 	{
 		return;
 	}
 
-	if (UnitBase->RunLocationArray.Num())
+	// Early exit if the unit is not in an idle or running state, preventing waypoint updates during combat or other actions.
+	if (!DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) &&
+		!DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct()))
 	{
-		// Get the required fragments from the entity
-		const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
-		FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
-		const FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+		return;
+	}
 
-		if (!TransformFrag || !MoveTargetFrag || !StatsFrag) return;
+	// Read queued path from fragment
+	FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(Entity);
+	if (!PathFrag)
+	{
+		return; // no queued waypoints fragment present
+	}
 
-		const FVector CurrentLocation = TransformFrag->GetTransform().GetLocation();
-		const FVector CurrentWaypoint = UnitBase->RunLocationArray[0];
+	const int32 NumWPs = PathFrag->Waypoints.Num();
+	if (NumWPs <= 0 || PathFrag->CurrentIndex >= NumWPs)
+	{
+		return; // nothing queued
+	}
 
-		// Define a distance to consider the waypoint "reached"
-		// Using squared distance is more efficient as it avoids a square root calculation
-		constexpr float ReachedDistanceSquared = 100.f * 100.f; // 1 meter
+	// Get the required fragments from the entity
+	const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+	FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity);
+	const FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+	FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+	const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+	const FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(Entity);
 
-		// Check if the entity has reached the current waypoint
-		if (FVector::DistSquared(CurrentLocation, CurrentWaypoint) < ReachedDistanceSquared)
+	if (!TransformFrag || !MoveTargetFrag || !StatsFrag || !StateFrag)
+	{
+		return;
+	}
+
+	const bool bFlying = CharFrag && CharFrag->bIsFlying;
+	const float AgentR = RadiusFrag ? RadiusFrag->Radius : 0.f;
+
+	// Unified acceptance (consistent with SlackRadius and reach check)
+	const float Acceptance = FMath::Max3(UnitBase->MovementAcceptanceRadius, AgentR + 20.f, 10.f);
+
+	FVector TargetWP = PathFrag->Waypoints[PathFrag->CurrentIndex];
+	if (bFlying)
+	{
+		// Normalize target Z for flying units to cruise height
+		const float GroundZ = CharFrag ? CharFrag->LastGroundLocation : TargetWP.Z;
+		TargetWP.Z = GroundZ + (CharFrag ? CharFrag->FlyHeight : 0.f);
+	}
+
+	// Detect tag enforcement based on path flags while waypoints remain
+	if (PathFrag->bIgnoreEnemiesDuringPath)
+	{
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(Entity);
+	}
+	else if (PathFrag->bAttackMoveDuringPath)
+	{
+		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+	}
+
+	// Kickoff or retarget guard: only (re)assign if not already pursuing this WP
+	const bool bCenterMatches = FVector::DistSquared2D(MoveTargetFrag->Center, TargetWP) <= 1.0f; 
+	if (MoveTargetFrag->GetCurrentAction() != EMassMovementAction::Move || !bCenterMatches)
+	{
+		if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Kickoff/Retarget to WP[%d/%d]=%s Speed=%.1f"), PathFrag->CurrentIndex, NumWPs, *TargetWP.ToString(), StatsFrag->RunSpeed);
+		StateFrag->StoredLocation = TargetWP;
+		UpdateMoveTarget(*MoveTargetFrag, TargetWP, StatsFrag->RunSpeed, GetWorld());
+		MoveTargetFrag->SlackRadius = Acceptance;
+		SwitchState(UnitSignals::Run, Entity, EntityManager);
+		return; // evaluate progress on next tick
+	}
+
+	// Reached test: use 2D distance for waypoint arrival as requested
+	const FVector CurrentLocation = TransformFrag->GetTransform().GetLocation();
+	float DistLeft = FVector::Dist2D(CurrentLocation, TargetWP);
+
+	if (DistLeft <= Acceptance)
+	{
+		if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Reached WP[%d/%d] Dist=%.1f Acc=%.1f"), PathFrag->CurrentIndex, NumWPs, DistLeft, Acceptance);
+		
+		PathFrag->CurrentIndex++;
+		PathFrag->StuckTimer = 0.f; // Reset timer when waypoint reached
+
+		if (PathFrag->CurrentIndex < PathFrag->Waypoints.Num())
 		{
-			// Waypoint reached, remove it from the path
-			UnitBase->RunLocationArray.RemoveAt(0);
-
-			// If there are more waypoints, update the move target to the next one
-			if (UnitBase->RunLocationArray.Num() > 0)
+			FVector NextWP = PathFrag->Waypoints[PathFrag->CurrentIndex];
+			if (bFlying)
 			{
-				if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
-				{
-					StateFrag->StoredLocation = UnitBase->RunLocationArray[0];
-				}
-				
-				UpdateMoveTarget(*MoveTargetFrag, UnitBase->RunLocationArray[0], StatsFrag->RunSpeed, GetWorld());
-				SwitchState(UnitSignals::Run, Entity, EntityManager);
+				const float GroundZ = CharFrag ? CharFrag->LastGroundLocation : NextWP.Z;
+				NextWP.Z = GroundZ + (CharFrag ? CharFrag->FlyHeight : 0.f);
 			}
+			StateFrag->StoredLocation = NextWP;
+			UpdateMoveTarget(*MoveTargetFrag, NextWP, StatsFrag->RunSpeed, GetWorld());
+			MoveTargetFrag->SlackRadius = Acceptance;
+			SwitchState(UnitSignals::Run, Entity, EntityManager);
+		}
+		else
+		{
+			if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Finished path."));
+			StopMovement(*MoveTargetFrag, GetWorld());
+			SwitchState(UnitSignals::Idle, Entity, EntityManager);
+			
+			// Clear path flags when done
+			PathFrag->bIgnoreEnemiesDuringPath = false;
+			PathFrag->bAttackMoveDuringPath = false;
+			PathFrag->bAttackToggled = false;
+		}
+	}
+	else
+	{
+		// Fallback for stuck units: if we are moving but haven't progressed for a while
+		const float MoveDistSq = FVector::DistSquared(CurrentLocation, PathFrag->LastLocation);
+		
+		// If moving very slowly or stuck
+		if (MoveDistSq < FMath::Square(1.0f)) // Moved less than 1cm
+		{
+			PathFrag->StuckTimer += GetWorld()->GetDeltaSeconds();
+		}
+		else
+		{
+			PathFrag->StuckTimer = 0.f;
+		}
+		PathFrag->LastLocation = CurrentLocation;
+
+		if (PathFrag->StuckTimer > 2.0f)
+		{
+			if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Unit stuck for %.1fs. Attempting fallback/nudge."), PathFrag->StuckTimer);
+			
+			UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+			if (NavSys && !bFlying) // Only project ground units
+			{
+				FNavLocation ProjectedLocation;
+				// Try a larger radius for projection if stuck
+				if (NavSys->ProjectPointToNavigation(TargetWP, ProjectedLocation, FVector(500.f, 500.f, 500.f)))
+				{
+					TargetWP = ProjectedLocation.Location;
+					// Save the projected location back to the fragment so it persists
+					PathFrag->Waypoints[PathFrag->CurrentIndex] = TargetWP;
+					
+					if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] TargetWP projected to NavMesh: %s"), *TargetWP.ToString());
+				}
+			}
+
+			// FORCE a new action to kickstart movement, even if center matches
+			MoveTargetFrag->CreateNewAction(EMassMovementAction::Move, *GetWorld());
+			StateFrag->StoredLocation = TargetWP;
+			UpdateMoveTarget(*MoveTargetFrag, TargetWP, StatsFrag->RunSpeed, GetWorld());
+			MoveTargetFrag->SlackRadius = Acceptance;
+			SwitchState(UnitSignals::Run, Entity, EntityManager);
+			
+			PathFrag->StuckTimer = 0.f; // Reset timer after nudge
+		}
+
+		if (Debug)
+		{
+			// Periodic verbose log
+			UE_LOG(LogTemp, VeryVerbose, TEXT("[UnitStateProcessor][Path] %s idx=%d/%d DistLeft=%.1f Acc=%.1f Action=%d Stuck=%.1f"), 
+				*UnitBase->GetName(), PathFrag->CurrentIndex, NumWPs, DistLeft, Acceptance, (int)MoveTargetFrag->GetCurrentAction(), PathFrag->StuckTimer);
 		}
 	}
 }

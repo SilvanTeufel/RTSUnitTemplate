@@ -196,6 +196,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool StopMassMovement();
 	
+	// Fill or clear the path fragment with a list of world-space waypoints. If bClearExistingFirst is true, it resets the queue first.
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetPathWaypoints(const TArray<FVector>& NewPoints, bool bClearExistingFirst, bool bAttackToggled = false);
+	
+	// Clears all queued waypoints in the path fragment.
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool ClearPathWaypoints();
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_UpdateISMInstanceTransform(int32 InstIndex, const FTransform& NewTransform);
 

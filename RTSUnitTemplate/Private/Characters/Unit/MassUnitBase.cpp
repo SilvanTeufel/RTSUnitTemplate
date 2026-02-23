@@ -1436,6 +1436,71 @@ bool AMassUnitBase::StopMassMovement()
 	return false;
 }
 
+bool AMassUnitBase::SetPathWaypoints(const TArray<FVector>& NewPoints, bool bClearExistingFirst, bool bAttackToggled)
+{
+	if (GetNetMode() == NM_Client)
+	{
+		return false;
+	}
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle   EntityHandle;
+	if (!GetMassEntityData(EntityManager, EntityHandle) || EntityManager == nullptr || !EntityManager->IsEntityValid(EntityHandle))
+	{
+		return false;
+	}
+
+	FMassUnitPathFragment* PathFrag = EntityManager->GetFragmentDataPtr<FMassUnitPathFragment>(EntityHandle);
+	if (!PathFrag)
+	{
+		return false;
+	}
+
+	if (bClearExistingFirst)
+	{
+		PathFrag->Waypoints.Reset();
+		PathFrag->CurrentIndex = 0;
+	}
+
+	PathFrag->bAttackToggled = bAttackToggled;
+
+	for (const FVector& P : NewPoints)
+	{
+		if (PathFrag->Waypoints.Num() < 10)
+		{
+			PathFrag->Waypoints.Add(P);
+		}
+		else
+		{
+			break;
+		}
+	}
+	return true;
+}
+
+bool AMassUnitBase::ClearPathWaypoints()
+{
+	if (GetNetMode() == NM_Client)
+	{
+		return false;
+	}
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle   EntityHandle;
+	if (!GetMassEntityData(EntityManager, EntityHandle) || EntityManager == nullptr || !EntityManager->IsEntityValid(EntityHandle))
+	{
+		return false;
+	}
+	FMassUnitPathFragment* PathFrag = EntityManager->GetFragmentDataPtr<FMassUnitPathFragment>(EntityHandle);
+	if (!PathFrag)
+	{
+		return false;
+	}
+	PathFrag->Waypoints.Reset();
+	PathFrag->CurrentIndex = 0;
+	return true;
+}
+
 void AMassUnitBase::MulticastTransformSync_Implementation(const FVector& Location)
 {
 	//SetActorLocation(Location);

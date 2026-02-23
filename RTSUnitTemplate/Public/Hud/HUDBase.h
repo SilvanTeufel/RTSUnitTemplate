@@ -143,6 +143,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 WPLineMaxIterations = 5;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitWPLineDashLen = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitWPLineGapLen = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitWPLineThickness = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float UnitWPLineZOffset = 30.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FColor UnitWPLineColorMove = FColor::Green;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FColor UnitWPLineColorAttackMove = FColor::Red;
+
 	// Draw a 3D dashed line between two points; duration 0 so it renders only this frame
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawDashedLine3D(const FVector& Start, const FVector& End, float DashLen = 200.f, float GapLen = 120.f, FColor Color = FColor::Yellow, float Thickness = 2.f, float ZOffset = 30.f);
@@ -150,5 +168,9 @@ public:
 	// Iterate selected units and draw building->waypoint dashed links while buildings are selected
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawSelectedBuildingWaypointLinks();
+
+	// Draw a single dashed path line for the selected group using the first unit with queued waypoints
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void DrawSelectedUnitsMovementLines();
 
 };

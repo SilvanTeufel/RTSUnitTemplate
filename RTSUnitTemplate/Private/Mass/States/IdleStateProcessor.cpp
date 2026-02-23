@@ -35,6 +35,7 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassUnitPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -85,6 +86,8 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable for timer
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
+        const bool bHasPathFrag = PathList.Num() > 0;
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -94,10 +97,11 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+            const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
             
-            
-
-            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition)
+            const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
+            const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
+            if (TargetFrag.bHasValidTarget && !StateFrag.SwitchingState && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)

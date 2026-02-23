@@ -32,7 +32,7 @@ public:
 	UUnitStateProcessor();
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = false;
+	bool Debug = true;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	FVector BuildingSpawnTrace = FVector(0.f, 0.f, 2500.f);

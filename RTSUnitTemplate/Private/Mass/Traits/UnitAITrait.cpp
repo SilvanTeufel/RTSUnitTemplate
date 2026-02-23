@@ -41,6 +41,7 @@ void UUnitAITrait::BuildTemplate(FMassEntityTemplateBuildContext& BuildContext, 
 
 	// Your Custom Logic
 	BuildContext.AddFragment<FMassPatrolFragment>(); 
+	BuildContext.AddFragment<FMassUnitPathFragment>();
 	BuildContext.AddFragment<FMassAIStateFragment>();
 	BuildContext.AddFragment<FMassSightFragment>();
 	BuildContext.AddFragment<FMassAITargetFragment>(); 
