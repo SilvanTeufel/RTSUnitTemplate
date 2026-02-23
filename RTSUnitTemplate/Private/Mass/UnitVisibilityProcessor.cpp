@@ -163,7 +163,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
  							{
  								if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
  								{
- 									bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId);
+ 									bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId && TgtStats->Health > 0.f);
  								}
  							}
  						}

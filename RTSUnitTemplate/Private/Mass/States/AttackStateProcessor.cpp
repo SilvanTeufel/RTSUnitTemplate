@@ -41,6 +41,7 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -76,6 +77,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+        auto SightList = ChunkContext.GetMutableFragmentView<FMassSightFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
@@ -86,6 +88,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // State modification stays here
             const FMassAITargetFragment& TargetFrag = TargetList[i];
+            FMassSightFragment& SightFrag = SightList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
@@ -95,19 +98,26 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // --- Target Lost ---
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || (!TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState))
+            FMassCombatStatsFragment* TgtStatsPtr = TargetFrag.TargetEntity.IsSet() ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
+            const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
+
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || (!TargetFrag.TargetEntity.IsSet() || bIsTargetDead))
             {
-                  // Queue signal instead of sending directly
-                  UpdateMoveTarget(
-                   MoveTarget,
-                   StateFrag.StoredLocation,
-                   Stats.RunSpeed,
-                   World);
-                
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
+                if (!StateFrag.SwitchingState)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
+                    SightFrag.AttackerTeamOverlapsPerTeam.Empty();
+                    // Queue signal instead of sending directly
+                    UpdateMoveTarget(
+                     MoveTarget,
+                     StateFrag.StoredLocation,
+                     Stats.RunSpeed,
+                     World);
+                
+                    StateFrag.SwitchingState = true;
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
+                    }
                 }
                 continue;
             }

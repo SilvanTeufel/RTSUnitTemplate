@@ -96,20 +96,26 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                TargetFrag.bHasValidTarget = false;
             }
             
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() && !StateFrag.SwitchingState)
+            FMassCombatStatsFragment* TgtStatsPtr = TargetFrag.TargetEntity.IsSet() ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
+            const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
+
+            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() || bIsTargetDead)
             {
-                SightFrag.AttackerTeamOverlapsPerTeam.Empty();
-                UpdateMoveTarget(
-                 MoveTarget,
-                 StateFrag.StoredLocation,
-                 Stats.RunSpeed,
-                 World);
-
-
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
+                if (!StateFrag.SwitchingState)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
+                    SightFrag.AttackerTeamOverlapsPerTeam.Empty();
+                    UpdateMoveTarget(
+                     MoveTarget,
+                     StateFrag.StoredLocation,
+                     Stats.RunSpeed,
+                     World);
+
+
+                    StateFrag.SwitchingState = true;
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
+                    }
                 }
                 continue;
             }

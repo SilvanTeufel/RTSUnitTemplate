@@ -150,6 +150,21 @@ void UUnitSightProcessor::ExecuteServer(
         
             for (int32 i = 0; i < N; ++i)
             {
+                // Immediately skip dead entities so they stop contributing to vision/fog
+                if (StatsList[i].Health <= 0.f)
+                {
+                    if (SightList)
+                    {
+                        SightList[i].TeamOverlapsPerTeam.Empty();
+                        SightList[i].DetectorOverlapsPerTeam.Empty();
+                        SightList[i].AttackerTeamOverlapsPerTeam.Empty();
+                        SightList[i].ConsistentTeamOverlapsPerTeam.Empty();
+                        SightList[i].ConsistentDetectorOverlapsPerTeam.Empty();
+                        SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Empty();
+                    }
+                    continue;
+                }
+
                 if (StateList)
                 {
                     FMassAIStateFragment& State = StateList[i];
