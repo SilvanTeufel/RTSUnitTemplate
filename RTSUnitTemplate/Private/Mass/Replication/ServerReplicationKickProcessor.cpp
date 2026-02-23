@@ -321,7 +321,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 						if (AnyController)
 						{
-							AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, UnitsToBatchMove, NewTargetLocations, DesiredSpeeds, BatchRadii, false);
+							AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, UnitsToBatchMove, NewTargetLocations, DesiredSpeeds, BatchRadii, false, false);
 						}
 					}
 

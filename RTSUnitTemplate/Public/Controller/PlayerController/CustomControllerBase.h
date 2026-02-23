@@ -104,7 +104,8 @@ public:
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
-		bool AttackT = false);
+		bool AttackT = false,
+		bool bResetHoldPosition = true);
 
 	// Server wrapper to validate and then trigger the multicast from the authority
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
@@ -114,7 +115,8 @@ public:
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
-		bool AttackT = false);
+		bool AttackT = false,
+		bool bResetHoldPosition = true);
 
 	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
 	UFUNCTION(Client, Reliable)
@@ -124,7 +126,8 @@ public:
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
-		bool AttackT = false);
+		bool AttackT = false,
+		bool bResetHoldPosition = true);
 
 	// Apply owner ability-key toggle on client and refresh UI
 	UFUNCTION(Client, Reliable)

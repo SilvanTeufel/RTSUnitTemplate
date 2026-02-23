@@ -294,7 +294,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true);
 			}
 		}
 	}
@@ -305,7 +305,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
 	const TArray<float>& AcceptanceRadii,
-	bool AttackT)
+	bool AttackT,
+	bool bResetHoldPosition)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World)
@@ -436,7 +437,10 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			CancelCurrentAbility(Unit);
 		}
 
-		Unit->bHoldPosition = false;
+		if (bResetHoldPosition)
+		{
+			Unit->bHoldPosition = false;
+		}
 
 		// Mass entity handle
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
@@ -557,12 +561,13 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
 	const TArray<float>& AcceptanceRadii,
-	bool AttackT)
+	bool AttackT,
+	bool bResetHoldPosition)
 {
 	// Diagnostics: server received batch move
 	//UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
 	// Apply authoritative changes on the server
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT);
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition);
 
 
 	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
@@ -572,7 +577,7 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition);
 			}
 		}
 	}
@@ -585,7 +590,8 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
 	const TArray<float>& AcceptanceRadii,
-	bool AttackT)
+	bool AttackT,
+	bool bResetHoldPosition)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Received batch prediction request: Units=%d"), Units.Num());
 	// Run prediction only on non-authority (clients). Avoid double-applying on listen servers.
@@ -660,7 +666,10 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		}
 		
 
-		Unit->bHoldPosition = false;
+		if (bResetHoldPosition)
+		{
+			Unit->bHoldPosition = false;
+		}
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 
@@ -694,7 +703,10 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		}
 		// Ensure client won't skip movement this tick
 		AiStatePtr->CanMove = true;
-		AiStatePtr->HoldPosition = false;
+		if (bResetHoldPosition)
+		{
+			AiStatePtr->HoldPosition = false;
+		}
 		// Reset local path state to avoid stale path following from previous order
 		if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
 		{
@@ -841,7 +853,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true);
 			}
 		}
 	}
@@ -948,7 +960,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 				{
 					BatchRadii.Add(Unit->MovementAcceptanceRadius);
 				}
-				Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, false);
+    Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, false, true);
 			}
 
 			if (Transporter->GetUnitState() != UnitData::Casting)
@@ -1312,7 +1324,7 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 			{
 				BatchRadii.Add(Unit->MovementAcceptanceRadius);
 			}
-			Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, BatchRadii, AttackT);
+   Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), ValidUnits, NewTargetLocations, DesiredSpeeds, BatchRadii, AttackT, true);
 		}
 	}
 }
@@ -2191,7 +2203,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	{
     		BatchRadii.Add(Unit->MovementAcceptanceRadius);
     	}
-    	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, BatchRadii, false);
+     Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, BatchRadii, false, true);
     }
 
     if (WaypointSound && PlayWaypoint)
@@ -2472,7 +2484,7 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 		{
 			BatchRadii.Add(Unit->MovementAcceptanceRadius);
 		}
-		Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, AttackT);
+  Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, AttackT, true);
 	}
 }
 
