@@ -15,6 +15,14 @@
 #include "MassActorBindingComponent.generated.h"
 
 
+UENUM(BlueprintType)
+enum class EMassBindingType : uint8
+{
+	Unit,
+	Building,
+	EffectArea
+};
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class RTSUNITTEMPLATE_API UMassActorBindingComponent : public USceneComponent
 {
@@ -50,14 +58,21 @@ public:
 	bool bNeedsMassBuildingSetup = false;
 	
 	FMassEntityHandle GetEntityHandle() { return MassEntityHandle; }
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	EMassBindingType BindingType = EMassBindingType::Unit;
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	void SetupMassOnActor();
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void SetupMassOnUnit();
 
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void SetupMassOnBuilding();
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	void SetupMassOnEffectArea();
 	
 	UPROPERTY() 
 	AActor* MyOwner;
@@ -69,6 +84,8 @@ public:
 	FMassEntityHandle CreateAndLinkOwnerToMassEntity();
 	
 	FMassEntityHandle CreateAndLinkBuildingToMassEntity();
+
+	FMassEntityHandle CreateAndLinkEffectAreaToMassEntity();
 
 	// Client-side request to queue safe Mass link after server creation
 	UFUNCTION(BlueprintCallable, Category = Mass)

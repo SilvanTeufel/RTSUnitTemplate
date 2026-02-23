@@ -6,7 +6,9 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/WorkingUnitBase.h"
+#include "Actors/EffectArea.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -52,17 +54,10 @@ void UUnitVisibilityProcessor::HandleVisibilitySignals(FName /*SignalName*/, TAr
 		FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
 		if (!ActorFrag) continue;
 
-		APerformanceUnit* Unit = Cast<APerformanceUnit>(ActorFrag->GetMutable());
-		if (Unit && !Unit->StopVisibilityTick)
+		IMassVisibilityInterface* VisInterface = Cast<IMassVisibilityInterface>(ActorFrag->GetMutable());
+		if (VisInterface)
 		{
-			if (Unit->EnableFog) Unit->VisibilityTickFog();
-			else Unit->SetCharacterVisibility(Unit->IsOnViewport);
-
-			Unit->CheckHealthBarVisibility();
-			Unit->CheckTimerVisibility();
-
-			// Sync attached assets (e.g., WorkResource mesh) via virtual call (client-side)
-			Unit->SyncAttachedAssetsVisibility();
+			VisInterface->SetActorVisibility(VisInterface->ComputeLocalVisibility());
 		}
 	}
 }
@@ -74,6 +69,8 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -111,23 +108,27 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		const auto& StatsList = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
 		auto VisibilityList = ChunkCtx.GetMutableFragmentView<FMassVisibilityFragment>();
 		auto ActorList = ChunkCtx.GetMutableFragmentView<FMassActorFragment>();
+		const auto& CharList = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+		const auto& SightList = ChunkCtx.GetFragmentView<FMassSightFragment>();
 
 		for (int32 i = 0; i < N; ++i)
 		{
 			FMassVisibilityFragment& Vis = VisibilityList[i];
 			AActor* Actor = ActorList[i].GetMutable();
-			APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
-			if (!Unit) continue;
+			IMassVisibilityInterface* VisInterface = Cast<IMassVisibilityInterface>(Actor);
+			if (!VisInterface) continue;
 
 			FVector Location = Transforms[i].GetTransform().GetLocation();
 
 			if (bDoThrottledUpdate)
 			{
-				// bIsClient && 
+				bool bIsVisibleByFog = true;
+
 				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
-					Vis.bIsMyTeam = (CustomPC->SelectableTeamId == StatsList[i].TeamId || CustomPC->SelectableTeamId == 0);
+					int32 LocalTeamId = CustomPC->SelectableTeamId;
+					Vis.bIsMyTeam = (LocalTeamId == StatsList[i].TeamId || LocalTeamId == 0);
 
 					// 2) Update Viewport Visibility
 					FVector2D ScreenPosition;
@@ -141,45 +142,79 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 						Vis.bIsOnViewport = false;
 					}
 
-					// Fix: Prevent server's viewport culling from replicating to clients
-					/*if (World->GetNetMode() == NM_ListenServer)
+					// 1.5) Update Fog Visibility
+					if (Vis.bIsMyTeam)
 					{
-						Vis.bIsOnViewport = true;
-					}*/
+						bIsVisibleByFog = true;
+					}
+					else
+					{
+						const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
+						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0);
+					}
 				}
 				else if (bDoThrottledUpdate)
 				{
 					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
 					Vis.bIsOnViewport = true;
 					Vis.bIsMyTeam = true; // Avoid hiding everything on dedicated server if team logic is local-player dependent
+					bIsVisibleByFog = true;
 				}
 				
 				// 3) Sync back to Unit and check if we need to trigger logic
-				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || (Vis.bIsOnViewport != Vis.bLastIsOnViewport) || (Unit->IsVisibleEnemy != Vis.bLastIsVisibleEnemy)
-								|| (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
-				
-				Unit->IsMyTeam = Vis.bIsMyTeam;
-				Unit->IsOnViewport = Vis.bIsOnViewport;
+				// For PerformanceUnit, we can still cast to sync extra flags, but for general actors, we rely on the interface
+				APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
+				AEffectArea* Area = Cast<AEffectArea>(Actor);
 
-				if (bChanged && !Unit->StopVisibilityTick)
+				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
+								(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
+								(bIsVisibleByFog != Vis.bLastIsVisibleEnemy) ||
+								(CharList[i].bIsInvisible != Vis.bLastIsInvisible);
+
+				if (Unit) bChanged = bChanged || (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
+				
+				if (Unit)
+				{
+					Unit->IsMyTeam = Vis.bIsMyTeam;
+					Unit->IsOnViewport = Vis.bIsOnViewport;
+					Unit->IsVisibleEnemy = bIsVisibleByFog;
+					
+					if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
+					{
+						UnitBase->bIsInvisible = CharList[i].bIsInvisible;
+					}
+				}
+				else if (Area)
+				{
+					Area->bIsInvisible = CharList[i].bIsInvisible;
+					Area->bIsVisibleByFog = bIsVisibleByFog;
+				}
+
+				if (bChanged)
 				{
 					EntitiesToSignal.Add(ChunkCtx.GetEntity(i));
 					
 					Vis.bLastIsMyTeam = Vis.bIsMyTeam;
 					Vis.bLastIsOnViewport = Vis.bIsOnViewport;
-					Vis.bLastIsVisibleEnemy = Unit->IsVisibleEnemy;
-					Vis.bLastOpenHealthWidget = Unit->OpenHealthWidget;
-					Vis.bLastShowLevelOnly = Unit->bShowLevelOnly;
+					Vis.bLastIsVisibleEnemy = bIsVisibleByFog;
+					Vis.bLastIsInvisible = CharList[i].bIsInvisible;
+
+					if (Unit)
+					{
+						Vis.bLastOpenHealthWidget = Unit->OpenHealthWidget;
+						Vis.bLastShowLevelOnly = Unit->bShowLevelOnly;
+					}
 				}
 			}
 
-				// 4) High-frequency Widget Updates (Client-only)
-				if (!Unit->StopVisibilityTick)
+				// 4) High-frequency Updates (Client-only)
+				if (APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor))
 				{
-					Unit->UpdateWidgetPositions(Location);
-
-					// Ensure attached assets visibility is synced every frame (client-side)
-					Unit->SyncAttachedAssetsVisibility();
+					if (!Unit->StopVisibilityTick)
+					{
+						Unit->UpdateWidgetPositions(Location);
+						Unit->SyncAttachedAssetsVisibility();
+					}
 				}
 		}
 	});

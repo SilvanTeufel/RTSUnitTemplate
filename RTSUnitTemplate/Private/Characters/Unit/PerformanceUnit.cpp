@@ -79,6 +79,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
+	DOREPLIFETIME(APerformanceUnit, bIsInvisible);
 
 	
 }
@@ -627,7 +628,7 @@ void APerformanceUnit::CheckTimerVisibility()
 }
 
 
-void APerformanceUnit::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible)
+void APerformanceUnit::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 {
 	// Do nothing for own team or if state already matches
 	if (IsMyTeam) return;
@@ -638,6 +639,14 @@ void APerformanceUnit::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool
 	{
 		return;
 	}
+
+	int32 DetectorTeamId = -1;
+	if (AUnitBase* Unit = Cast<AUnitBase>(DetectingActor))
+	{
+		DetectorTeamId = Unit->TeamId;
+	}
+
+	if (DetectorTeamId == -1) return;
 	
 	UWorld* World = GetWorld();
 	if (!World) return;  // Safety check
@@ -659,55 +668,26 @@ void APerformanceUnit::SetEnemyVisibility(APerformanceUnit* DetectingActor, bool
 
 	if (MyController && MyController->IsValidLowLevelFast())
 	{
-		if (MyController->SelectableTeamId == DetectingActor->TeamId)
+		if (MyController->SelectableTeamId == DetectorTeamId)
 		{
 			IsVisibleEnemy = bVisible;
 		}
 	}
 }
 
-void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible)
+void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible)
 {
-	// Do nothing for own team or if state already matches
-	if (IsMyTeam) return;
-	if (IsVisibleEnemy == bVisible) return;
-
-	// DetectingActor may be null/not replicated yet on some clients; guard before use
-	if (DetectingActor == nullptr || !DetectingActor->IsValidLowLevelFast())
-	{
-		return;
-	}
-	
-	UWorld* World = GetWorld();
-	if (!World) return;  // Safety check
-
-	// Ensure we have a controller reference and cast safely
-	ACustomControllerBase* MyController = nullptr;
-	if (OwningPlayerController)
-	{
-		MyController = Cast<ACustomControllerBase>(OwningPlayerController);
-	}
-	else
-	{
-		if (APlayerController* PlayerController = World->GetFirstPlayerController())
-		{
-			OwningPlayerController = PlayerController;
-			MyController = Cast<ACustomControllerBase>(OwningPlayerController);
-		}
-	}
-
-	if (MyController && MyController->IsValidLowLevelFast())
-	{
-		if (MyController->SelectableTeamId == DetectingActor->TeamId)
-		{
-			IsVisibleEnemy = bVisible;
-		}
-	}
+	SetEnemyVisibility(DetectingActor, bVisible);
 }
 
 
 bool APerformanceUnit::ComputeLocalVisibility() const
 {
+	if (bIsInvisible && !IsMyTeam)
+	{
+		return false;
+	}
+
 	return IsOnViewport
 		&& ( !EnableFog
 		   || IsVisibleEnemy

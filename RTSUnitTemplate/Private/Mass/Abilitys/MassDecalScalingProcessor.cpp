@@ -25,6 +25,7 @@ void UMassDecalScalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityMa
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassDecalScalingTag>(EMassFragmentPresence::All);
+	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

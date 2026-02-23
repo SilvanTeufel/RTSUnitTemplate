@@ -36,7 +36,8 @@ void UCastingStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::None);
-	
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

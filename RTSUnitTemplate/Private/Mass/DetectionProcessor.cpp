@@ -117,7 +117,8 @@ void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-    
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 

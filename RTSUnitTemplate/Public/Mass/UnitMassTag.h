@@ -13,10 +13,18 @@
 #include "Core/UnitData.h"
 #include "MassExternalSubsystemTraits.h"
 #include "Mass/MassFragmentTraitsOverrides.h"
+#include "MassVisibilityInterface.h"
 #include "UnitMassTag.generated.h"
+
 
 USTRUCT()
 struct FUnitMassTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
+struct FEffectAreaTag : public FMassTag
 {
 	GENERATED_BODY()
 };
@@ -74,6 +82,7 @@ USTRUCT() struct FMassStopGameplayEffectTag : public FMassTag { GENERATED_BODY()
 USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassDisableAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
+USTRUCT() struct FMassIsEffectAreaTag : public FMassTag { GENERATED_BODY() };
 // Client-side prediction fragment to carry desired speed and acceptance radius without touching authoritative MoveTarget
 USTRUCT()
 struct FMassClientPredictionFragment : public FMassFragment
@@ -375,6 +384,7 @@ struct FMassVisibilityFragment : public FMassFragment
 	bool bLastIsMyTeam = false;
 	bool bLastIsOnViewport = false;
 	bool bLastIsVisibleEnemy = false;
+	bool bLastIsInvisible = false;
 
 	bool bLastOpenHealthWidget = false;
 	bool bLastShowLevelOnly = false;
@@ -505,6 +515,7 @@ struct FMassCombatStatsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float MinRange = 0.f;
 };
+
 
 //----------------------------------------------------------------------//
 //  Agent Characteristics Fragment

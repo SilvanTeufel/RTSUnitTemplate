@@ -29,6 +29,7 @@ void UUnitSoftAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassSoftAvoidanceTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

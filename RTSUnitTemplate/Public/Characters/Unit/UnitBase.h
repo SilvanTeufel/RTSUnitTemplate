@@ -129,9 +129,6 @@ public:
 		bool bHoldPosition = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		bool bIsInvisible = false;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bCanBeInvisible = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

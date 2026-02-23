@@ -13,6 +13,7 @@
 #include "Actors/Projectile.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Mass/UnitMassTag.h"
 #include "PerformanceUnit.generated.h"
 
 class UNiagaraComponent;
@@ -37,7 +38,7 @@ struct FActiveNiagaraEffect
 };
 
 UCLASS()
-class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase
+class RTSUNITTEMPLATE_API APerformanceUnit : public AMassUnitBase, public IMassVisibilityInterface
 {
 	GENERATED_BODY()
 
@@ -110,6 +111,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsVisibleEnemy = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsInvisible = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FogDeadVisibilityTime = 10.0f;
@@ -198,15 +202,15 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	APlayerController* OwningPlayerController;
 	
-	// Local (non-RPC) visibility setter used by SightProcessor on both client and server
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	virtual void SetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
 	
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastSetEnemyVisibility(APerformanceUnit* DetectingActor, bool bVisible);
+	void MulticastSetEnemyVisibility(AActor* DetectingActor, bool bVisible);
 	
-	virtual void MulticastSetEnemyVisibility_Implementation(APerformanceUnit* DetectingActor, bool bVisible);
-	// Pure compute helper if you ever need the raw bool:
-	bool ComputeLocalVisibility() const;
+	virtual void MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible);
+	// IMassVisibilityInterface
+	virtual void SetActorVisibility(bool bVisible) override { SetCharacterVisibility(bVisible); }
+	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
+	virtual bool ComputeLocalVisibility() const override;
+	// End IMassVisibilityInterface
 	
 };

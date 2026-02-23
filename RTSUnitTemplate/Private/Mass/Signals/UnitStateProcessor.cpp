@@ -469,6 +469,7 @@ void UUnitStateProcessor::BeginDestroy()
 void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	EntityQuery.Initialize(EntityManager);
+	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 

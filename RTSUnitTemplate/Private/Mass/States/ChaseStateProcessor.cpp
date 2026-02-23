@@ -46,6 +46,7 @@ void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     // Optional: FMassActorFragment für Rotation oder Fähigkeits-Checks?
 
     EntityQuery.RegisterWithProcessor(*this);

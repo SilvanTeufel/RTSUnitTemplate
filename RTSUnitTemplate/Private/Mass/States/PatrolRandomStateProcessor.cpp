@@ -43,7 +43,7 @@ void UPatrolRandomStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 
     EntityQuery.RegisterWithProcessor(*this);
 }

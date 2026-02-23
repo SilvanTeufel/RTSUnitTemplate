@@ -38,6 +38,9 @@ private:
 	
 	// Main (server) query
 	FMassEntityQuery EntityQuery;
+
+	// Query for EffectAreas
+	FMassEntityQuery EffectAreaQuery;
 	
 	float TimeSinceLastRun = 0.0f;
 	const float ExecutionInterval = 0.2f; // Intervall für die Detektion (z.B. 5x pro Sekunde)

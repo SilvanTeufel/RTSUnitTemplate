@@ -26,6 +26,7 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     CasterQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddTagRequirement<FMassStopGameplayEffectTag>(EMassFragmentPresence::None);
+    CasterQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     CasterQuery.RegisterWithProcessor(*this);
 
     // Query 2: Find all entities that could potentially be a target for these effects.
@@ -34,7 +35,7 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     TargetQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite); // ReadOnly is fine, we operate on the Actor, not the fragment
     TargetQuery.AddRequirement<FMassGameplayEffectTargetFragment>(EMassFragmentAccess::ReadWrite);
     TargetQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-
+    TargetQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     TargetQuery.RegisterWithProcessor(*this);
 }
 

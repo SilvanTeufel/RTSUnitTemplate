@@ -22,6 +22,7 @@ void UTransportProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 	TransporterQuery.AddTagRequirement<FMassTransportTag>(EMassFragmentPresence::All);
 	TransporterQuery.AddTagRequirement<FMassTransportProcessorActiveTag>(EMassFragmentPresence::All);
 	TransporterQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	TransporterQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	TransporterQuery.RegisterWithProcessor(*this);
 
 	FollowerQuery.Initialize(EntityManager);
@@ -30,6 +31,7 @@ void UTransportProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 	FollowerQuery.AddTagRequirement<FMassTransportProcessorActiveTag>(EMassFragmentPresence::All);
 	FollowerQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	FollowerQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+	FollowerQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	FollowerQuery.RegisterWithProcessor(*this);
 }
 

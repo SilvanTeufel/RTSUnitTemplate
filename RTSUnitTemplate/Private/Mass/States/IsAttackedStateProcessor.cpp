@@ -27,7 +27,8 @@ void UIsAttackedStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

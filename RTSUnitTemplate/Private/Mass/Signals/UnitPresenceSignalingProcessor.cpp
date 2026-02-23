@@ -21,6 +21,7 @@ void UUnitPresenceSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEnt
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }

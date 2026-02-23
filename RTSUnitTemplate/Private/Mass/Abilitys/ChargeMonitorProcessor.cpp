@@ -24,6 +24,7 @@ void UChargeMonitorProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateChargingTag>(EMassFragmentPresence::All); // MUST have charging tag
 
 

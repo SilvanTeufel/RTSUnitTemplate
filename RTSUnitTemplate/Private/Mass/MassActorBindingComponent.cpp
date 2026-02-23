@@ -31,6 +31,7 @@
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Actors/EffectArea.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
@@ -131,8 +132,25 @@ void UMassActorBindingComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
+void UMassActorBindingComponent::SetupMassOnActor()
+{
+	switch (BindingType)
+	{
+	case EMassBindingType::Unit:
+		SetupMassOnUnit();
+		break;
+	case EMassBindingType::Building:
+		SetupMassOnBuilding();
+		break;
+	case EMassBindingType::EffectArea:
+		SetupMassOnEffectArea();
+		break;
+	}
+}
+
 void UMassActorBindingComponent::SetupMassOnUnit()
 {
+	BindingType = EMassBindingType::Unit;
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
@@ -351,6 +369,28 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     AActor* Owner = GetOwner();
     if (!Owner) return false;
 
+	if (BindingType == EMassBindingType::EffectArea)
+	{
+		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
+		TArray<const UScriptStruct*> FragmentsAndTags = {
+			FTransformFragment::StaticStruct(),
+			FMassActorFragment::StaticStruct(),
+			FMassCombatStatsFragment::StaticStruct(),
+			FMassVisibilityFragment::StaticStruct(),
+			FEffectAreaTag::StaticStruct(),
+			FMassSightFragment::StaticStruct(),
+			FMassAgentCharacteristicsFragment::StaticStruct(),
+			FMassIsEffectAreaTag::StaticStruct()
+		};
+
+		FMassArchetypeCreationParams Params;
+		Params.ChunkMemorySize = 0;
+		Params.DebugName = FName("UMassActorBindingComponent_EffectArea");
+		OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
+		OutSharedValues = FMassArchetypeSharedFragmentValues();
+		return OutArchetype.IsValid();
+	}
+
 	AUnitBase* UnitBase = Cast<AUnitBase>(Owner);
 	if (!UnitBase) return false;
 	
@@ -360,9 +400,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 
     TArray<const UScriptStruct*> FragmentsAndTags = {
-        // Fragments & tags as before, plus a one-shot init tag
 
-    	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
     	FMassNetworkIDFragment::StaticStruct(),
     	FMassReplicatedAgentFragment::StaticStruct(),
     	FMassReplicationViewerInfoFragment::StaticStruct(),
@@ -370,26 +408,19 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	FMassReplicationGridCellLocationFragment::StaticStruct(),
     	FMassInReplicationGridTag::StaticStruct(),
     	FUnitReplicatedTransformFragment::StaticStruct(),
-    	// --- END OF ADDITIONS ---
-    	
-    	// Core Movement & State
+
     	FTransformFragment::StaticStruct(),
 		FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
 		FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
 		FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
 		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
     	FMassClientPredictionFragment::StaticStruct(), 
-    	//FMassMovementParameters::StaticStruct(), 
-		// Steering & Avoidance
+
 		FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
 		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
     	
 		FMassGhostLocationFragment::StaticStruct(),
 		FMassNavigationEdgesFragment::StaticStruct(),
-		//FMassStandingAvoidanceParameters::StaticStruct(),
-		//FMassMovingAvoidanceParameters::StaticStruct(),
-		//FMassMovementParameters::StaticStruct(),
-		// Your Custom Logic
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
 		FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
@@ -403,12 +434,10 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassVisibilityFragment::StaticStruct(),
 
 		FMassWorkerStatsFragment::StaticStruct(),
-		// Actor Representation & Sync
+
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
-    	
-        //FNeedsActorBindingInitTag::StaticStruct(), // one-shot init tag
     };
 	
 	if(UnitBase->AddEffectTargetFragement)
@@ -454,20 +483,15 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	MovementParamsInstance.DefaultDesiredSpeed = MyUnit->Attributes->GetRunSpeed(); //400.0f; // Example: Default speed slightly less than max
 	MovementParamsInstance.DefaultDesiredSpeedVariance = 0.00f; // Example: +/- 5% variance is 0.05
 	MovementParamsInstance.HeightSmoothingTime = 0.0f; // 0.2f 
-	// Ensure values are validated if needed (or use MovementParamsInstance.GetValidated())
-	// FMassMovementParameters ValidatedParams = MovementParamsInstance.GetValidated();
 
-	// Get the const shared fragment handle for this specific set of parameter values
 	FConstSharedStruct MovementParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(MovementParamsInstance); // Use instance directly
 	
 	// Package the shared fragments
 	FMassArchetypeSharedFragmentValues SharedValues;
 	SharedValues.Add(MovementParamSharedFragment);
-	// Add other shared fragments here if needed (e.g., RepresentationParams) using the same pattern
 
-	// 2. Steering Parameters (Using default values initially)
 	FMassMovingSteeringParameters MovingSteeringParamsInstance;
-	// You can modify defaults here if needed: MovingSteeringParamsInstance.ReactionTime = 0.2f;
+	
 	MovingSteeringParamsInstance.ReactionTime = 0.05f; // Faster reaction (Default 0.3) // 0.05f;
 	MovingSteeringParamsInstance.LookAheadTime = 0.25f; // Look less far ahead (Default 1.0) - might make turns sharper but potentially start sooner
 
@@ -475,26 +499,24 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	SharedValues.Add(MovingSteeringParamSharedFragment);
 
 	FMassStandingSteeringParameters StandingSteeringParamsInstance;
-	// You can modify defaults here if needed
+
 	FConstSharedStruct StandingSteeringParamSharedFragment = EntityManager.GetOrCreateConstSharedFragment(StandingSteeringParamsInstance);
 	SharedValues.Add(StandingSteeringParamSharedFragment);
 	
-	// 3. Avoidance Parameters (Now explicitly initialized)
+
 	FMassMovingAvoidanceParameters MovingAvoidanceParamsInstance;
-	// Core detection radius
+
 	MovingAvoidanceParamsInstance.ObstacleDetectionDistance    = 400.f;  // How far agents see each other
-	// Separation tuning
+
 	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance;  //75.f // How close they can get before repelling
 	MovingAvoidanceParamsInstance.EnvironmentSeparationDistance= AvoidanceDistance;   // Wall‐avoidance distance
-	// Predictive avoidance tuning
+
 	MovingAvoidanceParamsInstance.PredictiveAvoidanceTime      = 2.5f;  // How far ahead in seconds
 	MovingAvoidanceParamsInstance.PredictiveAvoidanceDistance  = AvoidanceDistance;   // Look-ahead distance in cm
-	// (you can also tweak stiffness if desired)
-	// --- INCREASE THESE FOR STRONGER PUSHING ---
+	
 	MovingAvoidanceParamsInstance.ObstacleSeparationDistance   = AvoidanceDistance + 50.f; // Or a fixed larger value like 100.f or 125.f
 	MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = ObstacleSeparationStiffness; // Significantly increase this for a stronger push
 	
-	//MovingAvoidanceParamsInstance.ObstacleSeparationStiffness  = 250.f;
 	MovingAvoidanceParamsInstance.EnvironmentSeparationStiffness = 500.f;
 	MovingAvoidanceParamsInstance.ObstaclePredictiveAvoidanceStiffness = 700.f;
 	MovingAvoidanceParamsInstance.EnvironmentPredictiveAvoidanceStiffness = 200.f;
@@ -514,79 +536,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	FConstSharedStruct StandingAvoidanceParamSharedFragment =
 	EntityManager.GetOrCreateConstSharedFragment(StandingAvoidanceParamsInstance.GetValidated());
 	SharedValues.Add(StandingAvoidanceParamSharedFragment);
-
-	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
-	// NOTE: Temporarily disabled to avoid engine assertion until valid client bubbles exist reliably in UE5.7 P2P.
-	#if 0
-	// NOTE: Only inject on server/authority worlds. On clients, skip to avoid triggering
-	// UMassReplicationProcessor paths that expect valid client handles/bubbles.
-	if (UWorld* NetWorld = GetWorld())
-	{
-		if (NetWorld->GetNetMode() != NM_Client)
-		{
-			FMassReplicationSharedFragment RepShared;
-			// Share a single replicator instance per world so entities can batch into the same chunk
-			{
-				static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
-				UWorld* W = GetWorld();
-				UMassUnitReplicatorBase* SharedReplicator = nullptr;
-				if (W)
-				{
-					if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
-					{
-						SharedReplicator = Found->Get();
-					}
-					if (!SharedReplicator)
-					{
-						SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
-						GReplicatorPerWorld.Add(W, SharedReplicator);
-					}
-				}
-				RepShared.CachedReplicator = SharedReplicator;
-			}
-
-			// Resolve BubbleInfo class handle as early as possible, but only if there is at least one valid client handle
-			if (UWorld* WorldPtr = GetWorld())
-			{
-				FMassBubbleInfoClassHandle Handle; // leave invalid by default to opt-out safely
-				if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
-				{
-					const TArray<FMassClientHandle>& Handles = RepSub->GetClientReplicationHandles();
-					bool bHasValidClient = false;
-					for (const FMassClientHandle& H : Handles)
-					{
-						if (RepSub->IsValidClientHandle(H)) { bHasValidClient = true; break; }
-					}
-					if (bHasValidClient)
-					{
-						// First, try our bootstrap-registered handle
-						Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
-						// If still invalid on server, ask the replication subsystem for the handle
-						if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
-						{
-							const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
-							Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
-							if (!RepSub->IsBubbleClassHandleValid(Handle))
-							{
-								// As a last resort (early in world start), register it here on the server
-								Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
-							}
-						}
-					}
-				}
-				RepShared.BubbleInfoClassHandle = Handle; // remains invalid when no valid clients -> engine will skip safely
-			}
-
-			FSharedStruct SharedRep = EntityManager.GetOrCreateSharedFragment(RepShared);
-			// Only add the replication shared fragment when we have at least one valid client and a valid bubble handle
-			if (RepShared.BubbleInfoClassHandle.IsValid())
-			{
-				SharedValues.Add(SharedRep);
-			}
-		}
-	}
-	#endif
-
 	SharedValues.Sort();
 	
 	OutSharedValues = SharedValues;
@@ -649,6 +598,7 @@ void UMassActorBindingComponent::InitStats(FMassEntityManager& EntityManager,
 
 void UMassActorBindingComponent::SetupMassOnBuilding()
 {
+	BindingType = EMassBindingType::Building;
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
@@ -830,147 +780,37 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValuesForBuilding(FMassA
                                                                FMassArchetypeSharedFragmentValues& OutSharedValues)
 {
 	return BuildArchetypeAndSharedValues(OutArchetype, OutSharedValues);
-
-	/*
-    AActor* Owner = GetOwner();
-    if (!Owner) return false;
-
-	AUnitBase* UnitBase = Cast<AUnitBase>(Owner);
-	if (!UnitBase) return false;
-
-    UWorld* World = Owner->GetWorld();
-    if (!World) return false;
-
-	if(UnitBase->CanMove) 
-	{
-		return BuildArchetypeAndSharedValues(OutArchetype, OutSharedValues);
-	}
-
-	
-    FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
-
-    TArray<const UScriptStruct*> FragmentsAndTags = {
-        // Fragments & tags as before, plus a one-shot init tag
-
-    	// --- ADD THESE FRAGMENTS FOR REPLICATION ---
-    	FMassNetworkIDFragment::StaticStruct(),
-		FMassReplicatedAgentFragment::StaticStruct(),
-		FMassReplicationViewerInfoFragment::StaticStruct(),
-		FMassReplicationLODFragment::StaticStruct(),
-		FMassReplicationGridCellLocationFragment::StaticStruct(),
-		FMassInReplicationGridTag::StaticStruct(),
-		FUnitReplicatedTransformFragment::StaticStruct(),
-		// --- END OF ADDITIONS ---
-    	
-    	// Core Movement & State
-    	FTransformFragment::StaticStruct(),
-		//FMassVelocityFragment::StaticStruct(),          // Needed by Avoidance & Movement
-		//FMassForceFragment::StaticStruct(),             // Needed by Movement Processor
-		//FMassMoveTargetFragment::StaticStruct(),        // Input for your UnitMovementProcessor
-		FAgentRadiusFragment::StaticStruct(),           // Often used by Avoidance/Movement
-		//FMassMovementParameters::StaticStruct(), 
-		// Steering & Avoidance
-		//FMassSteeringFragment::StaticStruct(),          // ** REQUIRED: Output of UnitMovementProcessor, Input for Steer/Avoid/Move **
-		FMassAvoidanceColliderFragment::StaticStruct(), // ** REQUIRED: Avoidance shape **
-
-		FMassGhostLocationFragment::StaticStruct(),
-		//FMassNavigationEdgesFragment::StaticStruct(),
-		//FMassStandingAvoidanceParameters::StaticStruct(),
-		//FMassMovingAvoidanceParameters::StaticStruct(),
-		//FMassMovementParameters::StaticStruct(),
-		// Your Custom Logic
-		FUnitMassTag::StaticStruct(),                   // Your custom tag
-		FMassPatrolFragment::StaticStruct(), 
-		//FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
-    
-    	
-		FMassAIStateFragment::StaticStruct(),
-    	FMassSightFragment::StaticStruct(),
-		FMassAITargetFragment::StaticStruct(), 
-		FMassCombatStatsFragment::StaticStruct(), 
-		FMassAgentCharacteristicsFragment::StaticStruct(), 
-
-		//FMassWorkerStatsFragment::StaticStruct(),
-		// Actor Representation & Sync
-		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
-		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
-		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
-    };
-
-
-	if(UnitBase->AddEffectTargetFragement)
-		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());
-	
-	
-	if(UnitBase->AddGameplayEffectFragement)
-		FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
-	
-    FMassArchetypeCreationParams Params;
-	Params.ChunkMemorySize=0;
-	Params.DebugName=FName("UMassActorBindingComponent");
-
-    OutArchetype = EntityManager.CreateArchetype(FragmentsAndTags, Params);
-    if (!OutArchetype.IsValid()) return false;
-	
-	FMassArchetypeSharedFragmentValues SharedValues;
-
-	// Inject replication shared fragment so Mass replication knows our replicator and bubble type
-	{
-		FMassReplicationSharedFragment RepShared;
-    	// Share a single replicator instance per world so entities can batch into the same chunk
-	    {
-			static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
-			UWorld* W = GetWorld();
-			UMassUnitReplicatorBase* SharedReplicator = nullptr;
-			if (W)
-			{
-				if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(W))
-				{
-					SharedReplicator = Found->Get();
-				}
-				if (!SharedReplicator)
-				{
-					SharedReplicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
-					GReplicatorPerWorld.Add(W, SharedReplicator);
-				}
-			}
-			RepShared.CachedReplicator = SharedReplicator;
-	    }
-
-    	// Resolve BubbleInfo class handle as early as possible
-    	if (UWorld* WorldPtr = GetWorld())
-    	{
-    		// First, try our bootstrap-registered handle
-    		FMassBubbleInfoClassHandle Handle = RTSReplicationBootstrap::GetUnitBubbleHandle(WorldPtr);
-    		// If still invalid on server, ask the replication subsystem for the handle (avoid late registration on clients)
-    		if (!Handle.IsValid() && WorldPtr->GetNetMode() != NM_Client)
-    		{
-    			if (UMassReplicationSubsystem* RepSub = WorldPtr->GetSubsystem<UMassReplicationSubsystem>())
-    			{
-    				const TSubclassOf<AMassClientBubbleInfoBase> BubbleCls = AUnitClientBubbleInfo::StaticClass();
-    				Handle = RepSub->GetBubbleInfoClassHandle(BubbleCls);
-    				if (!RepSub->IsBubbleClassHandleValid(Handle))
-    				{
-    					// As a last resort (early in world start), register it here on the server
-    					Handle = RepSub->RegisterBubbleInfoClass(BubbleCls);
-    				}
-    			}
-    		}
-    		RepShared.BubbleInfoClassHandle = Handle;
-    	}
-	}
-	
-    SharedValues.Sort();
-
-	OutSharedValues = SharedValues;
-
-    return true;
-	*/
 }
 
 void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityManager& EntityManager,
 	FMassEntityHandle EntityHandle, AActor* OwnerActor)
 {
+	if (BindingType == EMassBindingType::EffectArea)
+	{
+		AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor);
+		if (EffectArea)
+		{
+			if (FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle))
+			{
+				CombatStatsFrag->TeamId = EffectArea->TeamId;
+				CombatStatsFrag->SightRadius = SightRadius;
+				CombatStatsFrag->LoseSightRadius = LoseSightRadius;
+			}
+			if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				CharFrag->bCanBeInvisible = EffectArea->bCanBeInvisible;
+				CharFrag->bIsInvisible = EffectArea->bIsInvisible;
+				CharFrag->bCanDetectInvisible = false;
+			}
+			if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
+			{
+				VisibilityFrag->bIsMyTeam = true;
+				VisibilityFrag->bIsOnViewport = true;
+			}
+			return;
+		}
+	}
+
 	 // --- Get Owner References (Replace Placeholders) ---
     // We assume OwnerActor is valid as it's checked before calling this function
     AUnitBase* UnitOwner = Cast<AUnitBase>(OwnerActor); // <<< REPLACE AUnitBase
@@ -985,22 +825,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	UnitOwner->GetAbilitiesArrays();
     	UnitOwner->AutoAbility();
         UnitAttributes = UnitOwner->Attributes; // <<< REPLACE UUnitAttributesComponent
-		/*
-    	if (UnitOwner->GetCharacterMovement())
-    	{
-    		// Make sure the CharacterMovementComponent still ticks even if unpossessed
-    		UnitOwner->GetCharacterMovement()->SetComponentTickEnabled(true);
-    		UnitOwner->GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
-    	} */
-    }
-    else
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s is not of expected type 'AUnitBase'. Using default stats."), *OwnerActor->GetName());
-    }
 
-    if (UnitOwner && !UnitAttributes)
-    {
-         //UE_LOG(LogTemp, Warning, TEXT("InitializeMassEntityStatsFromOwner: Owner %s (%s) is missing expected 'UUnitAttributesComponent'. Using default stats."), *OwnerActor->GetName(), *UnitOwner->GetName());
     }
     // --- End: Get Owner References ---
 	
@@ -1154,8 +979,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         {
             // <<< REPLACE Properties with your actual variable names >>>
             PatrolFrag->bLoopPatrol = UnitOwner->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
-            //PatrolFrag->bPatrolRandomAroundWaypoint = UnitOwner->NextWaypoint->PatrolCloseToWaypoint;
-            //PatrolFrag->RandomPatrolRadius = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
             PatrolFrag->RandomPatrolMinIdleTime = UnitOwner->NextWaypoint->PatrolCloseMinInterval;
             PatrolFrag->RandomPatrolMaxIdleTime = UnitOwner->NextWaypoint->PatrolCloseMaxInterval;
         	PatrolFrag->TargetWaypointLocation = UnitOwner->NextWaypoint->GetActorLocation();
@@ -1221,19 +1044,49 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 	}
 }
 
-void UMassActorBindingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntity()
 {
-	/*
-	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassUnitSetup)
-	{
-		MassEntityHandle = CreateAndLinkOwnerToMassEntity();
-	}
+	UWorld* World = GetWorld();
+	if (!World) return {};
+	
+	if (MassEntityHandle.IsValid()) return MassEntityHandle;
 
-	if (!MassEntityHandle.IsSet() || !MassEntityHandle.IsValid() && bNeedsMassBuildingSetup)
+	if (!MassEntitySubsystemCache) MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassEntitySubsystemCache) return {};
+
+	FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+	
+	FMassArchetypeHandle Archetype;
+	FMassArchetypeSharedFragmentValues SharedValues;
+	if (!BuildArchetypeAndSharedValues(Archetype, SharedValues)) return {};
+
+	MassEntityHandle = EM.CreateEntity(Archetype, SharedValues);
+	if (MassEntityHandle.IsValid())
 	{
-		MassEntityHandle = CreateAndLinkBuildingToMassEntity();
+		InitTransform(EM, MassEntityHandle);
+		InitStats(EM, MassEntityHandle, GetOwner());
+		
+		FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
+		ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
 	}
-	*/
+	return MassEntityHandle;
+}
+
+void UMassActorBindingComponent::SetupMassOnEffectArea()
+{
+	BindingType = EMassBindingType::EffectArea;
+	UWorld* World = GetWorld();
+	MyOwner = GetOwner();
+	if (!World) return;
+	if (!MassEntitySubsystemCache) MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache)
+	{
+		FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+		if (!EM.IsProcessing())
+		{
+			CreateAndLinkEffectAreaToMassEntity();
+		}
+	}
 }
 
 void UMassActorBindingComponent::RequestClientMassLink()

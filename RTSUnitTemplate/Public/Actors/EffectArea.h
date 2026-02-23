@@ -6,10 +6,13 @@
 #include "GameFramework/Actor.h"
 #include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
+#include "Mass/UnitMassTag.h"
 #include "EffectArea.generated.h"
 
+class UMassActorBindingComponent;
+
 UCLASS()
-class RTSUNITTEMPLATE_API AEffectArea : public AActor
+class RTSUNITTEMPLATE_API AEffectArea : public AActor, public IMassVisibilityInterface
 {
 	GENERATED_BODY()
 	
@@ -74,6 +77,29 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsHealing = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	bool bAffectedByFogOfWar = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	bool bInvisibleToEnemies = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	bool bIsInvisible = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	bool bCanBeInvisible = false;
+
+	UPROPERTY(Transient)
+	bool bIsVisibleByFog = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	UMassActorBindingComponent* MassBindingComponent;
+
+	// IMassVisibilityInterface
+	virtual void SetActorVisibility(bool bVisible) override;
+	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
+	virtual bool ComputeLocalVisibility() const override;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void ImpactEvent(AUnitBase* Unit);

@@ -1,7 +1,9 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EffectArea.h"
-
+#include "Mass/MassActorBindingComponent.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
+#include "NiagaraComponent.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -24,6 +26,8 @@ AEffectArea::AEffectArea()
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(SceneRoot);
 	
+	MassBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassBindingComponent"));
+
 	if (HasAuthority())
 	{
 		bReplicates = true;
@@ -36,6 +40,11 @@ void AEffectArea::BeginPlay()
 	Super::BeginPlay();
 	SetReplicateMovement(true);
 	SetScaleTimer();
+
+	if (MassBindingComponent)
+	{
+		MassBindingComponent->SetupMassOnEffectArea();
+	}
 }
 
 // Called every frame
@@ -68,6 +77,72 @@ void AEffectArea::ScaleMesh()
 		FVector NewScale = Mesh->GetComponentScale() * BiggerScaler;
 		Mesh->SetWorldScale3D(NewScale);
 	}
+}
+
+void AEffectArea::SetActorVisibility(bool bVisible)
+{
+	if (Mesh) Mesh->SetVisibility(bVisible);
+	if (Niagara_A) Niagara_A->SetVisibility(bVisible);
+}
+
+void AEffectArea::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
+{
+	if (DetectingActor == nullptr || !DetectingActor->IsValidLowLevelFast())
+	{
+		return;
+	}
+
+	int32 DetectorTeamId = -1;
+	if (AUnitBase* Unit = Cast<AUnitBase>(DetectingActor))
+	{
+		DetectorTeamId = Unit->TeamId;
+	}
+
+	if (DetectorTeamId == -1) return;
+	
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	ACustomControllerBase* MyController = Cast<ACustomControllerBase>(PC);
+
+	if (MyController && MyController->IsValidLowLevelFast())
+	{
+		if (MyController->SelectableTeamId == DetectorTeamId)
+		{
+			bIsVisibleByFog = bVisible;
+		}
+	}
+}
+
+bool AEffectArea::ComputeLocalVisibility() const
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+	if (!CustomPC) return true;
+
+	int32 LocalTeamId = CustomPC->SelectableTeamId;
+	bool bIsMyTeam = (TeamId == LocalTeamId || LocalTeamId == 0);
+
+	bool VisibleByTeam = true;
+	if (bInvisibleToEnemies && !bIsMyTeam && TeamId != 0)
+	{
+		VisibleByTeam = false;
+	}
+
+	bool VisibleByFog = true;
+	if (bAffectedByFogOfWar && !bIsMyTeam && TeamId != 0)
+	{
+		VisibleByFog = bIsVisibleByFog;
+	}
+
+	// Invisibility status (relevant for enemies)
+	if (bIsInvisible && !bIsMyTeam)
+	{
+		return false;
+	}
+
+	return VisibleByTeam && VisibleByFog;
 }
 
 void AEffectArea::SetScaleTimer()

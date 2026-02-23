@@ -37,7 +37,8 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

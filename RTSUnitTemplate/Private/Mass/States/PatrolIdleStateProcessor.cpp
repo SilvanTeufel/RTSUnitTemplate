@@ -38,6 +38,7 @@ void UPatrolIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }

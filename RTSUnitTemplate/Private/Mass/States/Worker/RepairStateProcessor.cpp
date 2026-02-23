@@ -31,7 +31,8 @@ void URepairStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
     EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::All);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 

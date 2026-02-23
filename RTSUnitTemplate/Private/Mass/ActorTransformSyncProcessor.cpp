@@ -62,6 +62,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
         EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
         EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
+        EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 		EntityQuery.RegisterWithProcessor(*this);
 
 		ClientEntityQuery.Initialize(EntityManager);
@@ -101,6 +102,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
         ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None); 
         ClientEntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None); 
+        ClientEntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     /*
 		ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 		ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);

@@ -47,6 +47,8 @@ void UGoToBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateGoToResourceExtractionTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 

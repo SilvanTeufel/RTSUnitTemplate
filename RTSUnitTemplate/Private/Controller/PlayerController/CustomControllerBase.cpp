@@ -2522,11 +2522,11 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
             const FMassAIStateFragment*             AI       = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
             const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
 
-            if (!TF || !StateFrag || !AI || !CharFrag)
+            if (!TF || !StateFrag || !CharFrag)
                 continue;
 
-            // skip dead/despawned
-            if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime)
+            // skip dead/despawned (if AI state is present)
+            if (AI && StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime)
                 continue;
 
                 // 1) world‐loc

@@ -47,7 +47,7 @@ void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 		Query.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::None);
 		Query.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
 		Query.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
-		
+		Query.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 		Query.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::Any);;
 		Query.RegisterWithProcessor(*this);
 	};

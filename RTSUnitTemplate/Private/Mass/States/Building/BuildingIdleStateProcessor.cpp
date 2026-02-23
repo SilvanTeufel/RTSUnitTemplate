@@ -24,6 +24,7 @@ void UBuildingIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	
 	// Schließe tote Entities aus
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 
 	EntityQuery.RegisterWithProcessor(*this);
 }
