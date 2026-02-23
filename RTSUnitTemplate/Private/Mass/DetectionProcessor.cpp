@@ -292,6 +292,7 @@ void UDetectionProcessor::Execute(
                 const FMassEntityHandle SquadTarget = Mate.TargetFrag->TargetEntity;
 
                 // Validate basic target conditions (alive and enemy). Range does not matter here.
+                if (!EntityManager.IsEntityValid(SquadTarget)) continue;
                 const FMassCombatStatsFragment* SquadTgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SquadTarget);
                 if (!SquadTgtStats || DoesEntityHaveTag(EntityManager, SquadTarget, FMassStopUnitDetectionTag::StaticStruct())) continue;
                 if (SquadTgtStats->TeamId == Det.Stats->TeamId) continue;
@@ -410,9 +411,9 @@ void UDetectionProcessor::Execute(
                 if (!bFoundNew && !bCurrentStillViable)
                 {
                     const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
-                    const float TgtEffectiveLoseSight = Tgt.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
-                    const float TgtEffectiveLoseSightSq = FMath::Square(TgtEffectiveLoseSight);
-                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < TgtEffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq)
+                    const float DetEffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    const float DetEffectiveLoseSightSq = FMath::Square(DetEffectiveLoseSight);
+                    if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < DetEffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq)
                     {
                         // Even for fallback, we should prioritize attack capability if we were to pick it
                         // But here we only reach if we haven't found anything else yet.

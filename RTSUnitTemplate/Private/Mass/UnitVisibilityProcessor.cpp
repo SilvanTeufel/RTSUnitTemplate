@@ -71,6 +71,7 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -110,6 +111,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		auto ActorList = ChunkCtx.GetMutableFragmentView<FMassActorFragment>();
 		const auto& CharList = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
 		const auto& SightList = ChunkCtx.GetFragmentView<FMassSightFragment>();
+		auto* TargetList = ChunkCtx.GetFragmentView<FMassAITargetFragment>().GetData();
 
 		for (int32 i = 0; i < N; ++i)
 		{
@@ -149,10 +151,26 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					}
 					else
 					{
-						const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
-						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0);
-					}
-				}
+ 					const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
+ 					const int32* AttackerOverlapCount = SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Find(LocalTeamId);
+ 					bool bAttacksMyTeam = false;
+ 					if (TargetList)
+ 					{
+ 						const FMassAITargetFragment& TargetFrag = TargetList[i];
+ 						if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
+ 						{
+ 							if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+ 							{
+ 								if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
+ 								{
+ 									bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId);
+ 								}
+ 							}
+ 						}
+ 					}
+ 					bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
+ 					}
+ 				}
 				else if (bDoThrottledUpdate)
 				{
 					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport

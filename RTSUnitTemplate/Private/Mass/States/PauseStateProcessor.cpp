@@ -121,7 +121,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
+            float TargetCapsule = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
+            float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCapsule;
             
                 if (Dist <= AttackRange) // --- In Range ---
                 {
@@ -131,7 +132,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         if (Stats.bUseProjectile)
                         {
 
-                            if (SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId) <= 0)
+                            if (TargetStats && SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId) <= 0)
                                 SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId)++;
                             
                             if (SignalSubsystem)
@@ -140,6 +141,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                             }
                         }else
                         {
+                            if (TargetStats && SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId) <= 0)
+                                SightFrag.AttackerTeamOverlapsPerTeam.FindOrAdd(TargetStats->TeamId)++;
+                            
                             if (SignalSubsystem)
                             {
                                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Attack, Entity);

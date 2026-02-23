@@ -276,6 +276,23 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Build the full authoritative remote ID set as union of Registry and Bubble IDs
 	TSet<uint32> FullRemoteIDs = RegistryIDs;
 	for (uint32 Bid : BubbleIDs) { FullRemoteIDs.Add(Bid); }
+
+	// Pre-build global NetID to Entity mapping for cross-entity references (e.g. AITarget)
+	TMap<uint32, FMassEntityHandle> GlobalNetToEntity;
+	GlobalNetToEntity.Reserve(ExistingIDs.Num());
+	EntityQuery.ForEachEntityChunk(Context, [&GlobalNetToEntity](FMassExecutionContext& Ctx)
+	{
+		const int32 Num = Ctx.GetNumEntities();
+		const TConstArrayView<FMassNetworkIDFragment> NetIDs = Ctx.GetFragmentView<FMassNetworkIDFragment>();
+		for (int32 i = 0; i < Num; ++i)
+		{
+			const uint32 NID = NetIDs[i].NetID.GetValue();
+			if (NID != 0)
+			{
+				GlobalNetToEntity.Add(NID, Ctx.GetEntity(i));
+			}
+		}
+	});
 	// Create any missing client entities by OwnerName
 	int32 Actions = 0;
 	int32 Budget = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
@@ -426,7 +443,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
 		}
 		
-		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager](FMassExecutionContext& Context)
+		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -465,17 +482,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				TSet<uint32> ClaimedIDs;
 				// Track seen NetIDs in this chunk to detect duplicates
 				TSet<uint32> SeenIDs;
-			// Build quick lookup for this chunk: NetID -> EntityHandle
-			TMap<uint32, FMassEntityHandle> NetToEntity;
-			NetToEntity.Reserve(NumEntities);
-			for (int32 PreIdx = 0; PreIdx < NumEntities; ++PreIdx)
-			{
-				const uint32 NID = NetIDList[PreIdx].NetID.GetValue();
-				if (NID != 0)
-				{
-					NetToEntity.Add(NID, Context.GetEntity(PreIdx));
-				}
-			}
 			for (int32 EntityIdx = 0; EntityIdx < NumEntities; ++EntityIdx)
 			{
 				// Duplicate NetID detection: ensure per-chunk uniqueness
@@ -592,7 +598,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								const uint32 TgtID = TagItem->AITargetNetID;
     								if (TgtID != 0)
     								{
-    									if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+    									if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(TgtID))
     									{
     										AITFrag.TargetEntity = *FoundHandle;
     									}
@@ -605,7 +611,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								AITFrag.PreviouslySeen.Reset();
     								for (const uint32 SeenID : TagItem->AITargetPrevSeenIDs)
     								{
-    									if (const FMassEntityHandle* Found = NetToEntity.Find(SeenID))
+    									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(SeenID))
     									{
     										AITFrag.PreviouslySeen.Add(*Found);
     									}
@@ -613,7 +619,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								AITFrag.CurrentlySeen.Reset();
     								for (const uint32 SeenID : TagItem->AITargetCurrSeenIDs)
     								{
-    									if (const FMassEntityHandle* Found = NetToEntity.Find(SeenID))
+    									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(SeenID))
     									{
     										AITFrag.CurrentlySeen.Add(*Found);
     									}
@@ -821,7 +827,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									const uint32 TgtID = UseItem->AITargetNetID;
 									if (TgtID != 0)
 									{
-										if (const FMassEntityHandle* FoundHandle = NetToEntity.Find(TgtID))
+										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(TgtID))
 										{
 											AITFrag.TargetEntity = *FoundHandle;
 										}

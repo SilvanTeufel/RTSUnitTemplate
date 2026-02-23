@@ -200,7 +200,10 @@ void UUnitSightProcessor::ExecuteServer(
                 continue;
             
             const float DistSqr = FVector::DistSquared2D(Det.Location, Tgt.Location);
-            const float SightR2 = FMath::Square(Det.Stats->SightRadius);
+            const float DetCapsule = Det.Char ? Det.Char->CapsuleRadius : 0.f;
+            const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
+            const float EffectiveSight = Det.Stats->SightRadius + DetCapsule + TgtCapsule;
+            const float SightR2 = FMath::Square(EffectiveSight);
 
             if (DistSqr > SightR2) 
                 continue;
@@ -258,7 +261,11 @@ void UUnitSightProcessor::ExecuteServer(
                 if (AttackingSightCount > 0)
                 {
                     const float DistSqr = FVector::DistSquared2D(Detector.Location, Target.Location);
-                    if (DistSqr <= FMath::Square(Target.Stats->SightRadius))
+                    const float DetCapsule = Detector.Char ? Detector.Char->CapsuleRadius : 0.f;
+                    const float TgtCapsule = Target.Char ? Target.Char->CapsuleRadius : 0.f;
+                    const float EffectiveLoseSight = Detector.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    
+                    if (DistSqr <= FMath::Square(EffectiveLoseSight))
                     {
                         PendingSignals.Emplace(Target.Entity, Detector.Entity, UnitSignals::UnitEnterSight);
                     }
