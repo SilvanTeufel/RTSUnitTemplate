@@ -652,13 +652,13 @@ struct FMassUnitPathFragment : public FMassFragment
     float AcceptanceRadius = 100.f;
 
     // Path behavior while waypoints pending
-    UPROPERTY(VisibleAnywhere, Transient)
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
     bool bIgnoreEnemiesDuringPath = false;   // Shift + RightClick
 
-    UPROPERTY(VisibleAnywhere, Transient)
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
     bool bAttackMoveDuringPath = false;      // Shift + AttackMove
 
-    UPROPERTY(VisibleAnywhere, Transient)
+    UPROPERTY(VisibleAnywhere, Category = "AI|Path", Transient)
     bool bAttackToggled = false;
 
     // Fallback for stuck units
