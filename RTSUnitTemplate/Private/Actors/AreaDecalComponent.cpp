@@ -37,29 +37,11 @@ UAreaDecalComponent::UAreaDecalComponent()
 	// Default size, will be overridden by activation.
 	DecalSize = FVector(500.f, 100.f, 100.f); 
 
-	// RVT Writer Setup
-	RVTWriterComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RVTWriterComponent"));
-	RVTWriterComponent->SetupAttachment(this);
-	RVTWriterComponent->SetCastShadow(false);
-	RVTWriterComponent->SetReceivesDecals(false);
-	RVTWriterComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
-	RVTWriterComponent->bRenderInMainPass = false;
-	RVTWriterComponent->SetHiddenInGame(true);
-	RVTWriterComponent->SetVisibility(false);
-	RVTWriterComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
-	// Anwenderdefinierte Mesh-Kantenlänge (in UU) -> Editor-Property 'RVTWriterMeshSize'
-	if (RVTWriterMeshSize <= 0.f)
-	{
-		RVTWriterMeshSize = 2000.f; // Fallback-Default
-	}
-	const float InitialScale = RVTWriterMeshSize / 100.f; // Engine-Plane ist 100 UU breit
-	RVTWriterComponent->SetRelativeScale3D(FVector(InitialScale, InitialScale, 1.0f));
-
+	// Cache the default plane mesh for RVT writer (will be created dynamically at runtime)
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Engine/BasicShapes/Plane.Plane"));
 	if (PlaneMeshAsset.Succeeded())
 	{
-		RVTWriterComponent->SetStaticMesh(PlaneMeshAsset.Object);
+		DefaultPlaneMesh = PlaneMeshAsset.Object;
 	}
 }
 
@@ -80,15 +62,54 @@ void UAreaDecalComponent::BeginPlay()
 	Super::BeginPlay();
 	SetHiddenInGame(true);
 
-	if (RVTWriterComponent)
+	// Create RVTWriterComponent dynamically at runtime to avoid template mismatch during cook.
+	// CreateDefaultSubobject inside a component constructor causes nested subobject issues when
+	// the component is Blueprint-added (template vs instance hierarchy confusion).
+	if (!HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
 	{
-		// Re-attach to parent to avoid Decal rotation inherited from this component
-		USceneComponent* AttachTarget = GetAttachParent() ? GetAttachParent() : (GetOwner() ? GetOwner()->GetRootComponent() : nullptr);
-		if (AttachTarget && AttachTarget != this)
+		RVTWriterComponent = NewObject<UStaticMeshComponent>(GetOwner(), UStaticMeshComponent::StaticClass(), TEXT("RVTWriterMesh"), RF_Transient);
+		if (RVTWriterComponent)
 		{
-			RVTWriterComponent->AttachToComponent(AttachTarget, FAttachmentTransformRules::KeepRelativeTransform);
-			RVTWriterComponent->SetRelativeLocation(FVector(0.f, 0.f, 2.0f));
-			RVTWriterComponent->SetRelativeRotation(FRotator::ZeroRotator);
+			RVTWriterComponent->SetCastShadow(false);
+			RVTWriterComponent->SetReceivesDecals(false);
+			RVTWriterComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			RVTWriterComponent->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Exclusive;
+			RVTWriterComponent->bRenderInMainPass = false;
+			RVTWriterComponent->SetHiddenInGame(true);
+			RVTWriterComponent->SetVisibility(false);
+
+			// Set default plane mesh
+			if (DefaultPlaneMesh)
+			{
+				RVTWriterComponent->SetStaticMesh(DefaultPlaneMesh);
+			}
+
+			// Scale based on RVTWriterMeshSize
+			if (RVTWriterMeshSize <= 0.f)
+			{
+				RVTWriterMeshSize = 2000.f;
+			}
+			const float InitialScale = RVTWriterMeshSize / 100.f;
+			RVTWriterComponent->SetRelativeScale3D(FVector(InitialScale, InitialScale, 1.0f));
+
+			// Attach to the decal's parent (or actor root) to avoid inheriting the decal's 90deg rotation
+			USceneComponent* AttachTarget = GetAttachParent();
+			if (!AttachTarget && GetOwner())
+			{
+				AttachTarget = GetOwner()->GetRootComponent();
+			}
+
+			if (AttachTarget)
+			{
+				RVTWriterComponent->AttachToComponent(AttachTarget, FAttachmentTransformRules::KeepRelativeTransform);
+				// Match decal's relative location but keep flat orientation
+				FVector TargetLocation = GetRelativeLocation();
+				TargetLocation.Z += 2.0f;
+				RVTWriterComponent->SetRelativeLocation(TargetLocation);
+				RVTWriterComponent->SetRelativeRotation(FRotator::ZeroRotator);
+			}
+
+			RVTWriterComponent->RegisterComponent();
 		}
 	}
 	
@@ -153,6 +174,8 @@ void UAreaDecalComponent::OnRep_DecalIsVisible()
 
 void UAreaDecalComponent::UpdateDecalVisuals()
 {
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+	
 	// --- Normal Decal Logic ---
 	if (!bUseRuntimeVirtualTexture)
 	{
@@ -238,11 +261,8 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 
 			// Only show and write if radius is meaningful
 			bool bShouldBeActive = (CurrentDecalRadius > 0.1f);
-			if (RVTWriterComponent->GetVisibleFlag() != bShouldBeActive)
-			{
-				RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
-				RVTWriterComponent->SetVisibility(bShouldBeActive);
-			}
+			RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
+			RVTWriterComponent->SetVisibility(bShouldBeActive);
 
 
 			// 1. Mesh Update
@@ -309,6 +329,12 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 			
 			// Position update (only if necessary)
 			FVector TargetLocation = FVector(0.f, 0.f, 2.0f);
+			if (RVTWriterComponent->GetAttachParent() != this)
+			{
+				TargetLocation = GetRelativeLocation();
+				TargetLocation.Z += 2.0f;
+			}
+
 			if (!RVTWriterComponent->GetRelativeLocation().Equals(TargetLocation, 0.1f))
 			{
 				RVTWriterComponent->SetRelativeLocation(TargetLocation);

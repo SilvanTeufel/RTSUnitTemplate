@@ -68,7 +68,7 @@ protected:
 
 	// Einstellbare Größe des RVT-Schreib-Meshs (Kantenlänge in Unreal Units). Standard 2000
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
-	float RVTWriterMeshSize;
+	float RVTWriterMeshSize = 2000.f;
 
 	// Einstellbarer Material-Parameterbereich für den Radius (0..0.5 entspricht Mesh-Halbkante)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
@@ -93,9 +93,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT")
 	UStaticMesh* RVTWriterCustomMesh;
 
-	// Hilfskomponente zum Schreiben in die RVT
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RVT")
-	UStaticMeshComponent* RVTWriterComponent;
+	// Hilfskomponente zum Schreiben in die RVT (created dynamically at runtime to avoid template mismatch)
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "RVT")
+	UStaticMeshComponent* RVTWriterComponent = nullptr;
+
+	// Cached default plane mesh for RVT writer
+	UPROPERTY()
+	UStaticMesh* DefaultPlaneMesh = nullptr;
 
 	UPROPERTY(Transient)
 	UMaterialInstanceDynamic* RVTWriterDynamicMaterial;
