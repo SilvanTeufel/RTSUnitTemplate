@@ -7,6 +7,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "Actors/EffectArea.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
@@ -102,6 +103,16 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 	TArray<FMassEntityHandle> EntitiesToSignal;
 
+	const float CurrentTime = World->GetTimeSeconds();
+
+	static float LastLogTime = 0.f;
+	bool bDoDiagnosticLog = false;
+	if (CurrentTime - LastLogTime > 2.0f)
+	{
+		bDoDiagnosticLog = true;
+		LastLogTime = CurrentTime;
+	}
+
 	EntityQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkCtx)
 	{
 		const int32 N = ChunkCtx.GetNumEntities();
@@ -116,12 +127,42 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		for (int32 i = 0; i < N; ++i)
 		{
 			FMassVisibilityFragment& Vis = VisibilityList[i];
+			const FMassCombatStatsFragment& Stats = StatsList[i];
 			AActor* Actor = ActorList[i].GetMutable();
 			IMassVisibilityInterface* VisInterface = Cast<IMassVisibilityInterface>(Actor);
 			if (!VisInterface) continue;
 
-			FVector Location = Transforms[i].GetTransform().GetLocation();
+			APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
+			AEffectArea* Area = Cast<AEffectArea>(Actor);
 
+			// 0) Detect Health/Shield changes (only for non-Units, Units handle this via signal-driven UpdateEntityHealth)
+			const bool bHealthDifferent = !FMath::IsNearlyEqual(Vis.LastHealth, Stats.Health, 0.1f);
+			const bool bShieldDifferent = !FMath::IsNearlyEqual(Vis.LastShield, Stats.Shield, 0.1f);
+
+			if (bHealthDifferent || bShieldDifferent)
+			{
+				if (!Unit) // Only handle logic for non-Units here (e.g. EffectAreas)
+				{
+					// Only trigger recent damage popup if it's not the very first initialization
+					if (Vis.LastHealth >= 0.f)
+					{
+						const bool bDamageTrigger = (Stats.Health < Vis.LastHealth - 1.0f) || (Stats.Shield < Vis.LastShield - 1.0f);
+						const bool bHealTrigger = (Stats.Health > Vis.LastHealth + PositiveChangeThreshold) || (Stats.Shield > Vis.LastShield + PositiveChangeThreshold);
+
+						if (bDamageTrigger || bHealTrigger)
+						{
+							Vis.LastHealthChangeTime = CurrentTime;
+						}
+					}
+					Vis.LastHealth = Stats.Health;
+					Vis.LastShield = Stats.Shield;
+				}
+				// For Units, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
+				// UpdateEntityHealth will handle syncing them when the GAS signal arrives.
+			}
+
+			FVector Location = Transforms[i].GetTransform().GetLocation();
+			
 			if (bDoThrottledUpdate)
 			{
 				bool bIsVisibleByFog = true;
@@ -151,38 +192,35 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					}
 					else
 					{
- 					const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
- 					const int32* AttackerOverlapCount = SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Find(LocalTeamId);
- 					bool bAttacksMyTeam = false;
- 					if (TargetList)
- 					{
- 						const FMassAITargetFragment& TargetFrag = TargetList[i];
- 						if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
- 						{
- 							if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
- 							{
- 								if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
- 								{
- 									bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId && TgtStats->Health > 0.f);
- 								}
- 							}
- 						}
- 					}
+						const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
+						const int32* AttackerOverlapCount = SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Find(LocalTeamId);
+						bool bAttacksMyTeam = false;
+						if (TargetList)
+						{
+							const FMassAITargetFragment& TargetFrag = TargetList[i];
+							if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
+							{
+								if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+								{
+									if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
+									{
+										bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId && TgtStats->Health > 0.f);
+									}
+								}
+							}
+						}
  					bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
- 					}
  				}
-				else if (bDoThrottledUpdate)
-				{
-					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
-					Vis.bIsOnViewport = true;
-					Vis.bIsMyTeam = true; // Avoid hiding everything on dedicated server if team logic is local-player dependent
-					bIsVisibleByFog = true;
-				}
-				
-				// 3) Sync back to Unit and check if we need to trigger logic
-				// For PerformanceUnit, we can still cast to sync extra flags, but for general actors, we rely on the interface
-				APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
-				AEffectArea* Area = Cast<AEffectArea>(Actor);
+ 				Vis.bIsVisibleEnemy = bIsVisibleByFog;
+ 			}
+ 			else
+ 			{
+ 				// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
+ 				Vis.bIsOnViewport = true;
+ 				Vis.bIsMyTeam = true; // Avoid hiding everything on dedicated server if team logic is local-player dependent
+ 				bIsVisibleByFog = true;
+ 				Vis.bIsVisibleEnemy = true;
+ 			}
 
 				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
 								(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
@@ -225,15 +263,54 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				}
 			}
 
-				// 4) High-frequency Updates (Client-only)
-				if (APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor))
+			// Decide Healthbar visibility (High-frequency)
+			if (Unit)
+			{
+				const bool bIsConstruction = Unit->IsA(AConstructionUnit::StaticClass());
+				
+				// Use per-unit duration if set, otherwise processor default
+				const float VisibleDuration = (Unit->HealthWidgetDisplayDuration > 0.f) ? Unit->HealthWidgetDisplayDuration : DefaultHealthbarVisibleTime;
+				const bool bRecentlyDamaged = (CurrentTime - Vis.LastHealthChangeTime) < VisibleDuration;
+				const bool bRecentlyLeveled = (CurrentTime - Vis.LastLevelUpTime) < VisibleDuration;
+				const bool bRecentPing = CustomPC && (CurrentTime - CustomPC->LastHealthBarPingTime) < VisibleDuration;
+				const bool bNotFull = (Stats.Health > 0.5f) && ((Stats.Health < Stats.MaxHealth - 1.0f) || (Stats.Shield < Stats.MaxShield - 1.0f));
+
+				const bool bShowDueToPing = bRecentPing && bNotFull && (Vis.bIsMyTeam || Vis.bIsVisibleEnemy);
+
+				if (bRecentPing && bDoDiagnosticLog && (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController())))
 				{
-					if (!Unit->StopVisibilityTick)
+					UE_LOG(LogTemp, Error, TEXT("[CLIENT][V-Ping] %s: Show=%d | RecentPing=%d, NotFull=%d, IsMyTeam=%d, IsVisibleEnemy=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
+						*Actor->GetName(), bShowDueToPing, bRecentPing, bNotFull, Vis.bIsMyTeam, Vis.bIsVisibleEnemy, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
+				}
+
+				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration
+				Unit->OpenHealthWidget = bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing;
+				Unit->bShowLevelOnly = bRecentlyLeveled && !bRecentlyDamaged && !bShowDueToPing && !bIsConstruction;
+
+				if (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController()))
+				{
+					if (Unit->OpenHealthWidget && bDoDiagnosticLog)
 					{
-						Unit->UpdateWidgetPositions(Location);
-						Unit->SyncAttachedAssetsVisibility();
+						/*
+						const float DamagedTimeLeft = FMath::Max(0.f, VisibleDuration - (CurrentTime - Vis.LastHealthChangeTime));
+						const float PingTimeLeft = CustomPC ? FMath::Max(0.f, VisibleDuration - (CurrentTime - CustomPC->LastHealthBarPingTime)) : 0.f;
+						
+						UE_LOG(LogTemp, Error, TEXT("[CLIENT][VisibilityProcessor] %s: OHW=1 | Damaged=%d (%.2fs left), Ping=%d (%.2fs left), NotFull=%d, ShowDueToPing=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
+							*Actor->GetName(), bRecentlyDamaged, DamagedTimeLeft, bRecentPing, PingTimeLeft, bNotFull, bShowDueToPing, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
+						*/
 					}
 				}
+			}
+
+			// 4) High-frequency Updates (Client-only)
+			if (Unit)
+			{
+				if (!Unit->StopVisibilityTick)
+				{
+					Unit->UpdateWidgetPositions(Location);
+					Unit->SyncAttachedAssetsVisibility();
+				}
+			}
 		}
 	});
 

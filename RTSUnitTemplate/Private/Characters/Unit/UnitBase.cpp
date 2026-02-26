@@ -530,8 +530,6 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		DeadEffectsAndEvents();
 		UnitControlTimer = 0.f;
 	}
-
-	HealthbarCollapseCheck(NewHealth, OldHealth);
 }
 
 void AUnitBase::DeadMultiCast_Implementation()
@@ -583,141 +581,41 @@ void AUnitBase::DeadEffectsAndEvents()
 }
 
 
-void AUnitBase::HealthbarCollapseCheck(float NewHealth, float OldHealth)
-{
-	
-	 // Capture necessary data for the lambda
-    TWeakObjectPtr<AUnitBase> WeakThis(this); // Sicherer Zeiger auf 'this'
-    float LocalHealthWidgetDisplayDuration = HealthWidgetDisplayDuration; // Kopiere relevante Daten
-    // Kopiere auch NewHealth, OldHealth etc., falls im GameThread-Teil benötigt
-
-    if (!IsInGameThread())
-    {
-        // Führe den kritischen Teil auf dem Game Thread aus
-        AsyncTask(ENamedThreads::GameThread, [WeakThis, LocalHealthWidgetDisplayDuration, NewHealth, OldHealth]()
-        {
-            // Prüfe, ob das Objekt noch existiert, wenn der Task ausgeführt wird
-            if (AUnitBase* StrongThis = WeakThis.Get())
-            {
-                UWorld* World = StrongThis->GetWorld();
-                if (World)
-                {
-                    // Führe hier die Logik aus, die den GameThread benötigt
-                    ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-                    const bool bIsConstruction = StrongThis->IsA(AConstructionUnit::StaticClass());
-                    if((OldHealth != NewHealth && NewHealth >= 0.f) && (bIsConstruction || (RTSGameMode && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount))) // Verwende StrongThis->Member
-                    {
-                       StrongThis->OpenHealthWidget = true;
-                       StrongThis->bShowLevelOnly = false;
-                    }
-
-                    World->GetTimerManager().SetTimer(
-                        StrongThis->HealthWidgetTimerHandle, // Verwende StrongThis->Member
-                        StrongThis,
-                        &ALevelUnit::HideHealthWidget,
-                        LocalHealthWidgetDisplayDuration,
-                        false);
-                }
-            }
-            // else: Das Objekt wurde zerstört, bevor der Task lief. Tu nichts.
-        });
-    }
-    else
-    {
-        // Wir sind bereits auf dem Game Thread, alles sicher
-        UWorld* World = GetWorld();
-        if (World && IsValid(this)) // Sicherheitschecks beibehalten
-        {
-        	ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-        	const bool bIsConstruction = IsA(AConstructionUnit::StaticClass());
-        	if((OldHealth != NewHealth && NewHealth >= 0.f) && (bIsConstruction || (RTSGameMode && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount)))
-        	{
-                OpenHealthWidget = true;
-                bShowLevelOnly = false;
-        	}
-            World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
-        }
-    }
-
-}
 
 
 
 void AUnitBase::SetShield_Implementation(float NewShield)
 {
-	const float OldShield = Attributes->GetShield();
 	Attributes->SetAttributeShield(NewShield);
-	ShieldCollapseCheck(NewShield, OldShield);
+	UpdateEntityHealth(Attributes->GetHealth()); // Just to trigger a refresh in Mass if needed, though we should probably have UpdateEntityShield
 }
 
-void AUnitBase::ShieldCollapseCheck(float NewShield, float OldShield)
-{
-	// Capture necessary data for the lambda
-	TWeakObjectPtr<AUnitBase> WeakThis(this); // Sicherer Zeiger auf 'this'
-	float LocalHealthWidgetDisplayDuration = HealthWidgetDisplayDuration; // Kopiere relevante Daten
-	// Kopiere auch NewHealth, OldHealth etc., falls im GameThread-Teil benötigt
-
-	if (!IsInGameThread())
-	{
-		// Führe den kritischen Teil auf dem Game Thread aus
-		AsyncTask(ENamedThreads::GameThread, [WeakThis, LocalHealthWidgetDisplayDuration, NewShield, OldShield]()
-		{
-			// Prüfe, ob das Objekt noch existiert, wenn der Task ausgeführt wird
-			if (AUnitBase* StrongThis = WeakThis.Get())
-			{
-				UWorld* World = StrongThis->GetWorld();
-			   if (World)
-			   {
-				   // AuthGameMode holen
-				   ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-
-		
-
-				   // Shield‑Collapse Check
-				   if (NewShield != OldShield
-					   && RTSGameMode
-					   && RTSGameMode->AllUnits.Num() <= StrongThis->HideHealthBarUnitCount)
-				   {
-					   StrongThis->OpenHealthWidget = true;
-					   StrongThis->bShowLevelOnly = false;
-				   }
-
-				   // Timer setzen, um das Widget später zu verstecken
-				   World->GetTimerManager().SetTimer(
-					   StrongThis->HealthWidgetTimerHandle,
-					   StrongThis,
-					   &ALevelUnit::HideHealthWidget,
-					   LocalHealthWidgetDisplayDuration,
-					   false
-				   );
-			   }
-			}
-			// else: Das Objekt wurde zerstört, bevor der Task lief. Tu nichts.
-		});
-	}
-	else
-	{
-		// Wir sind bereits auf dem Game Thread, alles sicher
-		UWorld* World = GetWorld();
-		if (World && IsValid(this)) // Sicherheitschecks beibehalten
-		{
-			ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
-			if (NewShield != OldShield
-					  && RTSGameMode
-					  && RTSGameMode->AllUnits.Num() <= HideHealthBarUnitCount)
-			{
-				OpenHealthWidget = true;
-				bShowLevelOnly = false;
-			}
-
-			World->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
-		}
-	}
-}
 
 
 void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 {
+	// 1. Sync local Mass fragment immediately
+	UpdateEntityHealth(Attributes->GetHealth());
+
+	// 2. Immediate UI Reaction (The "Signal")
+	// Only trigger popup if it's not the initial sync (OldValue > 0)
+	if (Data.OldValue > 0.5f)
+	{
+		const float Delta = Data.NewValue - Data.OldValue;
+		if (Delta < -1.0f || Delta > 10.0f) // Damage or significant heal
+		{
+			/*
+			if (GetWorld() && (GetWorld()->GetNetMode() == NM_Client || IsLocallyControlled()))
+			{
+				UE_LOG(LogTemp, Error, TEXT("[CLIENT][UnitBase] OnAttributeChanged for %s: Delta=%.2f -> OHW=1"), *GetName(), Delta);
+			}
+			*/
+			OpenHealthWidget = true;
+			bShowLevelOnly = false;
+			CheckHealthBarVisibility(); // Forces UI visibility refresh instantly
+		}
+	}
+
 	if (SquadId > 0)
 	{
 		UpdateSquadHealthBar();

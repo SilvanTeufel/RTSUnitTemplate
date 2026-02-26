@@ -1410,11 +1410,12 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 		if (!Unit || !Unit->MassActorBindingComponent) continue;
 
 		const FMassEntityHandle UnitHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-		if (EntityManager->IsEntityValid(UnitHandle))
-		{
-			// Clear any existing transport tag as we are issuing a new command
-			EntityManager->RemoveTagFromEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
-		}
+			if (EntityManager->IsEntityValid(UnitHandle))
+			{
+				// Clear any existing transport tag as we are issuing a new command
+				EntityManager->RemoveTagFromEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
+				//EntityManager->Defer().RemoveTag<FMassTransportProcessorActiveTag>(UnitHandle);
+			}
 
 		bool bShouldApplyToUnit = false;
 		if (bTargetIsTransporter && Unit->CanBeTransported)
@@ -1422,7 +1423,7 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 			// Check space and transport IDs
 			if ((Transporter->CurrentUnitsLoaded + Unit->UnitSpaceNeeded) <= Transporter->MaxTransportUnits)
 			{
-				if (Unit->TransportId == 0 || Transporter->TransportId == Unit->TransportId)
+				if (Transporter->TransportId == 0 || Unit->TransportId == 0 || Transporter->TransportId == Unit->TransportId)
 				{
 					bShouldApplyToUnit = true;
 				}
@@ -1446,6 +1447,7 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 			if (EntityManager->IsEntityValid(UnitHandle))
 			{
 				EntityManager->AddTagToEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
+				//EntityManager->Defer().AddTag<FMassTransportProcessorActiveTag>(UnitHandle);
 				bAnyUnitTagged = true;
 			}
 		}
@@ -1456,7 +1458,7 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 		const FMassEntityHandle TransporterHandle = Transporter->MassActorBindingComponent->GetMassEntityHandle();
 		if (EntityManager->IsEntityValid(TransporterHandle))
 		{
-			EntityManager->AddTagToEntity(TransporterHandle, FMassTransportProcessorActiveTag::StaticStruct());
+			EntityManager->Defer().AddTag<FMassTransportProcessorActiveTag>(TransporterHandle);
 			if (FMassTransportFragment* TransportFrag = EntityManager->GetFragmentDataPtr<FMassTransportFragment>(TransporterHandle))
 			{
 				TransportFrag->DeactivationTimer = 0.f;
@@ -3039,37 +3041,12 @@ void ACustomControllerBase::HandleAttackMovePressed()
 
 void ACustomControllerBase::ShowFriendlyHealthbars()
 {
-	TArray<AUnitBase*> UnitsToShow;
-	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	if (UWorld* World = GetWorld())
 	{
-		AUnitBase* Unit = *It;
-		if (Unit && Unit->TeamId == SelectableTeamId && Unit->IsOnViewport)
-		{
-			if (Unit->Attributes && (Unit->Attributes->GetHealth() < Unit->Attributes->GetMaxHealth() || 
-				Unit->Attributes->GetShield() < Unit->Attributes->GetMaxShield()))
-			{
-				UnitsToShow.Add(Unit);
-			}
-		}
-	}
-	if (UnitsToShow.Num() > 0)
-	{
-		Server_ShowFriendlyHealthbars(UnitsToShow);
+		LastHealthBarPingTime = World->GetTimeSeconds();
 	}
 }
 
-void ACustomControllerBase::Server_ShowFriendlyHealthbars_Implementation(const TArray<AUnitBase*>& Units)
-{
-	for (AUnitBase* Unit : Units)
-	{
-		if (Unit)
-		{
-			Unit->OpenHealthWidget = true;
-			Unit->bShowLevelOnly = false;
-			GetWorld()->GetTimerManager().SetTimer(Unit->HealthWidgetTimerHandle, Unit, &ALevelUnit::HideHealthWidget, Unit->HealthWidgetDisplayDuration, false);
-		}
-	}
-}
 
 void ACustomControllerBase::Client_InitializeMainHUD_Implementation()
 {

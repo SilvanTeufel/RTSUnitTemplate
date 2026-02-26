@@ -36,6 +36,14 @@ private:
 	float TimeSinceLastRun = 0.0f;
 	float ExecutionInterval = 0.05f; 
 
+	// Default fallback visible time if a unit does not provide one
+	UPROPERTY(EditAnywhere, Category="RTS|Visibility")
+	float DefaultHealthbarVisibleTime = 3.0f;
+
+	// Minimum positive health/shield change to trigger a healthbar popup
+	UPROPERTY(EditAnywhere, Category="RTS|Visibility")
+	float PositiveChangeThreshold = 100.0f;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 

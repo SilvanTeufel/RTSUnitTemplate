@@ -158,7 +158,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 			if (OldHealth + DamageAmount <= GetMaxHealth())
 			{
-				UnitBase->HealthbarCollapseCheck(OldHealth + DamageAmount , OldHealth);
+				UnitBase->UpdateEntityHealth(OldHealth + DamageAmount);
 			}
 			
 			UnitBase->UpdateWidget();
@@ -172,7 +172,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			
 			if (OldShield + ShieldAmount <= GetMaxShield())
 			{
-				UnitBase->ShieldCollapseCheck(OldShield + ShieldAmount, OldShield);
+				UnitBase->UpdateEntityHealth(GetHealth());
 				SpawnIndicator(ShieldAmount, FLinearColor::Blue, FLinearColor::White, 0.7f);
 			}
 			SetAttributeShield(OldShield + ShieldAmount);

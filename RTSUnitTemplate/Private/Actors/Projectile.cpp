@@ -352,6 +352,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, MovementSpeed);
 	DOREPLIFETIME(AProjectile, DestructionDelayTime);
 	DOREPLIFETIME(AProjectile, RotateMesh);
+	DOREPLIFETIME(AProjectile, DisableAnyRotation);
 	DOREPLIFETIME(AProjectile, RotationSpeed);
 	DOREPLIFETIME(AProjectile, TargetLocation);
 	DOREPLIFETIME(AProjectile, ShooterLocation);
@@ -467,7 +468,7 @@ void AProjectile::Tick(float DeltaTime)
 	CheckViewport();
 	LifeTime += DeltaTime;
 	
-	if(RotateMesh)
+	if(RotateMesh && !DisableAnyRotation)
 	{
 		// 1. Get the current transform of the instance. It already includes this frame's movement.
 		FTransform CurrentTransform;
@@ -639,7 +640,7 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     NewTransform.AddToTranslation(FrameMovement);
     
     // Fix: Face movement direction and apply rotation offset
-    if (!FlightDirection.IsNearlyZero())
+    if (!DisableAnyRotation && !FlightDirection.IsNearlyZero())
     {
         const FQuat FinalQuat = FlightDirection.Rotation().Quaternion() * RotationOffset.Quaternion();
         NewTransform.SetRotation(FinalQuat);
@@ -732,7 +733,7 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
     NewTransform.AddToTranslation(FrameMovement);
     
     // Fix: Face movement direction and apply rotation offset
-    if (!FlightDirection.IsNearlyZero())
+    if (!DisableAnyRotation && !FlightDirection.IsNearlyZero())
     {
         const FQuat FinalQuat = FlightDirection.Rotation().Quaternion() * RotationOffset.Quaternion();
         NewTransform.SetRotation(FinalQuat);
@@ -918,7 +919,7 @@ void AProjectile::FlyInArc(float DeltaTime)
         }
 
         FVector Direction = CombinedDirection.GetSafeNormal();
-        if (!Direction.IsNearlyZero())
+        if (!DisableAnyRotation && !Direction.IsNearlyZero())
         {
             const FQuat FinalQuat = Direction.Rotation().Quaternion() * RotationOffset.Quaternion();
             NewTransform.SetRotation(FinalQuat);

@@ -1853,7 +1853,6 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     if (UnitBase)
                     {
                     	if (UnitBase->HasAuthority() && UnitBase->NavObstacleProxy) UnitBase->Multicast_UnregisterObstacle();
-                    	UnitBase->HideHealthWidget(); // Aus deinem Code
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
                     	UnitBase->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);

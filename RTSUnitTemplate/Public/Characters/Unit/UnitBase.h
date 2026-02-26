@@ -251,12 +251,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
 	bool IsSquadHealthbarOwner() const;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void HealthbarCollapseCheck(float NewHealth, float OldHealth);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ShieldCollapseCheck(float NewShield, float OldShield);
-
 	void OnAttributeChanged(const struct FOnAttributeChangeData& Data);
 ///////////////////////////////////////////////////////////////////
 

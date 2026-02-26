@@ -146,8 +146,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopGameplayEffectTagToEntity();
 	
-	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool RemoveTagFromEntity(UScriptStruct* TagToRemove);
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SwitchEntityTag(UScriptStruct* TagToAdd);
@@ -178,6 +176,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool UpdateEntityHealth(float NewHealth);
+	
+	virtual bool UpdateLevelUpTimestamp() override;
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool SyncTranslation();

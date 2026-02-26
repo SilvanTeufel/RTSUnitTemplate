@@ -14,15 +14,15 @@ void ALevelUnit::Tick(float DeltaTime)
 
 	if(RegenerationTimer >= RegenerationDelayTime)
 	{
+		RegenerationTimer = 0.f; // Always reset timer to prevent spam
 
-		if(Attributes->GetHealth() > 0)
+		// ONLY regenerate on the server
+		if(HasAuthority() && Attributes->GetHealth() > 0)
 		{
 			Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 			Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
 		
-		//RegenerationTimer = 0.f;
-
-		if(AutoLeveling && HasAuthority()) AutoLevelUp();
+			if(AutoLeveling) AutoLevelUp();
 		}
 		//UE_LOG(LogTemp, Log, TEXT("ALevelUnit LevelData.CharacterLevel: %d"), LevelData.CharacterLevel);
 	}
@@ -48,24 +48,12 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
-	DOREPLIFETIME(ALevelUnit, OpenHealthWidget);
-	DOREPLIFETIME(ALevelUnit, bShowLevelOnly);
 }
 
-void ALevelUnit::HideHealthWidget()
-{
-	OpenHealthWidget = false;
-	bShowLevelOnly = false;
-}
 
 void ALevelUnit::LevelVisibilityCheck()
 {
-	if (GetWorld())
-	{
-		OpenHealthWidget = true;
-		bShowLevelOnly = true;
-		GetWorld()->GetTimerManager().SetTimer(HealthWidgetTimerHandle, this, &ALevelUnit::HideHealthWidget, HealthWidgetDisplayDuration, false);
-	}
+	UpdateLevelUpTimestamp();
 }
 
 void ALevelUnit::SetUnitIndex(int32 NewIndex)

@@ -143,21 +143,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	bool OpenHealthWidget = false;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Leveling")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	bool bShowLevelOnly = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
-	FTimerHandle HealthWidgetTimerHandle;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
-	float HealthWidgetDisplayDuration = 5.0f;
-
-	UFUNCTION(BlueprintCallable, Category = "Leveling")
-	void HideHealthWidget();
+	float HealthWidgetDisplayDuration = 0.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void LevelVisibilityCheck();
+
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	virtual bool UpdateLevelUpTimestamp() { return false; }
 };

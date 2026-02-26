@@ -141,6 +141,9 @@ public:
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool RotateMesh = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool DisableAnyRotation = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	FVector RotationSpeed = FVector(0.5f);

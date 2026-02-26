@@ -256,8 +256,8 @@ public:
 
 	void ShowFriendlyHealthbars();
 
-	UFUNCTION(Server, Reliable)
-	void Server_ShowFriendlyHealthbars(const TArray<AUnitBase*>& Units);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float LastHealthBarPingTime = -100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<class UUserWidget>> MainHUDs;

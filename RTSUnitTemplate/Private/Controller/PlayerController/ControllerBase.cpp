@@ -109,7 +109,7 @@ void AControllerBase::DisplayUnitCount()
 	if (RTSGameMode)
 	{
 		int UnitCount = RTSGameMode->AllUnits.Num();
-		UE_LOG(LogTemp, Warning, TEXT("UnitCount: %d"), UnitCount);
+ 	//UE_LOG(LogTemp, Warning, TEXT("UnitCount: %d"), UnitCount);
 
 		        // Display the message on screen:
                 if (GEngine)

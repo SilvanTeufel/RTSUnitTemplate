@@ -56,6 +56,8 @@ void APerformanceUnit::UpdateWidgetPositions(const FVector& Location)
 			TimerWidgetComp->SetWorldLocation(Location + TimerWidgetRelativeOffset);
 		}
 	}
+	CheckHealthBarVisibility();
+	CheckTimerVisibility();
 }
 
 void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -268,6 +270,14 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 	const bool bFogAllows = (!EnableFog || IsVisibleEnemy || IsMyTeam);
 
 	const bool bShouldShow = IsOnViewport && (OpenHealthWidget || bShowLevelOnly) && bFogAllows;
+
+	/*
+	if (OpenHealthWidget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[PerformanceUnit] %s: bShouldShow=%d (Viewport=%d, OpenHealth=%d, LevelOnly=%d, FogAllows=%d)"), 
+			*GetName(), bShouldShow, IsOnViewport, OpenHealthWidget, bShowLevelOnly, bFogAllows);
+	}
+	*/
 
 	if (bShouldShow)
 	{

@@ -1,4 +1,4 @@
-﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -30,13 +30,13 @@ struct FEffectAreaTag : public FMassTag
 };
 
 // Position + movement are handled by built-in fragments like FMassMovementFragment, so no need to add here.
-// --- Kern-Zustände ---
+// --- Kern-Zustnde ---
 USTRUCT() struct FMassStateIdleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateChaseTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateAttackTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
+USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // Fr Pause nach Angriff
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
+USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (fr Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopSeparationTag : public FMassTag { GENERATED_BODY() };
@@ -47,10 +47,10 @@ USTRUCT() struct FMassStateDisableNavManipulationTag : public FMassTag { GENERAT
 // New tag to freeze only horizontal (X/Y) movement while allowing Z updates (e.g., landing)
 USTRUCT() struct FMassStateStopXYMovementTag : public FMassTag { GENERATED_BODY() };
 
-// --- Worker-Zustände ---
-USTRUCT() struct FMassStateGoToBaseTag : public FMassTag { GENERATED_BODY() }; // Für Pause nach Angriff
+// --- Worker-Zustnde ---
+USTRUCT() struct FMassStateGoToBaseTag : public FMassTag { GENERATED_BODY() }; // Fr Pause nach Angriff
 USTRUCT() struct FMassStateGoToBuildTag : public FMassTag { GENERATED_BODY() };
-USTRUCT() struct FMassStateGoToResourceExtractionTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (für Run/Patrol)
+USTRUCT() struct FMassStateGoToResourceExtractionTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (fr Run/Patrol)
 USTRUCT() struct FMassStateBuildTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateResourceExtractionTag : public FMassTag { GENERATED_BODY() };
 // Repair-specific worker states
@@ -58,12 +58,12 @@ USTRUCT() struct FMassStateGoToRepairTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRepairTag : public FMassTag { GENERATED_BODY() };
 
 
-// --- Patrouillen-Zustände ---
+// --- Patrouillen-Zustnde ---
 USTRUCT() struct FMassStatePatrolTag : public FMassTag { GENERATED_BODY() }; // Direkt zum WP
-USTRUCT() struct FMassStatePatrolRandomTag : public FMassTag { GENERATED_BODY() }; // Zufällig um WP
+USTRUCT() struct FMassStatePatrolRandomTag : public FMassTag { GENERATED_BODY() }; // Zufllig um WP
 USTRUCT() struct FMassStatePatrolIdleTag : public FMassTag { GENERATED_BODY() }; // Idle bei Zufalls-Patrouille
 
-// --- Andere Zustände ---
+// --- Andere Zustnde ---
 USTRUCT() struct FMassStateEvasionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateCastingTag : public FMassTag { GENERATED_BODY() };
@@ -296,7 +296,7 @@ struct FMassAIStateFragment : public FMassFragment
 {
     GENERATED_BODY()
 	
-    /** Timer, der für Aktionen innerhalb des aktuellen Zustands verwendet wird (z.B. Attack-Cooldown, Pause-Dauer, Zeit im Idle-Zustand). Wird bei Zustandswechsel zurückgesetzt. */
+    /** Timer, der fr Aktionen innerhalb des aktuellen Zustands verwendet wird (z.B. Attack-Cooldown, Pause-Dauer, Zeit im Idle-Zustand). Wird bei Zustandswechsel zurckgesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     float StateTimer = 0.f;
 
@@ -380,6 +380,31 @@ struct FMassVisibilityFragment : public FMassFragment
 	UPROPERTY()
 	float VisibilityOffset = 150.f;
 
+	UPROPERTY()
+	float LastHealthChangeTime = -100.f;
+
+	UPROPERTY()
+	float LastLevelUpTime = -100.f;
+
+	UPROPERTY()
+	float LastHealth = -1.f;
+
+	UPROPERTY()
+	float LastShield = -1.f;
+
+	// Per-unit health widget telemetry
+	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
+	float HealthWidgetLastOpenToggleTime = -100.f;
+
+	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
+	float HealthWidgetOpenAccumulated = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)
+	float HealthWidgetCurrentOpenTime = 0.f;
+
+	UPROPERTY()
+	bool bHealthWidgetWasOpen = false;
+
 	// Optimization flags to avoid redundant calls to Actor
 	bool bLastIsMyTeam = false;
 	bool bLastIsOnViewport = false;
@@ -398,15 +423,15 @@ struct FMassAITargetFragment : public FMassFragment
 {
     GENERATED_BODY()
 
-    /** Das aktuelle Ziel-Entity. Kann ungültig sein (TargetEntity.IsSet() == false). */
+    /** Das aktuelle Ziel-Entity. Kann ungltig sein (TargetEntity.IsSet() == false). */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     FMassEntityHandle TargetEntity;
 
-    /** Die letzte bekannte Position des Ziels. Nützlich, wenn das Ziel aus der Sichtweite gerät. */
+    /** Die letzte bekannte Position des Ziels. Ntzlich, wenn das Ziel aus der Sichtweite gert. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     FVector LastKnownLocation = FVector::ZeroVector;
 
-    /** Gibt an, ob aktuell ein gültiges Ziel verfolgt/angevisiert wird. Wird von einem TargetAcquisitionProcessor gesetzt. */
+    /** Gibt an, ob aktuell ein gltiges Ziel verfolgt/angevisiert wird. Wird von einem TargetAcquisitionProcessor gesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasValidTarget = false;
 
@@ -418,7 +443,7 @@ struct FMassAITargetFragment : public FMassFragment
 	/** The set of entities this detector currently believes it can see. */
 	TSet<FMassEntityHandle> PreviouslySeen;
 
-	/** The set we’ll build fresh each tick. */
+	/** The set well build fresh each tick. */
 	TSet<FMassEntityHandle> CurrentlySeen;
 	
 	UPROPERTY(VisibleAnywhere, Category = "AI|Ability", Transient)
@@ -483,7 +508,7 @@ struct FMassCombatStatsFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	int32 SquadId = 0;
-    // --- Zusätzliche Attribute (Beispiele basierend auf deinem Code) ---
+    // --- Zustzliche Attribute (Beispiele basierend auf deinem Code) ---
     UPROPERTY(EditAnywhere, Category = "Stats")
     float Armor = 0.f;
 
@@ -496,7 +521,7 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     float MaxShield = 0.f; // Maximaler Schildwert
 
-    /** Sichtweite für die Zielerfassung. */
+    /** Sichtweite fr die Zielerfassung. */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float SightRadius = 2000.f;
 
@@ -504,7 +529,7 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     float LoseSightRadius = 2500.f;
 
-    /** Dauer der Pause zwischen Angriffen (könnte auch aus AttackSpeed berechnet werden). */
+    /** Dauer der Pause zwischen Angriffen (knnte auch aus AttackSpeed berechnet werden). */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float PauseDuration = 0.5f;
 
@@ -603,7 +628,7 @@ struct FMassPatrolFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "AI|Patrol")
     bool bLoopPatrol = true;
 
-    /** Soll zufällig im Radius um den Wegpunkt patrouilliert werden? (ersetzt PatrolCloseToWaypoint) */
+    /** Soll zufllig im Radius um den Wegpunkt patrouilliert werden? (ersetzt PatrolCloseToWaypoint) */
     UPROPERTY(EditAnywhere, Category = "AI|Patrol")
     bool bPatrolRandomAroundWaypoint = false;
 
@@ -612,14 +637,14 @@ struct FMassPatrolFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "AI|Patrol")
 	float SetUnitsBackToPatrolTime = 3.f;
-    /** Radius für zufällige Patrouille um den Wegpunkt. */
+    /** Radius fr zufllige Patrouille um den Wegpunkt. */
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolRadius = 500.f;
 
 	UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
 	float IdleChance = 70.f;
 	
-    /** Minimale/Maximale Idle-Zeit bei zufälliger Patrouille. */
+    /** Minimale/Maximale Idle-Zeit bei zuflliger Patrouille. */
     UPROPERTY(EditAnywhere, Category = "AI|Patrol", meta=(EditCondition="bPatrolRandomAroundWaypoint"))
     float RandomPatrolMinIdleTime = 2.0f;
 	
@@ -627,7 +652,7 @@ struct FMassPatrolFragment : public FMassFragment
     float RandomPatrolMaxIdleTime = 5.0f;
 
 	
-    // Hier könnte auch eine Referenz auf eine FMassEntityHandle Liste mit Waypoint-Entities stehen
+    // Hier knnte auch eine Referenz auf eine FMassEntityHandle Liste mit Waypoint-Entities stehen
     // oder eine TArray<FVector> mit Positionen, je nachdem wie du Waypoints verwaltest.
 };
 
@@ -683,8 +708,8 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 	MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
 	MoveTarget.Center = TargetLocation;
 	MoveTarget.DesiredSpeed.Set(Speed);
-	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
-	//MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
+	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewnscht ist)
+	//MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius fr Bewegung (ggf. anpassen)
 
 	//UE_LOG(LogTemp, Log, TEXT("MoveTarget.Center: %s"), *MoveTarget.Center.ToString());
 	FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
@@ -694,17 +719,17 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 
 inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 {
-	// Sicherheitscheck für World Pointer
+	// Sicherheitscheck fr World Pointer
 	if (!World)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
 		return;
 	}
 
-	// Modifiziere das übergebene Fragment direkt
+	// Modifiziere das bergebene Fragment direkt
 	MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
 	MoveTarget.DesiredSpeed.Set(0.f);
-	// Andere Felder wie Center, SlackRadius etc. bleiben unverändert, sind aber für Stand egal.
+	// Andere Felder wie Center, SlackRadius etc. bleiben unverndert, sind aber fr Stand egal.
 }
 
 inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
@@ -725,7 +750,7 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 
 	while (!bSuccess && Attempts < MaxAttempts)
 	{
-		// Finde zufälligen Punkt im Radius um den Basis-Wegpunkt
+		// Finde zuflligen Punkt im Radius um den Basis-Wegpunkt
 		bSuccess = NavSys->GetRandomReachablePointInRadius(BaseWaypointLocation, PatrolFrag.RandomPatrolRadius, RandomPoint);
 		Attempts++;
 	}

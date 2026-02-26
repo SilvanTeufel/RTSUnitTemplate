@@ -350,37 +350,6 @@ bool AMassUnitBase::AddStopGameplayEffectTagToEntity()
 	return true;
 }
 
-bool AMassUnitBase::RemoveTagFromEntity(UScriptStruct* TagToRemove)
-{
-    if (!TagToRemove || !TagToRemove->IsChildOf(FMassTag::StaticStruct()))
-    {
-        UE_LOG(LogTemp, Error, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Invalid Tag ScriptStruct provided."), *GetName());
-        return false;
-    }
-
-    FMassEntityManager* EntityManager;
-    FMassEntityHandle EntityHandle;
-
-    if (!GetMassEntityData(EntityManager, EntityHandle))
-    {
-        // Error already logged in GetMassEntityData
-        return false;
-    }
-
-    // Check if entity is still valid
-    if (!EntityManager->IsEntityValid(EntityHandle))
-    {
-         UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
-         return false;
-    }
-
-    // Remove the tag
-    EntityManager->RemoveTagFromEntity(EntityHandle, TagToRemove);
-    //UE_LOG(LogTemp, Verbose, TEXT("ASpawnerUnit (%s): Attempted to remove tag '%s' from entity %s."), *GetName(), *TagToRemove->GetName(), *EntityHandle.DebugGetDescription());
-
-    // Like AddTag, RemoveTag doesn't return status. Assume success if code reached here.
-    return true;
-}
 
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
@@ -784,7 +753,6 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 
 bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
 {
-
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 	
@@ -795,21 +763,75 @@ bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
 
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
 	
-	
-	// Reset state timers
 	FMassCombatStatsFragment* CombatStats = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
+	FMassVisibilityFragment* Vis = EntityManager->GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle);
 	
 	if (!CombatStats) return false;
 	
-	CombatStats->Health = NewHealth;
+	if (Attributes)
+	{
+		const float CurrentShield = Attributes->GetShield();
+		
+		// If we have a visibility fragment, handle logic-driven popups here (signal-driven)
+		if (Vis)
+		{
+			// Only trigger if not the very first sync
+			if (Vis->LastHealth >= 0.f)
+			{
+				// Significant changes trigger the healthbar popup timer
+				// Use same logic as previous processor: negative delta > 1.0 or positive delta > 10.0
+				const bool bDamageTrigger = (NewHealth < Vis->LastHealth - 1.0f) || (CurrentShield < Vis->LastShield - 1.0f);
+				const bool bHealTrigger = (NewHealth > Vis->LastHealth + 10.0f) || (CurrentShield > Vis->LastShield + 10.0f);
+
+				if (bDamageTrigger || bHealTrigger)
+				{
+					Vis->LastHealthChangeTime = GetWorld()->GetTimeSeconds();
+				}
+			}
+			Vis->LastHealth = NewHealth;
+			Vis->LastShield = CurrentShield;
+		}
+
+		CombatStats->Health = NewHealth;
+		CombatStats->MaxHealth = Attributes->GetMaxHealth();
+		CombatStats->MaxShield = Attributes->GetMaxShield();
+		CombatStats->Shield = CurrentShield;
+	}
 
 	if (CombatStats->Health <= 0.f)
 	{
 		SwitchEntityTag(FMassStateDeadTag::StaticStruct());
+	}
+
+	return true;
+}
+
+
+bool AMassUnitBase::UpdateLevelUpTimestamp()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		return false;
+	}
+
+	FMassVisibilityFragment* Vis = EntityManager->GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle);
+
+	if (!Vis) return false;
+
+	if (UWorld* World = GetWorld())
+	{
+		Vis->LastLevelUpTime = World->GetTimeSeconds();
 	}
 
 	return true;
