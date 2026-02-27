@@ -412,17 +412,6 @@ protected:
 	FTimerHandle ISMInstanceRotateTimerHandle;
 	TMap<FISMInstanceKey, FStaticMeshRotateTween> ActiveISMInstanceTweens;
 
-	// Continuous yaw-follow state for the unit itself
-	FYawFollowData UnitYawFollowData;
-	bool bUnitYawFollowEnabled = false;
-	FTimerHandle UnitYawFollowTimerHandle;
-	void UnitYawFollow_Step();
-
-	// Smooth rotation tween for the unit itself
-	FStaticMeshRotateTween UnitRotateTween;
-	FTimerHandle UnitRotateTimerHandle;
-	void UnitRotation_Step();
-
 	// Lightweight tween state for moving arbitrary static mesh components
 	struct FStaticMeshMoveTween
 	{

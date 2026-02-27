@@ -1,5 +1,6 @@
 // Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/ActorTransformSyncProcessor.h"
+#include "Mass/UnitMassTag.h"
 
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
@@ -632,10 +633,21 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());;
 
-         
-            if (bIsDead)
+            const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
+
+            static int32 SyncLogCounter = 0;
+            const bool bShouldLogSync = (SyncLogCounter++ % 1000 == 0);
+
+            if (bIsYawFollowing && bShouldLogSync)
+            {
+                UE_LOG(LogTemp, Error, TEXT("UActorTransformSyncProcessor (Client): %s is YawFollowing. Fragment Rot: %s, Actor Rot: %s"), 
+                    *UnitBase->GetName(), *MassTransform.GetRotation().Rotator().ToString(), *UnitBase->GetActorRotation().ToString());
+            }
+
+            if (bIsDead || bIsYawFollowing)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
+                // Or if UUnitYawFollowProcessor is handling it.
             }
             else if (TargetList[i].bRotateTowardsAbility)
             {
@@ -791,10 +803,22 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             // 1. Adjust rotation based on state (moving vs. attacking)
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
-     
-            if (bIsDead)
+
+            const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
+
+            static int32 SyncLogCounterSrv = 0;
+            const bool bShouldLogSyncSrv = (SyncLogCounterSrv++ % 1000 == 0);
+
+            if (bIsYawFollowing && bShouldLogSyncSrv)
+            {
+                UE_LOG(LogTemp, Error, TEXT("UActorTransformSyncProcessor (Server): %s is YawFollowing. Fragment Rot: %s, Actor Rot: %s"), 
+                    *UnitBase->GetName(), *MassTransform.GetRotation().Rotator().ToString(), *UnitBase->GetActorRotation().ToString());
+            }
+
+            if (bIsDead || bIsYawFollowing)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
+                // Or if UUnitYawFollowProcessor is handling it.
             }
             else if (TargetList[i].bRotateTowardsAbility)
             {

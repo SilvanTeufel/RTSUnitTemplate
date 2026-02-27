@@ -433,6 +433,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassAgentCharacteristicsFragment::StaticStruct(),
     	FMassChargeTimerFragment::StaticStruct(),
 		FMassVisibilityFragment::StaticStruct(),
+		FMassUnitYawFollowFragment::StaticStruct(),
 
 		FMassWorkerStatsFragment::StaticStruct(),
 

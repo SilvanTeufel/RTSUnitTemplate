@@ -14,6 +14,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "EngineUtils.h"
 #include "Components/SceneComponent.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "GameplayTagContainer.h"
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
@@ -503,7 +504,7 @@ void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* 
 			int32 Col = i % GridSize;     // Column index
 
 			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-			FVector RunLocation = Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
+			FVector RunLocation = Cast<ABuildingBase>(ExtendedController->SelectedUnits[i]) ? (FVector)Hit.Location : (FVector)Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
 		    bool HitNavModifier;
             RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
 		    if (HitNavModifier) continue;
@@ -586,7 +587,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
                 int32 Row = i / GridSize;     // Row index
                 int32 Col = i % GridSize;     // Column index
 
-                FVector RunLocation = HitResult.Location + CustomControllerBase->CalculateGridOffset(Row, Col);
+                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResult.Location : (FVector)HitResult.Location + CustomControllerBase->CalculateGridOffset(Row, Col);
                 bool HitNavModifier;
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;

@@ -1613,7 +1613,7 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 		AUnitBase* U = UnitsToProcess[i];
 		if (U == nullptr || U == CameraUnitWithTag) continue;
 
-		FVector RunLocation = AdjustedLocation + Offsets[i];
+		FVector RunLocation = Cast<ABuildingBase>(U) ? GroundLocation : AdjustedLocation + Offsets[i];
 
 		bool bNavMod;
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
@@ -2210,8 +2210,17 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     	if (UnitIsValid)
     	{
-    		FVector Off = UnitFormationOffsets.FindRef(U);
-    		Finals.Add(U, AdjustedLocation + Off);
+    		FVector FinalLoc;
+    		if (Cast<ABuildingBase>(U))
+    		{
+    			FinalLoc = Hit.Location;
+    		}
+    		else
+    		{
+    			FVector Off = UnitFormationOffsets.FindRef(U);
+    			FinalLoc = AdjustedLocation + Off;
+    		}
+    		Finals.Add(U, FinalLoc);
     	}
     }
 
@@ -2980,7 +2989,7 @@ void ACustomControllerBase::HandleAttackMovePressed()
         if (U == nullptr || U == CameraUnitWithTag) continue;
         
         // apply the same slot-by-index approach
-        FVector RunLocation = AdjustedLocation + Offsets[i];
+        FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)Hit.Location : AdjustedLocation + Offsets[i];
 
         bool bNavMod;
         RunLocation = TraceRunLocation(RunLocation, bNavMod);

@@ -2134,115 +2134,30 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 
 void AMassUnitBase::MulticastRotateUnitYawToChase_Implementation(float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees)
 {
-	bUnitYawFollowEnabled = bEnable;
-
-	if (bUnitYawFollowEnabled)
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
 	{
-		// Disable continuous constant rotation if it was active
-		bContinuousUnitRotationEnabled = false;
-		GetWorldTimerManager().ClearTimer(ContinuousUnitRotationTimerHandle);
-
-		UnitYawFollowData.Duration = InRotateDuration;
-		UnitYawFollowData.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
-		UnitYawFollowData.OffsetDegrees = YawOffsetDegrees;
-
-		// Start/update the follow timer
-		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-
-		// Kick immediate step then ensure looping
-		UnitYawFollow_Step();
-		if (!GetWorldTimerManager().IsTimerActive(UnitYawFollowTimerHandle))
+		if (bEnable)
 		{
-			GetWorldTimerManager().SetTimer(UnitYawFollowTimerHandle, this, &AMassUnitBase::UnitYawFollow_Step, TimerRate, true);
+			// Enable the processor via Tag
+			EntityManager->Defer().AddTag<FMassUnitYawFollowTag>(EntityHandle);
+			
+			// Provide the rotation parameters to the fragment
+			if (FMassUnitYawFollowFragment* FollowFrag = EntityManager->GetFragmentDataPtr<FMassUnitYawFollowFragment>(EntityHandle))
+			{
+				FollowFrag->Duration = FMath::Max(InRotateDuration, 0.001f);
+				FollowFrag->EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+				FollowFrag->OffsetDegrees = YawOffsetDegrees;
+			}
 		}
-	}
-	else
-	{
-		GetWorldTimerManager().ClearTimer(UnitYawFollowTimerHandle);
-		GetWorldTimerManager().ClearTimer(UnitRotateTimerHandle);
-	}
-}
-
-void AMassUnitBase::UnitYawFollow_Step()
-{
-	if (!bUnitYawFollowEnabled)
-	{
-		GetWorldTimerManager().ClearTimer(UnitYawFollowTimerHandle);
-		return;
-	}
-
-	AUnitBase* ThisUnit = Cast<AUnitBase>(this);
-	AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-	float DesiredWorldYaw = UnitYawFollowData.OffsetDegrees;
-
-	if (IsValid(TargetUnit))
-	{
-		const FVector UnitWorldLoc = GetActorLocation();
-		FVector TargetLoc = TargetUnit->GetActorLocation();
-
-		// 2D direction on the XY plane
-		FVector ToTarget = TargetLoc - UnitWorldLoc;
-		ToTarget.Z = 0.f;
-		if (ToTarget.IsNearlyZero(1e-3f))
+		else
 		{
-			return;
-		}
-
-		const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-		DesiredWorldYaw = FacingRot.Yaw + UnitYawFollowData.OffsetDegrees;
-	}
-
-	DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
-
-	FRotator NewRotation = GetActorRotation();
-	NewRotation.Yaw = DesiredWorldYaw;
-
-	// Drive/refresh the tween toward the newly computed yaw-only rotation
-	UnitRotateTween.Duration = UnitYawFollowData.Duration;
-	UnitRotateTween.EaseExp = FMath::Max(UnitYawFollowData.EaseExp, 0.001f);
-	UnitRotateTween.Elapsed = 0.f;
-	UnitRotateTween.Start = GetActorRotation().Quaternion().GetNormalized();
-	UnitRotateTween.Target = NewRotation.Quaternion().GetNormalized();
-	if ((UnitRotateTween.Start | UnitRotateTween.Target) < 0.f)
-	{
-		UnitRotateTween.Target = (-UnitRotateTween.Target);
-	}
-
-	// Ensure rotation tween timer is running
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float RotateTimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-	
-	UnitRotation_Step();
-	if (!GetWorldTimerManager().IsTimerActive(UnitRotateTimerHandle))
-	{
-		GetWorldTimerManager().SetTimer(UnitRotateTimerHandle, this, &AMassUnitBase::UnitRotation_Step, RotateTimerRate, true);
-	}
-}
-
-void AMassUnitBase::UnitRotation_Step()
-{
-	const float DeltaTime = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	UnitRotateTween.Elapsed += DeltaTime;
-
-	float Alpha = 1.0f;
-	if (UnitRotateTween.Duration > 0.f)
-	{
-		Alpha = FMath::Clamp(UnitRotateTween.Elapsed / UnitRotateTween.Duration, 0.f, 1.f);
-		if (UnitRotateTween.EaseExp != 1.0f)
-		{
-			Alpha = FMath::Pow(Alpha, UnitRotateTween.EaseExp);
+			// Disable the processor
+			EntityManager->Defer().RemoveTag<FMassUnitYawFollowTag>(EntityHandle);
 		}
 	}
 
-	FQuat CurrentQuat = FQuat::Slerp(UnitRotateTween.Start, UnitRotateTween.Target, Alpha);
-	SetActorRotation(CurrentQuat.Rotator());
-	SyncRotation();
-
-	if (Alpha >= 1.0f)
-	{
-		GetWorldTimerManager().ClearTimer(UnitRotateTimerHandle);
-	}
 }
 
 void AMassUnitBase::MulticastContinuousUnitRotation_Implementation(float YawRate, bool bEnable)
@@ -2253,9 +2168,12 @@ void AMassUnitBase::MulticastContinuousUnitRotation_Implementation(float YawRate
 	if (bContinuousUnitRotationEnabled)
 	{
 		// Disable unit-to-chase yaw follow if it was active
-		bUnitYawFollowEnabled = false;
-		GetWorldTimerManager().ClearTimer(UnitYawFollowTimerHandle);
-		GetWorldTimerManager().ClearTimer(UnitRotateTimerHandle);
+		FMassEntityManager* EntityManager;
+		FMassEntityHandle EntityHandle;
+		if (GetMassEntityData(EntityManager, EntityHandle))
+		{
+			EntityManager->Defer().RemoveTag<FMassUnitYawFollowTag>(EntityHandle);
+		}
 
 		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
 		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);

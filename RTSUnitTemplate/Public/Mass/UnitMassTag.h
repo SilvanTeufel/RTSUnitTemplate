@@ -83,6 +83,25 @@ USTRUCT() struct FMassStopUnitDetectionTag : public FMassTag { GENERATED_BODY() 
 USTRUCT() struct FMassDisableAvoidanceTag : public FMassTag { GENERATED_BODY() };
 
 USTRUCT() struct FMassIsEffectAreaTag : public FMassTag { GENERATED_BODY() };
+
+// Tag to enable the custom chase rotation processor
+USTRUCT()
+struct FMassUnitYawFollowTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+// Fragment to store the smoothing parameters
+USTRUCT()
+struct FMassUnitYawFollowFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	float Duration = 0.25f;
+	float EaseExp = 1.0f;
+	float OffsetDegrees = 0.0f;
+};
+
 // Client-side prediction fragment to carry desired speed and acceptance radius without touching authoritative MoveTarget
 USTRUCT()
 struct FMassClientPredictionFragment : public FMassFragment
