@@ -634,15 +634,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());;
 
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
-
-            static int32 SyncLogCounter = 0;
-            const bool bShouldLogSync = (SyncLogCounter++ % 1000 == 0);
-
-            if (bIsYawFollowing && bShouldLogSync)
-            {
-                UE_LOG(LogTemp, Error, TEXT("UActorTransformSyncProcessor (Client): %s is YawFollowing. Fragment Rot: %s, Actor Rot: %s"), 
-                    *UnitBase->GetName(), *MassTransform.GetRotation().Rotator().ToString(), *UnitBase->GetActorRotation().ToString());
-            }
+            
 
             if (bIsDead || bIsYawFollowing)
             {
@@ -805,16 +797,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
 
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
-
-            static int32 SyncLogCounterSrv = 0;
-            const bool bShouldLogSyncSrv = (SyncLogCounterSrv++ % 1000 == 0);
-
-            if (bIsYawFollowing && bShouldLogSyncSrv)
-            {
-                UE_LOG(LogTemp, Error, TEXT("UActorTransformSyncProcessor (Server): %s is YawFollowing. Fragment Rot: %s, Actor Rot: %s"), 
-                    *UnitBase->GetName(), *MassTransform.GetRotation().Rotator().ToString(), *UnitBase->GetActorRotation().ToString());
-            }
-
+            
             if (bIsDead || bIsYawFollowing)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)

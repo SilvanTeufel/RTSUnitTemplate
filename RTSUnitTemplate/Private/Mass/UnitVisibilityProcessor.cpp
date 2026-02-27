@@ -141,7 +141,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			if (bHealthDifferent || bShieldDifferent)
 			{
-				if (!Unit || World->GetNetMode() == NM_Client) // Only handle logic for non-Units here (e.g. EffectAreas) or on Client where GAS signals might be missing
+				if (!Unit) // Only handle logic for non-Units here (e.g. EffectAreas). Units handle this via signal-driven UpdateEntityHealth.
 				{
 					// Only trigger recent damage popup if it's not the very first initialization
 					if (Vis.LastHealth >= 0.f)
@@ -157,7 +157,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Vis.LastHealth = Stats.Health;
 					Vis.LastShield = Stats.Shield;
 				}
-				// For Units on Server, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
+				// For Units, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
 				// UpdateEntityHealth will handle syncing them when the GAS signal arrives.
 			}
 
