@@ -141,7 +141,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			if (bHealthDifferent || bShieldDifferent)
 			{
-				if (!Unit) // Only handle logic for non-Units here (e.g. EffectAreas)
+				if (!Unit || World->GetNetMode() == NM_Client) // Only handle logic for non-Units here (e.g. EffectAreas) or on Client where GAS signals might be missing
 				{
 					// Only trigger recent damage popup if it's not the very first initialization
 					if (Vis.LastHealth >= 0.f)
@@ -157,7 +157,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Vis.LastHealth = Stats.Health;
 					Vis.LastShield = Stats.Shield;
 				}
-				// For Units, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
+				// For Units on Server, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
 				// UpdateEntityHealth will handle syncing them when the GAS signal arrives.
 			}
 
@@ -273,7 +273,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				const bool bRecentlyDamaged = (CurrentTime - Vis.LastHealthChangeTime) < VisibleDuration;
 				const bool bRecentlyLeveled = (CurrentTime - Vis.LastLevelUpTime) < VisibleDuration;
 				const bool bRecentPing = CustomPC && (CurrentTime - CustomPC->LastHealthBarPingTime) < VisibleDuration;
-				const bool bNotFull = (Stats.Health > 0.5f) && ((Stats.Health < Stats.MaxHealth - 1.0f) || (Stats.Shield < Stats.MaxShield - 1.0f));
+				const bool bNotFull = (Stats.Health > 0.f) && ((Stats.Health < Stats.MaxHealth - 1.0f) || (Stats.Shield < Stats.MaxShield - 1.0f));
 
 				const bool bShowDueToPing = bRecentPing && bNotFull && (Vis.bIsMyTeam || Vis.bIsVisibleEnemy);
 
@@ -283,9 +283,9 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 						*Actor->GetName(), bShowDueToPing, bRecentPing, bNotFull, Vis.bIsMyTeam, Vis.bIsVisibleEnemy, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
 				}
 
-				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration
-				Unit->OpenHealthWidget = bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing;
-				Unit->bShowLevelOnly = bRecentlyLeveled && !bRecentlyDamaged && !bShowDueToPing && !bIsConstruction;
+				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration or if health <= 0
+				Unit->OpenHealthWidget = (Stats.Health > 0.f) && (bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing);
+				Unit->bShowLevelOnly = (Stats.Health > 0.f) && (bRecentlyLeveled && !bShowDueToPing && !bIsConstruction);
 
 				if (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController()))
 				{

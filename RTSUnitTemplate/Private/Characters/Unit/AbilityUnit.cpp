@@ -60,18 +60,9 @@ void AAbilityUnit::PossessedBy(AController* NewController)
 
 void AAbilityUnit::LevelUp_Implementation()
 {
-	//Super::LevelUp_Implementation();
-
 	if(LevelData.CharacterLevel < LevelUpData.MaxCharacterLevel && LevelData.Experience > LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel)
 	{
-		LevelData.CharacterLevel++;
-		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
-		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
-		// Trigger any additional level-up effects or logic here
-
-		OnLevelUp(LevelData.CharacterLevel);
-		
-		LevelVisibilityCheck();
+		Super::LevelUp_Implementation();
 
 		if(HasAuthority())
 			AddAbilityPoint();

@@ -82,6 +82,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APerformanceUnit, StopVisibilityTick);
 	DOREPLIFETIME(APerformanceUnit, AbilityIndicatorVisibility);
 	DOREPLIFETIME(APerformanceUnit, bIsInvisible);
+	DOREPLIFETIME(APerformanceUnit, IsInitialized);
 
 	
 }
@@ -141,6 +142,12 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 
 void APerformanceUnit::VisibilityTickFog()
 {
+	if (!IsInitialized)
+	{
+		SetCharacterVisibility(false);
+		return;
+	}
+
 	if (IsMyTeam)
 	{
 		SetCharacterVisibility(IsOnViewport);
@@ -693,6 +700,12 @@ void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(AActor* Detect
 
 bool APerformanceUnit::ComputeLocalVisibility() const
 {
+	// If the unit is not initialized (e.g., it is loaded in a transport), it should always be invisible.
+	if (!IsInitialized)
+	{
+		return false;
+	}
+
 	if (bIsInvisible && !IsMyTeam)
 	{
 		return false;

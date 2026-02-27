@@ -193,7 +193,6 @@ void ATransportUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATransportUnit, CanBeTransported);
 	DOREPLIFETIME(ATransportUnit, MaxTransportUnits);
 	DOREPLIFETIME(ATransportUnit, LoadedUnits);
-	DOREPLIFETIME(ATransportUnit, IsInitialized);
 	DOREPLIFETIME(ATransportUnit, CanBeSelected);
 	DOREPLIFETIME(ATransportUnit, InstantLoadRange);
 	DOREPLIFETIME(ATransportUnit, RdyForTransport);

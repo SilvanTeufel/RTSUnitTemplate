@@ -51,6 +51,14 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 }
 
 
+void ALevelUnit::OnRep_LevelData(const FLevelData& OldLevelData)
+{
+	if (LevelData.CharacterLevel > OldLevelData.CharacterLevel)
+	{
+		LevelVisibilityCheck();
+	}
+}
+
 void ALevelUnit::LevelVisibilityCheck()
 {
 	UpdateLevelUpTimestamp();
@@ -73,6 +81,7 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
 		OnLevelUp(LevelData.CharacterLevel);
 		// Trigger any additional level-up effects or logic here
+		LevelVisibilityCheck();
 	}
 
 	//UE_LOG(LogTemp, Log, TEXT("After Level Up: Level %d, Experience %d"), LevelData.CharacterLevel, LevelData.Experience);

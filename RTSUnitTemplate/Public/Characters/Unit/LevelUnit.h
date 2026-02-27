@@ -36,8 +36,11 @@ public:
 	bool AutoLeveling = true;
 	// Properties to store the unit's level and talent points
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
+	UPROPERTY(ReplicatedUsing = OnRep_LevelData, EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	FLevelData LevelData;
+
+	UFUNCTION()
+	void OnRep_LevelData(const FLevelData& OldLevelData);
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void SetLevelData(

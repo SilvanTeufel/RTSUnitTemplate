@@ -21,8 +21,6 @@ class RTSUNITTEMPLATE_API ATransportUnit : public APathSeekerBase
 
 public:
 
-	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool IsInitialized = true;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanBeSelected = true;
