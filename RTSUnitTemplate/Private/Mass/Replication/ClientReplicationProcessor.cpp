@@ -586,7 +586,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									{
 											FMassEntityManager& EMgr = ES->GetMutableEntityManager();
 											const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+											const uint32 BitsBeforeSync = BuildReplicatedTagBits(EMgr, EH);
 											ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
+											const bool bStateChanged = (BitsBeforeSync != TagItem->TagBits);
 											// Apply AI target replication to FMassAITargetFragment regardless of transform source
     							if (AITargetList.IsValidIndex(EntityIdx))
     							{
@@ -710,7 +712,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 										const uint16 LocalID = MT.GetCurrentActionID();
 										if (IncomingID < LocalID)
 										{
-											bIsNewer = false;
+											// If the state bits changed, prioritize server's MoveTarget even with lower ActionID (re-sync)
+											if (bStateChanged)
+											{
+												bIsNewer = true;
+											}
+											else
+											{
+												bIsNewer = false;
+											}
 										}
 										else if (IncomingID == LocalID)
 										{
@@ -814,7 +824,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							{
 								FMassEntityManager& EMgr = ES->GetMutableEntityManager();
 								const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
+								const uint32 BitsBeforeSync2 = BuildReplicatedTagBits(EMgr, EH);
 								ApplyReplicatedTagBits(EMgr, EH, UseItem->TagBits);
+								const bool bStateChanged2 = (BitsBeforeSync2 != UseItem->TagBits);
 								// Apply AI target replication to FMassAITargetFragment
 								if (AITargetList.IsValidIndex(EntityIdx))
 								{
@@ -899,72 +911,80 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
-								// Apply MoveTarget if present (guarded by bStopMovementReplication)
-		           if (UseItem->Move_bHasTarget)
-	       {
-	           if (bStopMovementReplication)
-	           {
-	               if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-	               {
-	                   UE_LOG(LogTemp, Verbose, TEXT("[ClientRep] Skipping MoveTarget replication (UseItem path) for NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
-	               }
-	           }
-	           else if (MoveTargetList.IsValidIndex(EntityIdx))
-	           {
-	               FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-	               // Decide newer vs older by Move_ActionID then Move_ServerStartTime
-	               bool bIsNewer2 = true;
-	               const uint16 IncomingID2 = UseItem->Move_ActionID;
-	               const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
-	               // If initial/legacy payload (ID==0) and client is currently predicting, keep prediction and skip overriding
-	               if (IncomingID2 == 0 && PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
-	               {
-	                   bIsNewer2 = false;
-	                   if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-	                   {
-	                       UE_LOG(LogTemp, Warning, TEXT("[ClientRep][Move] Skipping initial MoveTarget (UseItem path) while predicting (NetID=%u)"), NetIDList[EntityIdx].NetID.GetValue());
-	                   }
-	               }
-	               else if (IncomingID2 != 0)
-	               {
-	                   const uint16 LocalID2 = MT.GetCurrentActionID();
-	                   if (IncomingID2 < LocalID2)
-	                   {
-	                       bIsNewer2 = false;
-	                   }
-	                   else if (IncomingID2 == LocalID2)
-	                   {
-	                       const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
-	                       bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
-	                   }
-	               }
-	               if (bIsNewer2)
-	               {
-	                   MT.Center = FVector(UseItem->Move_Center);
-	                   MT.SlackRadius = UseItem->Move_SlackRadius;
-	                   MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
-	                   MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
-	                   MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
-	                   if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
-	                   {
-	                       UWorld* W3 = OwnerA3->GetWorld();
-	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
-	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
-	                   }
-	                   // Turn off client prediction if a really new MoveTarget arrived
-	                   if (PredList.IsValidIndex(EntityIdx))
-	                   {
-	                       FMassClientPredictionFragment& Pred = PredList[EntityIdx];
-	                       if (Pred.bHasData)
-	                       {
-	                           Pred.bHasData = false;
-	                           Pred.Location = FVector::ZeroVector;
-	                           Pred.PredDesiredSpeed = 0.f;
-	                           Pred.PredAcceptanceRadius = 0.f;
-	                       }
-	                   }
-	               }
-	           }
+ 								// Apply MoveTarget if present (guarded by bStopMovementReplication)
+ 		           if (UseItem->Move_bHasTarget)
+ 	       {
+ 	           if (bStopMovementReplication)
+ 	           {
+ 	               if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
+ 	               {
+ 	                   UE_LOG(LogTemp, Verbose, TEXT("[ClientRep] Skipping MoveTarget replication (UseItem path) for NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
+ 	               }
+ 	           }
+ 	           else if (MoveTargetList.IsValidIndex(EntityIdx))
+ 	           {
+ 	               FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+ 	               // Decide newer vs older by Move_ActionID then Move_ServerStartTime
+ 	               bool bIsNewer2 = true;
+ 	               const uint16 IncomingID2 = UseItem->Move_ActionID;
+ 	               const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
+ 	               // If initial/legacy payload (ID==0) and client is currently predicting, keep prediction and skip overriding
+ 	               if (IncomingID2 == 0 && PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
+ 	               {
+ 	                   bIsNewer2 = false;
+ 	                   if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
+ 	                   {
+ 	                       UE_LOG(LogTemp, Warning, TEXT("[ClientRep][Move] Skipping initial MoveTarget (UseItem path) while predicting (NetID=%u)"), NetIDList[EntityIdx].NetID.GetValue());
+ 	                   }
+ 	               }
+ 	               else if (IncomingID2 != 0)
+ 	               {
+ 	                   const uint16 LocalID2 = MT.GetCurrentActionID();
+ 	                   if (IncomingID2 < LocalID2)
+ 	                   {
+ 	                       // If the state bits changed, prioritize server's MoveTarget even with lower ActionID (re-sync)
+ 	                       if (bStateChanged2)
+ 	                       {
+ 	                           bIsNewer2 = true;
+ 	                       }
+ 	                       else
+ 	                       {
+ 	                           bIsNewer2 = false;
+ 	                       }
+ 	                   }
+ 	                   else if (IncomingID2 == LocalID2)
+ 	                   {
+ 	                       const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
+ 	                       bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
+ 	                   }
+ 	               }
+ 	               if (bIsNewer2)
+ 	               {
+ 	                   MT.Center = FVector(UseItem->Move_Center);
+ 	                   MT.SlackRadius = UseItem->Move_SlackRadius;
+ 	                   MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
+ 	                   MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
+ 	                   MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
+ 	                   if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
+ 	                   {
+ 	                       UWorld* W3 = OwnerA3->GetWorld();
+ 	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
+ 	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
+ 	                   }
+ 	                   // Turn off client prediction if a really new MoveTarget arrived
+ 	                   if (PredList.IsValidIndex(EntityIdx))
+ 	                   {
+ 	                       FMassClientPredictionFragment& Pred = PredList[EntityIdx];
+ 	                       if (Pred.bHasData)
+ 	                       {
+ 	                           Pred.bHasData = false;
+ 	                           Pred.Location = FVector::ZeroVector;
+ 	                           Pred.PredDesiredSpeed = 0.f;
+ 	                           Pred.PredAcceptanceRadius = 0.f;
+ 	                       }
+ 	                   }
+ 	               }
+ 	           }
 	           else
 	           {
 	               // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity

@@ -1044,6 +1044,18 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			TransportFrag->TransportId = TransportId;
 		}
 	}
+
+	if (FMassUnitYawFollowFragment* FollowFrag = EntityManager.GetFragmentDataPtr<FMassUnitYawFollowFragment>(EntityHandle))
+	{
+		FollowFrag->Duration = FMath::Max(RotateToTargetDuration, 0.001f);
+		FollowFrag->EaseExp = FMath::Max(RotateToTargetExp, 0.001f);
+		FollowFrag->OffsetDegrees = RotateToTargetYawOffset;
+		
+		if (UseRotateToTargetProcessor)
+		{
+			EntityManager.Defer().AddTag<FMassUnitYawFollowTag>(EntityHandle);
+		}
+	}
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntity()

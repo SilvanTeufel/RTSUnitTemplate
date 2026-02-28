@@ -178,4 +178,16 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool GroundAlignment = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool UseRotateToTargetProcessor = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float RotateToTargetDuration = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float RotateToTargetExp = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float RotateToTargetYawOffset = 0.f;
 };
