@@ -690,11 +690,12 @@ void AControllerBase::UnregisterWaypointFromBuilding(ABuildingBase* Building)
 void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool& Success)
 {
 	Success = false;
-	ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+	// OPTIMIZATION: Use flag instead of Cast
+	if (!Unit || !Unit->bIsBuilding) return;
+
+	ABuildingBase* BuildingBase = static_cast<ABuildingBase*>(Unit);
 	
 	PlayWaypointSound = false;
-	
-	if (!BuildingBase) return;
 	if (BuildingBase->CanMove) return;
 	if (!BuildingBase->HasWaypoint)
 	{
@@ -737,8 +738,9 @@ void AControllerBase::Multi_SetBuildingWaypoint_Implementation(FVector NewWPLoca
 {
 	if (!HasAuthority())
 	{
-		if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit))
+		if (Unit && Unit->bIsBuilding)
 		{
+			ABuildingBase* BuildingBase = static_cast<ABuildingBase*>(Unit);
 			BuildingBase->SetWaypoint(BuildingWaypoint);
 			if (BuildingBase->NextWaypoint)
 			{
@@ -1033,7 +1035,7 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 				}
 			}
 			
-			ABuildingBase* BuildingBase = Cast<ABuildingBase>(SelectedUnits[i]);
+			ABuildingBase* BuildingBase = (SelectedUnits[i] && SelectedUnits[i]->bIsBuilding) ? static_cast<ABuildingBase*>(SelectedUnits[i]) : nullptr;
 			if (BuildingBase && !BuildingBase->CanMove)
 			{
 				BuildingUnits.Add(SelectedUnits[i]);

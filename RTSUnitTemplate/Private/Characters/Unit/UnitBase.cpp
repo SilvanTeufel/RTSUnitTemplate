@@ -116,6 +116,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	ISMComponent->SetIsReplicated(false);
 	
 	NavObstaclePadding = 5.0f;
+	bIsBuilding = false;
 }
 
 // Called when the game starts or when spawned

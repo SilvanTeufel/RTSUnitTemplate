@@ -15,6 +15,7 @@ ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	// Buildings are stationary and may use ISMs for visuals; no dedicated SnapMesh is needed.
+	bIsBuilding = true;
 	CanMove = false;
 }
 

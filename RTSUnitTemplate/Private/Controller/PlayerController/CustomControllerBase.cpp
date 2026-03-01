@@ -1056,8 +1056,9 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 	{
 		if (Unit && Unit->IsWorker && FollowTarget)
 		{
-			if (ABuildingBase* Building = Cast<ABuildingBase>(FollowTarget))
+			if (FollowTarget->bIsBuilding)
 			{
+				ABuildingBase* Building = static_cast<ABuildingBase*>(FollowTarget);
 				if (Building->IsBase)
 				{
 					Unit->Base = Building;
@@ -1158,8 +1159,9 @@ void ACustomControllerBase::Retry_Server_SetUnitsFollowTarget()
 	{
 		if (Unit && Unit->IsWorker && StrongTarget)
 		{
-			if (ABuildingBase* Building = Cast<ABuildingBase>(StrongTarget))
+			if (StrongTarget->bIsBuilding)
 			{
+				ABuildingBase* Building = static_cast<ABuildingBase*>(StrongTarget);
 				if (Building->IsBase)
 				{
 					Unit->Base = Building;
@@ -1206,8 +1208,9 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 
 		if (Unit->IsWorker && FollowTarget)
 		{
-			if (ABuildingBase* Building = Cast<ABuildingBase>(FollowTarget))
+			if (FollowTarget->bIsBuilding)
 			{
+				ABuildingBase* Building = static_cast<ABuildingBase*>(FollowTarget);
 				if (Building->IsBase)
 				{
 					Unit->Base = Building;
@@ -1613,7 +1616,9 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 		AUnitBase* U = UnitsToProcess[i];
 		if (U == nullptr || U == CameraUnitWithTag) continue;
 
-		FVector RunLocation = Cast<ABuildingBase>(U) ? GroundLocation : AdjustedLocation + Offsets[i];
+		// OPTIMIZATION: Cast once per iteration using the flag
+		ABuildingBase* B = U->bIsBuilding ? static_cast<ABuildingBase*>(U) : nullptr;
+		FVector RunLocation = B ? GroundLocation : AdjustedLocation + Offsets[i];
 
 		bool bNavMod;
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
@@ -2202,7 +2207,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) UnitIsValid = false;
 			else
 			{
-				ABuildingBase* BuildingBase = Cast<ABuildingBase>(U);
+				ABuildingBase* BuildingBase = U->bIsBuilding ? static_cast<ABuildingBase*>(U) : nullptr;
 				if (!BuildingBase || (!BuildingBase->HasWaypoint && BuildingBase->CancelsAbilityOnRightClick))
 					CancelCurrentAbility(U);
 			}
@@ -2211,7 +2216,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	if (UnitIsValid)
     	{
     		FVector FinalLoc;
-    		if (Cast<ABuildingBase>(U))
+    		if (U->bIsBuilding)
     		{
     			FinalLoc = Hit.Location;
     		}
@@ -2940,9 +2945,8 @@ void ACustomControllerBase::HandleAttackMovePressed()
     FHitResult HitPawn;
     GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
     AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
+    AUnitBase* TargetUnit = Cast<AUnitBase>(CursorHitActor);
 
-
-    	
     FHitResult Hit;
     GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
@@ -2988,15 +2992,25 @@ void ACustomControllerBase::HandleAttackMovePressed()
         AUnitBase* U = UnitsToProcess[i];
         if (U == nullptr || U == CameraUnitWithTag) continue;
         
-        // apply the same slot-by-index approach
-        FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)Hit.Location : AdjustedLocation + Offsets[i];
+        // OPTIMIZATION: Cast once per iteration using the flag
+        ABuildingBase* B = U->bIsBuilding ? static_cast<ABuildingBase*>(U) : nullptr;
+
+        FVector RunLocation = B ? (FVector)Hit.Location : AdjustedLocation + Offsets[i];
 
         bool bNavMod;
         RunLocation = TraceRunLocation(RunLocation, bNavMod);
         if (bNavMod) continue; // || IsLocationInDirtyArea(RunLocation)
         
         bool bSuccess = false;
-        SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+
+        // FIX: Check if building can attack and we have a valid target unit
+        bool bIsBuildingFocus = (B && B->CanAttack && TargetUnit);
+
+        if (!bIsBuildingFocus)
+        {
+            SetBuildingWaypoint(RunLocation, U, BWaypoint, PlayWaypointSound, bSuccess);
+        }
+
         if (bSuccess)
         {
             // waypoint placed

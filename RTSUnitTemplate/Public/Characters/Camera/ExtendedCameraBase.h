@@ -166,6 +166,9 @@ public:
 	void UpdateTabModeUI();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void UpdateViewportBlur(bool bEnable);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

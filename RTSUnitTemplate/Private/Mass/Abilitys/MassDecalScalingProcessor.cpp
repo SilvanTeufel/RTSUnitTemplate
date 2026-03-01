@@ -40,7 +40,7 @@ void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMas
 	const float AccumulatedDeltaTime = TimeSinceLastRun;
 	TimeSinceLastRun = 0.0f; // Reset timer
 
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, AccumulatedDeltaTime](FMassExecutionContext& ChunkContext)
+	EntityQuery.ForEachEntityChunk(Context, [this, AccumulatedDeltaTime](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();

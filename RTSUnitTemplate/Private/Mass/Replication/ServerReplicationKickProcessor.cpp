@@ -265,7 +265,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				if (bCanRelease)
 				{
 					TArray<AUnitBase*> UnitsToBatchMove;
-					StartupFreezeQuery.ForEachEntityChunk(EntityManager, Context, [&EntityManager, &UnitsToBatchMove](FMassExecutionContext& FreezeCtx)
+					StartupFreezeQuery.ForEachEntityChunk(Context, [&EntityManager, &UnitsToBatchMove](FMassExecutionContext& FreezeCtx)
 					{
 						const int32 Num = FreezeCtx.GetNumEntities();
 						TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();

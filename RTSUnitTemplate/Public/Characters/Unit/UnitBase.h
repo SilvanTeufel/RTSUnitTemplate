@@ -44,6 +44,9 @@ public:
 
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bIsMassUnit = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bIsBuilding = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UTexture2D* UnitIcon;

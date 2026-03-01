@@ -276,6 +276,50 @@ void AExtendedCameraBase::UpdateTabModeUI()
 		}
 		break;
 	}
+	
+	UpdateViewportBlur(TabToggled);
+}
+
+void AExtendedCameraBase::UpdateViewportBlur(bool bEnable)
+{
+	if (CameraComp)
+	{
+		
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldFocalDistance = bEnable;
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldFstop = bEnable;
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldSensorWidth = bEnable;
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldMinFstop = bEnable;
+
+		// Try both Cinematic and old Gaussian properties to be sure
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldDepthBlurAmount = bEnable;
+		CameraComp->PostProcessSettings.bOverride_DepthOfFieldDepthBlurRadius = bEnable;
+
+		if (bEnable)
+		{
+			// Cinematic DoF settings for extreme blur
+			CameraComp->PostProcessSettings.DepthOfFieldFocalDistance = 1.0f; 
+			CameraComp->PostProcessSettings.DepthOfFieldFstop = 0.1f;
+			CameraComp->PostProcessSettings.DepthOfFieldMinFstop = 0.1f;
+			CameraComp->PostProcessSettings.DepthOfFieldSensorWidth = 1000.0f;
+
+			// Old DoF Fallback/Alternative blur settings
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldFocalRegion = true;
+			CameraComp->PostProcessSettings.DepthOfFieldFocalRegion = 0.0f;
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldNearTransitionRegion = true;
+			CameraComp->PostProcessSettings.DepthOfFieldNearTransitionRegion = 0.0f;
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldFarTransitionRegion = true;
+			CameraComp->PostProcessSettings.DepthOfFieldFarTransitionRegion = 0.0f;
+
+			CameraComp->PostProcessSettings.DepthOfFieldDepthBlurAmount = 1.0f;
+			CameraComp->PostProcessSettings.DepthOfFieldDepthBlurRadius = 100.0f;
+		}
+		else
+		{
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldFocalRegion = false;
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldNearTransitionRegion = false;
+			CameraComp->PostProcessSettings.bOverride_DepthOfFieldFarTransitionRegion = false;
+		}
+	}
 }
 
 void AExtendedCameraBase::Client_UpdateWidgets_Implementation(UUnitWidgetSelector* NewWidgetSelector, UTaggedUnitSelector* NewTaggedSelector, UResourceWidget* NewResourceWidget)
