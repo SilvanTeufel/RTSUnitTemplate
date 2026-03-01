@@ -150,8 +150,32 @@ void UUnitSightProcessor::ExecuteServer(
         
             for (int32 i = 0; i < N; ++i)
             {
-                // Immediately skip dead entities so they stop contributing to vision/fog
-                if (StatsList[i].Health <= 0.f)
+                const bool bIsDead = StatsList[i].Health <= 0.f;
+
+                if (StateList)
+                {
+                    FMassAIStateFragment& State = StateList[i];
+                    const float Age = World->GetTimeSeconds() - State.BirthTime;
+                    const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
+
+                    const bool bIsTooYoung = (Age < 1.f && Age >= 0.f);
+                    const bool bIsDeadTooLong = (SinceDeath > 4.f && SinceDeath >= 0.f);
+
+                    if (bIsDeadTooLong || !State.IsInitialized || (bIsTooYoung && !bIsDead))
+                    {
+                        if (SightList && (bIsDeadTooLong || !State.IsInitialized))
+                        {
+                            SightList[i].TeamOverlapsPerTeam.Empty();
+                            SightList[i].DetectorOverlapsPerTeam.Empty();
+                            SightList[i].AttackerTeamOverlapsPerTeam.Empty();
+                            SightList[i].ConsistentTeamOverlapsPerTeam.Empty();
+                            SightList[i].ConsistentDetectorOverlapsPerTeam.Empty();
+                            SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Empty();
+                        }
+                        continue;
+                    }
+                }
+                else if (bIsDead)
                 {
                     if (SightList)
                     {
@@ -163,21 +187,6 @@ void UUnitSightProcessor::ExecuteServer(
                         SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Empty();
                     }
                     continue;
-                }
-
-                if (StateList)
-                {
-                    FMassAIStateFragment& State = StateList[i];
-                    const float Age = World->GetTimeSeconds() - State.BirthTime;
-                    const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
-
-                    const bool bIsTooYoung = (Age < 1.f && Age >= 0.f);
-                    const bool bIsDeadTooLong = (SinceDeath > 4.f && SinceDeath >= 0.f);
-
-                    if (bIsTooYoung || bIsDeadTooLong || !State.IsInitialized)
-                    {
-                        continue;
-                    }
                 }
 
                 AllEntities.Add({
@@ -204,6 +213,10 @@ void UUnitSightProcessor::ExecuteServer(
     for (int32 i = 0; i < AllEntities.Num(); ++i)
     {
         const auto& Det = AllEntities[i];
+
+        // Dead Units should not able to detect Enemy Alive Units
+        if (Det.Stats->Health <= 0.f) continue;
+
         FogEntities.Add(Det.Entity);
 
         for (int32 j = 0; j < AllEntities.Num(); ++j)

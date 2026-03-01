@@ -810,6 +810,7 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 		{
 			MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 			BlockControls = false;
+			UpdateViewportBlur(TabToggled);
 		}
 		else
 		{
@@ -826,6 +827,7 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 
 			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
 			BlockControls = true;
+			UpdateViewportBlur(true);
 		}
 	}
 }
