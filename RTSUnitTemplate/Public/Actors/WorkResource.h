@@ -47,22 +47,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetResourceActive(bool bActive, EResourceType Type = EResourceType::Primary, float InAmount = 0.f, FVector Offset = FVector::ZeroVector);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float PickUpDistance = 25.f;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool FollowTarget = false;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	AActor* Target;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float MovementSpeed = 13.f;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound;
 
