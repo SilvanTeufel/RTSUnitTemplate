@@ -17,6 +17,18 @@ class UGameplayAbilityBase;
 #include "Components/AudioComponent.h"
 #include "ExtendedControllerBase.generated.h"
 
+struct FExtractionAudioData
+{
+	AWorkArea* WorkArea = nullptr;
+	float Distance = MAX_FLT;
+	float Volume = 0.f;
+	float LastSignalTime = 0.f;
+
+	FExtractionAudioData() {}
+	FExtractionAudioData(AWorkArea* InArea, float InDist, float InVol, float InTime) 
+		: WorkArea(InArea), Distance(InDist), Volume(InVol), LastSignalTime(InTime) {}
+};
+
 /**
  * 
  */
@@ -27,6 +39,9 @@ class RTSUNITTEMPLATE_API AExtendedControllerBase : public AWidgetController
 private:
 	/** Handle for the timer that logs entity tags after BeginPlay. */
 	FTimerHandle LogTagsTimerHandle;
+
+	TMap<EResourceType, FExtractionAudioData> SignaledExtractions;
+	FDelegateHandle ExtractionSignalHandle;
 	
 public:
 	// Set to true when a keyboard ability was just executed; consumed on next left click
@@ -68,6 +83,9 @@ protected:
 	TMap<EResourceType, UAudioComponent*> ExtractionAudioComponents;
 
 	void UpdateExtractionSounds(float DeltaSeconds);
+
+	UFUNCTION()
+	void HandleExtractionSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 public:
 	UFUNCTION(Client, Reliable)

@@ -89,6 +89,15 @@ void AExtendedControllerBase::BeginPlay()
 		  true 
 	  );
 	}
+
+	if (IsLocalController())
+	{
+		if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
+		{
+			ExtractionSignalHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ResourceExtraction)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(AExtendedControllerBase, HandleExtractionSignal));
+		}
+	}
 }
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
@@ -4128,76 +4137,90 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 }
 
 
+void AExtendedControllerBase::HandleExtractionSignal(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!IsLocalController()) return;
+
+	APawn* CurrentPawn = GetPawn();
+	FVector CameraLocation = FVector::ZeroVector;
+	if (CurrentPawn)
+	{
+		CameraLocation = CurrentPawn->GetActorLocation();
+	}
+	else
+	{
+		FRotator CameraRotation = FRotator::ZeroRotator;
+		GetPlayerViewPoint(CameraLocation, CameraRotation);
+	}
+
+	UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+	if (!EntitySubsystem) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+
+	// Temporary map to find the best (closest) source in this specific signal batch
+	TMap<EResourceType, FExtractionAudioData> BestInThisSignal;
+
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(Entity)) continue;
+
+		FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+		if (!ActorFrag) continue;
+
+		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(ActorFrag->GetMutable());
+		if (!Worker || !Worker->ResourcePlace) continue;
+
+		AWorkArea* Area = Worker->ResourcePlace;
+		EResourceType ResType = Area->ConvertWorkAreaTypeToResourceType(Area->Type);
+		if (ResType == EResourceType::MAX) continue;
+
+		float Distance = FVector::Dist(CameraLocation, Area->GetActorLocation());
+		
+		float DistanceMultiplier = FMath::Clamp(1.0f - (Distance / ExtractionSoundDistance), 0.0f, 1.0f);
+		float Volume = Area->ExtractionSoundVolume * DistanceMultiplier;
+
+		FExtractionAudioData* ExistingBest = BestInThisSignal.Find(ResType);
+		if (!ExistingBest || Distance < ExistingBest->Distance)
+		{
+			BestInThisSignal.Add(ResType, FExtractionAudioData(Area, Distance, Volume, CurrentTime));
+		}
+	}
+	
+	// Update the persistent signaled extractions map with results from this signal batch
+	// This ensures LastSignalTime is updated for all active resource types, preventing premature timeouts.
+	for (auto& Entry : BestInThisSignal)
+	{
+		SignaledExtractions.Add(Entry.Key, Entry.Value);
+	}
+}
+
 void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 {
 	if (!IsLocalController()) return;
 
-	FVector CameraLocation = FVector::ZeroVector;
-	FRotator CameraRotation = FRotator::ZeroRotator;
-	GetPlayerViewPoint(CameraLocation, CameraRotation);
-
 	float CurrentSoundMultiplier = GetSoundMultiplier();
-
-	// Mapping to store active work area per resource type for this frame
-	TMap<EResourceType, AWorkArea*> ActiveAreas;
-	TMap<EResourceType, float> FadeOutDurations;
-
-	// Iterate through all WorkAreas in the level
-	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
-	{
-		AWorkArea* Area = *It;
-		if (!Area) continue;
-
-		EResourceType ResType = Area->ConvertWorkAreaTypeToResourceType(Area->Type);
-		if (ResType == EResourceType::MAX) continue;
-
-		FadeOutDurations.Add(ResType, Area->ExtractionSoundFadeOutDuration);
-
-		if (ActiveAreas.Contains(ResType)) continue;
-
-		bool bHasExtractingWorker = false;
-		for (AWorkingUnitBase* Worker : Area->Workers)
-		{
-			if (Worker && Worker->GetUnitState() == UnitData::ResourceExtraction)
-			{
-				bHasExtractingWorker = true;
-				break;
-			}
-		}
-
-		if (bHasExtractingWorker)
-		{
-			float Distance = FVector::Dist(CameraLocation, Area->GetActorLocation());
-			bool bIsClose = Distance <= ExtractionSoundDistance;
-
-			bool bIsOnScreen = false;
-			FVector2D ScreenPosition;
-			if (ProjectWorldLocationToScreen(Area->GetActorLocation(), ScreenPosition))
-			{
-				bIsOnScreen = true;
-			}
-
-			if (bIsClose || bIsOnScreen)
-			{
-				ActiveAreas.Add(ResType, Area);
-			}
-		}
-	}
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float SignalTimeout = 0.5f; // Keep the sound for a bit longer than the signal interval
 
 	// Now handle the audio components
 	for (uint8 i = 0; i < (uint8)EResourceType::MAX; ++i)
 	{
 		EResourceType Type = (EResourceType)i;
-		AWorkArea* ActiveArea = ActiveAreas.FindRef(Type);
+		FExtractionAudioData* SignaledData = SignaledExtractions.Find(Type);
 		UAudioComponent* AudioComp = ExtractionAudioComponents.FindRef(Type);
 
-		if (ActiveArea && ActiveArea->ExtractionSound)
+		// Check if we have recent signaled data
+		bool bIsRecentlySignaled = SignaledData && (CurrentTime - SignaledData->LastSignalTime) < SignalTimeout;
+
+		if (bIsRecentlySignaled && SignaledData->WorkArea && SignaledData->WorkArea->ExtractionSound)
 		{
-			float FinalVolume = CurrentSoundMultiplier * ActiveArea->ExtractionSoundVolume;
+			float FinalVolume = CurrentSoundMultiplier * SignaledData->Volume;
 
 			if (!IsValid(AudioComp))
 			{
-				AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
+				AudioComp = UGameplayStatics::SpawnSound2D(this, SignaledData->WorkArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
 				if (AudioComp)
 				{
 					ExtractionAudioComponents.Add(Type, AudioComp);
@@ -4206,10 +4229,10 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 			}
 			else
 			{
-				if (AudioComp->Sound != ActiveArea->ExtractionSound)
+				if (AudioComp->Sound != SignaledData->WorkArea->ExtractionSound)
 				{
-					AudioComp->FadeOut(ActiveArea->ExtractionSoundFadeOutDuration, 0.f);
-					AudioComp = UGameplayStatics::SpawnSound2D(this, ActiveArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
+					AudioComp->FadeOut(SignaledData->WorkArea->ExtractionSoundFadeOutDuration, 0.f);
+					AudioComp = UGameplayStatics::SpawnSound2D(this, SignaledData->WorkArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
 					ExtractionAudioComponents.Add(Type, AudioComp);
 					AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
 				}
@@ -4223,13 +4246,19 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 				}
 			}
 		}
-		else if (IsValid(AudioComp) && AudioComp->IsPlaying())
+		else if (IsValid(AudioComp))
 		{
-			float FadeOutDuration = FadeOutDurations.Contains(Type) ? FadeOutDurations[Type] : 1.0f;
-			AudioComp->FadeOut(FadeOutDuration, 0.f);
+			// If we don't have signaled data, fade out if playing and then remove from management
+			if (AudioComp->IsPlaying())
+			{
+				AudioComp->FadeOut(1.0f, 0.f);
+			}
 			ExtractionAudioComponents.Remove(Type);
 		}
 	}
+
+	// We don't empty SignaledExtractions here because it's used as a cache across frames 
+	// until SignalTimeout is reached.
 }
 
 // Server RPC to mirror ability indicator overlap state from client to server

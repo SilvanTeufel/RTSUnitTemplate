@@ -5,9 +5,9 @@
 #include "MassMovementFragments.h"   // For FMassVelocityFragment
 #include "MassSignalSubsystem.h"
 #include "Async/Async.h"            // Required for AsyncTask
-
-// --- Include your specific project Fragments, Tags, and Signals ---
-#include "Mass/UnitMassTag.h"       // Contains State Tags (FMassStateResourceExtractionTag) and potentially FMassSignalPayload definition
+#include "Controller/PlayerController/CameraControllerBase.h"
+#include "MassCommonFragments.h"
+#include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 
 // Make sure UnitSignals::GoToBase and UnitSignals::Idle (or your equivalents) are defined and accessible
@@ -18,7 +18,7 @@
 
 UResourceExtractionStateProcessor::UResourceExtractionStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone | (int32)EProcessorExecutionFlags::Client;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -37,6 +37,12 @@ void UResourceExtractionStateProcessor::ConfigureQueries(const TSharedRef<FMassE
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);      // Read target validity (bHasValidTarget) and target entity handle if needed
    // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);     // Write Velocity to stop movement
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+
+    // Requirements for Client Signaling:
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+
     // Ensure all entities processed by this will have these fragments.
     // Consider adding EMassFragmentPresence::All checks if necessary,
     // though processors usually run *after* state setup ensures fragments exist.
@@ -62,17 +68,31 @@ void UResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, const
 
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-   // QUICK_SCOPE_CYCLE_COUNTER(STAT_UResourceExtractionStateProcessor_Execute);
-    
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
         return; 
     }
-    TimeSinceLastRun -= ExecutionInterval;
     
     if (!SignalSubsystem) return;
-    
+
+    UWorld* World = EntityManager.GetWorld();
+    if (!World) return;
+
+    if (World && World->IsNetMode(NM_Client))
+    {
+        ClientExecute(Context);
+    }
+    else
+    {
+        ServerExecute(Context);
+    }
+
+    TimeSinceLastRun -= ExecutionInterval;
+}
+
+void UResourceExtractionStateProcessor::ServerExecute(FMassExecutionContext& Context)
+{
     EntityQuery.ForEachEntityChunk(Context,
         [this](FMassExecutionContext& ChunkContext)
     {
@@ -82,7 +102,6 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
         const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
 
-        //UE_LOG(LogTemp, Log, TEXT("UResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -92,7 +111,6 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
             if (!WorkerStatsFrag.ResourceAvailable && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
-                // Target is lost or invalid. Signal to go idle or find a new task.
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
@@ -100,28 +118,67 @@ void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManage
                 continue;
             }
             
-            // --- 3. Increment Extraction Timer ---
             StateFrag.StateTimer += ExecutionInterval;
             if (SignalSubsystem)
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncCastTime, Entity);
             }
-            // --- 4. Check if Extraction Time Elapsed ---
            
-            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState) //  && !StateFrag.SwitchingState
+            if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
                 }
-                continue; // Move to next entity
+                continue;
             }else if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime*1.5f && StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = false;
             }
         }
-            
-    }); // End ForEachEntityChunk
+    });
+}
 
+void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Context)
+{
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    APlayerController* PC = World->GetFirstPlayerController();
+    ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(PC);
+
+    // AI check as requested: "We dont want to play the Sound for AI for AI PlayerControllers we added a flag. check void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation() Which flagg we added"
+    // In RTSGameModeBase, AIPC->bIsAi = true; was set.
+    if (CameraPC && CameraPC->bIsAi)
+    {
+        return;
+    }
+
+    TArray<FMassEntityHandle> EntitiesToSignal;
+
+    EntityQuery.ForEachEntityChunk(Context,
+        [&](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        if (NumEntities == 0) return;
+
+        const auto VisibilityList = ChunkContext.GetFragmentView<FMassVisibilityFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FMassVisibilityFragment& Vis = VisibilityList[i];
+
+            // Only signal if visible on viewport as requested: "We dont want to Play the Sound if the Unit (worker) is not on Viewport. U can use bIsOnViewport for that"
+            if (Vis.bIsOnViewport)
+            {
+                EntitiesToSignal.Add(ChunkContext.GetEntity(i));
+            }
+        }
+    });
+
+    if (EntitiesToSignal.Num() > 0 && SignalSubsystem)
+    {
+        SignalSubsystem->SignalEntities(UnitSignals::ResourceExtraction, EntitiesToSignal);
+    }
 }
