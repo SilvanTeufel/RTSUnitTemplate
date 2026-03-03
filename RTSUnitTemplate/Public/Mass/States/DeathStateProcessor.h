@@ -32,6 +32,9 @@ protected:
 	UFUNCTION()
 	void HandleRemoveDeadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
+	UFUNCTION()
+	void HandleHideUnit(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
 	
@@ -47,4 +50,6 @@ private:
 	TObjectPtr<class UMassEntitySubsystem> EntitySubsystem;
 
 	FDelegateHandle RemoveDeadUnitSignalDelegateHandle;
+
+	FDelegateHandle HideUnitSignalDelegateHandle;
 };

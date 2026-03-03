@@ -600,6 +600,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	float DespawnTime = 5.f;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float HideActorTime = 3.f;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	bool RotatesToMovement = true;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")

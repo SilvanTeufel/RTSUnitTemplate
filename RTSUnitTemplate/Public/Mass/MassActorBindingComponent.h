@@ -129,6 +129,9 @@ public:
 	float DespawnTime = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float HideActorTime = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float IsAttackedDuration = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")

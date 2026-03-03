@@ -13,6 +13,7 @@
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/PerformanceUnit.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
@@ -51,6 +52,9 @@ void UDeathStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
     {
         RemoveDeadUnitSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::RemoveDeadUnit)
             .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UDeathStateProcessor, HandleRemoveDeadUnit));
+
+        HideUnitSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::HideUnit)
+            .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UDeathStateProcessor, HandleHideUnit));
     }
 }
 
@@ -63,6 +67,13 @@ void UDeathStateProcessor::BeginDestroy()
             auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::RemoveDeadUnit);
             Delegate.Remove(RemoveDeadUnitSignalDelegateHandle);
             RemoveDeadUnitSignalDelegateHandle.Reset();
+        }
+
+        if (HideUnitSignalDelegateHandle.IsValid())
+        {
+            auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::HideUnit);
+            Delegate.Remove(HideUnitSignalDelegateHandle);
+            HideUnitSignalDelegateHandle.Reset();
         }
     }
     Super::BeginDestroy();
@@ -93,6 +104,8 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                 {
                     UnitBase->SetDeselected();
                     UnitBase->CanBeSelected = false;
+                    UnitBase->OpenHealthWidget = false;
+                    UnitBase->bShowLevelOnly = false;
                     if (GetWorld()->IsNetMode(NM_Client))
                     {
                         if (PC && PC->HUDBase)
@@ -120,6 +133,32 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                             }
                         }
                     }
+                }
+            }
+        }
+    });
+}
+
+void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+    if (!EntitySubsystem) return;
+
+    TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+    AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy]()
+    {
+        if (!EntitySubsystem || !GetWorld()) return;
+
+        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+        for (const FMassEntityHandle& Entity : EntitiesCopy)
+        {
+            if (!EntityManager.IsEntityValid(Entity)) continue;
+
+            if (FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
+            {
+                if (AActor* Actor = ActorFragPtr->GetMutable())
+                {
+                    Actor->SetActorHiddenInGame(true);
                 }
             }
         }
@@ -154,11 +193,13 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            const FMassAgentCharacteristicsFragment CharacteristicsFragment = AgentFragList[i];
 
             const float PrevTimer = StateFrag.StateTimer;
             StateFrag.StateTimer += ExecutionInterval;
@@ -166,6 +207,11 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             if (PrevTimer <= KINDA_SMALL_NUMBER)
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::RemoveDeadUnit, Entity);
+            }
+
+            if (PrevTimer < CharacteristicsFragment.HideActorTime && StateFrag.StateTimer >= CharacteristicsFragment.HideActorTime)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::HideUnit, Entity);
             }
         }
     });
@@ -199,6 +245,11 @@ void UDeathStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::StartDead, Entity);
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::RemoveDeadUnit, Entity);
+            }
+
+            if (PrevTimer < CharacteristicsFragment.HideActorTime && StateFrag.StateTimer >= CharacteristicsFragment.HideActorTime)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::HideUnit, Entity);
             }
             
             if (StateFrag.StateTimer >= CharacteristicsFragment.DespawnTime+1.f)
