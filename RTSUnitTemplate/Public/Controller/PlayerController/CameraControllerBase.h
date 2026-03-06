@@ -49,9 +49,6 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 
-	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
-	bool bIsAi = false;
-	
 	UPROPERTY()
 	class ULoadingWidget* ActiveLoadingWidget = nullptr;
 

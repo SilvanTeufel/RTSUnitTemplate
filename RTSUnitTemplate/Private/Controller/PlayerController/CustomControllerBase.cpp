@@ -2441,7 +2441,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
             else
             {
                 HUDBase->DeselectAllUnits();
-                HUDBase->SetUnitSelected(HitUnit);
+                HUDBase->SetUnitSelected(HitUnit, bIsAi);
                 DragUnitBase(HitUnit);
 
                 if (CameraBase)

@@ -1145,7 +1145,14 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
                 CombatStatsFrag->Health = AttributeSet->GetHealth();
                 CombatStatsFrag->Shield = AttributeSet->GetShield();
             	CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
-            	CombatStatsFrag->MaxShield = AttributeSet->GetMaxHealth();
+            	CombatStatsFrag->MaxShield = AttributeSet->GetMaxShield();
+            	
+            	if (FMassVisibilityFragment* VisFrag = GTEntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(CapturedEntity))
+            	{
+					VisFrag->LastHealth = CombatStatsFrag->Health;
+					VisFrag->LastShield = CombatStatsFrag->Shield;
+				}
+            	
             	CombatStatsFrag->AttackDamage = AttributeSet->GetAttackDamage();
             	CombatStatsFrag->AttackRange = AttributeSet->GetRange();
             	CombatStatsFrag->RunSpeed = AttributeSet->GetRunSpeed();
@@ -1618,39 +1625,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     AttackerStateFrag->SwitchingState = false;
                     continue;
                 }
-
-                // --- DAMAGE CALCULATION ---
-                bool bIsMagicDamage = AttackerUnitBase->IsDoingMagicDamage;
-                float BaseDamage = AttackerStats->AttackDamage;
-                float Defense = bIsMagicDamage ? TargetStatsFrag->MagicResistance : TargetStatsFrag->Armor;
-                float DamageAfterDefense = FMath::Max(0.0f, BaseDamage - Defense);
-
-                // Z-Position Check
-                if (AttackerLoc.Z < TargetLoc.Z - RangedZPositionThreshold)
-                {
-                    DamageAfterDefense *= RangedZPositionDamageMultiplier;
-                }
-
-                float DamageToApply = DamageAfterDefense;
-                float ShieldDamage = 0.0f;
-                float HealthDamage = 0.0f;
-
-                // Calculate Shield/Health splits
-                if (TargetStatsFrag->Shield > 0)
-                {
-                    ShieldDamage = FMath::Min(TargetStatsFrag->Shield, DamageToApply);
-                    TargetStatsFrag->Shield -= ShieldDamage;
-                    DamageToApply -= ShieldDamage;
-                }
-                if (DamageToApply > 0)
-                {
-                    HealthDamage = FMath::Min(TargetStatsFrag->Health, DamageToApply);
-                    TargetStatsFrag->Health -= HealthDamage;
-                }
-
-                // Clamp Health
-                TargetStatsFrag->Health = FMath::Max(0.0f, TargetStatsFrag->Health);
-
+             	
                 // 4. CAPTURE DATA FOR ASYNC
                 // We know we are in range and valid. Capture what we need for the Visuals/Gameplay.
                 TWeakObjectPtr<AUnitBase> WeakAttacker(AttackerUnitBase);
@@ -1674,7 +1649,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // 6. DISPATCH VISUAL/GAMEPLAY TASK
                 AsyncTask(ENamedThreads::GameThread, [this, Entity, TargetEntity, WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
-                    AttackAbilities, ThrowAbilities, OffensiveAbilities, HealthDamage, ShieldDamage]() mutable
+                    AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable
                 {
                     if (!EntitySubsystem) return; // Safety Check
 
@@ -1683,15 +1658,6 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     
                     if (StrongAttacker && StrongTarget)
                     {
-                        // Update Actor specific attributes (Syncing Mass data to Actor)
-                        if (ShieldDamage > 0)
-                        {
-                            StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
-                        }
-                        if (HealthDamage > 0)
-                        {
-                            StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
-                        }
 
                         // UI Update
                         if(StrongTarget->HealthWidgetComp)

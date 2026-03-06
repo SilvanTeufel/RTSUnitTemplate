@@ -610,7 +610,7 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 	}
 }
 
-void AHUDBase::SetUnitSelected(AUnitBase* Unit)
+void AHUDBase::SetUnitSelected(AUnitBase* Unit, bool bIsAi)
 {
 	// Deselect and prune any invalid pointers first
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
@@ -632,7 +632,7 @@ void AHUDBase::SetUnitSelected(AUnitBase* Unit)
 	if (IsValid(Unit))
 	{
 		SelectedUnits.Add(Unit);
-		Unit->SetSelected();
+		if (!bIsAi) Unit->SetSelected();
 		SelectUnitsFromSameSquad(Unit);
 	}
 }

@@ -36,6 +36,9 @@ class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
 public:
 	AControllerBase();
 
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsAi = false;
+
 	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|Team")
 	FOnTeamIdChanged OnTeamIdChanged;
 

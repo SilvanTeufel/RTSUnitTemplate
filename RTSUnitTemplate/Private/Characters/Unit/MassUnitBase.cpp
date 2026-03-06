@@ -751,7 +751,7 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 }
 
 
-bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
+bool AMassUnitBase::UpdateEntityHealth(float NewHealth, float CurrentShield)
 {
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
@@ -773,7 +773,7 @@ bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
 	
 	if (Attributes)
 	{
-		const float CurrentShield = Attributes->GetShield();
+		const float ActualShield = CurrentShield;
 		
 		// If we have a visibility fragment, handle logic-driven popups here (signal-driven)
 		if (Vis)
@@ -782,23 +782,37 @@ bool AMassUnitBase::UpdateEntityHealth(float NewHealth)
 			if (Vis->LastHealth >= 0.f)
 			{
 				// Significant changes trigger the healthbar popup timer
-				// Use same logic as previous processor: negative delta > 1.0 or positive delta > 10.0
-				const bool bDamageTrigger = (NewHealth < Vis->LastHealth - 1.0f) || (CurrentShield < Vis->LastShield - 1.0f);
-				const bool bHealTrigger = (NewHealth > Vis->LastHealth + 10.0f) || (CurrentShield > Vis->LastShield + 10.0f);
+				// Use same logic as previous processor: negative delta > 1.0 or positive delta > HealThreshold
+				const bool bIsClient = (GetWorld()->GetNetMode() == NM_Client);
+				const float HealThreshold = 10.0f; 
+
+				const bool bDamageTrigger = (NewHealth < Vis->LastHealth - 1.0f) || (ActualShield < Vis->LastShield - 1.0f);
+				const bool bHealTrigger = (NewHealth > Vis->LastHealth + HealThreshold) || (ActualShield > Vis->LastShield + HealThreshold);
 
 				if (bDamageTrigger || bHealTrigger)
 				{
 					Vis->LastHealthChangeTime = GetWorld()->GetTimeSeconds();
+					if (bIsClient)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[CLIENT][MassUnitBase] UpdateEntityHealth TRIGGER %s: H %.2f->%.2f, S %.2f->%.2f"), *GetName(), Vis->LastHealth, NewHealth, Vis->LastShield, ActualShield);
+					}
 				}
+
+				// Always update LastHealth/LastShield to track current state correctly.
+				// The previous 'restrictive' update logic caused values to get stuck, leading to 
+				// continuous damage triggers during regeneration.
+				Vis->LastHealth = NewHealth;
+				Vis->LastShield = ActualShield;
 			}
-			Vis->LastHealth = NewHealth;
-			Vis->LastShield = CurrentShield;
+			else // First initialization
+			{
+				Vis->LastHealth = NewHealth;
+				Vis->LastShield = ActualShield;
+			}
 		}
 
-		CombatStats->Health = NewHealth;
-		CombatStats->MaxHealth = Attributes->GetMaxHealth();
-		CombatStats->MaxShield = Attributes->GetMaxShield();
-		CombatStats->Shield = CurrentShield;
+		//CombatStats->Health = NewHealth;
+		//CombatStats->Shield = ActualShield;
 	}
 
 	if (CombatStats->Health <= 0.f)

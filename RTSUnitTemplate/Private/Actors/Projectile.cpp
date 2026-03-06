@@ -652,6 +652,7 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
     // --- 5. Check for impact (Authority Only) ---
     if (HasAuthority())
     {
+        if (bImpacted) return;
         const float Distance = FVector::Dist(NewTransform.GetLocation(), TargetLocation);
         if (Distance <= FrameSpeed + CollisionRadius)
         {
@@ -931,6 +932,7 @@ void AProjectile::FlyInArc(float DeltaTime)
 
     if (HasAuthority())
     {
+        if (bImpacted) return;
         OverlapCheckTimer += DeltaTime;
         if (OverlapCheckTimer >= OverlapCheckInterval)
         {
@@ -986,30 +988,30 @@ void AProjectile::FlyInArc(float DeltaTime)
 
 void AProjectile::Impact(AActor* ImpactTarget)
 {
-	if (!HasAuthority()) return;
+	// Sicherheitscheck am Anfang: Nur auf dem Server, gültiges Ziel und noch nicht getroffen
+	if (!HasAuthority() || !ImpactTarget || PiercedActors.Contains(ImpactTarget)) return;
 
-	// Trigger Blueprint impact visuals
+	// Ziel als getroffen markieren
+	PiercedActors.Add(ImpactTarget);
+
+	// Impact-Visuals erst nach dem Check auslösen
 	ImpactEvent();
 
-	if (PiercedActors.Contains(ImpactTarget))
-	{
-		return;
-	}
-	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
 	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
-		ShootingUnit->ResetTarget();
-		ShootingUnit->UnitToChase = nullptr;
+		if (ShootingUnit)
+		{
+			ShootingUnit->ResetTarget();
+			ShootingUnit->UnitToChase = nullptr;
+		}
 		return;
 	}
 	
 	if(UnitToHit && ShootingUnit)
 	{
-		PiercedActors.Add(ImpactTarget);
-		
 		float NewDamage = Damage;
 		if (UseAttributeDamage)
 		{
@@ -1109,23 +1111,29 @@ void AProjectile::Impact(AActor* ImpactTarget)
 
 void AProjectile::ImpactHeal(AActor* ImpactTarget)
 {
-	if (!HasAuthority()) return;
+	// Sicherheitscheck am Anfang: Nur auf dem Server, gültiges Ziel und noch nicht getroffen
+	if (!HasAuthority() || !ImpactTarget || PiercedActors.Contains(ImpactTarget)) return;
 	
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 	
 	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
-		ShootingUnit->ResetTarget();
-		ShootingUnit->UnitToChase = nullptr;
+		if (ShootingUnit)
+		{
+			ShootingUnit->ResetTarget();
+			ShootingUnit->UnitToChase = nullptr;
+		}
 		return;
 	}
-	//UE_LOG(LogTemp, Warning, TEXT("Projectile ShootingUnit->Attributes->GetAttackDamage()! %f"), ShootingUnit->Attributes->GetAttackDamage());
- if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
- {
- 	// Trigger Blueprint impact visuals
- 	ImpactEvent();
- 	float NewDamage = Damage;
+	
+	if(UnitToHit && UnitToHit->TeamId == TeamId && ShootingUnit)
+	{
+		// Ziel registrieren und Impact-Visuals auslösen
+		PiercedActors.Add(ImpactTarget);
+		ImpactEvent();
+		
+		float NewDamage = Damage;
 		
 		if (UseAttributeDamage)
 			NewDamage = ShootingUnit->Attributes->GetAttackDamage();
@@ -1247,6 +1255,8 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
+			if (PiercedActors.Contains(UnitToHit)) return;
+			PiercedActors.Add(UnitToHit);
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
@@ -1279,6 +1289,8 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			ImpactHeal(UnitToHit);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && !IsHealing)
 		{
+			if (PiercedActors.Contains(UnitToHit)) return;
+			PiercedActors.Add(UnitToHit);
 			ImpactEvent();
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{

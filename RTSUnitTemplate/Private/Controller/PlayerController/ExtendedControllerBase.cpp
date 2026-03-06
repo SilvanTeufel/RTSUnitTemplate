@@ -413,9 +413,9 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 		if (ClosestUnit)
 		{
 	
-			ClosestUnit->SetSelected();
+			if (!bIsAi) ClosestUnit->SetSelected();
 			SelectedUnits.Emplace(ClosestUnit);
-			HUDBase->SetUnitSelected(ClosestUnit);
+			HUDBase->SetUnitSelected(ClosestUnit, bIsAi);
 			AbilityArrayIndex = 0;
 		}
 }
@@ -452,12 +452,13 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 
 void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase* ClosestUnit, EGASAbilityInputID InputID)
 {
+	if (bIsAi) return;
 
 	if (ClosestUnit)
 	{
 		ClosestUnit->SetSelected();
 		SelectedUnits.Emplace(ClosestUnit);
-		HUDBase->SetUnitSelected(ClosestUnit);
+		HUDBase->SetUnitSelected(ClosestUnit, bIsAi);
 	}
 	// Update your local CloseUnit reference with ClosestUnit here.
 	// Example:
@@ -509,7 +510,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		{
 			ActivateAbilitiesByIndex_Implementation(CurrentUnit, InputID, Hit);
 			bActivatedAny = true;
-			HUDBase->SetUnitSelected(CurrentUnit);
+			HUDBase->SetUnitSelected(CurrentUnit, bIsAi);
 			CurrentUnitWidgetIndex = 0;
 			SelectedUnits = HUDBase->SelectedUnits;
 		}else if (CurrentUnit) {
@@ -542,9 +543,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	}
 	else if (CameraUnitWithTag && CameraUnitWithTag->CanActivateAbilities)
 	{
-		CameraUnitWithTag->SetSelected();
+		if (!bIsAi) CameraUnitWithTag->SetSelected();
 		SelectedUnits.Emplace(CameraUnitWithTag);
-		HUDBase->SetUnitSelected(CameraUnitWithTag);
+		HUDBase->SetUnitSelected(CameraUnitWithTag, bIsAi);
 		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
 		bActivatedAny = true;
 	}
@@ -3762,6 +3763,7 @@ void AExtendedControllerBase::Server_AssignTagToSelectedUnits_Implementation(FGa
 
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
+
 	UE_LOG(LogTemp, Log, TEXT("Client_UpdateHUDSelection: NewSelection.Num=%d, TeamId=%d, SelectableTeamId=%d"), NewSelection.Num(), TeamId, SelectableTeamId);
 	if (SelectableTeamId != TeamId)
 	{
@@ -3778,7 +3780,7 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 
 	for (AUnitBase* NewUnit : NewSelection)
 	{
-		NewUnit->SetSelected();
+		if (!bIsAi) NewUnit->SetSelected();
 		HUDBase->SelectedUnits.Emplace(NewUnit);
 	}
 	CurrentUnitWidgetIndex = 0;
@@ -3787,6 +3789,8 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 
 void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase* UnitToDeselect)
 {
+	if (bIsAi) return;
+
 	if (!HUDBase || !UnitToDeselect)
 	{
 		return;
@@ -4121,6 +4125,8 @@ void AExtendedControllerBase::Server_SelectUnitsFromSameSquad_Implementation(AUn
 
 void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(const TArray<AUnitBase*>& Units)
 {
+	if (bIsAi) return;
+
 	AHUDBase* HUD = Cast<AHUDBase>(GetHUD());
 	UE_LOG(LogTemp, Log, TEXT("[PC][Client_SelectUnitsFromSameSquad] Applying selection on client. HUD=%s Units=%d"), HUD ? *HUD->GetName() : TEXT("NULL"), Units.Num());
 	if (!HUD)

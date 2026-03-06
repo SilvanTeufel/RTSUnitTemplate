@@ -203,7 +203,7 @@ void AControllerBase::SelectUnit(int Index)
 	
 	CurrentUnitWidgetIndex = Index;
 	HUDBase->DeselectAllUnits();
-	HUDBase->SetUnitSelected( SelectedUnits[Index]);
+	HUDBase->SetUnitSelected( SelectedUnits[Index], bIsAi);
 	SelectedUnits = HUDBase->SelectedUnits; 
 
 	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);

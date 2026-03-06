@@ -128,27 +128,19 @@ void AUnitBase::BeginPlay()
 	SetupTimerWidget();
 	
 	SetReplicateMovement(false);
-	/*
-		//SpawnSelectedIcon();
-		GetCharacterMovement()->GravityScale = 1;
-		
-		if(IsFlying)
-		{
-			GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
-			FVector UnitLocation = GetActorLocation();
-			SetActorLocation(FVector(UnitLocation.X, UnitLocation.Y, FlyHeight));
-		}
-	*/
+
 	if (HasAuthority())
 	{
 		SetMeshRotationServer();
 	}
+	
 	
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UAttributeSetBase::GetHealthAttribute()).AddUObject(this, &AUnitBase::OnAttributeChanged);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UAttributeSetBase::GetShieldAttribute()).AddUObject(this, &AUnitBase::OnAttributeChanged);
 	}
+	
 
 	InitHealthbarOwner();
 }
@@ -483,7 +475,7 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	}
 	
 	Attributes->SetAttributeHealth(NewHealth);
-	UpdateEntityHealth(NewHealth);
+	UpdateEntityHealth(NewHealth, Attributes->GetShield());
 	if(NewHealth <= 0.f)
 	{
 		SetWalkSpeed(0);
@@ -588,15 +580,16 @@ void AUnitBase::DeadEffectsAndEvents()
 void AUnitBase::SetShield_Implementation(float NewShield)
 {
 	Attributes->SetAttributeShield(NewShield);
-	UpdateEntityHealth(Attributes->GetHealth()); // Just to trigger a refresh in Mass if needed, though we should probably have UpdateEntityShield
+	UpdateEntityHealth(Attributes->GetHealth(), NewShield);
 }
 
 
 
 void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 {
+
 	// 1. Sync local Mass fragment immediately
-	UpdateEntityHealth(Attributes->GetHealth());
+	UpdateEntityHealth(Attributes->GetHealth(), Attributes->GetShield());
 
 	// 2. Immediate UI Reaction (The "Signal")
 	// Only trigger popup if it's not the initial sync (OldValue > 0)
@@ -605,12 +598,6 @@ void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 		const float Delta = Data.NewValue - Data.OldValue;
 		if (Delta < -1.0f || Delta > 10.0f) // Damage or significant heal
 		{
-			/*
-			if (GetWorld() && (GetWorld()->GetNetMode() == NM_Client || IsLocallyControlled()))
-			{
-				UE_LOG(LogTemp, Error, TEXT("[CLIENT][UnitBase] OnAttributeChanged for %s: Delta=%.2f -> OHW=1"), *GetName(), Delta);
-			}
-			*/
 			OpenHealthWidget = true;
 			bShowLevelOnly = false;
 			CheckHealthBarVisibility(); // Forces UI visibility refresh instantly
@@ -780,7 +767,7 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	TArray<FVector> SpawnPositions;
 	FVector CenterSpawnPos = ShootingUnit->GetProjectileSpawnLocation();
 
-	if (TwinDistance > 0.f)
+	if (TwinDistance >= 10.f)
 	{
 		FVector DirToTarget = (AimLocation - CenterSpawnPos).GetSafeNormal2D();
 		FVector RightVector = DirToTarget.IsNearlyZero() ? ShootingUnit->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
@@ -880,7 +867,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     TArray<FVector> SpawnPositions;
     FVector CenterSpawnPos = ShootingUnit->GetProjectileSpawnLocation(SpawnOffset);
 
-    if (TwinDistance > 0.f)
+    if (TwinDistance >= 10.f)
     {
         FVector DirToTarget = (AimCenter - CenterSpawnPos).GetSafeNormal2D();
         FVector RightVector = DirToTarget.IsNearlyZero() ? ShootingUnit->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
@@ -994,7 +981,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     FVector CenterSpawnOrigin = GetProjectileSpawnLocation();
 
     TArray<FVector> SpawnPositions;
-    if (TwinDistance > 0.f)
+    if (TwinDistance >= 10.f)
     {
         FVector DirToTarget = (Aim - CenterSpawnOrigin).GetSafeNormal2D();
         FVector RightVector = DirToTarget.IsNearlyZero() ? GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);

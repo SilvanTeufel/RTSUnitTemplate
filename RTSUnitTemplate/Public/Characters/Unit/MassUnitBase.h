@@ -175,7 +175,7 @@ public:
 	bool RemoveFocusEntityTarget();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool UpdateEntityHealth(float NewHealth);
+	bool UpdateEntityHealth(float NewHealth, float CurrentShield = -1.f);
 	
 	virtual bool UpdateLevelUpTimestamp() override;
 	

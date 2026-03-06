@@ -108,7 +108,7 @@ public:
 		void PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units);
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = TopDownRTSTemplate)
-		void SetUnitSelected(AUnitBase* Unit);
+		void SetUnitSelected(AUnitBase* Unit, bool bIsAi = false);
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = TopDownRTSTemplate)
 		void DeselectAllUnits();

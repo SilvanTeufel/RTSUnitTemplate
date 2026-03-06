@@ -91,6 +91,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 			struct FSig
 			{
 				FVector Loc; uint16 P=0,Y=0,R=0; FVector Scale; uint32 TagBits = 0u;
+				float Health = 0.f; float Shield = 0.f;
 				
 				// Optional: track uncritical data hash to detect changes without full replication? 
 				// No, FSig is just for the "Kick" decision.
@@ -98,6 +99,8 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				bool IsNearlyEqual(const FSig& O, float LocThresh, float AngleThresh, float ScaleThresh) const
 				{
 					if (TagBits != O.TagBits) return false;
+					if (!FMath::IsNearlyEqual(Health, O.Health, 0.1f)) return false;
+					if (!FMath::IsNearlyEqual(Shield, O.Shield, 0.1f)) return false;
 
 					// If the unit is dead, we don't care about transform changes for the purpose of kicking replication
 					const bool bIsDead = (TagBits & UnitTagBits::Dead) != 0;
@@ -771,6 +774,13 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			S.R = QuantizeAngle(Rot.Roll);
 			S.Scale = Xf.GetScale3D();
 			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
+
+			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+			{
+				S.Health = CS->Health;
+				S.Shield = CS->Shield;
+			}
+
 			NewSigs.Add(S);
 
 			const FSig* Prev = GLastSigByID.Find(ID);
@@ -796,6 +806,13 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			S.R = QuantizeAngle(Rot.Roll);
 			S.Scale = Xf.GetScale3D();
 			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
+
+			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+			{
+				S.Health = CS->Health;
+				S.Shield = CS->Shield;
+			}
+
 			NewSigs.Add(S);
 		}
 	}

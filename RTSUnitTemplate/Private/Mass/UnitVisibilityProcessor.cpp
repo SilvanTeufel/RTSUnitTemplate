@@ -134,33 +134,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
 			AEffectArea* Area = Cast<AEffectArea>(Actor);
-
-			// 0) Detect Health/Shield changes (only for non-Units, Units handle this via signal-driven UpdateEntityHealth)
-			const bool bHealthDifferent = !FMath::IsNearlyEqual(Vis.LastHealth, Stats.Health, 0.1f);
-			const bool bShieldDifferent = !FMath::IsNearlyEqual(Vis.LastShield, Stats.Shield, 0.1f);
-
-			if (bHealthDifferent || bShieldDifferent)
-			{
-				if (!Unit) // Only handle logic for non-Units here (e.g. EffectAreas). Units handle this via signal-driven UpdateEntityHealth.
-				{
-					// Only trigger recent damage popup if it's not the very first initialization
-					if (Vis.LastHealth >= 0.f)
-					{
-						const bool bDamageTrigger = (Stats.Health < Vis.LastHealth - 1.0f) || (Stats.Shield < Vis.LastShield - 1.0f);
-						const bool bHealTrigger = (Stats.Health > Vis.LastHealth + PositiveChangeThreshold) || (Stats.Shield > Vis.LastShield + PositiveChangeThreshold);
-
-						if (bDamageTrigger || bHealTrigger)
-						{
-							Vis.LastHealthChangeTime = CurrentTime;
-						}
-					}
-					Vis.LastHealth = Stats.Health;
-					Vis.LastShield = Stats.Shield;
-				}
-				// For Units, we skip updating Vis.LastHealth here to prevent stealing the update from GAS signals.
-				// UpdateEntityHealth will handle syncing them when the GAS signal arrives.
-			}
-
+			
 			FVector Location = Transforms[i].GetTransform().GetLocation();
 			
 			if (bDoThrottledUpdate)
@@ -273,33 +247,26 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				const bool bRecentlyDamaged = (CurrentTime - Vis.LastHealthChangeTime) < VisibleDuration;
 				const bool bRecentlyLeveled = (CurrentTime - Vis.LastLevelUpTime) < VisibleDuration;
 				const bool bRecentPing = CustomPC && (CurrentTime - CustomPC->LastHealthBarPingTime) < VisibleDuration;
-				const bool bNotFull = (Stats.Health > 0.f) && ((Stats.Health < Stats.MaxHealth - 1.0f) || (Stats.Shield < Stats.MaxShield - 1.0f));
+				const bool bNotFull = (Stats.Health > 0.f) && ((Stats.MaxHealth > 0.f && Stats.Health < Stats.MaxHealth - 1.0f) || (Stats.MaxShield > 0.f && Stats.Shield < Stats.MaxShield - 1.0f));
 
 				const bool bShowDueToPing = bRecentPing && bNotFull && (Vis.bIsMyTeam || Vis.bIsVisibleEnemy);
 
+				/*
+				if (bRecentPing && (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController())))
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[CLIENT][V-Ping] %s: Show=%d | bNotFull=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
+						*Actor->GetName(), bShowDueToPing, bNotFull, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
+				}
+
 				if (bRecentPing && bDoDiagnosticLog && (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController())))
 				{
-					UE_LOG(LogTemp, Error, TEXT("[CLIENT][V-Ping] %s: Show=%d | RecentPing=%d, NotFull=%d, IsMyTeam=%d, IsVisibleEnemy=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
+					UE_LOG(LogTemp, Error, TEXT("[CLIENT][V-Ping-Diagnostics] %s: Show=%d | RecentPing=%d, NotFull=%d, IsMyTeam=%d, IsVisibleEnemy=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
 						*Actor->GetName(), bShowDueToPing, bRecentPing, bNotFull, Vis.bIsMyTeam, Vis.bIsVisibleEnemy, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
 				}
-
+				*/
 				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration or if health <= 0
 				Unit->OpenHealthWidget = (Stats.Health > 0.f) && (bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing);
-				Unit->bShowLevelOnly = (Stats.Health > 0.f) && (bRecentlyLeveled && !bShowDueToPing && !bIsConstruction);
-
-				if (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController()))
-				{
-					if (Unit->OpenHealthWidget && bDoDiagnosticLog)
-					{
-						/*
-						const float DamagedTimeLeft = FMath::Max(0.f, VisibleDuration - (CurrentTime - Vis.LastHealthChangeTime));
-						const float PingTimeLeft = CustomPC ? FMath::Max(0.f, VisibleDuration - (CurrentTime - CustomPC->LastHealthBarPingTime)) : 0.f;
-						
-						UE_LOG(LogTemp, Error, TEXT("[CLIENT][VisibilityProcessor] %s: OHW=1 | Damaged=%d (%.2fs left), Ping=%d (%.2fs left), NotFull=%d, ShowDueToPing=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
-							*Actor->GetName(), bRecentlyDamaged, DamagedTimeLeft, bRecentPing, PingTimeLeft, bNotFull, bShowDueToPing, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
-						*/
-					}
-				}
+				Unit->bShowLevelOnly = (Stats.Health > 0.f) && (bRecentlyLeveled && !bShowDueToPing && !bIsConstruction && !bRecentlyDamaged);
 			}
 
 			// 4) High-frequency Updates (Client-only)
