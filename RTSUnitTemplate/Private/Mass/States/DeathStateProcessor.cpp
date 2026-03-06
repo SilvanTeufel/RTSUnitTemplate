@@ -106,7 +106,7 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                     UnitBase->CanBeSelected = false;
                     UnitBase->OpenHealthWidget = false;
                     UnitBase->bShowLevelOnly = false;
-                    if (GetWorld()->IsNetMode(NM_Client))
+             
                     {
                         if (PC && PC->HUDBase)
                         {
