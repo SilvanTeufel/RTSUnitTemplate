@@ -792,10 +792,6 @@ bool AMassUnitBase::UpdateEntityHealth(float NewHealth, float CurrentShield)
 				if (bDamageTrigger || bHealTrigger)
 				{
 					Vis->LastHealthChangeTime = GetWorld()->GetTimeSeconds();
-					if (bIsClient)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("[CLIENT][MassUnitBase] UpdateEntityHealth TRIGGER %s: H %.2f->%.2f, S %.2f->%.2f"), *GetName(), Vis->LastHealth, NewHealth, Vis->LastShield, ActualShield);
-					}
 				}
 
 				// Always update LastHealth/LastShield to track current state correctly.
