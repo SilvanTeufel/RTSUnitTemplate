@@ -126,6 +126,12 @@ public:
 	float LoseSightRadius = 2500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float LoseSightRadiusFaktor = 2.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	float LoseSightRadiusFaktorTimer = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float DespawnTime = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")

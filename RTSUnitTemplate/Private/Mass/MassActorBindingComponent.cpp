@@ -797,6 +797,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CombatStatsFrag->TeamId = EffectArea->TeamId;
 				CombatStatsFrag->SightRadius = SightRadius;
 				CombatStatsFrag->LoseSightRadius = LoseSightRadius;
+				CombatStatsFrag->LoseSightRadiusFaktor = LoseSightRadiusFaktor;
+				CombatStatsFrag->LoseSightRadiusFaktorTimer = LoseSightRadiusFaktorTimer;
+			
 			}
 			if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
 			{

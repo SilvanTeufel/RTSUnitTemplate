@@ -350,8 +350,14 @@ struct FMassAIStateFragment : public FMassFragment
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool CanAttack = true;
 
-	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	bool HoldPosition = false;
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool HoldPosition = false;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float ExtendedLoseSightTimer = 0.f;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool bHasExtendedLoseSight = false;
 	
 };
 
@@ -548,6 +554,12 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     float LoseSightRadius = 2500.f;
 
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float LoseSightRadiusFaktor = 2.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float LoseSightRadiusFaktorTimer = 2.f;
+	
     /** Dauer der Pause zwischen Angriffen (knnte auch aus AttackSpeed berechnet werden). */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float PauseDuration = 0.5f;

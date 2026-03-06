@@ -5,6 +5,7 @@
 #include "Actors/WinLoseConfigActor.h"
 
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
@@ -817,10 +818,32 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 			if (CameraControllerBase && CameraControllerBase->HUDBase)
 			{
+				// If we have selected units, cancel their actions before deselecting
 				if (CameraControllerBase->HUDBase->SelectedUnits.Num() > 0)
 				{
+					for (AUnitBase* Unit : CameraControllerBase->HUDBase->SelectedUnits)
+					{
+						if (Unit)
+						{
+							// 1. Destroy any dragged work area (like a building placement)
+							AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit);
+							if (Worker && Worker->CurrentDraggedWorkArea)
+							{
+								CameraControllerBase->DestroyDraggedArea(Worker);
+							}
+
+							// 2. Cancel the current ability and remove the AbilityIndicator
+							CameraControllerBase->CancelCurrentAbility(Unit);
+						}
+					}
+
+					// Clear selection
 					CameraControllerBase->HUDBase->DeselectAllUnits();
 					CameraControllerBase->SelectedUnits = CameraControllerBase->HUDBase->SelectedUnits;
+
+					// Clear the camera's user widget (Ability/Talent choosers)
+					SetUserWidget(nullptr);
+
 					return;
 				}
 			}

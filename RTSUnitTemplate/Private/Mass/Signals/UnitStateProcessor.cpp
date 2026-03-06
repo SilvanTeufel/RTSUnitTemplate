@@ -1167,8 +1167,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             	if (StrongUnitActor->MassActorBindingComponent)
             	{
-            		CombatStatsFrag->SightRadius = StrongUnitActor->MassActorBindingComponent->SightRadius;
-					CombatStatsFrag->LoseSightRadius = StrongUnitActor->MassActorBindingComponent->LoseSightRadius;
+            		if (AIStateFragment && !AIStateFragment->bHasExtendedLoseSight)
+            		{
+            			CombatStatsFrag->SightRadius = StrongUnitActor->MassActorBindingComponent->SightRadius;
+						CombatStatsFrag->LoseSightRadius = StrongUnitActor->MassActorBindingComponent->LoseSightRadius;
+            		}
             	}
 
             	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
@@ -1467,6 +1470,17 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
                 if (!TargetStatsFrag) continue;
 
+                // Extend LoseSightRadius by 2 folds if not already extended
+                if (FMassAIStateFragment* TargetAIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity))
+                {
+                    if (!TargetAIStateFrag->bHasExtendedLoseSight)
+                    {
+                        TargetStatsFrag->LoseSightRadius *= TargetStatsFrag->LoseSightRadiusFaktor;
+                        TargetAIStateFrag->bHasExtendedLoseSight = true;
+                    }
+                    TargetAIStateFrag->ExtendedLoseSightTimer = TargetStatsFrag->LoseSightRadiusFaktorTimer;
+                }
+                
                 bool bIsMagicDamage = UnitBase->IsDoingMagicDamage;
                 float BaseDamage = AttackerStats->AttackDamage;
                 float Defense = bIsMagicDamage ? TargetStatsFrag->MagicResistance : TargetStatsFrag->Armor;
@@ -1592,7 +1606,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
         const FTransformFragment* AttackerTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
         const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
         FMassAIStateFragment* AttackerStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-
+    	
         // 2. Validate Prereqs
         if (ActorFragPtr && TargetFrag && TargetFrag->bHasValidTarget && TargetFrag->TargetEntity.IsSet() &&
             AttackerTransformFrag && CharFrag && AttackerStateFrag)
@@ -1611,6 +1625,17 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
                 if (!TargetTransformFrag || !TargetCharFrag || !TargetStatsFrag || !AttackerStats) continue;
 
+                // Extend LoseSightRadius by 2 folds if not already extended
+                if (FMassAIStateFragment* TargetAIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity))
+                {
+                    if (!TargetAIStateFrag->bHasExtendedLoseSight)
+                    {
+                        TargetStatsFrag->LoseSightRadius *= 2.f;
+                        TargetAIStateFrag->bHasExtendedLoseSight = true;
+                    }
+                    TargetAIStateFrag->ExtendedLoseSightTimer = 2.f;
+                }
+                
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
                 float RangeWithCapsule = AttackerRange + CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
                 float AttackRangeSquared = FMath::Square(RangeWithCapsule);

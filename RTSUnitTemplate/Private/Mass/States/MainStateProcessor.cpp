@@ -22,7 +22,7 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.Initialize(EntityManager);
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     
@@ -97,13 +97,25 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
-            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            FMassCombatStatsFragment& StatsFrag = StatsList[i];
+
+            // Handle LoseSightRadius extension revert
+            if (StateFrag.bHasExtendedLoseSight)
+            {
+                StateFrag.ExtendedLoseSightTimer -= ExecutionInterval;
+                if (StateFrag.ExtendedLoseSightTimer <= 0.f)
+                {
+                    StatsFrag.LoseSightRadius /= StatsFrag.LoseSightRadiusFaktor;
+                    StateFrag.bHasExtendedLoseSight = false;
+                    StateFrag.ExtendedLoseSightTimer = 0.f;
+                }
+            }
             
             if (SignalSubsystem)
             {
