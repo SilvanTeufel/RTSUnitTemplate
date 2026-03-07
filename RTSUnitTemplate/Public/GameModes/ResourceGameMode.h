@@ -132,7 +132,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId);
-
 	
 	virtual float GetResource(int32 TeamId, EResourceType ResourceType) const override;
 	
@@ -158,6 +157,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetClosestResourcePlaces(AWorkingUnitBase* Worker);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	TArray<AWorkArea*> GetAllResourcePlaces(AWorkingUnitBase* Worker);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);

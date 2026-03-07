@@ -299,9 +299,42 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 
 void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
-	TArray<AWorkArea*> WorkPlaces = ResourceGameMode->GetClosestResourcePlaces(Worker);
-	//ResourceGameMode->SetAllCurrentWorkers(Worker->TeamId);
-	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlaces);
+	if (!ResourceGameMode) return;
+
+	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(Worker->TeamId);
+
+	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetAllResourcePlaces(Worker);
+
+	if (AllWorkPlaces.Num() == 0)
+	{
+		UnitBase->SetUEPathfinding = true;
+		Worker->SetUnitState(UnitData::Idle);
+		return;
+	}
+
+	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetActorLocation();
+	const float ClosestDistance = FVector::Dist(BaseLocation, AllWorkPlaces[0]->GetActorLocation());
+	const float DistanceThreshold = ClosestDistance * ResourceGameMode->ResourceDistanceMultiplier;
+
+	TArray<AWorkArea*> CloseWorkPlaces;
+	for (AWorkArea* WorkPlace : AllWorkPlaces)
+	{
+		if (!IsValid(WorkPlace)) continue;
+		const float WorkPlaceDistance = FVector::Dist(BaseLocation, WorkPlace->GetActorLocation());
+		if (WorkPlaceDistance <= DistanceThreshold)
+		{
+			CloseWorkPlaces.Add(WorkPlace);
+		}
+	}
+
+	if (CloseWorkPlaces.Num() == 0 && AllWorkPlaces.Num() > 0)
+	{
+		CloseWorkPlaces.Add(AllWorkPlaces[0]);
+	}
+
+	TArray<AWorkArea*> WorkPlacesForDistribution = bWorkerDistributionSet ? AllWorkPlaces : CloseWorkPlaces;
+
+	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlacesForDistribution);
 
 	if (NewResourcePlace)
 	{
@@ -321,23 +354,51 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	}
 	else if (!UnitBase->ResourcePlace)
 	{
-		NewResourcePlace = ResourceGameMode->GetRandomClosestWorkArea(WorkPlaces);
+		// Fallback: pick the one with fewest workers from close list (extra workers)
+		AWorkArea* BestFallback = nullptr;
+		int32 LowestWorkerCount = INT_MAX;
 		
-		if (NewResourcePlace)
+		for (AWorkArea* WorkPlace : CloseWorkPlaces)
 		{
-			if(UnitBase->ResourcePlace && UnitBase->ResourcePlace->Type != NewResourcePlace->Type)
-			{
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-			}
-			else if(!UnitBase->ResourcePlace)
-			{
-				ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-			}
-			UnitBase->ResourcePlace = NewResourcePlace;
+			if (!IsValid(WorkPlace)) continue;
 
-			// Register worker at the fallback location immediately
+			// For extra workers (who fall back here), we ignore the distribution type check
+			// as they should just pick any close resource that has space.
+			
+			const int32 WorkerCount = WorkPlace->Workers.Num();
+			if (WorkerCount < LowestWorkerCount && WorkerCount < WorkPlace->MaxWorkerCount)
+			{
+				LowestWorkerCount = WorkerCount;
+				BestFallback = WorkPlace;
+			}
+		}
+
+		// If still no fallback found with space, pick the one with absolute lowest count in close range
+		if (!BestFallback)
+		{
+			for (AWorkArea* WorkPlace : CloseWorkPlaces)
+			{
+				if (!IsValid(WorkPlace)) continue;
+				const int32 WorkerCount = WorkPlace->Workers.Num();
+				if (WorkerCount < LowestWorkerCount)
+				{
+					LowestWorkerCount = WorkerCount;
+					BestFallback = WorkPlace;
+				}
+			}
+		}
+		
+		if (BestFallback)
+		{
+			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestFallback->Type), +1.0f);
+			UnitBase->ResourcePlace = BestFallback;
 			UnitBase->ResourcePlace->AddWorkerToArray(Worker);
+		}
+		else
+		{
+			UnitBase->SetUEPathfinding = true;
+			Worker->SetUnitState(UnitData::Idle);
+			return;
 		}
 	}
 	else
@@ -349,18 +410,6 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 		}
 	}
 
-	/*
-	if(Worker->ResourcePlace && NewResourcePlace && Worker->ResourcePlace->Type != NewResourcePlace->Type)
-	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
-	}else if(!Worker->ResourcePlace && NewResourcePlace)
-	{
-		ResourceGameMode->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
-		Worker->ResourcePlace = NewResourcePlace;
-	}*/
-	
 	UnitBase->SetUEPathfinding = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 	Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);

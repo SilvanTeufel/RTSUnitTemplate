@@ -724,34 +724,7 @@ float AResourceGameMode::GetResource(int32 TeamId, EResourceType ResourceType) c
 
 TArray<AWorkArea*> AResourceGameMode::GetClosestResourcePlaces(AWorkingUnitBase* Worker)
 {
-	// Clean up all arrays in WorkAreaGroups to remove invalid pointers
-	WorkAreaGroups.PrimaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-	WorkAreaGroups.SecondaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-	WorkAreaGroups.TertiaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-	WorkAreaGroups.RareAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-	WorkAreaGroups.EpicAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-	WorkAreaGroups.LegendaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
-    
-	TArray<AWorkArea*> AllAreas;
-	// Combine all resource areas into a single array for simplicity
-	AllAreas.Append(WorkAreaGroups.PrimaryAreas);
-	AllAreas.Append(WorkAreaGroups.SecondaryAreas);
-	AllAreas.Append(WorkAreaGroups.TertiaryAreas);
-	AllAreas.Append(WorkAreaGroups.RareAreas);
-	AllAreas.Append(WorkAreaGroups.EpicAreas);
-	AllAreas.Append(WorkAreaGroups.LegendaryAreas);
-	// Exclude BaseAreas and BuildAreas if they are not considered resource places
-
-	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
-	// This ensures resources are selected based on proximity to the base, not the worker's current position
-	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base)) 
-		? Worker->Base->GetActorLocation() 
-		: Worker->GetActorLocation();
-	
-	AllAreas.Sort([ReferenceLocation](const AWorkArea& AreaA, const AWorkArea& AreaB) {
-		return (AreaA.GetActorLocation() - ReferenceLocation).SizeSquared() < 
-			   (AreaB.GetActorLocation() - ReferenceLocation).SizeSquared();
-	});
+	TArray<AWorkArea*> AllAreas = GetAllResourcePlaces(Worker);
 
 	// Take up to the first five areas
 	int32 NumAreas = FMath::Min(MaxResourceAreasToSet, AllAreas.Num());
@@ -764,11 +737,44 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestResourcePlaces(AWorkingUnitBase*
 	return ClosestAreas;
 }
 
+TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Worker)
+{
+	// Clean up all arrays in WorkAreaGroups to remove invalid pointers
+	WorkAreaGroups.PrimaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.SecondaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.TertiaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.RareAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.EpicAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+	WorkAreaGroups.LegendaryAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area); });
+
+	TArray<AWorkArea*> AllAreas;
+	// Combine all resource areas into a single array for simplicity
+	AllAreas.Append(WorkAreaGroups.PrimaryAreas);
+	AllAreas.Append(WorkAreaGroups.SecondaryAreas);
+	AllAreas.Append(WorkAreaGroups.TertiaryAreas);
+	AllAreas.Append(WorkAreaGroups.RareAreas);
+	AllAreas.Append(WorkAreaGroups.EpicAreas);
+	AllAreas.Append(WorkAreaGroups.LegendaryAreas);
+
+	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
+	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))
+		? Worker->Base->GetActorLocation()
+		: Worker->GetActorLocation();
+
+	AllAreas.Sort([ReferenceLocation](const AWorkArea& AreaA, const AWorkArea& AreaB) {
+		return (AreaA.GetActorLocation() - ReferenceLocation).SizeSquared() <
+			   (AreaB.GetActorLocation() - ReferenceLocation).SizeSquared();
+	});
+
+	return AllAreas;
+}
+
 AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas)
 {
 	AWorkArea* BestWorkArea = nullptr;
 	int32 LowestWorkerCount = INT_MAX;
-	
+	const bool bDistributionSet = IsWorkerDistributionSet(TeamId);
+
 	// Check if there is space for the worker in any WorkArea based on ResourceType
 	for (AWorkArea* WorkArea : WorkAreas)
 	{
@@ -782,17 +788,28 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 			if (CurrentWorkers < MaxWorkers)
 			{
 				const int32 WorkerCount = WorkArea->Workers.Num();
-				if (WorkerCount < LowestWorkerCount)
+				if (WorkerCount < WorkArea->MaxWorkerCount)
 				{
-					LowestWorkerCount = WorkerCount;
-					BestWorkArea = WorkArea;
+					// If distribution is set, we prioritize distance. 
+					// Since WorkAreas is already sorted by distance, return the first one found!
+					if (bDistributionSet)
+					{
+						return WorkArea;
+					}
+
+					if (WorkerCount < LowestWorkerCount)
+					{
+						LowestWorkerCount = WorkerCount;
+						BestWorkArea = WorkArea;
+					}
 				}
 			}
 		}
 	}
 
-	// Fallback: If no work area matches the MaxWorkers constraint, pick the one with fewest workers anyway
-	if (!BestWorkArea && WorkAreas.Num() > 0)
+	// Fallback: If no work area matches the MaxWorkers constraint and NO distribution is set, 
+	// pick the one with fewest workers anyway
+	if (!BestWorkArea && !bDistributionSet && WorkAreas.Num() > 0)
 	{
 		for (AWorkArea* WorkArea : WorkAreas)
 		{

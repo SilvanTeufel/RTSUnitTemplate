@@ -5,6 +5,8 @@
 #include "Mass/UnitMassTag.h"
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/MassActorBindingComponent.h"
 #include "MassRepresentationFragments.h"
 #include "MassRepresentationTypes.h"
 #include "Async/Async.h"
@@ -86,28 +88,48 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 				bHasTarget = true;
 			}
 
+			FQuat TargetQuat = FRotator(0.f, UnitBase->GetActorRotation().Yaw + FollowFrag.OffsetDegrees, 0.f).Quaternion();
+
 			if (bHasTarget)
 			{
-				FVector Dir = TargetLocation - CurrentActorLocation;
-				Dir.Z = 0.f;
-				if (Dir.Normalize())
+				bool bIsDead = false;
+				if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
 				{
-					FQuat DesiredQuat = Dir.ToOrientationQuat();
-					float TargetYaw = DesiredQuat.Rotator().Yaw + FollowFrag.OffsetDegrees;
-					FQuat TargetQuat = FRotator(0.f, TargetYaw, 0.f).Quaternion();
+					bIsDead = DoesEntityHaveTag(EntityManager, TargetFrag.TargetEntity, FMassStateDeadTag::StaticStruct());
+				}
 
-					// Smooth interpolation
-					float Alpha = (FollowFrag.Duration > 0.f) ? FMath::Clamp(DeltaTime / FollowFrag.Duration, 0.f, 1.f) : 1.f;
-					if (FollowFrag.EaseExp != 1.0f && FollowFrag.Duration > 0.f)
+				const float Distance = FVector::Dist(CurrentActorLocation, TargetLocation);
+				float MaxRange = 2500.f;
+				if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+				{
+					if (MassUnit->MassActorBindingComponent)
 					{
-						Alpha = FMath::Pow(Alpha, FollowFrag.EaseExp);
+						MaxRange = MassUnit->MassActorBindingComponent->LoseSightRadius;
 					}
-					
+				}
 
-					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, Alpha);
-					MassTransform.SetRotation(NewQuat);
+				if (!bIsDead && Distance <= MaxRange)
+				{
+					FVector Dir = TargetLocation - CurrentActorLocation;
+					Dir.Z = 0.f;
+					if (Dir.Normalize())
+					{
+						FQuat DesiredQuat = Dir.ToOrientationQuat();
+						float TargetYaw = DesiredQuat.Rotator().Yaw + FollowFrag.OffsetDegrees;
+						TargetQuat = FRotator(0.f, TargetYaw, 0.f).Quaternion();
+					}
 				}
 			}
+
+			// Smooth interpolation
+			float Alpha = (FollowFrag.Duration > 0.f) ? FMath::Clamp(DeltaTime / FollowFrag.Duration, 0.f, 1.f) : 1.f;
+			if (FollowFrag.EaseExp != 1.0f && FollowFrag.Duration > 0.f)
+			{
+				Alpha = FMath::Pow(Alpha, FollowFrag.EaseExp);
+			}
+
+			FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, Alpha);
+			MassTransform.SetRotation(NewQuat);
 
 			// Always update PositionedTransform
 			CharList[i].PositionedTransform = MassTransform;

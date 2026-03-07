@@ -17,11 +17,21 @@ class UGameplayAbilityBase;
 #include "Components/AudioComponent.h"
 #include "ExtendedControllerBase.generated.h"
 
+USTRUCT()
 struct FExtractionAudioData
 {
+	GENERATED_BODY()
+
+	UPROPERTY()
 	AWorkArea* WorkArea = nullptr;
+
+	UPROPERTY()
 	float Distance = MAX_FLT;
+
+	UPROPERTY()
 	float Volume = 0.f;
+
+	UPROPERTY()
 	float LastSignalTime = 0.f;
 
 	FExtractionAudioData() {}
@@ -40,6 +50,7 @@ private:
 	/** Handle for the timer that logs entity tags after BeginPlay. */
 	FTimerHandle LogTagsTimerHandle;
 
+	UPROPERTY()
 	TMap<EResourceType, FExtractionAudioData> SignaledExtractions;
 	FDelegateHandle ExtractionSignalHandle;
 	

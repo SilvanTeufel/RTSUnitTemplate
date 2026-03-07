@@ -170,7 +170,9 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 {
 	if (!ResourceGameMode) return;
 
-	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetClosestResourcePlaces(UnitBase);
+	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(UnitBase->TeamId);
+
+	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetAllResourcePlaces(UnitBase);
 	
 	if (AllWorkPlaces.Num() == 0)
 	{
@@ -181,40 +183,37 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	
 	// Use Base location for distance calculation (worker is at base when this is called)
 	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetActorLocation();
-	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(UnitBase->TeamId);
-	
+
 	// Calculate distance threshold based on the closest resource (multiplier of closest distance)
 	const float ClosestDistance = FVector::Dist(BaseLocation, AllWorkPlaces[0]->GetActorLocation());
 	const float DistanceThreshold = ClosestDistance * ResourceGameMode->ResourceDistanceMultiplier;
 	
 	// Filter all work places to only include those within threshold distance
-	TArray<AWorkArea*> WorkPlaces;
+	TArray<AWorkArea*> CloseWorkPlaces;
 	for (AWorkArea* WorkPlace : AllWorkPlaces)
 	{
-		if (!IsValid(WorkPlace))
-		{
-			continue;
-		}
-		
+		if (!IsValid(WorkPlace)) continue;
 		const float WorkPlaceDistance = FVector::Dist(BaseLocation, WorkPlace->GetActorLocation());
 		if (WorkPlaceDistance <= DistanceThreshold)
 		{
-			WorkPlaces.Add(WorkPlace);
+			CloseWorkPlaces.Add(WorkPlace);
 		}
 	}
 	
 	// If no work places within threshold, use the closest one as fallback
-	if (WorkPlaces.Num() == 0 && AllWorkPlaces.Num() > 0)
+	if (CloseWorkPlaces.Num() == 0 && AllWorkPlaces.Num() > 0)
 	{
-		WorkPlaces.Add(AllWorkPlaces[0]);
+		CloseWorkPlaces.Add(AllWorkPlaces[0]);
 	}
+
+	TArray<AWorkArea*> WorkPlacesForDistribution = bWorkerDistributionSet ? AllWorkPlaces : CloseWorkPlaces;
 	
 	// Get suitable work area considering worker distribution
-	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlaces);
+	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlacesForDistribution);
 
 	// Check if worker should switch to a closer resource area with fewer workers
 	// This ensures even distribution within the threshold
-	if (IsValid(UnitBase->ResourcePlace) && WorkPlaces.Num() > 0)
+	if (IsValid(UnitBase->ResourcePlace) && CloseWorkPlaces.Num() > 0)
 	{
 		const float CurrentDistance = FVector::Dist(BaseLocation, UnitBase->ResourcePlace->GetActorLocation());
 		const float SwitchThreshold = CurrentDistance / ResourceGameMode->ResourceDistanceMultiplier;
@@ -222,7 +221,7 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 		// Collect all suitable work places that are significantly closer
 		TArray<AWorkArea*> SuitableCloserAreas;
 		
-		for (AWorkArea* WorkPlace : WorkPlaces)
+		for (AWorkArea* WorkPlace : CloseWorkPlaces)
 		{
 			if (!IsValid(WorkPlace) || WorkPlace == UnitBase->ResourcePlace)
 			{
@@ -271,10 +270,40 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 			for (AWorkArea* WorkPlace : SuitableCloserAreas)
 			{
 				const int32 WorkerCount = WorkPlace->Workers.Num();
-				if (WorkerCount < LowestWorkerCount)
+				
+				// Prefer areas with space
+				if (WorkerCount < WorkPlace->MaxWorkerCount)
 				{
-					LowestWorkerCount = WorkerCount;
-					BestWorkPlace = WorkPlace;
+					// If distribution is set, we prioritize distance among those with space
+					if (bWorkerDistributionSet && !BestWorkPlace)
+					{
+						BestWorkPlace = WorkPlace;
+						LowestWorkerCount = WorkerCount;
+						// If we want absolute closest, we could return here, 
+						// but balancing within the same distance class might be okay.
+						// However, to be safe and satisfy "prefer proximity", let's just pick the first one (closest)
+						break;
+					}
+
+					if (WorkerCount < LowestWorkerCount)
+					{
+						LowestWorkerCount = WorkerCount;
+						BestWorkPlace = WorkPlace;
+					}
+				}
+			}
+
+			// If no area with space found, fallback to any closer area with lowest worker count
+			if (!BestWorkPlace)
+			{
+				for (AWorkArea* WorkPlace : SuitableCloserAreas)
+				{
+					const int32 WorkerCount = WorkPlace->Workers.Num();
+					if (WorkerCount < LowestWorkerCount)
+					{
+						LowestWorkerCount = WorkerCount;
+						BestWorkPlace = WorkPlace;
+					}
 				}
 			}
 			
@@ -327,22 +356,40 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	}
 	else if (!IsValid(UnitBase->ResourcePlace))
 	{
-		// Fallback: pick the one with fewest workers from filtered list
+		// Fallback: pick the one with fewest workers from close list (extra workers)
 		AWorkArea* BestFallback = nullptr;
 		int32 LowestWorkerCount = INT_MAX;
 		
-		for (AWorkArea* WorkPlace : WorkPlaces)
+		for (AWorkArea* WorkPlace : CloseWorkPlaces)
 		{
 			if (!IsValid(WorkPlace))
 			{
 				continue;
 			}
+
+			// For extra workers (who fall back here), we ignore the distribution type check
+			// as they should just pick any close resource that has space.
 			
 			const int32 WorkerCount = WorkPlace->Workers.Num();
-			if (WorkerCount < LowestWorkerCount)
+			if (WorkerCount < LowestWorkerCount && WorkerCount < WorkPlace->MaxWorkerCount)
 			{
 				LowestWorkerCount = WorkerCount;
 				BestFallback = WorkPlace;
+			}
+		}
+
+		// If still no fallback found with space, pick the one with absolute lowest count in close range
+		if (!BestFallback)
+		{
+			for (AWorkArea* WorkPlace : CloseWorkPlaces)
+			{
+				if (!IsValid(WorkPlace)) continue;
+				const int32 WorkerCount = WorkPlace->Workers.Num();
+				if (WorkerCount < LowestWorkerCount)
+				{
+					LowestWorkerCount = WorkerCount;
+					BestFallback = WorkPlace;
+				}
 			}
 		}
 		

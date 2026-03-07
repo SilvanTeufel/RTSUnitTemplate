@@ -1943,33 +1943,47 @@ void AMassUnitBase::ISMInstanceYawFollow_Step()
 
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		float DesiredRelativeYaw = Data.OffsetDegrees;
+		float DesiredWorldYaw = FRotator::NormalizeAxis(GetActorRotation().Yaw + Data.OffsetDegrees);
 
 		if (IsValid(TargetUnit))
 		{
-			FTransform InstTransform;
-			Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
-			const FVector CompWorldLoc = InstTransform.GetLocation();
-			FVector TargetLoc = TargetUnit->GetActorLocation();
-
-			FVector ToTarget = TargetLoc - CompWorldLoc;
-			ToTarget.Z = 0.f;
-			if (ToTarget.IsNearlyZero(1e-3f))
+			bool bIsDead = false;
+			if (AMassUnitBase* MassTarget = Cast<AMassUnitBase>(TargetUnit))
 			{
-				continue;
+				FMassEntityManager* TargetEM;
+				FMassEntityHandle TargetHandle;
+				if (MassTarget->GetMassEntityData(TargetEM, TargetHandle))
+				{
+					bIsDead = DoesEntityHaveTag(*TargetEM, TargetHandle, FMassStateDeadTag::StaticStruct());
+				}
 			}
 
-			const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-			float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
-			DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+			const float Distance = FVector::Dist(GetActorLocation(), TargetUnit->GetActorLocation());
+			const float MaxRange = MassActorBindingComponent ? MassActorBindingComponent->LoseSightRadius : 2500.f;
 
-			float ParentYaw = 0.f;
-			if (const USceneComponent* Parent = Comp->GetAttachParent())
+			if (!bIsDead && Distance <= MaxRange)
 			{
-				ParentYaw = Parent->GetComponentRotation().Yaw;
+				FTransform InstTransform;
+				Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
+				const FVector CompWorldLoc = InstTransform.GetLocation();
+				FVector TargetLoc = TargetUnit->GetActorLocation();
+
+				FVector ToTarget = TargetLoc - CompWorldLoc;
+				ToTarget.Z = 0.f;
+				if (!ToTarget.IsNearlyZero(1e-3f))
+				{
+					const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+					DesiredWorldYaw = FRotator::NormalizeAxis(FacingRot.Yaw + Data.OffsetDegrees);
+				}
 			}
-			DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 		}
+
+		float ParentYaw = 0.f;
+		if (const USceneComponent* Parent = Comp->GetAttachParent())
+		{
+			ParentYaw = Parent->GetComponentRotation().Yaw;
+		}
+		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 
 		FTransform RelativeTransform;
 		Comp->GetInstanceTransform(Key.InstanceIndex, RelativeTransform, false);
@@ -2078,33 +2092,46 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 		// Use UnitToChase from AUnitBase if available
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		float DesiredRelativeYaw = Data.OffsetDegrees;
+		float DesiredWorldYaw = FRotator::NormalizeAxis(GetActorRotation().Yaw + Data.OffsetDegrees);
 
 		if (IsValid(TargetUnit))
 		{
-			const FVector CompWorldLoc = Comp->GetComponentLocation();
-			FVector TargetLoc = TargetUnit->GetActorLocation();
-
-			// 2D direction on the XY plane
-			FVector ToTarget = TargetLoc - CompWorldLoc;
-			ToTarget.Z = 0.f;
-			if (ToTarget.IsNearlyZero(1e-3f))
+			bool bIsDead = false;
+			if (AMassUnitBase* MassTarget = Cast<AMassUnitBase>(TargetUnit))
 			{
-				continue;
+				FMassEntityManager* TargetEM;
+				FMassEntityHandle TargetHandle;
+				if (MassTarget->GetMassEntityData(TargetEM, TargetHandle))
+				{
+					bIsDead = DoesEntityHaveTag(*TargetEM, TargetHandle, FMassStateDeadTag::StaticStruct());
+				}
 			}
 
-			const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-			float DesiredWorldYaw = FacingRot.Yaw + Data.OffsetDegrees;
-			DesiredWorldYaw = FRotator::NormalizeAxis(DesiredWorldYaw);
+			const float Distance = FVector::Dist(GetActorLocation(), TargetUnit->GetActorLocation());
+			const float MaxRange = MassActorBindingComponent ? MassActorBindingComponent->LoseSightRadius : 2500.f;
 
-			// Convert desired world yaw to relative yaw under parent if any
-			float ParentYaw = 0.f;
-			if (const USceneComponent* Parent = Comp->GetAttachParent())
+			if (!bIsDead && Distance <= MaxRange)
 			{
-				ParentYaw = Parent->GetComponentRotation().Yaw;
+				const FVector CompWorldLoc = Comp->GetComponentLocation();
+				FVector TargetLoc = TargetUnit->GetActorLocation();
+
+				// 2D direction on the XY plane
+				FVector ToTarget = TargetLoc - CompWorldLoc;
+				ToTarget.Z = 0.f;
+				if (!ToTarget.IsNearlyZero(1e-3f))
+				{
+					const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
+					DesiredWorldYaw = FRotator::NormalizeAxis(FacingRot.Yaw + Data.OffsetDegrees);
+				}
 			}
-			DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 		}
+
+		float ParentYaw = 0.f;
+		if (const USceneComponent* Parent = Comp->GetAttachParent())
+		{
+			ParentYaw = Parent->GetComponentRotation().Yaw;
+		}
+		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
 
 		FRotator NewRelative = Comp->GetRelativeRotation();
 		NewRelative.Yaw = DesiredRelativeYaw;

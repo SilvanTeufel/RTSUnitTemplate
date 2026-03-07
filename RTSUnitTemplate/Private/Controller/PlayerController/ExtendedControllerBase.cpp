@@ -4206,8 +4206,11 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 {
 	if (!IsLocalController()) return;
 
+	UWorld* World = GetWorld();
+	if (!World) return;
+
 	float CurrentSoundMultiplier = GetSoundMultiplier();
-	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float CurrentTime = World->GetTimeSeconds();
 	const float SignalTimeout = 0.5f; // Keep the sound for a bit longer than the signal interval
 
 	// Now handle the audio components
@@ -4220,13 +4223,15 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 		// Check if we have recent signaled data
 		bool bIsRecentlySignaled = SignaledData && (CurrentTime - SignaledData->LastSignalTime) < SignalTimeout;
 
-		if (bIsRecentlySignaled && SignaledData->WorkArea && SignaledData->WorkArea->ExtractionSound)
+		if (bIsRecentlySignaled && IsValid(SignaledData->WorkArea) && IsValid(SignaledData->WorkArea->ExtractionSound))
 		{
 			float FinalVolume = CurrentSoundMultiplier * SignaledData->Volume;
+			AWorkArea* WorkArea = SignaledData->WorkArea;
+			USoundBase* Sound = WorkArea->ExtractionSound;
 
 			if (!IsValid(AudioComp))
 			{
-				AudioComp = UGameplayStatics::SpawnSound2D(this, SignaledData->WorkArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
+				AudioComp = UGameplayStatics::SpawnSound2D(this, Sound, 0.f, 1.f, 0.f, nullptr, false, true);
 				if (AudioComp)
 				{
 					ExtractionAudioComponents.Add(Type, AudioComp);
@@ -4235,12 +4240,15 @@ void AExtendedControllerBase::UpdateExtractionSounds(float DeltaSeconds)
 			}
 			else
 			{
-				if (AudioComp->Sound != SignaledData->WorkArea->ExtractionSound)
+				if (AudioComp->Sound != Sound)
 				{
-					AudioComp->FadeOut(SignaledData->WorkArea->ExtractionSoundFadeOutDuration, 0.f);
-					AudioComp = UGameplayStatics::SpawnSound2D(this, SignaledData->WorkArea->ExtractionSound, 0.f, 1.f, 0.f, nullptr, false, true);
-					ExtractionAudioComponents.Add(Type, AudioComp);
-					AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
+					AudioComp->FadeOut(WorkArea->ExtractionSoundFadeOutDuration, 0.f);
+					AudioComp = UGameplayStatics::SpawnSound2D(this, Sound, 0.f, 1.f, 0.f, nullptr, false, true);
+					if (AudioComp)
+					{
+						ExtractionAudioComponents.Add(Type, AudioComp);
+						AudioComp->FadeIn(ExtractionSoundFadeInDuration, FinalVolume);
+					}
 				}
 				else if (!AudioComp->IsPlaying())
 				{
