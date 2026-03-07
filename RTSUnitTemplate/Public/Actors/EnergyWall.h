@@ -1,0 +1,95 @@
+﻿// Copyright 2024 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "EnergyWall.generated.h"
+
+class UInstancedStaticMeshComponent;
+class UBoxComponent;
+class UNavModifierComponent;
+class ABuildingBase;
+
+/**
+ * AEnergyWall - An adaptive energy wall actor that connects two buildings.
+ * Holds three ISM meshes (Top Rod, Bottom Rod, Shield Plane) and acts as a navigation obstacle.
+ */
+UCLASS()
+class RTSUNITTEMPLATE_API AEnergyWall : public AActor
+{
+	GENERATED_BODY()
+	
+public:	
+	AEnergyWall();
+
+protected:
+	virtual void BeginPlay() override;
+
+public:	
+	virtual void Tick(float DeltaTime) override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	USceneComponent* WallRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInstancedStaticMeshComponent* TopRodISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInstancedStaticMeshComponent* BottomRodISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInstancedStaticMeshComponent* ShieldISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UBoxComponent* NavObstacleBox;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UNavModifierComponent* NavModifier;
+
+	/**
+	 * Initializes the wall between two buildings, setting up its position, rotation, scaling, and navigation obstacle.
+	 * @param BuildingA First building to connect.
+	 * @param BuildingB Second building to connect.
+	 */
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = "EnergyWall")
+	void Multicast_InitializeWall(ABuildingBase* BuildingA, ABuildingBase* BuildingB);
+
+	/**
+	 * Initializes the ISMs for the wall.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EnergyWall")
+	void InitializeISMs();
+
+	/**
+	 * Initializes an additional ISM for the wall.
+	 * @param InISMComponent The ISM component to initialize.
+	 * @return The index of the added or updated instance.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EnergyWall")
+	int32 InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
+
+	/**
+	 * Starts the despawn process, notifying the navigation system and applying visual effects via materials.
+	 * @param DestroyedActor The actor whose destruction triggered this call.
+	 */
+	UFUNCTION()
+	void StartDespawn(AActor* DestroyedActor);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall")
+	float DespawnDelay = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall")
+	FName DespawnStartTimeParameterName = "DespawnStartTime";
+
+private:
+	UPROPERTY()
+	ABuildingBase* CachedBuildingA;
+
+	UPROPERTY()
+	ABuildingBase* CachedBuildingB;
+
+	void RegisterObstacle(float Length);
+    
+	bool bIsDespawning = false;
+};

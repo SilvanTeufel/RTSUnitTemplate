@@ -23,6 +23,7 @@
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Components/StaticMeshComponent.h"
 #include "Actors/WorkArea.h"
+#include "Actors/EnergyWall.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameModes/RTSGameModeBase.h"
@@ -1843,6 +1844,20 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
                     if (UnitBase)
                     {
+                        if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase))
+                        {
+                            for (AEnergyWall* Wall : BuildingBase->EnergyWallArray)
+                            {
+                                if (IsValid(Wall))
+                                {
+                                    Wall->StartDespawn(BuildingBase);
+                                    if (BuildingBase->Origin) BuildingBase->Origin->EnergyWallArray.Remove(Wall);
+                                    if (BuildingBase->Extension) BuildingBase->Extension->EnergyWallArray.Remove(Wall);
+                                }
+                            }
+                            BuildingBase->EnergyWallArray.Empty();
+                        }
+
                     	if (UnitBase->HasAuthority() && UnitBase->NavObstacleProxy) UnitBase->Multicast_UnregisterObstacle();
                     	UnitBase->KillLoadedUnits();
                     	UnitBase->CanActivateAbilities = false;
@@ -2248,10 +2263,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 									if (UnitBase->BuildArea->IsExtensionArea && SpawnedBuilding)
 									{
-										SpawnedBuilding->Origin = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
-										SpawnedBuilding->Origin->Extension = SpawnedBuilding;
-										
-										if (UnitBase->BuildArea->KillOrigin)
+										if (UnitBase->BuildArea->KillOrigin && SpawnedBuilding->Origin)
 										{
 											SpawnedBuilding->Origin->Destroy(false, true);
 										}
@@ -2392,6 +2404,18 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     // --------------------------------------------
     // 6) Jetzt wird der Actor final in die Welt gesetzt
     // --------------------------------------------
+	if (BuildArea && BuildArea->IsExtensionArea)
+	{
+		if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase))
+		{
+			BuildingBase->Origin = Cast<ABuildingBase>(BuildArea->Origin);
+			if (BuildingBase->Origin) 
+			{
+				BuildingBase->Origin->Extension = BuildingBase;
+			}
+		}
+	}
+	
     UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 
 

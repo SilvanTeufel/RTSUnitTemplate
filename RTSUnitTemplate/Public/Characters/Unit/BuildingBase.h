@@ -14,6 +14,7 @@
 #include "UnitBase.h"
 #include "BuildingBase.generated.h"
 
+class AEnergyWall;
 
 UCLASS()
 class RTSUNITTEMPLATE_API ABuildingBase : public AUnitBase
@@ -60,6 +61,15 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Origin = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<AEnergyWall> EnergyWallClass;
+
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	TArray<AEnergyWall*> EnergyWallArray;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, ABuildingBase* InOrigin);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetBeaconRange(float NewRange);

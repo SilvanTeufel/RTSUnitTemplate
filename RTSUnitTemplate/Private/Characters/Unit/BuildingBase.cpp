@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/BuildingBase.h"
+#include "Actors/EnergyWall.h"
 
 #include "Elements/Framework/TypedElementQueryBuilder.h"
 #include "GameModes/ResourceGameMode.h"
@@ -28,6 +29,11 @@ void ABuildingBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (EnergyWallClass && Origin)
+	{
+		SpawnEnergyWall(EnergyWallClass, Origin);
+	}
+
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 	if(ResourceGameMode)
@@ -37,6 +43,21 @@ void ABuildingBase::BeginPlay()
 void ABuildingBase::SetBeaconRange(float NewRange)
 {
 	BeaconRange = FMath::Max(0.f, NewRange);
+}
+
+void ABuildingBase::SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, ABuildingBase* InOrigin)
+{
+	if (!InEnergyWallClass || !InOrigin) return;
+	if (UWorld* World = GetWorld())
+	{
+		AEnergyWall* NewWall = World->SpawnActor<AEnergyWall>(InEnergyWallClass, FTransform::Identity);
+		if (NewWall)
+		{
+			NewWall->Multicast_InitializeWall(InOrigin, this);
+			EnergyWallArray.Add(NewWall);
+			InOrigin->EnergyWallArray.Add(NewWall);
+		}
+	}
 }
 
 void ABuildingBase::Destroyed()
