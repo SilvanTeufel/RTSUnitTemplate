@@ -38,9 +38,7 @@ AEnergyWall::AEnergyWall()
 	// Collision for physical blocking and projectile interception, but NOT for NavMesh generation
 	NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	NavObstacleBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-	//NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	//NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
-	//NavObstacleBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	NavObstacleBox->SetCanEverAffectNavigation(false);
 
 	NavModifier = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifier"));
@@ -87,6 +85,18 @@ void AEnergyWall::Tick(float DeltaTime)
 		{
 			BottomTransform.SetScale3D(FVector(1.f, CurrentScaleY, 1.f));
 			BottomRodISM->UpdateInstanceTransform(0, BottomTransform, false, true, true);
+		}
+
+		FTransform ShieldTransform;
+		if (ShieldISM->GetInstanceTransform(0, ShieldTransform))
+		{
+			ShieldTransform.SetScale3D(FVector(1.f, CurrentScaleY, 1.f));
+			ShieldISM->UpdateInstanceTransform(0, ShieldTransform, false, true, true);
+		}
+
+		if ((bIsInitializing && bFlickerOnInitialize) || (bIsDespawning && bFlickerOnDespawn))
+		{
+			ShieldISM->SetHiddenInGame(FMath::FRand() > 0.5f);
 		}
 	}
 }

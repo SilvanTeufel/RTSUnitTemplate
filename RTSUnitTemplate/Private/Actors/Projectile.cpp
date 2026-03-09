@@ -2,6 +2,7 @@
 
 
 #include "Actors/Projectile.h"
+#include "Actors/EnergyWall.h"
 
 #include "MassSignalSubsystem.h"
 #include "Components/CapsuleComponent.h"
@@ -99,6 +100,7 @@ AProjectile::AProjectile()
 
 	bReplicates = true;
 	InstanceIndex = INDEX_NONE; // Initialize the instance index
+	LastWallHitLocation = FVector::ZeroVector;
 }
 
 void AProjectile::OnConstruction(const FTransform& Transform)
@@ -362,6 +364,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, IsHealing);
 	DOREPLIFETIME(AProjectile, IsBouncingBack);
 	DOREPLIFETIME(AProjectile, IsBouncingNext);
+	DOREPLIFETIME(AProjectile, bCanBeRepelledByEnergyWall);
 	DOREPLIFETIME(AProjectile, BouncedBack);
 	DOREPLIFETIME(AProjectile, ProjectileEffect); // Added for Build
 	DOREPLIFETIME(AProjectile, UseAttributeDamage);
@@ -530,6 +533,47 @@ void AProjectile::Tick(float DeltaTime)
 	}else
 	{
 		FlyToLocationTarget(DeltaTime);
+	}
+
+	if (HasAuthority() && bCanBeRepelledByEnergyWall && !bImpacted)
+	{
+		FTransform CurrentTransform;
+		FVector CurrentLocation;
+		if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+		{
+			ISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
+			CurrentLocation = CurrentTransform.GetLocation();
+		}
+		else
+		{
+			CurrentLocation = GetActorLocation();
+		}
+
+		FHitResult HitResult;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+		Params.AddIgnoredActor(Shooter);
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, PreviousLocation, CurrentLocation, ECC_WorldDynamic, Params))
+		{
+			if (AEnergyWall* EnergyWall = Cast<AEnergyWall>(HitResult.GetActor()))
+			{
+				// Update location to impact point
+				if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+				{
+					CurrentTransform.SetLocation(HitResult.ImpactPoint);
+					Multicast_UpdateISMTransform(CurrentTransform);
+				}
+				else
+				{
+					SetActorLocation(HitResult.ImpactPoint);
+				}
+
+				LastWallHitLocation = HitResult.ImpactPoint;
+				Impact(HitResult.GetActor());
+				DestroyProjectileWithDelay();
+			}
+		}
 	}
 }
 
@@ -1002,10 +1046,33 @@ void AProjectile::Impact(AActor* ImpactTarget)
 
 	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
-		if (ShootingUnit)
+		AEnergyWall* EnergyWall = Cast<AEnergyWall>(ImpactTarget);
+		
+		if (ShootingUnit && !EnergyWall)
 		{
 			ShootingUnit->ResetTarget();
 			ShootingUnit->UnitToChase = nullptr;
+		}
+
+		if (EnergyWall)
+		{
+			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
+			{
+				FVector SurfaceLoc = LastWallHitLocation;
+				
+				FTransform InstanceXform;
+				if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
+					ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXform, true);
+				else
+					InstanceXform = GetActorTransform();
+				
+				SurfaceLoc.Z = InstanceXform.GetLocation().Z;
+
+				const FVector FromLoc = ShootingUnit->GetMassActorLocation();
+				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
+				
+				PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, 2.0f, FaceRot);
+			}
 		}
 		return;
 	}

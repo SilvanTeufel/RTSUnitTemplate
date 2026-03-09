@@ -106,6 +106,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
 	float InitializationDuration = 3.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
+	bool bFlickerOnInitialize = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
+	bool bFlickerOnDespawn = true;
+
 private:
 	UPROPERTY()
 	ABuildingBase* CachedBuildingA;

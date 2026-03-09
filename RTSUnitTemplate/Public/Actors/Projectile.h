@@ -202,6 +202,9 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool IsBouncingNext = false;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bCanBeRepelledByEnergyWall = false;
+
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool BouncedBack = false;
 protected:
@@ -213,6 +216,7 @@ protected:
 	UPROPERTY(Replicated)
 	FVector ArcStartLocation;
 	FVector PreviousLocation;
+	FVector LastWallHitLocation;
 	float ArcTotalDistance;
 	UPROPERTY(Replicated)
 	float ArcTravelTime = 0.f;
