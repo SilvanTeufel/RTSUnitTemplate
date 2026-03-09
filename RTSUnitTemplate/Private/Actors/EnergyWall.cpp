@@ -44,7 +44,11 @@ AEnergyWall::AEnergyWall()
 	NavObstacleBox->SetCanEverAffectNavigation(false);
 
 	NavModifier = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifier"));
-	NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
+	NavModifier->SetAreaClass(nullptr); 
+	NavModifier->bAutoActivate = false;
+	NavModifier->SetActive(false);
+	//NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
+
 }
 
 void AEnergyWall::BeginPlay()
@@ -56,11 +60,20 @@ void AEnergyWall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsInitializing)
+	if (bIsInitializing || bIsDespawning)
 	{
-		// Linear scaling
-		float Step = (TargetScaleY / InitializationDuration) * DeltaTime;
-		CurrentScaleY = FMath::Min(CurrentScaleY + Step, TargetScaleY);
+		if (bIsInitializing)
+		{
+			// Linear scaling
+			float Step = (TargetScaleY / InitializationDuration) * DeltaTime;
+			CurrentScaleY = FMath::Min(CurrentScaleY + Step, TargetScaleY);
+		}
+		else // bIsDespawning
+		{
+			// Linear scaling
+			float Step = (TargetScaleY / DespawnDelay) * DeltaTime;
+			CurrentScaleY = FMath::Max(CurrentScaleY - Step, 0.f);
+		}
 
 		FTransform TopTransform;
 		if (TopRodISM->GetInstanceTransform(0, TopTransform))
@@ -81,7 +94,9 @@ void AEnergyWall::Tick(float DeltaTime)
 void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* BuildingA, ABuildingBase* BuildingB)
 {
 	if (!BuildingA || !BuildingB) return;
-
+	
+	if (NavModifier) NavModifier->SetActive(false);
+	
 	CachedBuildingA = BuildingA;
 	CachedBuildingB = BuildingB;
 
@@ -297,6 +312,7 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 
 		if (NavModifier)
 		{
+			NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
 			NavModifier->FailsafeExtent = BoxExtent;
 			NavModifier->SetActive(false);
 			NavModifier->SetActive(true);
@@ -326,6 +342,8 @@ void AEnergyWall::StartDespawn(AActor* DestroyedActor)
 {
 	if (bIsDespawning) return;
 	bIsDespawning = true;
+	bIsInitializing = false;
+	GetWorldTimerManager().ClearTimer(InitializationTimerHandle);
 
 	// Unbind to prevent multiple calls
 	if (CachedBuildingA) CachedBuildingA->OnDestroyed.RemoveAll(this);
