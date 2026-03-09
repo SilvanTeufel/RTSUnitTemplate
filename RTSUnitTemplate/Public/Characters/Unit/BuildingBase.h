@@ -55,6 +55,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ExtensionDominantSideSelection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ExtensionExtendedDominantSideSelection = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ExtensionMovementAllowed = false;
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Extension = nullptr;

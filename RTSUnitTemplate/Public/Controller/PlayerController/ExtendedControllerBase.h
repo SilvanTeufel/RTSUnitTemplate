@@ -296,6 +296,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveWorkArea_Local(float DeltaSeconds);
 
+	void UpdateExtensionWorkAreaPosition(class AWorkArea* DraggedWorkArea, class ABuildingBase* Unit, float DeltaSeconds);
+
+	void GetSnappedExtensionTransform(class ABuildingBase* Unit, const FVector& MouseLocation, FVector& OutLocation, FRotator& OutRotation);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_FinalizeWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 

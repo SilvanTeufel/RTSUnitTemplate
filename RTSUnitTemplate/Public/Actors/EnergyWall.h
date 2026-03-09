@@ -46,7 +46,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UNavModifierComponent* NavModifier;
-
+	
 	/**
 	 * Initializes the wall between two buildings, setting up its position, rotation, scaling, and navigation obstacle.
 	 * @param BuildingA First building to connect.
@@ -82,6 +82,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall")
 	FName DespawnStartTimeParameterName = "DespawnStartTime";
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float MinThickness = 150.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float MaxThickness = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float MinPadding = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float MaxPadding = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float NavigationZPadding = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float AgentRadiusPadding = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
+	float DirtyAreaExpansion = 300.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
+	float InitializationDuration = 3.0f;
+
 private:
 	UPROPERTY()
 	ABuildingBase* CachedBuildingA;
@@ -89,7 +113,16 @@ private:
 	UPROPERTY()
 	ABuildingBase* CachedBuildingB;
 
-	void RegisterObstacle(float Length);
-    
+	void RegisterObstacle(float Length, float Height);
+
+	UFUNCTION()
+	void OnInitializationTimerComplete();
+
+	FTimerHandle InitializationTimerHandle;
+	float TargetScaleY = 1.0f;
+	float CurrentScaleY = 0.0f;
+	float TargetDistance2D = 0.0f;
+	float TargetWallHeight = 0.0f;
+	bool bIsInitializing = false;
 	bool bIsDespawning = false;
 };
