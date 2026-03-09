@@ -60,17 +60,38 @@ void AEnergyWall::Tick(float DeltaTime)
 
 	if (bIsInitializing || bIsDespawning)
 	{
+		float Alpha = 0.f;
 		if (bIsInitializing)
 		{
-			// Linear scaling
-			float Step = (TargetScaleY / InitializationDuration) * DeltaTime;
-			CurrentScaleY = FMath::Min(CurrentScaleY + Step, TargetScaleY);
+			float Elapsed = GetWorldTimerManager().GetTimerElapsed(InitializationTimerHandle);
+			if (Elapsed < 0.f) Elapsed = InitializationDuration;
+			float TotalInitTime = FMath::Max(InitializationDuration, 0.001f);
+			Alpha = FMath::Clamp(Elapsed / TotalInitTime, 0.f, 1.f);
+
+			if (Alpha <= 0.5f)
+			{
+				CurrentScaleY = TargetScaleY * (Alpha * 2.f);
+			}
+			else
+			{
+				CurrentScaleY = TargetScaleY;
+			}
 		}
 		else // bIsDespawning
 		{
-			// Linear scaling
-			float Step = (TargetScaleY / DespawnDelay) * DeltaTime;
-			CurrentScaleY = FMath::Max(CurrentScaleY - Step, 0.f);
+			float Remaining = GetLifeSpan();
+			float TotalDespawnTime = FMath::Max(DespawnDelay, 0.001f);
+			Alpha = 1.f - FMath::Clamp(Remaining / TotalDespawnTime, 0.f, 1.f);
+
+			if (Alpha >= 0.5f)
+			{
+				float ScalingAlpha = (Alpha - 0.5f) * 2.f;
+				CurrentScaleY = TargetScaleY * (1.f - ScalingAlpha);
+			}
+			else
+			{
+				CurrentScaleY = TargetScaleY;
+			}
 		}
 
 		FTransform TopTransform;
@@ -94,9 +115,56 @@ void AEnergyWall::Tick(float DeltaTime)
 			ShieldISM->UpdateInstanceTransform(0, ShieldTransform, false, true, true);
 		}
 
-		if ((bIsInitializing && bFlickerOnInitialize) || (bIsDespawning && bFlickerOnDespawn))
+		// Handle Shield Visibility (Flickering or hidden)
+		if (bIsInitializing)
 		{
-			ShieldISM->SetHiddenInGame(FMath::FRand() > 0.5f);
+			if (Alpha > 0.5f)
+			{
+				if (bFlickerOnInitialize)
+				{
+					float FlickerAlpha = (Alpha - 0.5f) * 2.f;
+					float VisibilityProb = FMath::Lerp(0.1f, 1.0f, FlickerAlpha);
+					float Frequency = FMath::Lerp(25.f, 5.f, FlickerAlpha);
+					const float SwitchProb = ShieldISM->bHiddenInGame ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
+					if (FMath::FRand() < SwitchProb)
+					{
+						ShieldISM->SetHiddenInGame(!ShieldISM->bHiddenInGame);
+					}
+				}
+				else
+				{
+					ShieldISM->SetHiddenInGame(false);
+				}
+			}
+			else
+			{
+				ShieldISM->SetHiddenInGame(true);
+			}
+		}
+		else if (bIsDespawning)
+		{
+			if (Alpha <= 0.5f)
+			{
+				if (bFlickerOnDespawn)
+				{
+					float FlickerAlpha = Alpha * 2.f;
+					float VisibilityProb = FMath::Lerp(0.9f, 0.0f, FlickerAlpha);
+					float Frequency = FMath::Lerp(25.f, 5.f, FlickerAlpha);
+					const float SwitchProb = ShieldISM->bHiddenInGame ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
+					if (FMath::FRand() < SwitchProb)
+					{
+						ShieldISM->SetHiddenInGame(!ShieldISM->bHiddenInGame);
+					}
+				}
+				else
+				{
+					ShieldISM->SetHiddenInGame(false);
+				}
+			}
+			else
+			{
+				ShieldISM->SetHiddenInGame(true);
+			}
 		}
 	}
 }
