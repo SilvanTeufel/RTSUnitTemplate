@@ -58,7 +58,16 @@ void AEnergyWall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsInitializing || bIsDespawning)
+	if (!bIsInitialized && CachedBuildingA && CachedBuildingB)
+	{
+		UpdateVisibility();
+		if (bIsVisibleByFoW)
+		{
+			InitializeWallInternal();
+		}
+	}
+
+	if (bIsInitialized && (bIsInitializing || bIsDespawning))
 	{
 		float Alpha = 0.f;
 		if (bIsInitializing)
@@ -116,7 +125,11 @@ void AEnergyWall::Tick(float DeltaTime)
 		}
 
 		// Handle Shield Visibility (Flickering or hidden)
-		if (bIsInitializing)
+		if (!bIsVisibleByFoW)
+		{
+			ShieldISM->SetHiddenInGame(true);
+		}
+		else if (bIsInitializing)
 		{
 			if (Alpha > 0.5f)
 			{
@@ -171,12 +184,20 @@ void AEnergyWall::Tick(float DeltaTime)
 
 void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* BuildingA, ABuildingBase* BuildingB)
 {
-	if (!BuildingA || !BuildingB) return;
-	
-	if (NavModifier) NavModifier->SetActive(false);
-	
 	CachedBuildingA = BuildingA;
 	CachedBuildingB = BuildingB;
+
+	if (CachedBuildingA && CachedBuildingB)
+	{
+		InitializeWallInternal();
+	}
+}
+
+void AEnergyWall::InitializeWallInternal()
+{
+	if (bIsInitialized || !CachedBuildingA || !CachedBuildingB) return;
+
+	if (NavModifier) NavModifier->SetActive(false);
 
 	FVector LocA = CachedBuildingA->GetActorLocation();
 	FVector LocB = CachedBuildingB->GetActorLocation();
@@ -190,8 +211,8 @@ void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* Buildin
 	FVector End = Midpoint - FVector(0, 0, 1000.f);
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
-	Params.AddIgnoredActor(BuildingA);
-	Params.AddIgnoredActor(BuildingB);
+	Params.AddIgnoredActor(CachedBuildingA);
+	Params.AddIgnoredActor(CachedBuildingB);
 
 	float GroundZ = Midpoint.Z;
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
@@ -207,7 +228,7 @@ void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* Buildin
 	FRotator Rotation = Direction.Rotation() + FRotator(0, -90.f, 0.f);
 	SetActorRotation(Rotation);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::Multicast_InitializeWall: Actor Rotation=%s"), *Rotation.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Actor Rotation=%s"), *Rotation.ToString());
 
 	// Setup instances for the rods and the shield
 	TopRodISM->ClearInstances();
@@ -236,6 +257,7 @@ void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* Buildin
 	TargetDistance2D = Distance2D;
 	TargetWallHeight = WallHeight;
 	bIsInitializing = true;
+	bIsInitialized = true;
 
 	// Add instance for top rod with 0 scale at its Blueprint position
 	TopRodISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, 0.f, 1.f)));
@@ -249,8 +271,46 @@ void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* Buildin
 
 	GetWorldTimerManager().SetTimer(InitializationTimerHandle, this, &AEnergyWall::OnInitializationTimerComplete, InitializationDuration, false);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::Multicast_InitializeWall: Instances Added. ScaleY=%f, WallHeight=%f"), ScaleY, WallHeight);
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::Multicast_InitializeWall: Timer started. Distance2D=%f, WallHeight=%f, ScaleY=%f"), Distance2D, WallHeight, ScaleY);
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Instances Added. ScaleY=%f, WallHeight=%f"), ScaleY, WallHeight);
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Timer started. Distance2D=%f, WallHeight=%f, ScaleY=%f"), Distance2D, WallHeight, ScaleY);
+	UpdateVisibility();
+}
+
+void AEnergyWall::UpdateVisibility()
+{
+	bIsVisibleByFoW = false;
+
+	if (CachedBuildingA && (CachedBuildingA->IsMyTeam || CachedBuildingA->IsVisibleEnemy))
+	{
+		bIsVisibleByFoW = true;
+	}
+	else if (CachedBuildingB && (CachedBuildingB->IsMyTeam || CachedBuildingB->IsVisibleEnemy))
+	{
+		bIsVisibleByFoW = true;
+	}
+
+	if (TopRodISM) TopRodISM->SetHiddenInGame(!bIsVisibleByFoW);
+	if (BottomRodISM) BottomRodISM->SetHiddenInGame(!bIsVisibleByFoW);
+	
+	if (ShieldISM)
+	{
+		if (!bIsVisibleByFoW)
+		{
+			ShieldISM->SetHiddenInGame(true);
+		}
+		else if (!bIsInitializing && !bIsDespawning)
+		{
+			ShieldISM->SetHiddenInGame(false);
+		}
+	}
+}
+
+void AEnergyWall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AEnergyWall, CachedBuildingA);
+	DOREPLIFETIME(AEnergyWall, CachedBuildingB);
 }
 
 void AEnergyWall::OnInitializationTimerComplete()
@@ -275,8 +335,8 @@ void AEnergyWall::OnInitializationTimerComplete()
 		UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::OnInitializationTimerComplete: BottomRod Final Scale=%s"), *BottomTransform.GetScale3D().ToString());
 	}
 
-	// Make shield visible
-	ShieldISM->SetHiddenInGame(false);
+	// Update visibility based on FoW
+	UpdateVisibility();
 
 	RegisterObstacle(TargetDistance2D, TargetWallHeight);
 }

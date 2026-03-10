@@ -71,7 +71,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<AEnergyWall> EnergyWallClass;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<AEnergyWall*> EnergyWallArray;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -82,11 +82,15 @@ public:
 	
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	virtual void BeginPlay() override;
 	
 	virtual void Destroyed() override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void SyncAttachedAssetsVisibility() override;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnOverlapBegin(

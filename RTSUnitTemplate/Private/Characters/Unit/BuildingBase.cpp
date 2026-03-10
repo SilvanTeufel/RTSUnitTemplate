@@ -2,6 +2,7 @@
 
 #include "Characters/Unit/BuildingBase.h"
 #include "Actors/EnergyWall.h"
+#include "Net/UnrealNetwork.h"
 
 #include "Elements/Framework/TypedElementQueryBuilder.h"
 #include "GameModes/ResourceGameMode.h"
@@ -23,6 +24,13 @@ ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
 void ABuildingBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+}
+
+void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ABuildingBase, EnergyWallArray);
 }
 
 void ABuildingBase::BeginPlay()
@@ -80,6 +88,19 @@ void ABuildingBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void ABuildingBase::SyncAttachedAssetsVisibility()
+{
+	Super::SyncAttachedAssetsVisibility();
+
+	for (AEnergyWall* Wall : EnergyWallArray)
+	{
+		if (IsValid(Wall))
+		{
+			Wall->UpdateVisibility();
+		}
+	}
 }
 
 

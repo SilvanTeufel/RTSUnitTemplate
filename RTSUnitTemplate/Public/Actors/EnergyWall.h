@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Net/UnrealNetwork.h"
 #include "EnergyWall.generated.h"
 
 class UInstancedStaticMeshComponent;
@@ -28,6 +29,7 @@ protected:
 
 public:	
 	virtual void Tick(float DeltaTime) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USceneComponent* WallRoot;
@@ -54,6 +56,17 @@ public:
 	 */
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = "EnergyWall")
 	void Multicast_InitializeWall(ABuildingBase* BuildingA, ABuildingBase* BuildingB);
+
+	/**
+	 * Updates the visibility of the wall components based on the visibility of the connected buildings.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EnergyWall")
+	void UpdateVisibility();
+
+	/**
+	 * Internal initialization of the wall, called on server and client.
+	 */
+	void InitializeWallInternal();
 
 	/**
 	 * Initializes the ISMs for the wall.
@@ -113,11 +126,13 @@ public:
 	bool bFlickerOnDespawn = true;
 
 private:
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	ABuildingBase* CachedBuildingA;
 
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	ABuildingBase* CachedBuildingB;
+
+	bool bIsInitialized = false;
 
 	void RegisterObstacle(float Length, float Height);
 
@@ -131,4 +146,5 @@ private:
 	float TargetWallHeight = 0.0f;
 	bool bIsInitializing = false;
 	bool bIsDespawning = false;
+	bool bIsVisibleByFoW = false;
 };
