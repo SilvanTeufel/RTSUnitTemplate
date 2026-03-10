@@ -3084,6 +3084,7 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 	AUnitBase* NewConstruction = World->SpawnActorDeferred<AUnitBase>(WA->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (NewConstruction)
 	{
+		NewConstruction->SetCharacterVisibility(false);
 		// Ground trace at the area center to find floor Z
 		FBox AreaBox = WA->Mesh ? WA->Mesh->Bounds.GetBox() : WA->GetComponentsBoundingBox(true);
 		const FVector AreaCenter = AreaBox.GetCenter();

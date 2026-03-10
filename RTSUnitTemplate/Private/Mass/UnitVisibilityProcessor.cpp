@@ -136,11 +136,10 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			AEffectArea* Area = Cast<AEffectArea>(Actor);
 			
 			FVector Location = Transforms[i].GetTransform().GetLocation();
-			
+			bool bIsVisibleByFog = true;
+
 			if (bDoThrottledUpdate)
 			{
-				bool bIsVisibleByFog = true;
-
 				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
@@ -183,57 +182,62 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 								}
 							}
 						}
- 					bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
- 				}
- 				Vis.bIsVisibleEnemy = bIsVisibleByFog;
- 			}
- 			else
- 			{
- 				// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
- 				Vis.bIsOnViewport = true;
- 				Vis.bIsMyTeam = true; // Avoid hiding everything on dedicated server if team logic is local-player dependent
- 				bIsVisibleByFog = true;
- 				Vis.bIsVisibleEnemy = true;
- 			}
+						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
+					}
+					Vis.bIsVisibleEnemy = bIsVisibleByFog;
+				}
+				else
+				{
+					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
+					Vis.bIsOnViewport = true;
+					Vis.bIsMyTeam = true; 
+					Vis.bIsVisibleEnemy = true;
+					bIsVisibleByFog = true;
+				}
+			}
+			else
+			{
+				// If not throttled update, keep the last known visibility state for calculations below
+				bIsVisibleByFog = Vis.bIsVisibleEnemy;
+			}
 
-				bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
-								(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
-								(bIsVisibleByFog != Vis.bLastIsVisibleEnemy) ||
-								(CharList[i].bIsInvisible != Vis.bLastIsInvisible);
+			bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
+							(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
+							(bIsVisibleByFog != Vis.bLastIsVisibleEnemy) ||
+							(CharList[i].bIsInvisible != Vis.bLastIsInvisible);
 
-				if (Unit) bChanged = bChanged || (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
+			if (Unit) bChanged = bChanged || (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
+			
+			if (Unit)
+			{
+				Unit->IsMyTeam = Vis.bIsMyTeam;
+				Unit->IsOnViewport = Vis.bIsOnViewport;
+				Unit->IsVisibleEnemy = bIsVisibleByFog;
 				
+				if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
+				{
+					UnitBase->bIsInvisible = CharList[i].bIsInvisible;
+				}
+			}
+			else if (Area)
+			{
+				Area->bIsInvisible = CharList[i].bIsInvisible;
+				Area->bIsVisibleByFog = bIsVisibleByFog;
+			}
+
+			if (bChanged)
+			{
+				EntitiesToSignal.Add(ChunkCtx.GetEntity(i));
+				
+				Vis.bLastIsMyTeam = Vis.bIsMyTeam;
+				Vis.bLastIsOnViewport = Vis.bIsOnViewport;
+				Vis.bLastIsVisibleEnemy = bIsVisibleByFog;
+				Vis.bLastIsInvisible = CharList[i].bIsInvisible;
+
 				if (Unit)
 				{
-					Unit->IsMyTeam = Vis.bIsMyTeam;
-					Unit->IsOnViewport = Vis.bIsOnViewport;
-					Unit->IsVisibleEnemy = bIsVisibleByFog;
-					
-					if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
-					{
-						UnitBase->bIsInvisible = CharList[i].bIsInvisible;
-					}
-				}
-				else if (Area)
-				{
-					Area->bIsInvisible = CharList[i].bIsInvisible;
-					Area->bIsVisibleByFog = bIsVisibleByFog;
-				}
-
-				if (bChanged)
-				{
-					EntitiesToSignal.Add(ChunkCtx.GetEntity(i));
-					
-					Vis.bLastIsMyTeam = Vis.bIsMyTeam;
-					Vis.bLastIsOnViewport = Vis.bIsOnViewport;
-					Vis.bLastIsVisibleEnemy = bIsVisibleByFog;
-					Vis.bLastIsInvisible = CharList[i].bIsInvisible;
-
-					if (Unit)
-					{
-						Vis.bLastOpenHealthWidget = Unit->OpenHealthWidget;
-						Vis.bLastShowLevelOnly = Unit->bShowLevelOnly;
-					}
+					Vis.bLastOpenHealthWidget = Unit->OpenHealthWidget;
+					Vis.bLastShowLevelOnly = Unit->bShowLevelOnly;
 				}
 			}
 
@@ -251,19 +255,6 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 				const bool bShowDueToPing = bRecentPing && bNotFull && (Vis.bIsMyTeam || Vis.bIsVisibleEnemy);
 
-				/*
-				if (bRecentPing && (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController())))
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[CLIENT][V-Ping] %s: Show=%d | bNotFull=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
-						*Actor->GetName(), bShowDueToPing, bNotFull, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
-				}
-
-				if (bRecentPing && bDoDiagnosticLog && (World->GetNetMode() == NM_Client || (CustomPC && CustomPC->IsLocalController())))
-				{
-					UE_LOG(LogTemp, Error, TEXT("[CLIENT][V-Ping-Diagnostics] %s: Show=%d | RecentPing=%d, NotFull=%d, IsMyTeam=%d, IsVisibleEnemy=%d | Health=%.2f/%.2f, Shield=%.2f/%.2f"),
-						*Actor->GetName(), bShowDueToPing, bRecentPing, bNotFull, Vis.bIsMyTeam, Vis.bIsVisibleEnemy, Stats.Health, Stats.MaxHealth, Stats.Shield, Stats.MaxShield);
-				}
-				*/
 				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration or if health <= 0
 				Unit->OpenHealthWidget = (Stats.Health > 0.f) && (bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing);
 				Unit->bShowLevelOnly = (Stats.Health > 0.f) && (bRecentlyLeveled && !bShowDueToPing && !bIsConstruction && !bRecentlyDamaged);

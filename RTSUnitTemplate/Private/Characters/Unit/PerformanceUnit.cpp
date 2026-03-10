@@ -89,6 +89,7 @@ void APerformanceUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 void APerformanceUnit::BeginPlay()
 {
+	SetCharacterVisibility(false);
 	Super::BeginPlay();
 
 	if (bForceWidgetPosition)

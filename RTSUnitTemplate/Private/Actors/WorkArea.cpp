@@ -47,10 +47,10 @@ AWorkArea::AWorkArea()
 
 
 	
-	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
-	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
-	TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
-	TriggerCapsule->SetupAttachment(RootComponent);
+	//TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
+	//TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
+	//TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
+	//TriggerCapsule->SetupAttachment(RootComponent);
 	//TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
 
 	//SceneRoot->SetVisibility(false, true);

@@ -2365,12 +2365,14 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
         )
     );
 
-    if (!UnitBase)
-    {
-        return nullptr;
-    }
+   	if (!UnitBase)
+   	{
+   		return nullptr;
+   	}
+
+   	UnitBase->SetCharacterVisibility(false);
 	
-	if (TeamId)
+   	if (TeamId)
 	{
 		UnitBase->TeamId = TeamId;
 	}
@@ -3692,6 +3694,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			AUnitBase* NewConstruction = GetWorld()->SpawnActorDeferred<AUnitBase>(UnitBase->BuildArea->ConstructionUnitClass, SpawnTM, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 			if (NewConstruction)
 			{
+				NewConstruction->SetCharacterVisibility(false);
 				// Ground trace at the area center to find floor Z
 				FHitResult Hit;
 				const FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
