@@ -21,6 +21,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
+#include "Subsystems/ResourceVisualManager.h"
+#include "MassEntityTypes.h"
+#include "MassActorSubsystem.h"
 
 void AWorkingUnitBase::BeginPlay()
 {
@@ -56,6 +59,35 @@ void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(AWorkingUnitBase, ResourcePlace);
 	DOREPLIFETIME(AWorkingUnitBase, Base);
 	DOREPLIFETIME(AWorkingUnitBase, BuildArea);
+	DOREPLIFETIME(AWorkingUnitBase, CarryingResourceType);
+}
+
+void AWorkingUnitBase::OnRep_CarryingResourceType()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	UResourceVisualManager* VisualManager = GetWorld()->GetSubsystem<UResourceVisualManager>();
+	if (!VisualManager) return;
+
+	UMassActorSubsystem* MassActorSubsystem = GetWorld()->GetSubsystem<UMassActorSubsystem>();
+	if (!MassActorSubsystem) return;
+
+	FMassEntityHandle EntityHandle = MassActorSubsystem->GetEntityHandleFromActor(this);
+	if (!EntityHandle.IsValid()) return;
+
+	if (CarryingResourceType != EResourceType::MAX)
+	{
+		TSubclassOf<AWorkResource> ResourceClass = nullptr;
+		if (ResourcePlace)
+		{
+			ResourceClass = ResourcePlace->WorkResourceClass;
+		}
+		VisualManager->AssignResource(EntityHandle, CarryingResourceType, ResourceClass);
+	}
+	else
+	{
+		VisualManager->RemoveResource(EntityHandle);
+	}
 }
 
 void AWorkingUnitBase::OnRep_CurrentDraggedWorkArea()

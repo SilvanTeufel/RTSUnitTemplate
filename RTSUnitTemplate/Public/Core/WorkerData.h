@@ -102,3 +102,21 @@ inline EResourceType ConvertToResourceType(WorkAreaData::WorkAreaType workAreaTy
 	// Return a default value or assert if the input value is unexpected
 	return EResourceType::MAX; // Example of a default return value, adjust as needed
 }
+
+USTRUCT(BlueprintType)
+struct FWorkResourceVisuals
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
+	UStaticMesh* Mesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
+	UMaterialInterface* Material = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
+	FVector Scale = FVector(1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
+	FVector SocketOffset = FVector::ZeroVector;
+};

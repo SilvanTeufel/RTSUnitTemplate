@@ -11,9 +11,11 @@
 #include "NavigationSystem.h"
 #include "MassCommandBuffer.h"
 #include "Core/UnitData.h"
+#include "Core/WorkerData.h"
 #include "MassExternalSubsystemTraits.h"
 #include "Mass/MassFragmentTraitsOverrides.h"
 #include "MassVisibilityInterface.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "UnitMassTag.generated.h"
 
 
@@ -259,6 +261,18 @@ struct FMassWorkerStatsFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool AutoMining = true;
+};
+
+USTRUCT()
+struct FMassCarriedResourceFragment : public FMassFragment {
+    GENERATED_BODY()
+    
+    int32 InstanceIndex = INDEX_NONE;
+    TWeakObjectPtr<UInstancedStaticMeshComponent> TargetISM;
+    bool bIsCarrying = false;
+    EResourceType ResourceType = EResourceType::Primary;
+    FVector SocketOffset = FVector::ZeroVector;
+    FVector ResourceScale = FVector(1.0f);
 };
 
 USTRUCT()

@@ -435,8 +435,6 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassVisibilityFragment::StaticStruct(),
 		FMassUnitYawFollowFragment::StaticStruct(),
 
-		FMassWorkerStatsFragment::StaticStruct(),
-
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
@@ -466,6 +464,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FragmentsAndTags.Add(FMassDisableAvoidanceTag::StaticStruct());
 			FragmentsAndTags.Add(FMassStateDisableObstacleTag::StaticStruct());
 		}
+	}
+
+	if (UnitBase->IsWorker)
+	{
+		FragmentsAndTags.Add(FMassWorkerStatsFragment::StaticStruct());
+		FragmentsAndTags.Add(FMassCarriedResourceFragment::StaticStruct());
 	}
 	
     FMassArchetypeCreationParams Params;
@@ -1058,6 +1062,15 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		if (UseRotateToTargetProcessor)
 		{
 			EntityManager.Defer().AddTag<FMassUnitYawFollowTag>(EntityHandle);
+		}
+	}
+
+	if (UnitOwner && UnitOwner->IsWorker)
+	{
+		if (FMassCarriedResourceFragment* CarriedFrag = EntityManager.GetFragmentDataPtr<FMassCarriedResourceFragment>(EntityHandle))
+		{
+			CarriedFrag->bIsCarrying = false;
+			CarriedFrag->InstanceIndex = INDEX_NONE;
 		}
 	}
 }

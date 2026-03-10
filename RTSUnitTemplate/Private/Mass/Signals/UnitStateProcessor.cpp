@@ -26,6 +26,7 @@
 #include "Actors/EnergyWall.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "GameModes/ResourceGameMode.h"
+#include "Subsystems/ResourceVisualManager.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Engine/CanvasRenderTarget2D.h"
 #include "Engine/Canvas.h"
@@ -1983,7 +1984,46 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 						WorkAreaData::WorkAreaType PlaceType = UnitBase->ResourcePlace->Type;
 						EResourceType CorrectResourceType = ConvertToResourceType(PlaceType);
 						UnitBase->ExtractingWorkResourceType = CorrectResourceType;
-						SpawnWorkResource(CorrectResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						// SpawnWorkResource(CorrectResourceType, UnitBase->GetActorLocation(), UnitBase->ResourcePlace->WorkResourceClass, UnitBase);
+						
+						if (UResourceVisualManager* VisualManager = World->GetSubsystem<UResourceVisualManager>())
+						{
+							VisualManager->AssignResource(Entity, CorrectResourceType, UnitBase->ResourcePlace->WorkResourceClass);
+						}
+
+						if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+						{
+							WorkingUnit->CarryingResourceType = CorrectResourceType;
+						}
+						
+						// Resource Depletion Logic (moved from SpawnWorkResource)
+						float AmountTaken = 10.0f; // Default? We should probably get this from somewhere
+						if (UnitBase->ResourcePlace->WorkResourceClass)
+						{
+							if (AWorkResource* WRDefault = UnitBase->ResourcePlace->WorkResourceClass->GetDefaultObject<AWorkResource>())
+							{
+								AmountTaken = WRDefault->Amount;
+							}
+						}
+						
+						float& Remaining = UnitBase->ResourcePlace->AvailableResourceAmount;
+						const float MaxRemain = UnitBase->ResourcePlace->MaxAvailableResourceAmount;
+						Remaining = FMath::Max(0.f, Remaining - AmountTaken);
+						
+						if (Remaining <= KINDA_SMALL_NUMBER)
+						{
+							UnitBase->ResourcePlace->Destroy();
+							UnitBase->ResourcePlace = nullptr;
+						}
+						else
+						{
+							float Ratio = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
+							if (UnitBase->ResourcePlace->Mesh)
+							{
+								UnitBase->ResourcePlace->Mesh->SetWorldScale3D(FVector(Ratio));
+							}
+						}
+						
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
 					}
 				}
@@ -2031,10 +2071,20 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					
-					if (UnitBase && UnitBase->IsWorker)
-					{
-						if (!ResourceGameMode)
-							ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+						if (UnitBase && UnitBase->IsWorker)
+						{
+							if (UResourceVisualManager* VisualManager = World->GetSubsystem<UResourceVisualManager>())
+							{
+								VisualManager->RemoveResource(Entity);
+							}
+
+							if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
+							{
+								WorkingUnit->CarryingResourceType = EResourceType::MAX;
+							}
+							
+							if (!ResourceGameMode)
+								ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 						bool CanAffordConstruction = false;
 

@@ -10,6 +10,7 @@
 #include "Actors/WorkArea.h"
 #include "Actors/WorkResource.h"
 #include "PathSeekerBase.h"
+#include "Core/WorkerData.h"
 #include "WorkingUnitBase.generated.h"
 
 
@@ -49,6 +50,15 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;
 	
+	UPROPERTY(ReplicatedUsing=OnRep_CarryingResourceType, EditAnywhere, BlueprintReadWrite, Category = Worker)
+	EResourceType CarryingResourceType = EResourceType::MAX;
+
+	UFUNCTION()
+	void OnRep_CarryingResourceType();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	TArray<FWorkResourceVisuals> WorkResourceVisuals;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;
 	
