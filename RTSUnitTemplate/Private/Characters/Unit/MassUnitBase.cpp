@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Characters/Unit/MassUnitBase.h"
@@ -22,6 +22,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
+#include "Subsystems/UnitVisualManager.h"
+#include "Mass/MassUnitVisualFragments.h"
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -35,7 +39,7 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 
 		ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
 		ISMComponent->SetupAttachment(RootComponent);
-		ISMComponent->SetVisibility(false);
+		// ISMComponent->SetVisibility(false);
 		ISMComponent->SetIsReplicated(true);
 	}
 
@@ -71,11 +75,13 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 void AMassUnitBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	InitializeUnitMode();
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AMassUnitBase, bIsMassUnit);
 	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
 	DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
@@ -100,11 +106,13 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 FVector AMassUnitBase::GetMassActorLocation() const
 {
-	if (!bUseSkeletalMovement && ISMComponent && !bUseIsmWithActorMovement)
+	if (!bUseSkeletalMovement && ISMComponent && !bUseIsmWithActorMovement && InstanceIndex != INDEX_NONE)
 	{
 		FTransform Xform;
-		ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true);
-		return Xform.GetLocation();
+		if (ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true))
+		{
+			return Xform.GetLocation();
+		}
 	}
 
 	return Super::GetMassActorLocation();
@@ -1032,34 +1040,60 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 		return false;
 	}
 
-	OutEntityManager = &EntitySubsystem->GetMutableEntityManager(); // Get mutable manager for modifications
+	OutEntityManager = &EntitySubsystem->GetMutableEntityManager();
 	return true;
 }
 
 void AMassUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
-	InitializeUnitMode();
+
+	if (RegisterVisualsToMass() && RegisterAdditionalVisualsToMass())
+	{
+		bMassVisualsRegistered = true;
+		RemoveAdditionalISMInstances();
+	}
+}
+
+void AMassUnitBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bIsMassUnit && !bMassVisualsRegistered)
+	{
+		if (RegisterVisualsToMass() && RegisterAdditionalVisualsToMass())
+		{
+			bMassVisualsRegistered = true;
+			RemoveAdditionalISMInstances();
+		}
+	}
 }
 
 void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// Stop any pending rotation/movement timers
-	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
+	if (UUnitVisualManager* VisualManager = GetWorld() ? GetWorld()->GetSubsystem<UUnitVisualManager>() : nullptr)
+	{
+		if (MassActorBindingComponent)
+		{
+			FMassEntityHandle EntityHandle = MassActorBindingComponent->GetEntityHandle();
+			if (EntityHandle.IsValid())
+			{
+				VisualManager->RemoveUnitVisual(EntityHandle);
+			}
+		}
+	}
+
+	// Stop any pending rotation/movement timers for static meshes/niagara
 	GetWorldTimerManager().ClearTimer(StaticMeshRotateTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshYawFollowTimerHandle);
 	ActiveStaticMeshTweens.Empty();
 	ActiveYawFollows.Empty();
 
-	GetWorldTimerManager().ClearTimer(MoveTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshMoveTimerHandle);
 	ActiveStaticMeshMoveTweens.Empty();
 
 	// Stop any pending scaling timers
-	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
 	GetWorldTimerManager().ClearTimer(StaticMeshScaleTimerHandle);
-	GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
-	bPulsateScaleEnabled = false;
 	ActiveStaticMeshScaleTweens.Empty();
 
 	// Remove our specific instance from the component when the actor is destroyed
@@ -1072,6 +1106,7 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+/*
 void AMassUnitBase::InitializeUnitMode()
 {
 	if (bUseSkeletalMovement)
@@ -1123,24 +1158,251 @@ void AMassUnitBase::InitializeUnitMode()
 	}
 	
 }
+*/
+
+
+void AMassUnitBase::InitializeUnitMode()
+{
+	if (bUseSkeletalMovement)
+	{
+		if (GetMesh()) GetMesh()->SetVisibility(true);
+		if (ISMComponent) ISMComponent->SetVisibility(false);
+	}
+	else
+	{
+		if (GetMesh()) GetMesh()->SetVisibility(false);
+		if (ISMComponent) ISMComponent->SetVisibility(true);
+	}
+
+	
+	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
+	{
+
+		const FTransform LocalIdentityTransform = FTransform::Identity;
+		
+		if (InstanceIndex == INDEX_NONE)
+		{
+			// Add a new instance at the component's local origin.
+			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, false);
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
+		}
+		else
+		{
+			// Update the existing instance to be at the component's local origin.
+			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, false);
+			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
+		}
+	}
+	
+	if (Niagara_A)
+	{
+		Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
+	}
+
+	if (Niagara_B)
+	{
+		Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
+	}
+}
+
+bool AMassUnitBase::RegisterVisualsToMass()
+{
+	if (!GetWorld() || !GetWorld()->IsGameWorld()) return true;
+
+	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Called for unit %s (bUseSkeletalMovement: %d)"), *GetName(), bUseSkeletalMovement);
+
+	if (!bUseSkeletalMovement)
+	{
+		UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+		if (MoveComp)
+		{
+			MoveComp->Deactivate();
+			MoveComp->SetComponentTickEnabled(false);
+		}
+		
+		if (ISMComponent)
+		{
+			if (ISMComponent->GetStaticMesh())
+			{
+				UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
+				if (VisualManager && MassActorBindingComponent)
+				{
+					FMassEntityHandle EntityHandle = MassActorBindingComponent->GetEntityHandle();
+					if (EntityHandle.IsValid())
+					{
+						UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Assigning main ISM %s for unit %s to entity %s"), *ISMComponent->GetName(), *GetName(), *EntityHandle.DebugGetDescription());
+						VisualManager->AssignUnitVisual(EntityHandle, ISMComponent, this);
+						return true;
+					}
+					UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterVisualsToMass: EntityHandle is invalid for unit %s"), *GetName());
+					return false;
+				}
+				UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterVisualsToMass: VisualManager or MassActorBindingComponent is null for unit %s"), *GetName());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterVisualsToMass: ISMComponent has no static mesh for unit %s"), *GetName());
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterVisualsToMass: ISMComponent is null for unit %s"), *GetName());
+		}
+	}
+	return true;
+}
+
+bool AMassUnitBase::RegisterAdditionalVisualsToMass()
+{
+	if (!GetWorld() || !GetWorld()->IsGameWorld()) return true;
+
+	if (AdditionalISMComponents.Num() == 0) return true;
+
+	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: Called for unit %s with %d additional ISMs"), *GetName(), AdditionalISMComponents.Num());
+
+	UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
+	if (VisualManager && MassActorBindingComponent)
+	{
+		FMassEntityHandle EntityHandle = MassActorBindingComponent->GetEntityHandle();
+		if (EntityHandle.IsValid())
+		{
+			for (UInstancedStaticMeshComponent* Comp : AdditionalISMComponents)
+			{
+				if (Comp)
+				{
+					UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: Assigning additional ISM %s for unit %s to entity %s"), *Comp->GetName(), *GetName(), *EntityHandle.DebugGetDescription());
+					VisualManager->AssignUnitVisual(EntityHandle, Comp, this);
+				}
+			}
+			return true;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: EntityHandle is invalid for unit %s"), *GetName());
+		return false;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: VisualManager or MassActorBindingComponent is null for unit %s"), *GetName());
+	return true;
+}
+
+void AMassUnitBase::RemoveAdditionalISMInstances()
+{
+	// Process main ISMComponent
+	if (ISMComponent)
+	{
+		ISMComponent->SetVisibility(false);
+		ISMComponent->SetCastShadow(false);
+		ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (ISMComponent->GetInstanceCount() > 0)
+		{
+			ISMComponent->ClearInstances();
+		}
+		InstanceIndex = INDEX_NONE;
+	}
+
+	// Process additional ISMs
+	for (UInstancedStaticMeshComponent* Comp : AdditionalISMComponents)
+	{
+		if (Comp)
+		{
+			Comp->SetVisibility(false);
+			Comp->SetCastShadow(false);
+			Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			if (Comp->GetInstanceCount() > 0)
+			{
+				Comp->ClearInstances();
+			}
+		}
+	}
+}
 
 int32 AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
 {
-	if (!InISMComponent || !InISMComponent->GetStaticMesh())
+	if (!InISMComponent)
 	{
 		return INDEX_NONE;
 	}
 
-	const FTransform LocalIdentityTransform = FTransform::Identity;
-	if (InISMComponent->GetInstanceCount() == 0)
+	AdditionalISMComponents.AddUnique(InISMComponent);
+
+	if (GetWorld() && GetWorld()->IsGameWorld())
 	{
-		return InISMComponent->AddInstance(LocalIdentityTransform, false);
+		// Deactivate local rendering/collision immediately to avoid double rendering
+		InISMComponent->SetVisibility(false);
+		InISMComponent->SetCastShadow(false);
+		InISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 	else
 	{
-		InISMComponent->UpdateInstanceTransform(0, LocalIdentityTransform, false, true, false);
-		return 0;
+		// Still create a local instance in Editor for visibility
+		if (InISMComponent->GetInstanceCount() == 0)
+		{
+			const FTransform LocalIdentityTransform = FTransform::Identity;
+			return InISMComponent->AddInstance(LocalIdentityTransform, false);
+		}
 	}
+
+	return 0; // We don't have a Mass index yet
+}
+
+bool AMassUnitBase::GetMassVisualInstance(UInstancedStaticMeshComponent* TemplateISM, UInstancedStaticMeshComponent*& OutComponent, int32& OutInstanceIndex) const
+{
+	if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
+	{
+		for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+		{
+			if (Instance.TemplateISM == TemplateISM)
+			{
+				OutComponent = Instance.TargetISM.Get();
+				OutInstanceIndex = Instance.InstanceIndex;
+				return OutComponent != nullptr && OutInstanceIndex != INDEX_NONE;
+			}
+		}
+	}
+	return false;
+}
+
+FMassUnitVisualFragment* AMassUnitBase::GetMutableVisualFragment()
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return EntityManager->GetFragmentDataPtr<FMassUnitVisualFragment>(EntityHandle);
+	}
+	return nullptr;
+}
+
+const FMassUnitVisualFragment* AMassUnitBase::GetVisualFragment() const
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	// Use the non-const GetMassEntityData by temporarily casting away const
+	if (const_cast<AMassUnitBase*>(this)->GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return EntityManager->GetFragmentDataPtr<FMassUnitVisualFragment>(EntityHandle);
+	}
+	return nullptr;
+}
+
+FMassVisualTweenFragment* AMassUnitBase::GetMutableTweenFragment()
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return EntityManager->GetFragmentDataPtr<FMassVisualTweenFragment>(EntityHandle);
+	}
+	return nullptr;
+}
+
+FMassVisualEffectFragment* AMassUnitBase::GetMutableEffectFragment()
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return EntityManager->GetFragmentDataPtr<FMassVisualEffectFragment>(EntityHandle);
+	}
+	return nullptr;
 }
 
 bool AMassUnitBase::SyncTranslation()
@@ -1176,7 +1438,7 @@ bool AMassUnitBase::SyncTranslation()
 
 	// Sync
 	FTransform& Current = TransformFrag->GetMutableTransform();
-	Current.SetTranslation(GetActorLocation());
+	Current.SetTranslation(GetActorLocation()); Current.SetRotation(GetActorRotation().Quaternion()); Current.SetScale3D(GetActorScale3D());
 
 	return true;
 }
@@ -1287,14 +1549,31 @@ bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float D
 	return true;
 }
 
-void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 InstIndex,
-	const FTransform& NewTransform)
+void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 InstIndex, const FTransform& NewTransform)
 {
-	if (ISMComponent)
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 	{
-		if (ISMComponent->IsValidInstance(InstIndex))
+		if (VisualFrag->VisualInstances.IsValidIndex(InstIndex))
 		{
-			ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
+			const FMassUnitVisualInstance& Data = VisualFrag->VisualInstances[InstIndex];
+			TargetISM = Data.TargetISM.Get();
+			TargetInstIndex = Data.InstanceIndex;
+		}
+	}
+
+	// Prioritize Mass Manager Visuals
+	if (TargetISM && TargetInstIndex != INDEX_NONE)
+	{
+		TargetISM->UpdateInstanceTransform(TargetInstIndex, NewTransform, true, true, false);
+	}
+	else
+	{
+		if (this->ISMComponent && this->ISMComponent->IsValidInstance(InstIndex))
+		{
+			this->ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
 		}
 	}
 	
@@ -1542,64 +1821,52 @@ void AMassUnitBase::MulticastTransformSync_Implementation(const FVector& Locatio
 	SwitchEntityTagByState(UnitData::Idle, UnitStatePlaceholder);
 }
 
-void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent)
+void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
-	// Assign incoming parameters to the global variables so all machines share identical tween settings
-	RotateDuration = InRotateDuration;
-	// Clamp ease exponent to a small positive value to avoid degenerate alpha mapping
-	RotationEaseExponent = FMath::Max(InRotationEaseExponent, 0.001f);
-
-	// Start a smooth rotation on both server and clients using a local timer per machine.
-	if (!ISMComponent && !GetMesh())
+	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		return;
+		TweenFrag->RotationTween.StartRotation = GetCurrentLocalVisualRotation(InISMComponent);
+		TweenFrag->RotationTween.TargetRotation = NewRotation.Quaternion().GetNormalized();
+		TweenFrag->RotationTween.Duration = InRotateDuration;
+		TweenFrag->RotationTween.Elapsed = 0.f;
+		TweenFrag->RotationTween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
+		TweenFrag->RotationTween.bActive = true;
+		TweenFrag->RotationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
+
+		// Shortest arc
+		if ((TweenFrag->RotationTween.StartRotation | TweenFrag->RotationTween.TargetRotation) < 0.f)
+		{
+			TweenFrag->RotationTween.TargetRotation = (-TweenFrag->RotationTween.TargetRotation);
+		}
 	}
-
-	// Desired target (component/local or world for ISM instance). Interpret NewRotation as the exact end orientation for the visual.
-	// Do NOT bake in MeshRotationOffset here, otherwise yaw-only inputs may introduce pitch/roll during the tween.
-	const FQuat DesiredLocal = NewRotation.Quaternion().GetNormalized();
-
-	// If duration is not positive, snap immediately.
-	if (RotateDuration <= 0.f)
-	{
-		ApplyLocalVisualRotation(DesiredLocal);
-		return;
-	}
-
-	// Initialize interpolation state and start/update the timer on this machine.
-	GetWorldTimerManager().ClearTimer(RotateTimerHandle);
-	RotateStart = GetCurrentLocalVisualRotation().GetNormalized();
-	RotateTarget = DesiredLocal;
-	// Ensure shortest-arc interpolation by flipping target if needed (q and -q represent same rotation)
-	if ((RotateStart | RotateTarget) < 0.f)
-	{
-		RotateTarget = (-RotateTarget);
-	}
-	RotateElapsed = 0.f;
-
-	// Use a small, non-zero rate so the timer actually loops on all platforms/versions.
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-
-	// Kick the first step immediately for responsiveness
-	RotateISM_Step();
-
-	GetWorldTimerManager().SetTimer(RotateTimerHandle, this, &AMassUnitBase::RotateISM_Step, TimerRate, true);
 }
 
-FQuat AMassUnitBase::GetCurrentLocalVisualRotation() const
+FQuat AMassUnitBase::GetCurrentLocalVisualRotation(UInstancedStaticMeshComponent* InISM) const
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		return InstanceXf.GetRotation().GetNormalized();
+	}
+
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		// If it's the main ISM component and we have a valid index
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
-			// Read instance LOCAL transform (not world) to avoid pulling in actor/world rotation
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
 			return InstanceXf.GetRotation().GetNormalized();
 		}
-		// Fallback to component's relative rotation if no valid instance
-		return ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
+		
+		// Fallback to component's relative rotation
+		return TemplateISM->GetRelativeRotation().Quaternion().GetNormalized();
 	}
 
 	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
@@ -1610,23 +1877,37 @@ FQuat AMassUnitBase::GetCurrentLocalVisualRotation() const
 	return GetActorQuat().GetNormalized();
 }
 
-void AMassUnitBase::ApplyLocalVisualRotation(const FQuat& NewLocalRotation)
+void AMassUnitBase::ApplyLocalVisualRotation(const FQuat& NewLocalRotation, UInstancedStaticMeshComponent* InISM)
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
 		const FQuat Visual = NewLocalRotation.GetNormalized();
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		InstanceXf.SetRotation(Visual);
+		TargetISM->UpdateInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+		return;
+	}
+
+	// Fallback to local component
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		const FQuat Visual = NewLocalRotation.GetNormalized();
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
-			// Write instance LOCAL transform so we don't blend in world/actor rotation
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
 			InstanceXf.SetRotation(Visual);
 			ISMComponent->UpdateInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
 			return;
 		}
 
-		// Fallback: rotate the whole ISM component
-		ISMComponent->SetRelativeRotation(Visual.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		TemplateISM->SetRelativeRotation(Visual.Rotator(), /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
 		return;
 	}
 
@@ -1636,34 +1917,6 @@ void AMassUnitBase::ApplyLocalVisualRotation(const FQuat& NewLocalRotation)
 	}
 }
 
-void AMassUnitBase::RotateISM_Step()
-{
-	// If we lost visual components, bail out and stop the timer
-	if (!ISMComponent && !GetMesh())
-	{
-		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
-		return;
-	}
-
-	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	RotateElapsed += Dt;
-
-	float Alpha = (RotateDuration > 0.f) ? FMath::Clamp(RotateElapsed / RotateDuration, 0.f, 1.f) : 1.f;
-	if (!FMath::IsNearlyEqual(RotationEaseExponent, 1.f))
-	{
-		Alpha = FMath::Pow(Alpha, RotationEaseExponent);
-	}
-
-	const FQuat NewLocal = FQuat::Slerp(RotateStart, RotateTarget, Alpha).GetNormalized();
-	ApplyLocalVisualRotation(NewLocal);
-
-	if (Alpha >= 1.f)
-	{
-		// Snap exactly to the desired final orientation to avoid accumulated numeric error
-		ApplyLocalVisualRotation(RotateTarget);
-		GetWorldTimerManager().ClearTimer(RotateTimerHandle);
-	}
-}
 
 void AMassUnitBase::MulticastRotateActorLinear_Implementation(UStaticMeshComponent* MeshToRotate, const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent)
 {
@@ -1886,185 +2139,26 @@ void AMassUnitBase::MulticastRotateActorYawToChase_Implementation(UStaticMeshCom
 
 void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees, bool bTeleport)
 {
-	if (!ISMToRotate || InstIndex == INDEX_NONE)
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
-		return;
-	}
-
-	FISMInstanceKey Key(ISMToRotate, InstIndex);
-
-	if (bEnable)
-	{
-		FYawFollowData& Data = ActiveISMInstanceYawFollows.FindOrAdd(Key);
-		Data.Duration = InRotateDuration;
-		Data.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
-		Data.OffsetDegrees = YawOffsetDegrees;
-		Data.bTeleport = bTeleport;
-
-		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-
-		ISMInstanceYawFollow_Step();
-		if (!GetWorldTimerManager().IsTimerActive(ISMInstanceYawFollowTimerHandle))
-		{
-			GetWorldTimerManager().SetTimer(ISMInstanceYawFollowTimerHandle, this, &AMassUnitBase::ISMInstanceYawFollow_Step, TimerRate, true);
-		}
-	}
-	else
-	{
-		ActiveISMInstanceYawFollows.Remove(Key);
-		if (ActiveISMInstanceYawFollows.Num() == 0)
-		{
-			GetWorldTimerManager().ClearTimer(ISMInstanceYawFollowTimerHandle);
-		}
-	}
-}
-
-void AMassUnitBase::ISMInstanceYawFollow_Step()
-{
-	if (ActiveISMInstanceYawFollows.Num() == 0)
-	{
-		GetWorldTimerManager().ClearTimer(ISMInstanceYawFollowTimerHandle);
-		return;
-	}
-
-	TArray<FISMInstanceKey> ToRemove;
-	for (auto& Pair : ActiveISMInstanceYawFollows)
-	{
-		const FISMInstanceKey& Key = Pair.Key;
-		FYawFollowData& Data = Pair.Value;
-
-		UInstancedStaticMeshComponent* Comp = Key.Component.Get();
-		if (!Comp || !Comp->IsValidInstance(Key.InstanceIndex))
-		{
-			ToRemove.Add(Key);
-			continue;
-		}
-
+		EffectFrag->bYawChaseEnabled = bEnable;
+		EffectFrag->YawChaseOffset = YawOffsetDegrees;
+		EffectFrag->YawChaseDuration = InRotateDuration;
+		EffectFrag->YawChaseTargetISM = ISMToRotate ? ISMToRotate : ISMComponent;
+		
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
-		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		float DesiredWorldYaw = FRotator::NormalizeAxis(GetActorRotation().Yaw + Data.OffsetDegrees);
-
-		if (IsValid(TargetUnit))
+		if (ThisUnit && ThisUnit->UnitToChase)
 		{
-			bool bIsDead = false;
-			if (AMassUnitBase* MassTarget = Cast<AMassUnitBase>(TargetUnit))
+			if (AMassUnitBase* MassTarget = Cast<AMassUnitBase>(ThisUnit->UnitToChase))
 			{
 				FMassEntityManager* TargetEM;
 				FMassEntityHandle TargetHandle;
 				if (MassTarget->GetMassEntityData(TargetEM, TargetHandle))
 				{
-					bIsDead = DoesEntityHaveTag(*TargetEM, TargetHandle, FMassStateDeadTag::StaticStruct());
-				}
-			}
-
-			const float Distance = FVector::Dist(GetActorLocation(), TargetUnit->GetActorLocation());
-			const float MaxRange = MassActorBindingComponent ? MassActorBindingComponent->LoseSightRadius : 2500.f;
-
-			if (!bIsDead && Distance <= MaxRange)
-			{
-				FTransform InstTransform;
-				Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, true);
-				const FVector CompWorldLoc = InstTransform.GetLocation();
-				FVector TargetLoc = TargetUnit->GetActorLocation();
-
-				FVector ToTarget = TargetLoc - CompWorldLoc;
-				ToTarget.Z = 0.f;
-				if (!ToTarget.IsNearlyZero(1e-3f))
-				{
-					const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
-					DesiredWorldYaw = FRotator::NormalizeAxis(FacingRot.Yaw + Data.OffsetDegrees);
+					EffectFrag->TargetEntity = TargetHandle;
 				}
 			}
 		}
-
-		float ParentYaw = 0.f;
-		if (const USceneComponent* Parent = Comp->GetAttachParent())
-		{
-			ParentYaw = Parent->GetComponentRotation().Yaw;
-		}
-		float DesiredRelativeYaw = FRotator::NormalizeAxis(DesiredWorldYaw - ParentYaw);
-
-		FTransform RelativeTransform;
-		Comp->GetInstanceTransform(Key.InstanceIndex, RelativeTransform, false);
-		FRotator NewRelative = RelativeTransform.Rotator();
-		NewRelative.Yaw = DesiredRelativeYaw;
-
-		FStaticMeshRotateTween& Tween = ActiveISMInstanceTweens.FindOrAdd(Key);
-		Tween.Duration = Data.Duration;
-		Tween.EaseExp = FMath::Max(Data.EaseExp, 0.001f);
-		Tween.Elapsed = 0.f;
-		Tween.Start = RelativeTransform.GetRotation().GetNormalized();
-		Tween.Target = NewRelative.Quaternion().GetNormalized();
-		Tween.bTeleport = Data.bTeleport;
-		if ((Tween.Start | Tween.Target) < 0.f)
-		{
-			Tween.Target = (-Tween.Target);
-		}
-	}
-
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float RotateTimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-	ISMInstanceRotations_Step();
-	if (!GetWorldTimerManager().IsTimerActive(ISMInstanceRotateTimerHandle))
-	{
-		GetWorldTimerManager().SetTimer(ISMInstanceRotateTimerHandle, this, &AMassUnitBase::ISMInstanceRotations_Step, RotateTimerRate, true);
-	}
-}
-
-void AMassUnitBase::ISMInstanceRotations_Step()
-{
-	if (ActiveISMInstanceTweens.Num() == 0)
-	{
-		GetWorldTimerManager().ClearTimer(ISMInstanceRotateTimerHandle);
-		return;
-	}
-
-	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-
-	TArray<FISMInstanceKey> ToRemove;
-	for (auto& Pair : ActiveISMInstanceTweens)
-	{
-		const FISMInstanceKey& Key = Pair.Key;
-		FStaticMeshRotateTween& Tween = Pair.Value;
-
-		UInstancedStaticMeshComponent* Comp = Key.Component.Get();
-		if (!Comp || !Comp->IsValidInstance(Key.InstanceIndex))
-		{
-			ToRemove.Add(Key);
-			continue;
-		}
-
-		Tween.Elapsed += Dt;
-		float Alpha = (Tween.Duration > 0.f) ? FMath::Clamp(Tween.Elapsed / Tween.Duration, 0.f, 1.f) : 1.f;
-		if (!FMath::IsNearlyEqual(Tween.EaseExp, 1.f))
-		{
-			Alpha = FMath::Pow(Alpha, Tween.EaseExp);
-		}
-
-		const FQuat NewLocal = FQuat::Slerp(Tween.Start, Tween.Target, Alpha).GetNormalized();
-		
-		FTransform InstTransform;
-		Comp->GetInstanceTransform(Key.InstanceIndex, InstTransform, false);
-		InstTransform.SetRotation(NewLocal);
-		Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, Tween.bTeleport);
-
-		if (Alpha >= 1.f)
-		{
-			InstTransform.SetRotation(Tween.Target);
-			Comp->UpdateInstanceTransform(Key.InstanceIndex, InstTransform, false, true, Tween.bTeleport);
-			ToRemove.Add(Key);
-		}
-	}
-
-	for (const auto& Key : ToRemove)
-	{
-		ActiveISMInstanceTweens.Remove(Key);
-	}
-
-	if (ActiveISMInstanceTweens.Num() == 0)
-	{
-		GetWorldTimerManager().ClearTimer(ISMInstanceRotateTimerHandle);
 	}
 }
 
@@ -2294,49 +2388,43 @@ void AMassUnitBase::UnitMove_Step()
 	}
 }
 
-void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent)
+void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
-	// Cache parameters
-	MoveDuration = InMoveDuration;
-	MoveEaseExponent = FMath::Max(InMoveEaseExponent, 0.001f);
-
-	if (!ISMComponent && !GetMesh())
+	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		return;
+		TweenFrag->LocationTween.StartLocation = GetCurrentLocalVisualLocation(InISMComponent);
+		TweenFrag->LocationTween.TargetLocation = NewLocation;
+		TweenFrag->LocationTween.Duration = InMoveDuration;
+		TweenFrag->LocationTween.Elapsed = 0.f;
+		TweenFrag->LocationTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
+		TweenFrag->LocationTween.bActive = true;
+		TweenFrag->LocationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
-
-	// Snap if no duration
-	if (MoveDuration <= 0.f)
-	{
-		ApplyLocalVisualLocation(NewLocation);
-		return;
-	}
-
-	// Initialize interpolation state
-	GetWorldTimerManager().ClearTimer(MoveTimerHandle);
-	MoveStart = GetCurrentLocalVisualLocation();
-	MoveTarget = NewLocation;
-	MoveElapsed = 0.f;
-
-	// Immediate step then start timer
-	MoveISM_Step();
-
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-	GetWorldTimerManager().SetTimer(MoveTimerHandle, this, &AMassUnitBase::MoveISM_Step, TimerRate, true);
 }
 
-FVector AMassUnitBase::GetCurrentLocalVisualLocation() const
+FVector AMassUnitBase::GetCurrentLocalVisualLocation(UInstancedStaticMeshComponent* InISM) const
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		return InstanceXf.GetLocation();
+	}
+
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
 			return InstanceXf.GetLocation();
 		}
-		return ISMComponent->GetRelativeLocation();
+		return TemplateISM->GetRelativeLocation();
 	}
 
 	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
@@ -2347,11 +2435,25 @@ FVector AMassUnitBase::GetCurrentLocalVisualLocation() const
 	return GetActorLocation();
 }
 
-void AMassUnitBase::ApplyLocalVisualLocation(const FVector& NewLocalLocation)
+void AMassUnitBase::ApplyLocalVisualLocation(const FVector& NewLocalLocation, UInstancedStaticMeshComponent* InISM)
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		InstanceXf.SetLocation(NewLocalLocation);
+		TargetISM->UpdateInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+		return;
+	}
+
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
@@ -2360,7 +2462,7 @@ void AMassUnitBase::ApplyLocalVisualLocation(const FVector& NewLocalLocation)
 			return;
 		}
 
-		ISMComponent->SetRelativeLocation(NewLocalLocation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
+		TemplateISM->SetRelativeLocation(NewLocalLocation, /*bSweep*/ false, nullptr, ETeleportType::TeleportPhysics);
 		return;
 	}
 
@@ -2370,32 +2472,6 @@ void AMassUnitBase::ApplyLocalVisualLocation(const FVector& NewLocalLocation)
 	}
 }
 
-void AMassUnitBase::MoveISM_Step()
-{
-	if (!ISMComponent && !GetMesh())
-	{
-		GetWorldTimerManager().ClearTimer(MoveTimerHandle);
-		return;
-	}
-
-	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	MoveElapsed += Dt;
-
-	float Alpha = (MoveDuration > 0.f) ? FMath::Clamp(MoveElapsed / MoveDuration, 0.f, 1.f) : 1.f;
-	if (!FMath::IsNearlyEqual(MoveEaseExponent, 1.f))
-	{
-		Alpha = FMath::Pow(Alpha, MoveEaseExponent);
-	}
-
-	const FVector NewLocal = FMath::Lerp(MoveStart, MoveTarget, Alpha);
-	ApplyLocalVisualLocation(NewLocal);
-
-	if (Alpha >= 1.f)
-	{
-		ApplyLocalVisualLocation(MoveTarget);
-		GetWorldTimerManager().ClearTimer(MoveTimerHandle);
-	}
-}
 
 void AMassUnitBase::MulticastMoveActorLinear_Implementation(UStaticMeshComponent* MeshToMove, const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent)
 {
@@ -2479,49 +2555,43 @@ void AMassUnitBase::StaticMeshMoves_Step()
 	}
 }
 
-void AMassUnitBase::MulticastScaleISMLinear_Implementation(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent)
+void AMassUnitBase::MulticastScaleISMLinear_Implementation(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
-	// Cache parameters
-	ScaleDuration = InScaleDuration;
-	ScaleEaseExponent = FMath::Max(InScaleEaseExponent, 0.001f);
-
-	if (!ISMComponent && !GetMesh())
+	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		return;
+		TweenFrag->ScaleTween.StartScale = GetCurrentLocalVisualScale(InISMComponent);
+		TweenFrag->ScaleTween.TargetScale = NewScale;
+		TweenFrag->ScaleTween.Duration = InScaleDuration;
+		TweenFrag->ScaleTween.Elapsed = 0.f;
+		TweenFrag->ScaleTween.EaseExp = FMath::Max(InScaleEaseExponent, 0.001f);
+		TweenFrag->ScaleTween.bActive = true;
+		TweenFrag->ScaleTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
-
-	// Snap if no duration
-	if (ScaleDuration <= 0.f)
-	{
-		ApplyLocalVisualScale(NewScale);
-		return;
-	}
-
-	// Initialize interpolation state
-	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
-	ScaleStart = GetCurrentLocalVisualScale();
-	ScaleTarget = NewScale;
-	ScaleElapsed = 0.f;
-
-	// Immediate step then start timer
-	ScaleISM_Step();
-
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-	GetWorldTimerManager().SetTimer(ScaleTimerHandle, this, &AMassUnitBase::ScaleISM_Step, TimerRate, true);
 }
 
-FVector AMassUnitBase::GetCurrentLocalVisualScale() const
+FVector AMassUnitBase::GetCurrentLocalVisualScale(UInstancedStaticMeshComponent* InISM) const
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		return InstanceXf.GetScale3D();
+	}
+
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
 			return InstanceXf.GetScale3D();
 		}
-		return ISMComponent->GetRelativeScale3D();
+		return TemplateISM->GetRelativeScale3D();
 	}
 
 	if (const USkeletalMeshComponent* SkelMesh = GetMesh())
@@ -2532,11 +2602,25 @@ FVector AMassUnitBase::GetCurrentLocalVisualScale() const
 	return GetActorScale3D();
 }
 
-void AMassUnitBase::ApplyLocalVisualScale(const FVector& NewLocalScale)
+void AMassUnitBase::ApplyLocalVisualScale(const FVector& NewLocalScale, UInstancedStaticMeshComponent* InISM)
 {
-	if (!bUseSkeletalMovement && ISMComponent)
+	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
+	UInstancedStaticMeshComponent* TargetISM = nullptr;
+	int32 TargetInstIndex = INDEX_NONE;
+
+	// Prioritize Mass Manager Visuals
+	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
-		if (ISMComponent->IsValidInstance(InstanceIndex))
+		FTransform InstanceXf;
+		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
+		InstanceXf.SetScale3D(NewLocalScale);
+		TargetISM->UpdateInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ false);
+		return;
+	}
+
+	if (!bUseSkeletalMovement && TemplateISM)
+	{
+		if (TemplateISM == ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 		{
 			FTransform InstanceXf;
 			ISMComponent->GetInstanceTransform(InstanceIndex, InstanceXf, /*bWorldSpace*/ false);
@@ -2545,7 +2629,7 @@ void AMassUnitBase::ApplyLocalVisualScale(const FVector& NewLocalScale)
 			return;
 		}
 
-		ISMComponent->SetRelativeScale3D(NewLocalScale);
+		TemplateISM->SetRelativeScale3D(NewLocalScale);
 		return;
 	}
 
@@ -2555,32 +2639,6 @@ void AMassUnitBase::ApplyLocalVisualScale(const FVector& NewLocalScale)
 	}
 }
 
-void AMassUnitBase::ScaleISM_Step()
-{
-	if (!ISMComponent && !GetMesh())
-	{
-		GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
-		return;
-	}
-
-	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	ScaleElapsed += Dt;
-
-	float Alpha = (ScaleDuration > 0.f) ? FMath::Clamp(ScaleElapsed / ScaleDuration, 0.f, 1.f) : 1.f;
-	if (!FMath::IsNearlyEqual(ScaleEaseExponent, 1.f))
-	{
-		Alpha = FMath::Pow(Alpha, ScaleEaseExponent);
-	}
-
-	const FVector NewLocal = FMath::Lerp(ScaleStart, ScaleTarget, Alpha);
-	ApplyLocalVisualScale(NewLocal);
-
-	if (Alpha >= 1.f)
-	{
-		ApplyLocalVisualScale(ScaleTarget);
-		GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
-	}
-}
 
 void AMassUnitBase::MulticastScaleActorLinear_Implementation(UStaticMeshComponent* MeshToScale, const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent)
 {
@@ -2666,68 +2724,19 @@ void AMassUnitBase::StaticMeshScales_Step()
 }
 
 
-void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable)
+void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, UInstancedStaticMeshComponent* InISMComponent)
 {
-	// Only proceed if we have a visual to manipulate
-	if (!ISMComponent && !GetMesh())
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
-		return;
+		EffectFrag->bPulsateEnabled = bEnable;
+		EffectFrag->PulsateMinScale = InMinScale;
+		EffectFrag->PulsateMaxScale = InMaxScale;
+		EffectFrag->PulsateHalfPeriod = TimeMinToMax;
+		EffectFrag->PulsateElapsed = 0.f;
+		EffectFrag->PulsateTargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
-
-	// Disable pulsating on request
-	if (!bEnable)
-	{
-		bPulsateScaleEnabled = false;
-		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
-		return;
-	}
-
-	// Enable and configure pulsation
-	bPulsateScaleEnabled = true;
-	PulsateMinScale = InMinScale;
-	PulsateMaxScale = InMaxScale;
-	PulsateHalfPeriod = FMath::Max(TimeMinToMax, 0.0001f); // avoid division by zero
-	PulsateElapsed = 0.f;
-
-	// Ensure one-shot scale tween is not fighting with the pulsation
-	GetWorldTimerManager().ClearTimer(ScaleTimerHandle);
-
-	// Immediate step for responsiveness
-	PulsateISMScale_Step();
-
-	// Start/update timer with a safe rate
-	const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-	GetWorldTimerManager().SetTimer(PulsateScaleTimerHandle, this, &AMassUnitBase::PulsateISMScale_Step, TimerRate, true);
 }
 
-void AMassUnitBase::PulsateISMScale_Step()
-{
-	if (!bPulsateScaleEnabled)
-	{
-		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
-		return;
-	}
-
-	if (!ISMComponent && !GetMesh())
-	{
-		bPulsateScaleEnabled = false;
-		GetWorldTimerManager().ClearTimer(PulsateScaleTimerHandle);
-		return;
-	}
-
-	const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-	PulsateElapsed += Dt;
-
-	// Compute a ping-pong alpha in [0,1] with a half-period of PulsateHalfPeriod
-	const float Cycle = (PulsateElapsed / PulsateHalfPeriod);
-	float Mod = FMath::Fmod(Cycle, 2.f);
-	if (Mod < 0.f) Mod += 2.f;
-	const float Alpha = (Mod <= 1.f) ? Mod : (2.f - Mod); // 0->1 then 1->0
-
-	const FVector NewScale = FMath::Lerp(PulsateMinScale, PulsateMaxScale, Alpha);
-	ApplyLocalVisualScale(NewScale);
-}
 
 
 // Static helper to apply/clear follow target for a unit at the Mass level.

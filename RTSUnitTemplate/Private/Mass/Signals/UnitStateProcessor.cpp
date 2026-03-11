@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Signals/UnitStateProcessor.h"
 
 // Source: UnitStateProcessor.cpp
@@ -2444,7 +2444,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 			{
 				// New robust calculation: NewZ = CurrentZ + (GroundZ - BottomZ)
 				//FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z - (MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z));
-				FinalLocation.Z = HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z;
+				FinalLocation.Z = HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z - MeshBounds.Origin.Z;
 			}
 		}
 	}
@@ -2509,6 +2509,8 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 
     GameMode->AddUnitIndexAndAssignToAllUnitsArray(UnitBase);
 	UnitBase->ScheduleDelayedNavigationUpdate();
+	UnitBase->SyncTranslation();
+	UnitBase->SyncRotation();
     return UnitBase;
 }
 
@@ -3793,6 +3795,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
 					
 					NewConstruction->SetActorLocation(FinalLoc);
+					NewConstruction->SyncTranslation();
 				}
 				// store pointer on area
 				UnitBase->BuildArea->ConstructionUnit = NewConstruction;

@@ -42,9 +42,6 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_UnregisterObstacle();
 
-	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
-	bool bIsMassUnit = false;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bIsBuilding = false;
 	

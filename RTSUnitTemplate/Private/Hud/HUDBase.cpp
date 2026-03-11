@@ -16,6 +16,8 @@
 #include "Net/UnrealNetwork.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/MassUnitVisualFragments.h"
+#include "Characters/Unit/MassUnitBase.h"
 
 // Project-Specific Headers
 #include "Characters/Unit/HealingUnit.h"
@@ -394,29 +396,35 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
     if (!Controller)
         return;
 
-    // Iterate all UnitBase actors
-	//UE_LOG(LogTemp, Error, TEXT("FriendlyUnits.Num()=%d"), FriendlyUnits.Num());
-	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)   // FriendlyUnits // for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It) 
+    // Iterate all MassUnitBase actors (which includes UnitBase)
+	for (TActorIterator<AMassUnitBase> It(GetWorld()); It; ++It)
     {
-        AUnitBase* Unit = *It;
-    	//AUnitBase* Unit = FriendlyUnits[i];
-    	
-        if (Unit->bUseSkeletalMovement || Unit->TeamId != Controller->SelectableTeamId || !Unit->CanBeSelected)
+        AMassUnitBase* Unit = *It;
+        if (!Unit) continue;
+
+        if (Unit->bUseSkeletalMovement || (Controller->SelectableTeamId != 0 && Unit->TeamId != Controller->SelectableTeamId))
             continue;
 
-    	//UE_LOG(LogTemp, Error, TEXT("Unit '%s': TeamId=%d"), *Unit->GetName(), CombatStats->TeamId);
-    	
-        UInstancedStaticMeshComponent* ISM = Unit->ISMComponent;
-        if (!ISM)
-            continue;
+        if (AUnitBase* UB = Cast<AUnitBase>(Unit))
+        {
+            if (!UB->CanBeSelected) continue;
+        }
 
-        // Test each instance
-        const int32 Count = ISM->GetInstanceCount();
-        for (int32 Index = 0; Index < Count; ++Index)
+        // Test each instance from VisualInstances in fragment
+        const FMassUnitVisualFragment* VisualFrag = Unit->GetVisualFragment();
+        if (!VisualFrag) continue;
+
+        for (const FMassUnitVisualInstance& VisualInst : VisualFrag->VisualInstances)
+        {
+            UInstancedStaticMeshComponent* ISM = VisualInst.TargetISM.Get();
+            if (!ISM) continue;
+            int32 Index = VisualInst.InstanceIndex;
+
         {
             FTransform Xform;
             ISM->GetInstanceTransform(Index, Xform, /*bWorldSpace=*/true);
             FVector WorldLoc = Xform.GetLocation();
+
 
             FVector2D ScreenLoc;
             if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
@@ -428,17 +436,24 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
                 ScreenLoc.Y >= FMath::Min(RectMin.Y, RectMax.Y) &&
                 ScreenLoc.Y <= FMath::Max(RectMin.Y, RectMax.Y))
             {
-                // Select this unit
-                if (Unit->GetOwner() == nullptr)
+                // Select this unit only if not already selected to reduce network traffic
+                if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
                 {
-                    Unit->SetOwner(Controller);
+                    if (!SelectedUnits.Contains(UnitBase))
+                    {
+                        if (UnitBase->GetOwner() == nullptr)
+                        {
+                            UnitBase->SetOwner(Controller);
+                        }
+                        UnitBase->SetSelected();
+                        SelectedUnits.AddUnique(UnitBase);
+                        SelectUnitsFromSameSquad(UnitBase);
+                    }
                 }
-                Unit->SetSelected();
-                SelectedUnits.AddUnique(Unit);
-                SelectUnitsFromSameSquad(Unit);
                 break;  // one hit is enough
             }
         }
+    }
     }
 }
 

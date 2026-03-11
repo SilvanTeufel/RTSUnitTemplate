@@ -46,8 +46,17 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = ISM)
 	UInstancedStaticMeshComponent* ISMComponent;
 
+	UPROPERTY(Transient)
+	TArray<UInstancedStaticMeshComponent*> AdditionalISMComponents;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= ISM)
 	int32 InstanceIndex = INDEX_NONE;
+
+	UPROPERTY(Transient)
+	bool bMassVisualsRegistered = false;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bIsMassUnit = false;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	bool bUseSkeletalMovement = true;
@@ -230,17 +239,31 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FQuat MeshRotationOffset;
 	
+	virtual void Tick(float DeltaSeconds) override;
+
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeUnitMode();
 
-	UFUNCTION(BlueprintCallable, Category = ISM)
+	bool RegisterVisualsToMass();
+	bool RegisterAdditionalVisualsToMass();
+
+	UFUNCTION(BlueprintCallable, Category = "Mass|Visual")
+	void RemoveAdditionalISMInstances();
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
 	int32 InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
+
+	/** Returns the actual ISM component and instance index used by the Mass Visual Manager. 
+	 * Matches the TemplateISM (e.g. ISMComponent or an Additional ISM) to the manager's instance.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Mass|Visual")
+	bool GetMassVisualInstance(UInstancedStaticMeshComponent* TemplateISM, UInstancedStaticMeshComponent*& OutComponent, int32& OutInstanceIndex) const;
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastTransformSync(const FVector& Location);
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent);
+	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 	
 	// Rotate an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -252,7 +275,7 @@ public:
 
 	// Move the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent);
+	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Move an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -260,15 +283,15 @@ public:
 
 	// Scale the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
+	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
- // Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
+	// Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastScaleActorLinear(UStaticMeshComponent* MeshToScale, const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent);
 
 	// Continuously pulsate the ISM/skeletal visual scale between Min and Max (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable);
+	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Continuously rotate a static mesh component's Yaw to face UnitToChase (runs on server and clients)
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
@@ -299,54 +322,23 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
-	// Smooth rotation controls (duration-based)
-	
-	float RotateDuration = 0.25f; // seconds to reach target; <=0 to snap
-	float RotationEaseExponent = 1.0f; // 1 = linear; >1 to ease-in/out feel
-	
-	// Runtime state for smooth rotation (not replicated)
-	FTimerHandle RotateTimerHandle;
-	float RotateElapsed = 0.f;
-	FQuat RotateStart;
-	FQuat RotateTarget;
-	
-	// Per-frame rotation step while timer active
-	void RotateISM_Step();
-	
 	// Helpers to read/apply current visual rotation
-	FQuat GetCurrentLocalVisualRotation() const;
-	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation);
+	FQuat GetCurrentLocalVisualRotation(UInstancedStaticMeshComponent* InISM = nullptr) const;
+	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation, UInstancedStaticMeshComponent* InISM = nullptr);
 
-	// Smooth movement controls (duration-based)
-	float MoveDuration = 0.25f; // seconds to reach target; <=0 to snap
-	float MoveEaseExponent = 1.0f; // 1 = linear
-	FTimerHandle MoveTimerHandle;
-	float MoveElapsed = 0.f;
-	FVector MoveStart = FVector::ZeroVector;
-	FVector MoveTarget = FVector::ZeroVector;
-	void MoveISM_Step();
-	FVector GetCurrentLocalVisualLocation() const;
-	void ApplyLocalVisualLocation(const FVector& NewLocalLocation);
+	FVector GetCurrentLocalVisualLocation(UInstancedStaticMeshComponent* InISM = nullptr) const;
+	void ApplyLocalVisualLocation(const FVector& NewLocalLocation, UInstancedStaticMeshComponent* InISM = nullptr);
 
-	// Smooth scaling controls (duration-based)
-	float ScaleDuration = 0.25f; // seconds to reach target; <=0 to snap
-	float ScaleEaseExponent = 1.0f; // 1 = linear
-	FTimerHandle ScaleTimerHandle;
-	float ScaleElapsed = 0.f;
-	FVector ScaleStart = FVector(1.f, 1.f, 1.f);
-	FVector ScaleTarget = FVector(1.f, 1.f, 1.f);
-	void ScaleISM_Step();
-	FVector GetCurrentLocalVisualScale() const;
-	void ApplyLocalVisualScale(const FVector& NewLocalScale);
+	FVector GetCurrentLocalVisualScale(UInstancedStaticMeshComponent* InISM = nullptr) const;
+	void ApplyLocalVisualScale(const FVector& NewLocalScale, UInstancedStaticMeshComponent* InISM = nullptr);
 
-	// Continuous pulsating scale state (not replicated)
-	bool bPulsateScaleEnabled = false;
-	FTimerHandle PulsateScaleTimerHandle;
-	FVector PulsateMinScale = FVector(1.f, 1.f, 1.f);
-	FVector PulsateMaxScale = FVector(1.f, 1.f, 1.f);
-	float PulsateHalfPeriod = 1.0f; // seconds from Min to Max
-	float PulsateElapsed = 0.f;
-	void PulsateISMScale_Step();
+	// Fragment helpers
+public:
+	struct FMassUnitVisualFragment* GetMutableVisualFragment();
+	const struct FMassUnitVisualFragment* GetVisualFragment() const;
+protected:
+	struct FMassVisualTweenFragment* GetMutableTweenFragment();
+	struct FMassVisualEffectFragment* GetMutableEffectFragment();
 	
 	// Lightweight tween state for rotating arbitrary static mesh components
 	struct FStaticMeshRotateTween
@@ -357,25 +349,6 @@ protected:
 		FQuat Start = FQuat::Identity;
 		FQuat Target = FQuat::Identity;
 		bool bTeleport = true;
-	};
-	
-	struct FISMInstanceKey
-	{
-		TWeakObjectPtr<UInstancedStaticMeshComponent> Component;
-		int32 InstanceIndex;
-
-		FISMInstanceKey() : InstanceIndex(INDEX_NONE) {}
-		FISMInstanceKey(UInstancedStaticMeshComponent* InComp, int32 InIndex) : Component(InComp), InstanceIndex(InIndex) {}
-
-		bool operator==(const FISMInstanceKey& Other) const
-		{
-			return Component == Other.Component && InstanceIndex == Other.InstanceIndex;
-		}
-
-		friend uint32 GetTypeHash(const FISMInstanceKey& Key)
-		{
-			return HashCombine(GetTypeHash(Key.Component), GetTypeHash(Key.InstanceIndex));
-		}
 	};
 	
 	// Timer step for rotating arbitrary static mesh components (state stored internally in cpp)
@@ -403,14 +376,6 @@ protected:
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FYawFollowData> ActiveYawFollows;
 	FTimerHandle StaticMeshYawFollowTimerHandle;
 	void StaticMeshYawFollow_Step();
-
-	TMap<FISMInstanceKey, FYawFollowData> ActiveISMInstanceYawFollows;
-	FTimerHandle ISMInstanceYawFollowTimerHandle;
-	void ISMInstanceYawFollow_Step();
-	
-	void ISMInstanceRotations_Step();
-	FTimerHandle ISMInstanceRotateTimerHandle;
-	TMap<FISMInstanceKey, FStaticMeshRotateTween> ActiveISMInstanceTweens;
 
 	// Lightweight tween state for moving arbitrary static mesh components
 	struct FStaticMeshMoveTween
@@ -449,7 +414,5 @@ protected:
 	void StaticMeshScales_Step();
 	FTimerHandle StaticMeshScaleTimerHandle;
 	TMap<TWeakObjectPtr<UStaticMeshComponent>, FStaticMeshScaleTween> ActiveStaticMeshScaleTweens;
-	
-	//void InitializeUnitMode();
 		
 };

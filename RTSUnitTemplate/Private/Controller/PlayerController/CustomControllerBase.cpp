@@ -38,6 +38,8 @@
 #include "AbilitySystemComponent.h"
 #include "Characters\Unit\UnitBase.h"
 #include "Characters/Unit/SpeakingUnit.h"
+#include "Subsystems/UnitVisualManager.h"
+#include "Characters/Unit/MassUnitBase.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "GAS/AttributeSetBase.h"
@@ -1470,6 +1472,27 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 	}
 }
 
+AUnitBase* ACustomControllerBase::GetUnitFromHitResult(const FHitResult& Hit) const
+{
+	AActor* HitActor = Hit.GetActor();
+	if (!HitActor) return nullptr;
+
+	// 1. Direct check (for units / actors)
+	if (AUnitBase* Unit = Cast<AUnitBase>(HitActor)) return Unit;
+
+	// 2. ISM mapping via VisualManager (for mass units)
+	if (UInstancedStaticMeshComponent* HitISM = Cast<UInstancedStaticMeshComponent>(Hit.Component.Get()))
+	{
+		if (UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>())
+		{
+			AMassUnitBase* MUB = VisualManager->GetUnitFromInstance(HitISM, Hit.Item);
+			return Cast<AUnitBase>(MUB);
+		}
+	}
+
+	return nullptr;
+}
+
 bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPawn)
 {
 	// If we clicked on a unit while having a selection, assign follow or attack and early return
@@ -1477,7 +1500,7 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 	{
 		if (!Cast<AConstructionUnit>(HitPawn.GetActor()))
 		{
-			if (AUnitBase* HitUnit = Cast<AUnitBase>(HitPawn.GetActor()))
+			if (AUnitBase* HitUnit = GetUnitFromHitResult(HitPawn))
 			{
 				const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
 				if (bFriendly)
@@ -2428,7 +2451,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         else
             ClickedActor = nullptr;
 
-        AUnitBase* HitUnit = Cast<AUnitBase>(HitActor);
+        AUnitBase* HitUnit = GetUnitFromHitResult(HitPawn);
         ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
 
         if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
@@ -2944,8 +2967,8 @@ void ACustomControllerBase::HandleAttackMovePressed()
     	
     FHitResult HitPawn;
     GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-    AActor* CursorHitActor = HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr;
-    AUnitBase* TargetUnit = Cast<AUnitBase>(CursorHitActor);
+    AUnitBase* TargetUnit = GetUnitFromHitResult(HitPawn);
+    AActor* CursorHitActor = TargetUnit ? static_cast<AActor*>(TargetUnit) : (HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr);
 
     FHitResult Hit;
     GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);

@@ -98,13 +98,7 @@ public:
  // Resolve which component we will animate
  UPrimitiveComponent* ResolveVisualComponent() const;
 
- // Timer steps
- void RotateVisual_Step();
- void OscillateVisual_Step();
- void PulsateScale_Step();
-
  // Runtime state (not replicated)
- FTimerHandle RotateTimerHandle;
  float Rotate_Duration = 0.f;
  float Rotate_Elapsed = 0.f;
  FVector Rotate_Axis = FVector(0.f, 0.f, 0.f);
@@ -112,7 +106,6 @@ public:
  TWeakObjectPtr<USceneComponent> Rotate_TargetComp;
  bool Rotate_UseActor = false;
 
- FTimerHandle OscillateTimerHandle;
  float Osc_Duration = 0.f;
  float Osc_Elapsed = 0.f;
  float Osc_CyclesPerSec = 1.f;
@@ -124,7 +117,6 @@ public:
  bool Osc_UseActor = false;
 
  // Pulsate runtime state
- FTimerHandle PulsateTimerHandle;
  bool bPulsateActive = false;
  FVector Pulsate_BaseScale = FVector(1.f, 1.f, 1.f);
  FVector Pulsate_Min = FVector(0.9f, 0.9f, 0.9f);

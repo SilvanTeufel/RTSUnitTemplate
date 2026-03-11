@@ -11,6 +11,7 @@
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h" // Include your custom tag definition (Adjust path)
 #include "MassEntityUtils.h"
+#include "Mass/MassUnitVisualFragments.h"
 
 #include "Characters/Unit/TransportUnit.h"
 #include "Characters/Unit/ConstructionUnit.h"
@@ -221,8 +222,10 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	InitRepresentation(EntityManager, Entity);
 	
 	bNeedsMassUnitSetup = false;
-	AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
-	UnitBase->bIsMassUnit = true;
+	if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
+	{
+		MassUnit->bIsMassUnit = true;
+	}
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
@@ -289,10 +292,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			}
 			
 			bNeedsMassUnitSetup = false;
-			AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner);
-			UnitBase->bIsMassUnit = true;
-			UnitBase->UpdatePredictionFragment(UnitBase->GetMassActorLocation(), 0);
-			UnitBase->SyncTranslation();
+			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
+			{
+				MassUnit->bIsMassUnit = true;
+				MassUnit->UpdatePredictionFragment(MassUnit->GetMassActorLocation(), 0);
+				MassUnit->SyncTranslation();
+			}
 			
 			// Client: Clear stale cache for any NetID this actor might have had previously 
 			// or might be about to receive. Better yet, the ClientReplicationProcessor 
@@ -306,6 +311,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 					if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(NewMassEntityHandle))
 					{
 							// Skip registration if the owning unit is dead
+							AMassUnitBase* MassUnit2 = Cast<AMassUnitBase>(MyOwner);
 							AUnitBase* UnitBaseLocal2 = Cast<AUnitBase>(MyOwner);
 							if (UnitBaseLocal2 && UnitBaseLocal2->UnitState == UnitData::Dead)
 							{
@@ -438,6 +444,9 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassActorFragment::StaticStruct(),             // ** REQUIRED: Links Mass entity to Actor **
 		FMassRepresentationFragment::StaticStruct(),    // Needed by representation system
 		FMassRepresentationLODFragment::StaticStruct(),  // Needed by representation system
+		FMassUnitVisualFragment::StaticStruct(),
+		FMassVisualTweenFragment::StaticStruct(),
+		FMassVisualEffectFragment::StaticStruct(),
     };
 	
 	if(UnitBase->AddEffectTargetFragement)
@@ -1071,6 +1080,14 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		{
 			CarriedFrag->bIsCarrying = false;
 			CarriedFrag->InstanceIndex = INDEX_NONE;
+		}
+	}
+
+	if (FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(EntityHandle))
+	{
+		if (UnitOwner)
+		{
+			VisualFrag->bUseSkeletalMovement = UnitOwner->bUseSkeletalMovement;
 		}
 	}
 }

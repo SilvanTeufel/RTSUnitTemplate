@@ -19,6 +19,7 @@
 
 class USoundBase;
 class AUnitBase;
+class AMassUnitBase;
 
 #include "CustomControllerBase.generated.h"
 
@@ -59,6 +60,8 @@ protected:
 
 	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
+
+	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 
 public:
 	virtual void BeginPlay() override;
