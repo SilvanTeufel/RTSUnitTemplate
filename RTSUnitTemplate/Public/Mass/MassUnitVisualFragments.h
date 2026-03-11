@@ -85,6 +85,9 @@ struct RTSUNITTEMPLATE_API FMassUnitVisualInstance
     // Current relative transform (BaseOffset + Tweens)
     UPROPERTY()
     FTransform CurrentRelativeTransform = FTransform::Identity;
+
+    UPROPERTY()
+    bool bWasVisible = false;
 };
 
 USTRUCT()

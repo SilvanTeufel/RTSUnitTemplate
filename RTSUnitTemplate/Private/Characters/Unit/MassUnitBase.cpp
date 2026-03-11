@@ -97,6 +97,16 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
 	DOREPLIFETIME(AMassUnitBase, FlyHeight);
 
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_ActiveEffects);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_PulsateMinScale);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_PulsateMaxScale);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_PulsateHalfPeriod);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_RotationAxis);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_RotationDegreesPerSecond);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetA);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetB);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationCyclesPerSecond);
+
 	DOREPLIFETIME(AMassUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AMassUnitBase, TimerWidgetComp);
 	DOREPLIFETIME(AMassUnitBase, HealthWidgetRelativeOffset);
@@ -1047,30 +1057,18 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 void AMassUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (RegisterVisualsToMass() && RegisterAdditionalVisualsToMass())
-	{
-		bMassVisualsRegistered = true;
-		RemoveAdditionalISMInstances();
-	}
 }
 
 void AMassUnitBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-
-	if (bIsMassUnit && !bMassVisualsRegistered)
-	{
-		if (RegisterVisualsToMass() && RegisterAdditionalVisualsToMass())
-		{
-			bMassVisualsRegistered = true;
-			RemoveAdditionalISMInstances();
-		}
-	}
 }
+
 
 void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	bMassVisualsRegistered = false;
+
 	if (UUnitVisualManager* VisualManager = GetWorld() ? GetWorld()->GetSubsystem<UUnitVisualManager>() : nullptr)
 	{
 		if (MassActorBindingComponent)
@@ -1105,61 +1103,6 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	Super::EndPlay(EndPlayReason);
 }
-
-/*
-void AMassUnitBase::InitializeUnitMode()
-{
-	if (bUseSkeletalMovement)
-	{
-		GetMesh()->SetVisibility(true);
-		ISMComponent->SetVisibility(false);
-	}
-	else
-	{
-		GetMesh()->SetVisibility(false);
-		ISMComponent->SetVisibility(true);
-	
-		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
-		{
-			MoveComp->Deactivate();
-			MoveComp->SetComponentTickEnabled(false);
-		}
-	}
-
-	
-	if (Niagara_A)
-	{
-		Niagara_A_Start_Transform = Niagara_A->GetRelativeTransform();
-	}
-
-	if (Niagara_B)
-	{
-		Niagara_B_Start_Transform = Niagara_B->GetRelativeTransform();
-	}
-	
-	// Add the instance when the actor is ready and in the world
-	if (!bUseSkeletalMovement && ISMComponent && ISMComponent->GetStaticMesh())
-	{
-
-		const FTransform LocalIdentityTransform = FTransform::Identity;
-		
-		if (InstanceIndex == INDEX_NONE)
-		{
-			// Add a new instance at the component's local origin.
-			InstanceIndex = ISMComponent->AddInstance(LocalIdentityTransform, false);
-			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
-		}
-		else
-		{
-			// Update the existing instance to be at the component's local origin.
-			ISMComponent->UpdateInstanceTransform(InstanceIndex, LocalIdentityTransform, false, true, false);
-			MeshRotationOffset = ISMComponent->GetRelativeRotation().Quaternion().GetNormalized();
-		}
-	}
-	
-}
-*/
-
 
 void AMassUnitBase::InitializeUnitMode()
 {
@@ -1207,7 +1150,7 @@ void AMassUnitBase::InitializeUnitMode()
 
 bool AMassUnitBase::RegisterVisualsToMass()
 {
-	if (!GetWorld() || !GetWorld()->IsGameWorld()) return true;
+	if (!GetWorld() || !GetWorld()->IsGameWorld() || bMassVisualsRegistered) return true;
 
 	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Called for unit %s (bUseSkeletalMovement: %d)"), *GetName(), bUseSkeletalMovement);
 
@@ -1232,6 +1175,28 @@ bool AMassUnitBase::RegisterVisualsToMass()
 					{
 						UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Assigning main ISM %s for unit %s to entity %s"), *ISMComponent->GetName(), *GetName(), *EntityHandle.DebugGetDescription());
 						VisualManager->AssignUnitVisual(EntityHandle, ISMComponent, this);
+
+						if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+						{
+							EffectFrag->bPulsateEnabled = (Rep_VE_ActiveEffects & (1 << 0)) != 0;
+							EffectFrag->PulsateMinScale = Rep_VE_PulsateMinScale;
+							EffectFrag->PulsateMaxScale = Rep_VE_PulsateMaxScale;
+							EffectFrag->PulsateHalfPeriod = Rep_VE_PulsateHalfPeriod;
+
+							EffectFrag->bRotationEnabled = (Rep_VE_ActiveEffects & (1 << 1)) != 0;
+							EffectFrag->RotationAxis = Rep_VE_RotationAxis;
+							EffectFrag->RotationDegreesPerSecond = Rep_VE_RotationDegreesPerSecond;
+
+							EffectFrag->bOscillationEnabled = (Rep_VE_ActiveEffects & (1 << 2)) != 0;
+							EffectFrag->OscillationOffsetA = Rep_VE_OscillationOffsetA;
+							EffectFrag->OscillationOffsetB = Rep_VE_OscillationOffsetB;
+							EffectFrag->OscillationCyclesPerSecond = Rep_VE_OscillationCyclesPerSecond;
+
+							EffectFrag->PulsateTargetISM = ISMComponent;
+							EffectFrag->RotationTargetISM = ISMComponent;
+							EffectFrag->OscillationTargetISM = ISMComponent;
+						}
+
 						return true;
 					}
 					UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase::RegisterVisualsToMass: EntityHandle is invalid for unit %s"), *GetName());
@@ -1254,7 +1219,7 @@ bool AMassUnitBase::RegisterVisualsToMass()
 
 bool AMassUnitBase::RegisterAdditionalVisualsToMass()
 {
-	if (!GetWorld() || !GetWorld()->IsGameWorld()) return true;
+	if (!GetWorld() || !GetWorld()->IsGameWorld() || bMassVisualsRegistered) return true;
 
 	if (AdditionalISMComponents.Num() == 0) return true;
 
@@ -1850,9 +1815,28 @@ FQuat AMassUnitBase::GetCurrentLocalVisualRotation(UInstancedStaticMeshComponent
 	// Prioritize Mass Manager Visuals
 	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
+		// Try to get current instance rotation if it's not default/zero
 		FTransform InstanceXf;
-		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
-		return InstanceXf.GetRotation().GetNormalized();
+		if (TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false))
+		{
+			// We check if the transform is valid/not completely zeroed out by initialization
+			if (!InstanceXf.GetRotation().IsIdentity())
+			{
+				return InstanceXf.GetRotation().GetNormalized();
+			}
+		}
+
+		// If instance transform is not helpful, use the BaseOffset from the fragment
+		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
+		{
+			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+			{
+				if (Instance.TemplateISM == TemplateISM)
+				{
+					return Instance.BaseOffset.GetRotation().GetNormalized();
+				}
+			}
+		}
 	}
 
 	if (!bUseSkeletalMovement && TemplateISM)
@@ -2412,8 +2396,24 @@ FVector AMassUnitBase::GetCurrentLocalVisualLocation(UInstancedStaticMeshCompone
 	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
 		FTransform InstanceXf;
-		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
-		return InstanceXf.GetLocation();
+		if (TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false))
+		{
+			if (!InstanceXf.GetLocation().IsNearlyZero())
+			{
+				return InstanceXf.GetLocation();
+			}
+		}
+
+		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
+		{
+			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+			{
+				if (Instance.TemplateISM == TemplateISM)
+				{
+					return Instance.BaseOffset.GetLocation();
+				}
+			}
+		}
 	}
 
 	if (!bUseSkeletalMovement && TemplateISM)
@@ -2579,8 +2579,24 @@ FVector AMassUnitBase::GetCurrentLocalVisualScale(UInstancedStaticMeshComponent*
 	if (GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex))
 	{
 		FTransform InstanceXf;
-		TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false);
-		return InstanceXf.GetScale3D();
+		if (TargetISM->GetInstanceTransform(TargetInstIndex, InstanceXf, /*bWorldSpace*/ false))
+		{
+			if (!InstanceXf.GetScale3D().IsNearlyZero())
+			{
+				return InstanceXf.GetScale3D();
+			}
+		}
+
+		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
+		{
+			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+			{
+				if (Instance.TemplateISM == TemplateISM)
+				{
+					return Instance.BaseOffset.GetScale3D();
+				}
+			}
+		}
 	}
 
 	if (!bUseSkeletalMovement && TemplateISM)

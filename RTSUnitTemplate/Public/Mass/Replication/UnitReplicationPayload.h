@@ -144,6 +144,23 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Current movement action enum (from GetCurrentAction). Informational; can help client-side decision making
 	UPROPERTY() uint8 Move_CurrentAction = 0; // EMassMovementAction
 
+	// --- FMassVisualEffectFragment replication ---
+	UPROPERTY() uint8 VE_ActiveEffects = 0; // Bitmask: bit0=Pulsate, bit1=Rotation, bit2=Oscillation
+
+	// Pulsate
+	UPROPERTY() FVector_NetQuantize10 VE_PulsateMinScale = FVector::OneVector;
+	UPROPERTY() FVector_NetQuantize10 VE_PulsateMaxScale = FVector::OneVector;
+	UPROPERTY() float VE_PulsateHalfPeriod = 0.f;
+
+	// Rotation
+	UPROPERTY() FVector_NetQuantize10 VE_RotationAxis = FVector::UpVector;
+	UPROPERTY() float VE_RotationDegreesPerSecond = 0.f;
+
+	// Oscillation
+	UPROPERTY() FVector_NetQuantize10 VE_OscillationOffsetA = FVector::ZeroVector;
+	UPROPERTY() FVector_NetQuantize10 VE_OscillationOffsetB = FVector::ZeroVector;
+	UPROPERTY() float VE_OscillationCyclesPerSecond = 0.f;
+
 	// Default Constructor
 	FUnitReplicationItem()
 		: NetID()

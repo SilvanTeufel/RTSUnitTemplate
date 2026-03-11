@@ -273,6 +273,7 @@ struct FMassCarriedResourceFragment : public FMassFragment {
     EResourceType ResourceType = EResourceType::Primary;
     FVector SocketOffset = FVector::ZeroVector;
     FVector ResourceScale = FVector(1.0f);
+    bool bWasVisible = false;
 };
 
 USTRUCT()

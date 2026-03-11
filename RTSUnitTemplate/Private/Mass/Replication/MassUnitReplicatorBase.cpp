@@ -46,6 +46,7 @@ namespace ReplicationSliceControl
 #include "MassRepresentationActorManagement.h"
 #include "HAL/IConsoleManager.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/MassUnitVisualFragments.h"
 #include "Characters/Unit/UnitBase.h"
 
 // CVAR to control server-side MassUnitReplicatorBase logging
@@ -325,6 +326,28 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_DeathTime = AIS->DeathTime;
             NewItem.AIS_IsInitialized = AIS->IsInitialized;
         }
+
+        // Fill Visual Effect Fragment
+        if (const FMassVisualEffectFragment* VE = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity))
+        {
+            uint8 ActiveBits = 0;
+            if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
+            if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
+            if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
+            NewItem.VE_ActiveEffects = ActiveBits;
+
+            NewItem.VE_PulsateMinScale = VE->PulsateMinScale;
+            NewItem.VE_PulsateMaxScale = VE->PulsateMaxScale;
+            NewItem.VE_PulsateHalfPeriod = VE->PulsateHalfPeriod;
+
+            NewItem.VE_RotationAxis = VE->RotationAxis;
+            NewItem.VE_RotationDegreesPerSecond = VE->RotationDegreesPerSecond;
+
+            NewItem.VE_OscillationOffsetA = VE->OscillationOffsetA;
+            NewItem.VE_OscillationOffsetB = VE->OscillationOffsetB;
+            NewItem.VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond;
+        }
+
         if (RepLogLevel() >= 2)
         {
             //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Add): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
@@ -685,6 +708,27 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.AIS_DeathTime = AIS->DeathTime;
                             NewItem.AIS_IsInitialized = AIS->IsInitialized;
                         }
+
+                        // Fill Visual Effect Fragment
+                        if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
+                        {
+                            uint8 ActiveBits = 0;
+                            if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
+                            if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
+                            if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
+                            NewItem.VE_ActiveEffects = ActiveBits;
+
+                            NewItem.VE_PulsateMinScale = VE->PulsateMinScale;
+                            NewItem.VE_PulsateMaxScale = VE->PulsateMaxScale;
+                            NewItem.VE_PulsateHalfPeriod = VE->PulsateHalfPeriod;
+
+                            NewItem.VE_RotationAxis = VE->RotationAxis;
+                            NewItem.VE_RotationDegreesPerSecond = VE->RotationDegreesPerSecond;
+
+                            NewItem.VE_OscillationOffsetA = VE->OscillationOffsetA;
+                            NewItem.VE_OscillationOffsetB = VE->OscillationOffsetB;
+                            NewItem.VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond;
+                        }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -860,6 +904,29 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!FMath::IsNearlyEqual(Item->AIS_DeathTime, AIS->DeathTime, 0.001f)) { Item->AIS_DeathTime = AIS->DeathTime; bDirty = true; }
                             if (Item->AIS_IsInitialized != AIS->IsInitialized) { Item->AIS_IsInitialized = AIS->IsInitialized; bDirty = true; }
                         }
+
+                        // Update Visual Effect Fragment
+                        if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
+                        {
+                            uint8 ActiveBits = 0;
+                            if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
+                            if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
+                            if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
+
+                            if (Item->VE_ActiveEffects != ActiveBits) { Item->VE_ActiveEffects = ActiveBits; bDirty = true; }
+                            
+                            if (!Item->VE_PulsateMinScale.Equals(VE->PulsateMinScale, 0.01f)) { Item->VE_PulsateMinScale = VE->PulsateMinScale; bDirty = true; }
+                            if (!Item->VE_PulsateMaxScale.Equals(VE->PulsateMaxScale, 0.01f)) { Item->VE_PulsateMaxScale = VE->PulsateMaxScale; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->VE_PulsateHalfPeriod, VE->PulsateHalfPeriod, 0.01f)) { Item->VE_PulsateHalfPeriod = VE->PulsateHalfPeriod; bDirty = true; }
+                            
+                            if (!Item->VE_RotationAxis.Equals(VE->RotationAxis, 0.01f)) { Item->VE_RotationAxis = VE->RotationAxis; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->VE_RotationDegreesPerSecond, VE->RotationDegreesPerSecond, 0.1f)) { Item->VE_RotationDegreesPerSecond = VE->RotationDegreesPerSecond; bDirty = true; }
+                            
+                            if (!Item->VE_OscillationOffsetA.Equals(VE->OscillationOffsetA, 0.1f)) { Item->VE_OscillationOffsetA = VE->OscillationOffsetA; bDirty = true; }
+                            if (!Item->VE_OscillationOffsetB.Equals(VE->OscillationOffsetB, 0.1f)) { Item->VE_OscillationOffsetB = VE->OscillationOffsetB; bDirty = true; }
+                            if (!FMath::IsNearlyEqual(Item->VE_OscillationCyclesPerSecond, VE->OscillationCyclesPerSecond, 0.01f)) { Item->VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond; bDirty = true; }
+                        }
+
                         if (RepLogLevel() >= 2)
                         {
                             //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Upd): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),

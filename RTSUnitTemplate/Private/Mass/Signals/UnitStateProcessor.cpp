@@ -1,4 +1,4 @@
-﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Signals/UnitStateProcessor.h"
 
 // Source: UnitStateProcessor.cpp
@@ -2250,15 +2250,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
 
-								bool bDoGroundTrace = true;
-								if (UnitBase->BuildArea->IsExtensionArea)
-								{
-									ABuildingBase* OriginBuilding = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
-									if (OriginBuilding && !OriginBuilding->ExtensionGroundTrace)
-									{
-										bDoGroundTrace = false;
-									}
-								}
+								bool bDoGroundTrace = false;
 
     							if(!ControllerBase)
     							{

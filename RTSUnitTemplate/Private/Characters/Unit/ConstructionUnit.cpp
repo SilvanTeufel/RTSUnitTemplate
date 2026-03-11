@@ -68,6 +68,13 @@ UPrimitiveComponent* AConstructionUnit::ResolveVisualComponent() const
 
 void AConstructionUnit::MulticastStartRotateVisual_Implementation(const FVector& Axis, float DegreesPerSecond, float Duration)
 {
+	if (HasAuthority())
+	{
+		Rep_VE_ActiveEffects |= (1 << 1);
+		Rep_VE_RotationAxis = Axis.GetSafeNormal().IsNearlyZero() ? FVector::UpVector : Axis.GetSafeNormal();
+		Rep_VE_RotationDegreesPerSecond = DegreesPerSecond;
+	}
+
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
 		EffectFrag->bRotationEnabled = true;
@@ -82,6 +89,14 @@ void AConstructionUnit::MulticastStartRotateVisual_Implementation(const FVector&
 
 void AConstructionUnit::MulticastStartOscillateVisual_Implementation(const FVector& LocalOffsetA, const FVector& LocalOffsetB, float CyclesPerSecond, float Duration)
 {
+	if (HasAuthority())
+	{
+		Rep_VE_ActiveEffects |= (1 << 2);
+		Rep_VE_OscillationOffsetA = LocalOffsetA;
+		Rep_VE_OscillationOffsetB = LocalOffsetB;
+		Rep_VE_OscillationCyclesPerSecond = CyclesPerSecond;
+	}
+
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
 		EffectFrag->bOscillationEnabled = true;
@@ -138,5 +153,13 @@ void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinM
 		EffectFrag->PulsateHalfPeriod = TimeMinToMax;
 		EffectFrag->PulsateElapsed = 0.f;
 		EffectFrag->PulsateTargetISM = TargetISM;
+
+		if (HasAuthority())
+		{
+			if (bEnable) Rep_VE_ActiveEffects |= (1 << 0); else Rep_VE_ActiveEffects &= ~(1 << 0);
+			Rep_VE_PulsateMinScale = EffectFrag->PulsateMinScale;
+			Rep_VE_PulsateMaxScale = EffectFrag->PulsateMaxScale;
+			Rep_VE_PulsateHalfPeriod = EffectFrag->PulsateHalfPeriod;
+		}
 	}
 }

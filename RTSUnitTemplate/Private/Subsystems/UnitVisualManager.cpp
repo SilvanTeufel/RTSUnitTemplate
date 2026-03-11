@@ -34,11 +34,39 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 
 	UStaticMesh* Mesh = TemplateISM->GetStaticMesh();
 	UMaterialInterface* Material = TemplateISM->GetMaterial(0);
+	bool bCastShadow = TemplateISM->CastShadow;
 
-	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Entity %s, Mesh %s, Material %s, Unit %s"), 
-		*Entity.DebugGetDescription(), *Mesh->GetName(), Material ? *Material->GetName() : TEXT("None"), Unit ? *Unit->GetName() : TEXT("None"));
+	// Check for reuse and cleanup stale instances
+	for (int32 i = VisualFrag->VisualInstances.Num() - 1; i >= 0; --i) {
+		FMassUnitVisualInstance& Existing = VisualFrag->VisualInstances[i];
+		
+		// Reuse if same template pointer OR if stale instance matches the new mesh/material/shadow settings
+		bool bIsSameTemplate = (Existing.TemplateISM == TemplateISM);
+		bool bIsStaleMatch = (!Existing.TemplateISM.IsValid() && Existing.TargetISM.IsValid() && 
+							 Existing.TargetISM->GetStaticMesh() == Mesh && 
+							 Existing.TargetISM->GetMaterial(0) == Material &&
+							 Existing.TargetISM->CastShadow == bCastShadow);
 
-	UInstancedStaticMeshComponent* ISM = GetOrCreateISM(Mesh, Material);
+		if (bIsSameTemplate || bIsStaleMatch) {
+			UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Reusing instance %d for entity %s to avoid duplication."), Existing.InstanceIndex, *Entity.DebugGetDescription());
+			
+			Existing.TemplateISM = TemplateISM;
+			Existing.BaseOffset = TemplateISM->GetRelativeTransform();
+			Existing.CurrentRelativeTransform = Existing.BaseOffset;
+			
+			// Re-map the unit in the manager
+			TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(Existing.TargetISM.Get());
+			if (UnitArray.IsValidIndex(Existing.InstanceIndex)) {
+				UnitArray[Existing.InstanceIndex] = Unit;
+			}
+			return; // Successfully reused/updated
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Entity %s, Mesh %s, Material %s, Unit %s, CastShadow %d"), 
+		*Entity.DebugGetDescription(), *Mesh->GetName(), Material ? *Material->GetName() : TEXT("None"), Unit ? *Unit->GetName() : TEXT("None"), (int32)bCastShadow);
+
+	UInstancedStaticMeshComponent* ISM = GetOrCreateISM(Mesh, Material, bCastShadow);
 	if (!ISM) {
 		UE_LOG(LogTemp, Error, TEXT("UUnitVisualManager::AssignUnitVisual: Failed to get or create ISM for mesh %s!"), *Mesh->GetName());
 		return;
@@ -56,7 +84,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 
 	// Create a new instance with zero scale to avoid flicker
 	int32 NewIndex = ISM->AddInstance(FTransform::Identity);
-	ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+	ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -71,6 +99,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	NewInstance.InstanceIndex = NewIndex;
 	NewInstance.BaseOffset = TemplateISM->GetRelativeTransform();
 	NewInstance.CurrentRelativeTransform = NewInstance.BaseOffset;
+	NewInstance.bWasVisible = false;
 
 	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: NewInstance at Index %d, BaseOffset: %s"), 
 		NewIndex, *NewInstance.BaseOffset.ToString());
@@ -88,7 +117,9 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 	if (VisualFrag) {
 		for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances) {
 			if (Instance.TargetISM.IsValid() && Instance.InstanceIndex != INDEX_NONE) {
-				Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+				// Move to origin and zero scale to "hide" it while staying in the pool
+				FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+				Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, true, true);
 				
 				// Clear map entry
 				if (TArray<TWeakObjectPtr<AMassUnitBase>>* UnitArray = ISMToUnitMap.Find(Instance.TargetISM.Get())) {
@@ -102,10 +133,11 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 	}
 }
 
-UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material) {
+UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow) {
     FMeshMaterialKey Key;
     Key.Mesh = Mesh;
     Key.Material = Material;
+    Key.bCastShadow = bCastShadow;
 
     if (ISMPool.Contains(Key)) {
         return ISMPool[Key];
@@ -113,7 +145,7 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
 
     AActor* ManagerActor = nullptr;
     for (TObjectIterator<AActor> It; It; ++It) {
-        if (It->GetWorld() == GetWorld() && It->GetName().Contains(TEXT("UnitVisualISMManagerActor"))) {
+        if (It->GetWorld() == GetWorld() && (It->ActorHasTag(TEXT("UnitVisualISMManager")) || It->GetName().Contains(TEXT("UnitVisualISMManagerActor")))) {
             ManagerActor = *It;
             break;
         }
@@ -121,6 +153,7 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
 
     if (!ManagerActor) {
         ManagerActor = GetWorld()->SpawnActor<AActor>();
+        ManagerActor->Tags.Add(TEXT("UnitVisualISMManager"));
         ManagerActor->SetFlags(RF_Transient);
         USceneComponent* Root = NewObject<USceneComponent>(ManagerActor, TEXT("Root"));
         ManagerActor->SetRootComponent(Root);
@@ -137,7 +170,7 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     }
     
     NewISM->SetMobility(EComponentMobility::Movable);
-    NewISM->SetCastShadow(true);
+    NewISM->SetCastShadow(bCastShadow);
     // Collision will be set in AssignUnitVisual from Template
     NewISM->SetGenerateOverlapEvents(false);
     NewISM->SetCanEverAffectNavigation(false);

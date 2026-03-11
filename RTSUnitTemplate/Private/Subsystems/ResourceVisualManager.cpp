@@ -155,6 +155,7 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
     ResourceFrag->ResourceType = ResourceType;
     ResourceFrag->ResourceScale = SelectedScale;
     ResourceFrag->SocketOffset = SelectedOffset;
+    ResourceFrag->bWasVisible = false;
 }
 
 void UResourceVisualManager::RemoveResource(FMassEntityHandle Entity) {
@@ -166,16 +167,18 @@ void UResourceVisualManager::RemoveResource(FMassEntityHandle Entity) {
 
     if (ResourceFrag && ResourceFrag->bIsCarrying && ResourceFrag->TargetISM.IsValid()) {
         // We set scale to 0 instead of RemoveInstance to avoid shifting indices for other entities
-        ResourceFrag->TargetISM->UpdateInstanceTransform(ResourceFrag->InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+        ResourceFrag->TargetISM->UpdateInstanceTransform(ResourceFrag->InstanceIndex, FTransform::Identity, true, true, true);
         ResourceFrag->bIsCarrying = false;
+        ResourceFrag->bWasVisible = false;
         // Optionally: reuse index in the future
     }
 }
 
-UInstancedStaticMeshComponent* UResourceVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material) {
+UInstancedStaticMeshComponent* UResourceVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow) {
     FMeshMaterialKey Key;
     Key.Mesh = Mesh;
     Key.Material = Material;
+    Key.bCastShadow = bCastShadow;
 
     if (ISMPool.Contains(Key)) {
         return ISMPool[Key];
@@ -210,7 +213,7 @@ UInstancedStaticMeshComponent* UResourceVisualManager::GetOrCreateISM(UStaticMes
     }
     
     NewISM->SetMobility(EComponentMobility::Movable);
-    NewISM->SetCastShadow(true);
+    NewISM->SetCastShadow(bCastShadow);
     
     // Disable collisions as requested to avoid movement issues
     NewISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);

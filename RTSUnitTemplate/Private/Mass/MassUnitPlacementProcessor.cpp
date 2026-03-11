@@ -7,6 +7,7 @@
 #include "Mass/UnitMassTag.h"
 #include "MassActorSubsystem.h"
 #include "GameFramework/Actor.h"
+#include "Characters/Unit/UnitBase.h"
 
 UMassUnitPlacementProcessor::UMassUnitPlacementProcessor() {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -27,7 +28,18 @@ void UMassUnitPlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 }
 
 void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
-    EntityQuery.ForEachEntityChunk(Context, ([&EntityManager](FMassExecutionContext& Context) {
+    TSet<UInstancedStaticMeshComponent*> AffectedISMs;
+
+    static double LastLogTime = 0.0;
+    static int32 LoggedThisFrame = 0;
+    double CurrentTime = FPlatformTime::Seconds();
+    bool bShouldLog = (CurrentTime - LastLogTime) > 0.5;
+    if (bShouldLog) {
+        LastLogTime = CurrentTime;
+        LoggedThisFrame = 0;
+    }
+
+    EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, &AffectedISMs, bShouldLog](FMassExecutionContext& Context) {
         TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
@@ -39,49 +51,61 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
             const FMassVisibilityFragment& Vis = VisibilityList[i];
 
             const AActor* Actor = ActorList[i].Get();
-            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             FTransform BaseTransform;
+            FString BaseSource = TEXT("Actor");
             if (Actor) {
                 BaseTransform = Actor->GetActorTransform();
-                
-                // Der Actor-Transform wird bevorzugt, da dieser im ActorTransformSyncProcessor bereits
-                // korrekt am Boden ausgerichtet, geneigt und sanft interpoliert wurde.
             } else {
                 BaseTransform = TransformList[i].GetTransform();
+                BaseSource = TEXT("Fragment");
             }
 
             bool bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport;
 
             if (VisualFrag.bUseSkeletalMovement) {
                 for (FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances) {
-                    if (Instance.TargetISM.IsValid()) {
-                        // Auch bei SkeletalMovement sicherstellen, dass ISMs nicht stören, falls sie aktiv wären.
-                        if (Instance.TargetISM->GetCollisionObjectType() == ECC_WorldStatic) {
-                            Instance.TargetISM->SetCollisionObjectType(ECC_WorldDynamic);
-                        }
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+                    if (Instance.TargetISM.IsValid() && Instance.TemplateISM.IsValid()) {
+                        AffectedISMs.Add(Instance.TargetISM.Get());
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, false, true);
+                        Instance.bWasVisible = false;
                     }
                 }
                 continue;
             }
 
             for (FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances) {
-                if (Instance.TargetISM.IsValid()) {
-                    // Die gepoolten ISMs dürfen nicht WorldStatic sein, da sie sonst
-                    // die Bodenprüfung (Line-Trace) ihrer eigenen Einheiten stören.
-                    if (Instance.TargetISM->GetCollisionObjectType() == ECC_WorldStatic) {
-                        Instance.TargetISM->SetCollisionObjectType(ECC_WorldDynamic);
-                    }
+                if (Instance.TargetISM.IsValid() && Instance.TemplateISM.IsValid()) {
+                    AffectedISMs.Add(Instance.TargetISM.Get());
 
                     if (bVisible) {
                         FTransform FinalTransform = Instance.CurrentRelativeTransform * BaseTransform;
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FinalTransform, true, true);
+                        bool bTeleport = !Instance.bWasVisible;
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FinalTransform, true, true, bTeleport);
+                        Instance.bWasVisible = true;
+
+                        if (bShouldLog && LoggedThisFrame < 10) {
+                            LoggedThisFrame++;
+                            UE_LOG(LogTemp, Log, TEXT("Placement: Entity %s, ISM: %s, RelLoc: %s, RelRot: %s, BaseLoc: %s (%s), FinalLoc: %s"), 
+                                *Context.GetEntity(i).DebugGetDescription(), *Instance.TargetISM->GetName(), 
+                                *Instance.CurrentRelativeTransform.GetLocation().ToString(), 
+                                *Instance.CurrentRelativeTransform.GetRotation().Rotator().ToString(),
+                                *BaseTransform.GetLocation().ToString(),
+                                *BaseSource,
+                                *FinalTransform.GetLocation().ToString());
+                        }
                     } else {
                         // Bei Unsichtbarkeit (z.B. außerhalb des Viewports) wird das ISM an den Nullpunkt verschoben.
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, true, true);
+                        Instance.bWasVisible = false;
                     }
                 }
             }
         }
     }));
+
+    for (UInstancedStaticMeshComponent* ISM : AffectedISMs) {
+        if (ISM) {
+            ISM->MarkRenderStateDirty();
+        }
+    }
 }

@@ -26,7 +26,7 @@ public:
 
 	void RemoveUnitVisual(FMassEntityHandle Entity);
 
-	UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr);
+	UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr, bool bCastShadow = true);
 
 	AMassUnitBase* GetUnitFromInstance(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex);
 

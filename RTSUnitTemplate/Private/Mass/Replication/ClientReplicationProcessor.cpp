@@ -45,6 +45,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/MassUnitVisualFragments.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
@@ -101,6 +102,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
@@ -460,6 +462,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
 			// Prediction fragment view (mutable)
 			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
 
@@ -911,6 +914,39 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
+							
+							if (EffectList.IsValidIndex(EntityIdx))
+							{
+								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
+								
+								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
+								if (bNewPulsate && !Effect.bPulsateEnabled) Effect.PulsateElapsed = 0.f;
+								Effect.bPulsateEnabled = bNewPulsate;
+								Effect.PulsateMinScale = FVector(UseItem->VE_PulsateMinScale);
+								Effect.PulsateMaxScale = FVector(UseItem->VE_PulsateMaxScale);
+								Effect.PulsateHalfPeriod = UseItem->VE_PulsateHalfPeriod;
+
+								bool bNewRotation = (UseItem->VE_ActiveEffects & (1 << 1)) != 0;
+								if (bNewRotation && !Effect.bRotationEnabled) Effect.RotationElapsed = 0.f;
+								Effect.bRotationEnabled = bNewRotation;
+								Effect.RotationAxis = FVector(UseItem->VE_RotationAxis);
+								Effect.RotationDegreesPerSecond = UseItem->VE_RotationDegreesPerSecond;
+
+								bool bNewOscillation = (UseItem->VE_ActiveEffects & (1 << 2)) != 0;
+								if (bNewOscillation && !Effect.bOscillationEnabled) Effect.OscillationElapsed = 0.f;
+								Effect.bOscillationEnabled = bNewOscillation;
+								Effect.OscillationOffsetA = FVector(UseItem->VE_OscillationOffsetA);
+								Effect.OscillationOffsetB = FVector(UseItem->VE_OscillationOffsetB);
+								Effect.OscillationCyclesPerSecond = UseItem->VE_OscillationCyclesPerSecond;
+
+								// Resolve ISMs if null
+								if (AMassUnitBase* UnitBase = Cast<AMassUnitBase>(ActorList[EntityIdx].GetMutable()))
+								{
+									if (!Effect.PulsateTargetISM.IsValid()) Effect.PulsateTargetISM = UnitBase->ISMComponent;
+									if (!Effect.RotationTargetISM.IsValid()) Effect.RotationTargetISM = UnitBase->ISMComponent;
+									if (!Effect.OscillationTargetISM.IsValid()) Effect.OscillationTargetISM = UnitBase->ISMComponent;
+								}
+							}
  								// Apply MoveTarget if present (guarded by bStopMovementReplication)
  		           if (UseItem->Move_bHasTarget)
  	       {

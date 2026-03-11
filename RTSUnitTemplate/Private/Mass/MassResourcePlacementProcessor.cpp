@@ -24,7 +24,9 @@ void UMassResourcePlacementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 }
 
 void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, ([](FMassExecutionContext& Context) {
+    TSet<UInstancedStaticMeshComponent*> AffectedISMs;
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&AffectedISMs](FMassExecutionContext& Context) {
         TArrayView<FMassActorFragment> ActorList = Context.GetMutableFragmentView<FMassActorFragment>();
         TArrayView<FMassCarriedResourceFragment> ResourceList = Context.GetMutableFragmentView<FMassCarriedResourceFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
@@ -38,9 +40,10 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
 
             if (ResourceFrag.bIsCarrying && ResourceFrag.TargetISM.IsValid()) {
                 UInstancedStaticMeshComponent* ISM = ResourceFrag.TargetISM.Get();
+                AffectedISMs.Add(ISM);
                 AActor* Actor = ActorFrag.GetMutable();
                 AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Actor);
-                if (Worker && Worker->GetMesh() && !Worker->IsHidden() && ISM && bUnitVisible) {
+                if (Worker && Worker->GetMesh() && !Worker->IsHidden() && bUnitVisible) {
                     static const FName SocketName(TEXT("ResourceSocket"));
                     FTransform SocketTransform = Worker->GetMesh()->GetSocketTransform(SocketName);
                     
@@ -51,15 +54,26 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
 
                     SocketTransform.SetScale3D(ResourceFrag.ResourceScale);
                     
-                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, SocketTransform, true, true);
-                } else if (ISM) {
+                    bool bTeleport = !ResourceFrag.bWasVisible;
+                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, SocketTransform, true, false, bTeleport);
+                    ResourceFrag.bWasVisible = true;
+                } else {
                     // Hide if worker is hidden, invalid or not visible
-                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform::Identity, true, false, true);
+                    ResourceFrag.bWasVisible = false;
                 }
-            } else if (!ResourceFrag.bIsCarrying && ResourceFrag.TargetISM.IsValid()) {
+            } else if (ResourceFrag.TargetISM.IsValid()) {
                 // Ensure it's hidden if we stopped carrying
-                ResourceFrag.TargetISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true);
+                AffectedISMs.Add(ResourceFrag.TargetISM.Get());
+                ResourceFrag.TargetISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform::Identity, true, false, true);
+                ResourceFrag.bWasVisible = false;
             }
         }
     }));
+
+    for (UInstancedStaticMeshComponent* ISM : AffectedISMs) {
+        if (ISM) {
+            ISM->MarkRenderStateDirty();
+        }
+    }
 }

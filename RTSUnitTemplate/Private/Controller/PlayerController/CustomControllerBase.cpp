@@ -1414,13 +1414,14 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 	{
 		if (!Unit || !Unit->MassActorBindingComponent) continue;
 
+	
 		const FMassEntityHandle UnitHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
-			if (EntityManager->IsEntityValid(UnitHandle))
+			/*if (EntityManager->IsEntityValid(UnitHandle))
 			{
 				// Clear any existing transport tag as we are issuing a new command
 				EntityManager->RemoveTagFromEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
 				//EntityManager->Defer().RemoveTag<FMassTransportProcessorActiveTag>(UnitHandle);
-			}
+			}*/
 
 		bool bShouldApplyToUnit = false;
 		if (bTargetIsTransporter && Unit->CanBeTransported)

@@ -20,14 +20,17 @@ struct FMeshMaterialKey
     UPROPERTY()
     UMaterialInterface* Material = nullptr;
 
+    UPROPERTY()
+    bool bCastShadow = true;
+
     bool operator==(const FMeshMaterialKey& Other) const
     {
-        return Mesh == Other.Mesh && Material == Other.Material;
+        return Mesh == Other.Mesh && Material == Other.Material && bCastShadow == Other.bCastShadow;
     }
 
     friend uint32 GetTypeHash(const FMeshMaterialKey& Key)
     {
-        return HashCombine(GetTypeHash(Key.Mesh), GetTypeHash(Key.Material));
+        return HashCombine(HashCombine(GetTypeHash(Key.Mesh), GetTypeHash(Key.Material)), GetTypeHash(Key.bCastShadow));
     }
 };
 
@@ -44,7 +47,7 @@ public:
     UFUNCTION(Category = "RTS|Resources")
     void RemoveResource(FMassEntityHandle Entity);
 
-    UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr);
+    UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr, bool bCastShadow = true);
 
 protected:
     UPROPERTY()

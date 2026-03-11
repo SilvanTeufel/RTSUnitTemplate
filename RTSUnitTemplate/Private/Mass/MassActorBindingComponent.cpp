@@ -31,9 +31,12 @@
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/MassUnitBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Actors/EffectArea.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "Subsystems/UnitVisualManager.h"
+#include "Subsystems/ResourceVisualManager.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
 #include "MassReplicationSubsystem.h"
@@ -297,6 +300,12 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 				MassUnit->bIsMassUnit = true;
 				MassUnit->UpdatePredictionFragment(MassUnit->GetMassActorLocation(), 0);
 				MassUnit->SyncTranslation();
+
+				if (MassUnit->RegisterVisualsToMass() && MassUnit->RegisterAdditionalVisualsToMass())
+				{
+					MassUnit->bMassVisualsRegistered = true;
+					MassUnit->RemoveAdditionalISMInstances();
+				}
 			}
 			
 			// Client: Clear stale cache for any NetID this actor might have had previously 
@@ -724,9 +733,15 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			}
 			
 			bNeedsMassBuildingSetup = false;
-			if (AUnitBase* UnitBase = Cast<AUnitBase>(MyOwner))
+			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
 			{
-				UnitBase->bIsMassUnit = true;
+				MassUnit->bIsMassUnit = true;
+
+				if (MassUnit->RegisterVisualsToMass() && MassUnit->RegisterAdditionalVisualsToMass())
+				{
+					MassUnit->bMassVisualsRegistered = true;
+					MassUnit->RemoveAdditionalISMInstances();
+				}
 			}
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
@@ -1286,6 +1301,15 @@ void UMassActorBindingComponent::CleanupMassEntity()
 			FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 			if (EntityManager.IsEntityValid(MassEntityHandle))
 			{
+				if (World) {
+					if (UUnitVisualManager* UV = World->GetSubsystem<UUnitVisualManager>()) {
+						UV->RemoveUnitVisual(MassEntityHandle);
+					}
+					if (UResourceVisualManager* RV = World->GetSubsystem<UResourceVisualManager>()) {
+						RV->RemoveResource(MassEntityHandle);
+					}
+				}
+
 				// Before destroying, clear any client-side cached replication data for this entity's NetID
 				if (const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
 				{

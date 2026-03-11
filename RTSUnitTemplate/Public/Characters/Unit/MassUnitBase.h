@@ -70,6 +70,29 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FlyHeight = 500.f;
 
+	// --- Visual Effect Replication ---
+	UPROPERTY(Replicated)
+	uint8 Rep_VE_ActiveEffects = 0;
+
+	UPROPERTY(Replicated)
+	FVector Rep_VE_PulsateMinScale = FVector::OneVector;
+	UPROPERTY(Replicated)
+	FVector Rep_VE_PulsateMaxScale = FVector::OneVector;
+	UPROPERTY(Replicated)
+	float Rep_VE_PulsateHalfPeriod = 0.f;
+
+	UPROPERTY(Replicated)
+	FVector Rep_VE_RotationAxis = FVector::UpVector;
+	UPROPERTY(Replicated)
+	float Rep_VE_RotationDegreesPerSecond = 0.f;
+
+	UPROPERTY(Replicated)
+	FVector Rep_VE_OscillationOffsetA = FVector::ZeroVector;
+	UPROPERTY(Replicated)
+	FVector Rep_VE_OscillationOffsetB = FVector::ZeroVector;
+	UPROPERTY(Replicated)
+	float Rep_VE_OscillationCyclesPerSecond = 0.f;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AddEffectTargetFragement = false;
