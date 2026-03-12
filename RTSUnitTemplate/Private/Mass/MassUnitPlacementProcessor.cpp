@@ -21,6 +21,7 @@ void UMassUnitPlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
     EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
@@ -42,31 +43,42 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
     EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, &AffectedISMs, bShouldLog](FMassExecutionContext& Context) {
         TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
+        TConstArrayView<FMassVisualEffectFragment> EffectList = Context.GetFragmentView<FMassVisualEffectFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
         TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
         TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& VisualFrag = VisualList[i];
+            const FMassVisualEffectFragment& EffectFrag = EffectList[i];
             const FMassVisibilityFragment& Vis = VisibilityList[i];
 
             const AActor* Actor = ActorList[i].Get();
+            const AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             FTransform BaseTransform;
             FString BaseSource = TEXT("Actor");
-            if (Actor) {
+
+            if (UnitBase && !UnitBase->bUseSkeletalMovement)
+            {
+                BaseTransform = CharList[i].PositionedTransform;
+                BaseSource = TEXT("CharFragment");
+            }
+            else if (Actor) {
                 BaseTransform = Actor->GetActorTransform();
             } else {
                 BaseTransform = TransformList[i].GetTransform();
                 BaseSource = TEXT("Fragment");
             }
 
-            bool bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport;
+            bool bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport && !EffectFrag.bForceHidden;
 
             if (VisualFrag.bUseSkeletalMovement) {
                 for (FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances) {
                     if (Instance.TargetISM.IsValid() && Instance.TemplateISM.IsValid()) {
                         AffectedISMs.Add(Instance.TargetISM.Get());
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, false, true);
+                        // Hide skeletal movement units by setting scale to 0
+                        FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, false, true);
                         Instance.bWasVisible = false;
                     }
                 }
@@ -86,17 +98,18 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
                         if (bShouldLog && LoggedThisFrame < 10) {
                             LoggedThisFrame++;
-                            UE_LOG(LogTemp, Log, TEXT("Placement: Entity %s, ISM: %s, RelLoc: %s, RelRot: %s, BaseLoc: %s (%s), FinalLoc: %s"), 
+                            /*UE_LOG(LogTemp, Log, TEXT("Placement: Entity %s, ISM: %s, RelLoc: %s, RelRot: %s, BaseLoc: %s (%s), FinalLoc: %s"), 
                                 *Context.GetEntity(i).DebugGetDescription(), *Instance.TargetISM->GetName(), 
                                 *Instance.CurrentRelativeTransform.GetLocation().ToString(), 
                                 *Instance.CurrentRelativeTransform.GetRotation().Rotator().ToString(),
                                 *BaseTransform.GetLocation().ToString(),
                                 *BaseSource,
-                                *FinalTransform.GetLocation().ToString());
+                                *FinalTransform.GetLocation().ToString());*/
                         }
                     } else {
-                        // Bei Unsichtbarkeit (z.B. außerhalb des Viewports) wird das ISM an den Nullpunkt verschoben.
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, false, true);
+                        // Bei Unsichtbarkeit (z.B. außerhalb des Viewports) wird das ISM an den Nullpunkt verschoben und auf Scale 0 gesetzt.
+                        FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, false, true);
                         Instance.bWasVisible = false;
                     }
                 }

@@ -107,6 +107,9 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 {
     GENERATED_BODY()
 
+    UPROPERTY()
+    bool bForceHidden = false;
+
     // Pulsate Effect
     UPROPERTY()
     bool bPulsateEnabled = false;

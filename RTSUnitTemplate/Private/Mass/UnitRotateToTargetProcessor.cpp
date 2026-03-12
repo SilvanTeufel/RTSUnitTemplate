@@ -142,13 +142,14 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 			if (bLocationChanged || bRotationChanged)
 			{
-				if (UnitBase->bUseSkeletalMovement || UnitBase->bUseIsmWithActorMovement)
+				if (UnitBase->bUseSkeletalMovement)
 				{
 					Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::None);
 				}
 				else
 				{
-					UnitBase->Multicast_UpdateISMInstanceTransform_Implementation(UnitBase->InstanceIndex, MassTransform);
+					// SEtActor wird nur 1mal pro Sekunde aktiviert ansonsten wir position in fragment geschrieben
+					//UnitBase->Multicast_UpdateISMInstanceTransform_Implementation(UnitBase->InstanceIndex, MassTransform);
 				}
 			}
 		}

@@ -157,15 +157,13 @@ bool UActorTransformSyncProcessor::ShouldProceedWithTick(const float ActualDelta
  */
 void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBase, FMassAgentCharacteristicsFragment& CharFragment, const FVector& CurrentActorLocation, const float ActualDeltaTime, FTransform& MassTransform, FVector& InOutFinalLocation, bool bIsDead) const
 {
-    float HeightOffset;
+    float HeightOffset = 0.f;
+    const float CurrentZ = UnitBase->bUseSkeletalMovement ? CurrentActorLocation.Z : CharFragment.PositionedTransform.GetLocation().Z;
 
     // Determine height offset and scale based on unit type
-    if (UnitBase->bUseSkeletalMovement || UnitBase->bUseIsmWithActorMovement)
-    {
-        MassTransform.SetScale3D(UnitBase->GetActorScale3D());
-        HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-    }
-    else
+    MassTransform.SetScale3D(UnitBase->GetActorScale3D());
+    HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+    /*else
     {
         
         const FTransform& ISMTransform = UnitBase->ISMComponent->GetComponentTransform();
@@ -176,7 +174,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
             HeightOffset += UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         }
         
-    }
+    */
 
     // --- Ground/Height Adjustment Logic ---
     FHitResult Hit;
@@ -191,12 +189,11 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     {
         
         const AActor* HitActor = Hit.GetActor();
-        const float DeltaZ = Hit.ImpactPoint.Z - CurrentActorLocation.Z;
+        const float DeltaZ = Hit.ImpactPoint.Z - CurrentZ;
 
         if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
         {
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
-            const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = Hit.ImpactPoint.Z + HeightOffset;
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
 
@@ -255,7 +252,6 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         }
         else if (!CharFragment.bIsFlying) // Not on a valid ground hit, but not flying (e.g., walking off a ledge, or on another unit)
         {
-            const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = CharFragment.LastGroundLocation + HeightOffset;
 
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
@@ -274,7 +270,6 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         }
         else if (IsValid(HitActor) && CharFragment.bIsFlying) // Flying, but a hit occurred (e.g., flying over terrain)
         {
-            const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = bIsDead ? Hit.ImpactPoint.Z + HeightOffset : Hit.ImpactPoint.Z + CharFragment.FlyHeight;
             const float InterpSpeed = bIsDead ? VerticalDeadInterpSpeed : VerticalInterpSpeed;
             
@@ -306,7 +301,6 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     {
         if (CharFragment.bIsFlying)
         {
-            const float CurrentZ = CurrentActorLocation.Z;
             const float TargetZ = bIsDead ? CharFragment.LastGroundLocation + HeightOffset : CharFragment.LastGroundLocation + CharFragment.FlyHeight;
             const float InterpSpeed = bIsDead ? VerticalDeadInterpSpeed : VerticalInterpSpeed;
 
@@ -374,7 +368,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
 
             FQuat DesiredQuat = LookAtDir.ToOrientationQuat();
 
-            if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+            if (!UnitBase->bUseSkeletalMovement)
                 DesiredQuat *= UnitBase->MeshRotationOffset;
 
             TargetYaw = DesiredQuat.Rotator().Yaw;
@@ -427,7 +421,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     
     FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-    if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+    if (!UnitBase->bUseSkeletalMovement)
         DesiredQuat *= UnitBase->MeshRotationOffset;
     
     float TargetYaw = DesiredQuat.Rotator().Yaw;
@@ -459,7 +453,7 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
 
     FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-    if (!UnitBase->bUseSkeletalMovement && !UnitBase->bUseIsmWithActorMovement)
+    if (!UnitBase->bUseSkeletalMovement)
     {
         DesiredQuat *= UnitBase->MeshRotationOffset;
     }
@@ -493,61 +487,13 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
         return;
     }
 
-    const bool bLog = this->bShowLogs;
-    AsyncTask(ENamedThreads::GameThread, [Updates = MoveTemp(PendingUpdates), bLog]()
+    for (const FActorTransformUpdatePayload& Update : PendingUpdates)
     {
-        // Periodic diagnostic: log batch size and a sample delta on clients
-        bool bLogged = false;
-        for (int32 idx = 0; idx < Updates.Num(); ++idx)
+        if (AActor* Actor = Update.ActorPtr.Get())
         {
-            if (const AActor* SampleActor = Updates[idx].ActorPtr.Get())
-            {
-                if (UWorld* W = SampleActor->GetWorld())
-                {
-                    if (W->IsNetMode(NM_Client))
-                    {
-                        static int32 GActorSyncDispatchCounter = 0;
-                        if (((++GActorSyncDispatchCounter) % 60) == 0)
-                        {
-                            if (bLog)
-                            {
-                                const FVector CurLoc = SampleActor->GetActorLocation();
-                                const FVector NewLoc = Updates[idx].NewTransform.GetLocation();
-                                const FRotator CurRot = SampleActor->GetActorRotation();
-                                const FRotator NewRot = Updates[idx].NewTransform.Rotator();
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] Dispatching %d updates. Example %s: Loc %s -> %s | Yaw %.1f -> %.1f | Skeletal=%d"),
-                                    Updates.Num(), *SampleActor->GetName(), *CurLoc.ToString(), *NewLoc.ToString(), CurRot.Yaw, NewRot.Yaw, Updates[idx].bUseSkeletal ? 1 : 0);
-                            }
-                        }
-                        bLogged = true;
-                    }
-                }
-                break; // logged (or attempted), proceed to apply updates
-            }
+            Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
         }
-
-        for (const FActorTransformUpdatePayload& Update : Updates)
-        {
-            if (AActor* Actor = Update.ActorPtr.Get())
-            {
-                if (Update.bUseSkeletal)
-                {
-                    Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
-                }
-                else if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
-                {
-                    if (Unit->bUseIsmWithActorMovement)
-                    {
-                        Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
-                    }
-                    else
-                    {
-                        Unit->Multicast_UpdateISMInstanceTransform_Implementation(Update.InstanceIndex, Update.NewTransform);
-                    }
-                }
-            }
-        }
-    });
+    }
 }
 
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -574,7 +520,7 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
-    if (!ShouldProceedWithTick(ActualDeltaTime)) return;
+    const float CurrentTime = Context.GetWorld()->GetTimeSeconds();
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     PendingActorUpdates.Reserve(ClientEntityQuery.GetNumMatchingEntities());
@@ -589,7 +535,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
     }
     
     ClientEntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
+        [this, &EntityManager, ActualDeltaTime, CurrentTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
             
@@ -668,9 +614,18 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
 
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
+
             if (bLocationChanged || bRotationChanged)
             {
-                PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+                if (UnitBase->bUseSkeletalMovement || bNeedsActorSync)
+                {
+                    PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+                    if (!UnitBase->bUseSkeletalMovement)
+                    {
+                        CharList[i].LastActorSyncTime = CurrentTime;
+                    }
+                }
             }else if (UnitBase->GetUnitState() == UnitData::Run)
             {
                     UnitBase->SetUnitState(UnitData::Idle);
@@ -750,13 +705,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
     // Determine if we are on a client world. This will be used to guard our logs.
     const bool bIsClient = GetWorld() && GetWorld()->IsNetMode(NM_Client);
     
-    if (!ShouldProceedWithTick(ActualDeltaTime)) return;
+    const float CurrentTime = Context.GetWorld()->GetTimeSeconds();
     
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities());
     
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager, ActualDeltaTime, &PendingActorUpdates, bIsClient](FMassExecutionContext& ChunkContext)
+        [this, &EntityManager, ActualDeltaTime, CurrentTime, &PendingActorUpdates, bIsClient](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
             
@@ -837,9 +792,18 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                 //UE_LOG(LogTemp, Error, TEXT("Server FinalLocation %s"), *FinalLocation.ToString());
             }
 
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
+
             if (bLocationChanged || bRotationChanged)
             {
-                PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+                if (UnitBase->bUseSkeletalMovement || bNeedsActorSync)
+                {
+                    PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+                    if (!UnitBase->bUseSkeletalMovement)
+                    {
+                        CharList[i].LastActorSyncTime = CurrentTime;
+                    }
+                }
             }else if (UnitBase->GetUnitState() == UnitData::Run)
             {
                     UnitBase->SetUnitState(UnitData::Idle);

@@ -1257,6 +1257,28 @@ void UMassActorBindingComponent::CleanupMassEntity()
 	// Server-authoritative: ensure this unit is removed from replication registry before entity/actor destruction
 	if (World && World->GetNetMode() != NM_Client)
 	{
+		// 1. Remove from all client replication bubbles
+		if (MassEntityHandle.IsValid() && MassEntitySubsystemCache)
+		{
+			const FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetEntityManager();
+			if (const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+			{
+				const FMassNetworkID NetID = NetIDFrag->NetID;
+				for (TActorIterator<AUnitClientBubbleInfo> It(World); It; ++It)
+				{
+					if (AUnitClientBubbleInfo* Bubble = *It)
+					{
+						if (Bubble->Agents.RemoveItemByNetID(NetID))
+						{
+							Bubble->Agents.MarkArrayDirty();
+							Bubble->ForceNetUpdate();
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Remove from authoritative UnitRegistry
 		if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
 		{
 			bool bRemoved = false;

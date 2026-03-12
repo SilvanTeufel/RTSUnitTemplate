@@ -13,6 +13,9 @@ public:
     UMassUnitVisualTweenProcessor();
 
 protected:
+    UPROPERTY(EditAnywhere, Category = "Mass")
+    bool bLogDebug = false;
+
     virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 

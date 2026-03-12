@@ -39,6 +39,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = ISM)
 	virtual FVector GetMassActorLocation() const override;
+
+	UFUNCTION(BlueprintCallable, Category = ISM)
+	virtual FRotator GetMassActorRotation() const override;
+
+	UFUNCTION(BlueprintCallable, Category = ISM)
+	virtual FTransform GetMassActorTransform() const override;
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = ISM)
 	UMassActorBindingComponent* MassActorBindingComponent;
@@ -61,8 +67,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	bool bUseSkeletalMovement = true;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
-	bool bUseIsmWithActorMovement = true;
+	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
+	//bool bUseIsmWithActorMovement = true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsFlying = false;
@@ -246,6 +252,7 @@ public:
 	void StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration);
 	
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
+	bool GetMassEntityData(const FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle) const;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_A;

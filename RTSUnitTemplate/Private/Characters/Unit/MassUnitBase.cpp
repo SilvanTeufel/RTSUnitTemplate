@@ -84,7 +84,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, bIsMassUnit);
 	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
-	DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
+	//DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
 
 	DOREPLIFETIME(AMassUnitBase, Niagara_A);
 	DOREPLIFETIME(AMassUnitBase, Niagara_B);
@@ -116,16 +116,56 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 FVector AMassUnitBase::GetMassActorLocation() const
 {
-	if (!bUseSkeletalMovement && ISMComponent && !bUseIsmWithActorMovement && InstanceIndex != INDEX_NONE)
+	if (!bUseSkeletalMovement)
 	{
-		FTransform Xform;
-		if (ISMComponent->GetInstanceTransform(InstanceIndex, Xform, true))
+		const FMassEntityManager* EntityManager;
+		FMassEntityHandle EntityHandle;
+		if (GetMassEntityData(EntityManager, EntityHandle))
 		{
-			return Xform.GetLocation();
+			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				return CharFrag->PositionedTransform.GetLocation();
+			}
 		}
 	}
 
 	return Super::GetMassActorLocation();
+}
+
+FRotator AMassUnitBase::GetMassActorRotation() const
+{
+	if (!bUseSkeletalMovement)
+	{
+		const FMassEntityManager* EntityManager;
+		FMassEntityHandle EntityHandle;
+		if (GetMassEntityData(EntityManager, EntityHandle))
+		{
+			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				return CharFrag->PositionedTransform.GetRotation().Rotator();
+			}
+		}
+	}
+
+	return Super::GetMassActorRotation();
+}
+
+FTransform AMassUnitBase::GetMassActorTransform() const
+{
+	if (!bUseSkeletalMovement)
+	{
+		const FMassEntityManager* EntityManager;
+		FMassEntityHandle EntityHandle;
+		if (GetMassEntityData(EntityManager, EntityHandle))
+		{
+			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				return CharFrag->PositionedTransform;
+			}
+		}
+	}
+
+	return Super::GetMassActorTransform();
 }
 
 bool AMassUnitBase::SetInvisibility(bool NewInvisibility)
@@ -1009,8 +1049,6 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 
 bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle)
 {
-
-	
 	OutEntityManager = nullptr;
 	OutEntityHandle.Reset();
 	
@@ -1051,6 +1089,26 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 	}
 
 	OutEntityManager = &EntitySubsystem->GetMutableEntityManager();
+	return true;
+}
+
+bool AMassUnitBase::GetMassEntityData(const FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle) const
+{
+	OutEntityManager = nullptr;
+	OutEntityHandle.Reset();
+
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	const UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!EntitySubsystem) return false;
+
+	if (!MassActorBindingComponent) return false;
+
+	OutEntityHandle = MassActorBindingComponent->GetEntityHandle();
+	if (!OutEntityHandle.IsSet()) return false;
+
+	OutEntityManager = &EntitySubsystem->GetEntityManager();
 	return true;
 }
 

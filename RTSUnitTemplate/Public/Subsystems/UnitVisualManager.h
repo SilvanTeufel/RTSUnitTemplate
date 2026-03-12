@@ -25,6 +25,8 @@ public:
 	void AssignUnitVisual(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit);
 
 	void RemoveUnitVisual(FMassEntityHandle Entity);
+	
+	void SetUnitVisualVisible(FMassEntityHandle Entity, bool bVisible);
 
 	UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr, bool bCastShadow = true);
 

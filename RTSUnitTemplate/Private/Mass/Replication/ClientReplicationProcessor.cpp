@@ -674,14 +674,19 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								const float LPitch = (static_cast<float>(TagItem->PitchQuantized) / 65535.0f) * 360.0f;
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
     								const float LRoll  = (static_cast<float>(TagItem->RollQuantized)  / 65535.0f) * 360.0f;
-    								AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
+    								// AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
     								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
     								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
        							if (AIStateList.IsValidIndex(EntityIdx))
 							{
 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
-								AIS.StateTimer = TagItem->AIS_StateTimer;
+								const bool bIsDead = (TagItem->TagBits & UnitTagBits::Dead) != 0;
+								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
+								if (!bIsDead || (AIS.StateTimer <= 0.001f && TagItem->AIS_StateTimer <= 0.001f))
+								{
+									AIS.StateTimer = TagItem->AIS_StateTimer;
+								}
 								AIS.CanAttack = TagItem->AIS_CanAttack;
 								AIS.CanMove = TagItem->AIS_CanMove;
 								AIS.HoldPosition = TagItem->AIS_HoldPosition;
@@ -895,14 +900,19 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								const float LPitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
  								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								const float LRoll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
- 								AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
+ 								// AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
  								AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
  								AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
  							}
  							if (AIStateList.IsValidIndex(EntityIdx))
  							{
  								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
- 								AIS.StateTimer = UseItem->AIS_StateTimer;
+ 								const bool bIsDead2 = (UseItem->TagBits & UnitTagBits::Dead) != 0;
+ 								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
+ 								if (!bIsDead2 || (AIS.StateTimer <= 0.001f && UseItem->AIS_StateTimer <= 0.001f))
+ 								{
+ 									AIS.StateTimer = UseItem->AIS_StateTimer;
+ 								}
  								AIS.CanAttack = UseItem->AIS_CanAttack;
  								AIS.CanMove = UseItem->AIS_CanMove;
  								AIS.HoldPosition = UseItem->AIS_HoldPosition;
@@ -918,6 +928,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (EffectList.IsValidIndex(EntityIdx))
 							{
 								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
+
+								if (Effect.bForceHidden != UseItem->VE_bForceHidden)
+								{
+									UE_LOG(LogTemp, Log, TEXT("[ClientRep] Visibility changed for NetID=%u: %s"), 
+										UseItem->NetID.GetValue(), UseItem->VE_bForceHidden ? TEXT("HIDDEN") : TEXT("VISIBLE"));
+								}
+								Effect.bForceHidden = UseItem->VE_bForceHidden;
 								
 								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
 								if (bNewPulsate && !Effect.bPulsateEnabled) Effect.PulsateElapsed = 0.f;

@@ -140,6 +140,10 @@ public:
 	
 	virtual FVector GetMassActorLocation() const;
 	
+	virtual FRotator GetMassActorRotation() const;
+	
+	virtual FTransform GetMassActorTransform() const;
+	
 	UPROPERTY(Replicated,BlueprintReadWrite, EditDefaultsOnly, Category=RTSUnitTemplate)
 	TSubclassOf<class UGameplayEffect>DefaultAttributeEffect;
 

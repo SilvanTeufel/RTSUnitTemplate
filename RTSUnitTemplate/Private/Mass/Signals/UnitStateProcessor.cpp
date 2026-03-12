@@ -611,6 +611,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             	}
                             }
 
+                        	/*
                             // Unregister from Mass replication when the unit dies (server only)
                             if (World && !World->IsNetMode(NM_Client))
                             {
@@ -646,6 +647,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                                     }
                                 }
                             }
+                            */
                         }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {

@@ -133,6 +133,35 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 	}
 }
 
+void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVisible) {
+	UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+	if (!EntitySubsystem) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
+	FMassVisualEffectFragment* EffectFrag = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity);
+
+	if (EffectFrag) {
+		EffectFrag->bForceHidden = !bVisible;
+		UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::SetUnitVisualVisible: Entity %s, Visible %d"), 
+			*Entity.DebugGetDescription(), (int32)bVisible);
+	}
+
+	if (VisualFrag) {
+		if (!bVisible) {
+			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances) {
+				if (Instance.TargetISM.IsValid() && Instance.InstanceIndex != INDEX_NONE) {
+					// Move to origin and zero scale to "hide" it while staying in the pool
+					FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+					Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, true, true);
+				}
+			}
+		}
+	} else {
+		UE_LOG(LogTemp, Warning, TEXT("UUnitVisualManager::SetUnitVisualVisible: Entity %s HAS NO VISUAL FRAGMENT!"), *Entity.DebugGetDescription());
+	}
+}
+
 UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow) {
     FMeshMaterialKey Key;
     Key.Mesh = Mesh;

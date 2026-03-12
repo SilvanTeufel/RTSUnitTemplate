@@ -458,6 +458,16 @@ FVector AGASUnit::GetMassActorLocation() const
 	return GetActorLocation();
 }
 
+FRotator AGASUnit::GetMassActorRotation() const
+{
+	return GetActorRotation();
+}
+
+FTransform AGASUnit::GetMassActorTransform() const
+{
+	return GetActorTransform();
+}
+
 void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 {
 	if (ActivatedAbilityInstance)

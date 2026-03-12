@@ -11,6 +11,7 @@ UMassUnitVisualTweenProcessor::UMassUnitVisualTweenProcessor() {
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     bAutoRegisterWithProcessingPhases = true;
     bRequiresGameThreadExecution = true;
+    bLogDebug = false;
 }
 
 void UMassUnitVisualTweenProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) {
@@ -28,7 +29,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
     static double LastLogTime = 0.0;
     static int32 LoggedThisFrame = 0;
     double CurrentTime = FPlatformTime::Seconds();
-    bool bShouldLog = (CurrentTime - LastLogTime) > 0.5;
+    bool bShouldLog = bLogDebug && (CurrentTime - LastLogTime) > 0.5;
     if (bShouldLog) {
         LastLogTime = CurrentTime;
         LoggedThisFrame = 0;
@@ -152,10 +153,6 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 UInstancedStaticMeshComponent* InstanceTemplate = Instance.TemplateISM.Get();
                 if (!InstanceTemplate) continue;
 
-                if (bShouldLog && LoggedThisFrame < 10) {
-                     UE_LOG(LogTemp, Log, TEXT("Entity %s: Processing Instance for Template %s, BaseOffset Loc: %s"), 
-                        *Context.GetEntity(i).DebugGetDescription(), *InstanceTemplate->GetName(), *Instance.BaseOffset.GetLocation().ToString());
-                }
 
                 // Start with the base offset from the Blueprint/Fragment
                 FTransform NewTransform = Instance.BaseOffset;

@@ -17,6 +17,7 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Subsystems/UnitVisualManager.h"
 #include "Hud/HUDBase.h"
 
 
@@ -149,10 +150,18 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
     {
         if (!EntitySubsystem || !GetWorld()) return;
 
+        UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
+
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
             if (!EntityManager.IsEntityValid(Entity)) continue;
+
+            if (VisualManager)
+            {
+                UE_LOG(LogTemp, Log, TEXT("DeathStateProcessor: Hiding unit visual for entity %s"), *Entity.DebugGetDescription());
+                VisualManager->SetUnitVisualVisible(Entity, false);
+            }
 
             if (FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
             {
@@ -195,6 +204,7 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+            UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor ExecuteClient %i"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -229,6 +239,7 @@ void UDeathStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
+            UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor ExecuteServer %i"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -240,7 +251,7 @@ void UDeathStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             const float PrevTimer = StateFrag.StateTimer;
             StateFrag.StateTimer += ExecutionInterval;
-
+    
             if (PrevTimer <= KINDA_SMALL_NUMBER)
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::StartDead, Entity);

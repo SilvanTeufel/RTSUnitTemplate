@@ -10,6 +10,9 @@
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
+#include "Mass/MassUnitVisualFragments.h"
+#include "Mass/MassActorBindingComponent.h"
+#include "Subsystems/UnitVisualManager.h"
 
 void ATransportUnit::BindTransportOverlap()
 {
@@ -254,6 +257,19 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 	LoadedUnit->EditUnitDetectable(true);
 	LoadedUnit->SetCollisionAndVisibility(true);
 
+	// Make visuals visible again
+	if (UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>())
+	{
+		if (LoadedUnit->MassActorBindingComponent)
+		{
+			const FMassEntityHandle UnitHandle = LoadedUnit->MassActorBindingComponent->GetMassEntityHandle();
+			if (UnitHandle.IsValid())
+			{
+				VisualManager->SetUnitVisualVisible(UnitHandle, true);
+			}
+		}
+	}
+
 	LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
 	LoadedUnit->CanAttack = true;
 	LoadedUnit->IsInitialized = true;
@@ -271,6 +287,20 @@ void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToL
 	UnitToLoad->CanBeSelected = false;
 	UnitToLoad->AddStopMovementTagToEntity();
 	UnitToLoad->SetCollisionAndVisibility(false);
+
+	// Hide visuals in Mass
+	if (UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>())
+	{
+		if (UnitToLoad->MassActorBindingComponent)
+		{
+			const FMassEntityHandle UnitHandle = UnitToLoad->MassActorBindingComponent->GetMassEntityHandle();
+			if (UnitHandle.IsValid())
+			{
+				VisualManager->SetUnitVisualVisible(UnitHandle, false);
+			}
+		}
+	}
+
 	UnitToLoad->SetActorLocation(TransporterLocation);
 	UnitToLoad->EnableDynamicObstacle(false);
 	UnitToLoad->EditUnitDetectable(false);

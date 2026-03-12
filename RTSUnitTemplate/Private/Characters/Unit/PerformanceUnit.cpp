@@ -45,17 +45,6 @@ APerformanceUnit::APerformanceUnit(const FObjectInitializer& ObjectInitializer):
 
 void APerformanceUnit::UpdateWidgetPositions(const FVector& Location)
 {
-	if (!bUseSkeletalMovement && IsOnViewport && !bUseIsmWithActorMovement)
-	{
-		if ((OpenHealthWidget || bShowLevelOnly) && HealthWidgetComp)
-		{
-			HealthWidgetComp->SetWorldLocation(Location + HealthWidgetRelativeOffset);
-		}
-		if (TimerUpdateTriggered && TimerWidgetComp)
-		{
-			TimerWidgetComp->SetWorldLocation(Location + TimerWidgetRelativeOffset);
-		}
-	}
 	CheckHealthBarVisibility();
 	CheckTimerVisibility();
 }

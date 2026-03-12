@@ -146,6 +146,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// --- FMassVisualEffectFragment replication ---
 	UPROPERTY() uint8 VE_ActiveEffects = 0; // Bitmask: bit0=Pulsate, bit1=Rotation, bit2=Oscillation
+	UPROPERTY() bool VE_bForceHidden = false;
 
 	// Pulsate
 	UPROPERTY() FVector_NetQuantize10 VE_PulsateMinScale = FVector::OneVector;

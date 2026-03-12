@@ -717,6 +717,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
                             if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
                             NewItem.VE_ActiveEffects = ActiveBits;
+                            NewItem.VE_bForceHidden = VE->bForceHidden;
 
                             NewItem.VE_PulsateMinScale = VE->PulsateMinScale;
                             NewItem.VE_PulsateMaxScale = VE->PulsateMaxScale;
@@ -892,7 +893,16 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         }
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
-                            if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) { Item->AIS_StateTimer = AIS->StateTimer; bDirty = true; }
+                            // Only replicate StateTimer if NOT dead, or if it's the first time it's dead (transition)
+                            bool bIsDeadTransition = (bIsDead && Item->AIS_StateTimer > 0.001f && AIS->StateTimer <= 0.001f);
+                            if (!bIsDead || bIsDeadTransition)
+                            {
+                                if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) 
+                                { 
+                                    Item->AIS_StateTimer = AIS->StateTimer; 
+                                    bDirty = true; 
+                                }
+                            }
                             if (Item->AIS_CanAttack != AIS->CanAttack) { Item->AIS_CanAttack = AIS->CanAttack; bDirty = true; }
                             if (Item->AIS_CanMove != AIS->CanMove) { Item->AIS_CanMove = AIS->CanMove; bDirty = true; }
                             if (Item->AIS_HoldPosition != AIS->HoldPosition) { Item->AIS_HoldPosition = AIS->HoldPosition; bDirty = true; }
@@ -914,6 +924,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
 
                             if (Item->VE_ActiveEffects != ActiveBits) { Item->VE_ActiveEffects = ActiveBits; bDirty = true; }
+                            if (Item->VE_bForceHidden != VE->bForceHidden) { Item->VE_bForceHidden = VE->bForceHidden; bDirty = true; }
                             
                             if (!Item->VE_PulsateMinScale.Equals(VE->PulsateMinScale, 0.01f)) { Item->VE_PulsateMinScale = VE->PulsateMinScale; bDirty = true; }
                             if (!Item->VE_PulsateMaxScale.Equals(VE->PulsateMaxScale, 0.01f)) { Item->VE_PulsateMaxScale = VE->PulsateMaxScale; bDirty = true; }
