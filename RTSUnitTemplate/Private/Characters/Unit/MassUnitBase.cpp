@@ -1532,13 +1532,15 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 	// Prioritize Mass Manager Visuals
 	if (TargetISM && TargetInstIndex != INDEX_NONE)
 	{
-		TargetISM->UpdateInstanceTransform(TargetInstIndex, NewTransform, true, true, false);
+		TargetISM->UpdateInstanceTransform(TargetInstIndex, NewTransform, true, false, false);
+		TargetISM->MarkRenderDynamicDataDirty();
 	}
 	else
 	{
 		if (this->ISMComponent && this->ISMComponent->IsValidInstance(InstIndex))
 		{
-			this->ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, true, false);
+			this->ISMComponent->UpdateInstanceTransform(InstIndex, NewTransform, true, false, false);
+			this->ISMComponent->MarkRenderDynamicDataDirty();
 		}
 	}
 	

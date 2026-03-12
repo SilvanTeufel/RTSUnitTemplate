@@ -80,7 +80,8 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                     if (bVisible) {
                         FTransform FinalTransform = Instance.CurrentRelativeTransform * BaseTransform;
                         bool bTeleport = !Instance.bWasVisible;
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FinalTransform, true, true, bTeleport);
+                        // Use bMarkRenderStateDirty = false to preserve Temporal History (TAA/TSR) and avoid ghosting.
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FinalTransform, true, false, bTeleport);
                         Instance.bWasVisible = true;
 
                         if (bShouldLog && LoggedThisFrame < 10) {
@@ -95,7 +96,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                         }
                     } else {
                         // Bei Unsichtbarkeit (z.B. außerhalb des Viewports) wird das ISM an den Nullpunkt verschoben.
-                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, true, true);
+                        Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, FTransform::Identity, true, false, true);
                         Instance.bWasVisible = false;
                     }
                 }
@@ -105,7 +106,8 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
     for (UInstancedStaticMeshComponent* ISM : AffectedISMs) {
         if (ISM) {
-            ISM->MarkRenderStateDirty();
+            // Update only dynamic data (transforms) on GPU to maintain motion vectors for TAA/Motion Blur.
+            ISM->MarkRenderDynamicDataDirty();
         }
     }
 }
