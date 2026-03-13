@@ -116,34 +116,36 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
 /**
  * @brief Checks if the processor should execute its main logic based on a dynamic tick rate.
- * @param ActualDeltaTime The delta time for the current frame.
+ * @param FrameDeltaTime The delta time for the current frame.
+ * @param OutAccumulatedDeltaTime The accumulated delta time since last execution, to be used for interpolation.
  * @return True if the processor should execute, false otherwise.
  */
-bool UActorTransformSyncProcessor::ShouldProceedWithTick(const float ActualDeltaTime)
+bool UActorTransformSyncProcessor::ShouldProceedWithTick(const float FrameDeltaTime, float& OutAccumulatedDeltaTime)
 {
     // --- Dynamic Tick Rate Calculation ---
     HighFPSThreshold = FMath::Max(HighFPSThreshold, LowFPSThreshold + 1.0f);
     MinTickInterval = FMath::Max(0.001f, MinTickInterval);
     MaxTickInterval = FMath::Max(MinTickInterval, MaxTickInterval);
 
-    if (ActualDeltaTime <= 0.0f) return false;
+    if (FrameDeltaTime <= 0.0f) return false;
 
     const float LowDeltaTimeThreshold = 1.0f / HighFPSThreshold;
     const float HighDeltaTimeThreshold = 1.0f / LowFPSThreshold;
 
     const FVector2D InputDeltaTimeRange(LowDeltaTimeThreshold, HighDeltaTimeThreshold);
     const FVector2D OutputIntervalRange(MinTickInterval, MaxTickInterval);
-    const float CurrentDynamicTickInterval = FMath::GetMappedRangeValueClamped(InputDeltaTimeRange, OutputIntervalRange, ActualDeltaTime);
+    const float CurrentDynamicTickInterval = FMath::GetMappedRangeValueClamped(InputDeltaTimeRange, OutputIntervalRange, FrameDeltaTime);
 
-    AccumulatedTimeA += ActualDeltaTime;
+    AccumulatedTimeA += FrameDeltaTime;
     if (AccumulatedTimeA < CurrentDynamicTickInterval)
     {
         return false;
     }
 
+    // Output the full accumulated time for use as delta in interpolations
+    OutAccumulatedDeltaTime = AccumulatedTimeA;
     AccumulatedTimeA = 0.0f;
     return true;
-    
 }
 
 /**
@@ -519,7 +521,11 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
+    const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
+    
+    float ActualDeltaTime = 0.0f;
+    if (!ShouldProceedWithTick(FrameDeltaTime, ActualDeltaTime)) return;
+    
     const float CurrentTime = Context.GetWorld()->GetTimeSeconds();
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
@@ -609,10 +615,12 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             
             // 3. Apply final location and cache the result
             MassTransform.SetLocation(FinalLocation);
-            CharList[i].PositionedTransform = MassTransform;
 
             const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
+
+            CharList[i].PositionedTransform = MassTransform;
+            CharList[i].bTransformDirty = bLocationChanged || bRotationChanged;
 
             const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
 
@@ -639,8 +647,9 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
 void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
-    if (!ShouldProceedWithTick(ActualDeltaTime)) return;
+    const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
+    float ActualDeltaTime = 0.0f;
+    if (!ShouldProceedWithTick(FrameDeltaTime, ActualDeltaTime)) return;
 
     const int32 TotalMatchingEntities = ClientEntityQuery.GetNumMatchingEntities();
     //UE_LOG(LogTemp, Warning, TEXT("[Client] UActorTransformSyncProcessor Matching=%d"), TotalMatchingEntities);
@@ -700,7 +709,10 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
 
 void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const float ActualDeltaTime = Context.GetDeltaTimeSeconds();
+    const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
+    
+    float ActualDeltaTime = 0.0f;
+    if (!ShouldProceedWithTick(FrameDeltaTime, ActualDeltaTime)) return;
     
     // Determine if we are on a client world. This will be used to guard our logs.
     const bool bIsClient = GetWorld() && GetWorld()->IsNetMode(NM_Client);
@@ -781,10 +793,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             
             // 3. Apply final location and cache the result
             MassTransform.SetLocation(FinalLocation);
-            CharList[i].PositionedTransform = MassTransform;
 
             const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
+
+            CharList[i].PositionedTransform = MassTransform;
+            CharList[i].bTransformDirty = bLocationChanged || bRotationChanged;
+
             // 4. Queue an update to be performed on the game thread if the transform has changed
          
             if (!bIsClient)
@@ -792,7 +807,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                 //UE_LOG(LogTemp, Error, TEXT("Server FinalLocation %s"), *FinalLocation.ToString());
             }
 
-            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= VisualISMActorSyncTime;
 
             if (bLocationChanged || bRotationChanged)
             {

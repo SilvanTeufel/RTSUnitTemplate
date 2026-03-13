@@ -644,6 +644,11 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	FTransform PositionedTransform;
 
+	// Dirty-Flag — set by ActorTransformSyncProcessor when PositionedTransform changes,
+	// read and reset by PlacementProcessor to skip redundant UpdateInstanceTransform calls
+	UPROPERTY(Transient)
+	bool bTransformDirty = true;
+
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float CapsuleHeight = 88.f;
 

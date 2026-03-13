@@ -34,6 +34,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VerticalDeadInterpSpeed = 15.f;
 	
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float VisualISMActorSyncTime = 0.f;
+	
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
 	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)
 	float MinMovementDistanceForRotation = 1.0f;
@@ -76,7 +79,7 @@ private:
 	// HELPER FUNCTIONS for Execute()                                       //
 	//----------------------------------------------------------------------//
 	
-	bool ShouldProceedWithTick(const float ActualDeltaTime);
+	bool ShouldProceedWithTick(const float FrameDeltaTime, float& OutAccumulatedDeltaTime);
 	
 	void HandleGroundAndHeight(const AUnitBase* UnitBase, FMassAgentCharacteristicsFragment& CharFragment, const FVector& CurrentActorLocation, const float ActualDeltaTime, FTransform& MassTransform, FVector& InOutFinalLocation, bool bIsDead = false) const;
 	

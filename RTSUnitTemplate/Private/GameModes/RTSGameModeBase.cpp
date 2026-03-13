@@ -61,7 +61,11 @@ void ARTSGameModeBase::BeginPlay()
 		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Triggering loading widget in GameState."));
 		if (AResourceGameState* GS = GetGameState<AResourceGameState>())
 		{
-			const float WidgetDuration = FMath::Max(10.f, (float)GatherControllerTimer + 5.f + (AllUnits.Num() * LoadingTimePerUnit));
+			float WidgetDuration = FMath::Max(10.f, (float)GatherControllerTimer + 5.f + (AllUnits.Num() * LoadingTimePerUnit));
+			
+			if (WidgetDuration > 40.f)
+				WidgetDuration = 40;
+			
 			const int32 NewTriggerId = FMath::RandRange(1, 2147483647);
 
 			GS->LoadingWidgetConfig.WidgetClass = LoadingWidgetClass;
