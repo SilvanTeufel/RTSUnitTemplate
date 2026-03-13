@@ -622,7 +622,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             CharList[i].PositionedTransform = MassTransform;
             CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged);
 
-            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= VisualISMActorSyncTime;
 
             if (bLocationChanged || bRotationChanged)
             {
