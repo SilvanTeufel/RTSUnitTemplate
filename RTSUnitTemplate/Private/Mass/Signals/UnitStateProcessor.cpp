@@ -12,6 +12,7 @@
 #include "Characters/Unit/UnitBase.h" // Include your AUnitBase header
 #include "Mass/Signals/MySignals.h" // Include your signal definition header
 #include "Characters/Unit/MassUnitBase.h"
+#include "Mass/MassUnitVisualFragments.h"
 #include "Widgets/UnitBaseHealthBar.h"
 #include "MassMovementFragments.h"
 #include "MassCommonFragments.h"
@@ -3746,17 +3747,10 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 						CU->DefaultOscOffsetB.Z = MeshBounds.Origin.Z + MeshBounds.BoxExtent.Z;
 					}
 				}
-				// Finish spawning after initializing properties
-				NewConstruction->FinishSpawning(SpawnTM);
-				if (NewConstruction->AbilitySystemComponent)
+				// Step 1: Compute the target scale BEFORE FinishSpawning
+				// so that when RegisterVisualsToMass captures BaseOffset, it gets the correct scale
 				{
-					NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
-					NewConstruction->InitializeAttributes();
-				}
-
-				// Fit, center, and ground-align construction unit to WorkArea footprint
-				{
-					// Compute uniform scale to fit XY footprint
+					NewConstruction->GetRootComponent()->UpdateComponentToWorld(); // ensure bounds are valid pre-spawn
 					FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
 					FVector UnitSize = PreBox.GetSize();
 					if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
@@ -3779,7 +3773,18 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 						}
 						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
 					}
-					// Recompute bounds after scale and compute single final location
+				}
+
+				// Step 2: Finish spawning — BeginPlay/RegisterVisualsToMass will now see the correct scale
+				NewConstruction->FinishSpawning(SpawnTM);
+				if (NewConstruction->AbilitySystemComponent)
+				{
+					NewConstruction->AbilitySystemComponent->InitAbilityActorInfo(NewConstruction, NewConstruction);
+					NewConstruction->InitializeAttributes();
+				}
+
+				// Step 3: Position/center and ground-align (scale is already applied)
+				{
 					FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
 					const FVector UnitCenter = ScaledBox.GetCenter();
 					const float BottomZ = ScaledBox.Min.Z;
@@ -3787,9 +3792,24 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					FinalLoc.X += (AreaCenter.X - UnitCenter.X);
 					FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
 					if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
-					
 					NewConstruction->SetActorLocation(FinalLoc);
 					NewConstruction->SyncTranslation();
+				}
+
+				// Step 4: Safety net — re-sync VisualISM BaseOffset after final transform
+				if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(NewConstruction))
+				{
+					if (FMassUnitVisualFragment* VF = MassUnit->GetMutableVisualFragment())
+					{
+						for (FMassUnitVisualInstance& Inst : VF->VisualInstances)
+						{
+							if (Inst.TemplateISM.IsValid())
+							{
+								Inst.BaseOffset = Inst.TemplateISM->GetRelativeTransform();
+								Inst.CurrentRelativeTransform = Inst.BaseOffset;
+							}
+						}
+					}
 				}
 				// store pointer on area
 				UnitBase->BuildArea->ConstructionUnit = NewConstruction;

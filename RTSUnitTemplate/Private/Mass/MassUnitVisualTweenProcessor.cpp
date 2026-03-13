@@ -20,6 +20,7 @@ void UMassUnitVisualTweenProcessor::ConfigureQueries(const TSharedRef<FMassEntit
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualTweenFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -40,6 +41,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TArrayView<FMassVisualTweenFragment> TweenList = Context.GetMutableFragmentView<FMassVisualTweenFragment>();
         TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
+        TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& Visual = VisualList[i];
@@ -209,6 +211,17 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 }
 
                 Instance.CurrentRelativeTransform = NewTransform;
+            }
+
+            // Set dirty flag when any tween or effect is active so PlacementProcessor updates the ISM
+            const bool bHasActiveTweenOrEffect =
+                Tween.RotationTween.bActive || Tween.LocationTween.bActive || Tween.ScaleTween.bActive ||
+                Effect.bPulsateEnabled || Effect.bRotationEnabled || Effect.bOscillationEnabled ||
+                (Effect.bYawChaseEnabled && bHasYawChaseTarget);
+
+            if (bHasActiveTweenOrEffect)
+            {
+                CharList[i].bTransformDirty = true;
             }
         }
     }));

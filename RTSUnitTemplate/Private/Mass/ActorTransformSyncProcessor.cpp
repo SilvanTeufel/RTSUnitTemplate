@@ -620,7 +620,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
 
             CharList[i].PositionedTransform = MassTransform;
-            CharList[i].bTransformDirty = bLocationChanged || bRotationChanged;
+            CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged);
 
             const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= 1.0f;
 
@@ -798,7 +798,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
 
             CharList[i].PositionedTransform = MassTransform;
-            CharList[i].bTransformDirty = bLocationChanged || bRotationChanged;
+            CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged);
 
             // 4. Queue an update to be performed on the game thread if the transform has changed
          

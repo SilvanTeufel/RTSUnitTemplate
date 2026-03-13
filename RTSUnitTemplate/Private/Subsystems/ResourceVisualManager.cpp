@@ -167,7 +167,8 @@ void UResourceVisualManager::RemoveResource(FMassEntityHandle Entity) {
 
     if (ResourceFrag && ResourceFrag->bIsCarrying && ResourceFrag->TargetISM.IsValid()) {
         // We set scale to 0 instead of RemoveInstance to avoid shifting indices for other entities
-        ResourceFrag->TargetISM->UpdateInstanceTransform(ResourceFrag->InstanceIndex, FTransform::Identity, true, true, true);
+        FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+        ResourceFrag->TargetISM->UpdateInstanceTransform(ResourceFrag->InstanceIndex, HiddenTransform, true, true, true);
         ResourceFrag->bIsCarrying = false;
         ResourceFrag->bWasVisible = false;
         // Optionally: reuse index in the future

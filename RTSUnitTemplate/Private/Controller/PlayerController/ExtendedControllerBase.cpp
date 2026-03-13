@@ -3423,12 +3423,24 @@ void AExtendedControllerBase::SetAbilityEnabledByKey(AUnitBase* UnitBase, const 
 
 bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
 {
-	if (!UnitBase) return false;
+	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Enter | UnitBase=%s | bWorkAreaIsSnapped=%d"),
+		UnitBase ? *UnitBase->GetName() : TEXT("NULL"), bWorkAreaIsSnapped);
+
+	if (!UnitBase)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ABORT - UnitBase is null"));
+		return false;
+	}
 
 	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
+	UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: DraggedWorkArea=%s | PlannedBuilding=%d"),
+		DraggedWorkArea ? *DraggedWorkArea->GetName() : TEXT("NULL"),
+		DraggedWorkArea ? (int32)DraggedWorkArea->PlannedBuilding : -1);
+
 	if (DraggedWorkArea && DraggedWorkArea->PlannedBuilding == false)
 	{
 		const bool bIsExtensionArea = DraggedWorkArea->IsExtensionArea;
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: bIsExtensionArea=%d"), bIsExtensionArea);
 		
 		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
 		if (!bIsExtensionArea)
@@ -3509,8 +3521,10 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			
 		
 
-			if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
+ 		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ABORT (non-extension) - Overlap=%d, Snapped=%d, NoBuildZone=%d, BeaconOutOfRange=%d, TooCloseToResources=%d, OffNavMesh=%d"),
+					bIsOverlappingWithValidArea, bWorkAreaIsSnapped, bIsNoBuildZone, bNeedsBeaconOutOfRange, bTooCloseToResources, bOffNavMesh);
 				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);
@@ -3537,18 +3551,22 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			float UnitGroundZ = UnitBase->GetActorLocation().Z;
 			float WAGroundZ = DraggedWorkArea->GetActorLocation().Z;
 
-			if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetActorLocation() + TraceOffset, UnitBase->GetActorLocation() - TraceOffset, ECC_Visibility, TraceParams))
+ 		if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetActorLocation() + TraceOffset, UnitBase->GetActorLocation() - TraceOffset, ECC_WorldStatic, TraceParams))
 			{
 				UnitGroundZ = UnitHit.Location.Z;
 			}
 
-			if (GetWorld()->LineTraceSingleByChannel(WAHit, DraggedWorkArea->GetActorLocation() + TraceOffset, DraggedWorkArea->GetActorLocation() - TraceOffset, ECC_Visibility, TraceParams))
+			if (GetWorld()->LineTraceSingleByChannel(WAHit, DraggedWorkArea->GetActorLocation() + TraceOffset, DraggedWorkArea->GetActorLocation() - TraceOffset, ECC_WorldStatic, TraceParams))
 			{
 				WAGroundZ = WAHit.Location.Z;
 			}
 
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ExtensionArea height check - UnitGroundZ=%.2f, WAGroundZ=%.2f, Diff=%.2f"),
+				UnitGroundZ, WAGroundZ, FMath::Abs(UnitGroundZ - WAGroundZ));
+
 			if (FMath::Abs(UnitGroundZ - WAGroundZ) > 10.f)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ABORT (extension) - Height difference too large (%.2f > 10.0)"), FMath::Abs(UnitGroundZ - WAGroundZ));
 				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);
@@ -3561,10 +3579,14 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				SendWorkerToBase(UnitBase);
 				return true;
 			}
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ExtensionArea height check PASSED"));
 		}
 	
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Passed all checks - IsWorker=%d"), UnitBase->IsWorker);
+
 		if (UnitBase->IsWorker)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: SUCCESS - Worker path, finalizing WorkArea"));
 			if (DropWorkAreaSound)
 			{
 				Client_PlaySound2D(DropWorkAreaSound);
@@ -3581,12 +3603,21 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 		if (UnitBase->CurrentDraggedWorkArea && UnitBase->CurrentDraggedWorkArea->IsExtensionArea)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: SUCCESS - ExtensionArea path, finalizing and spawning construction unit"));
 			Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 				UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			Server_SpawnExtensionConstructionUnit(UnitBase, UnitBase->CurrentDraggedWorkArea);
 			SetAbilityEnabledByKey(UnitBase, "ExtensionAbility", false);
 			return true;
 		}
+
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ABORT - Not a worker and no valid ExtensionArea (CurrentDraggedWorkArea=%s, IsExtension=%d)"),
+			UnitBase->CurrentDraggedWorkArea ? *UnitBase->CurrentDraggedWorkArea->GetName() : TEXT("NULL"),
+			UnitBase->CurrentDraggedWorkArea ? (int32)UnitBase->CurrentDraggedWorkArea->IsExtensionArea : -1);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: ABORT - DraggedWorkArea is null or PlannedBuilding is true"));
 	}
 	return false;
 }

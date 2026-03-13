@@ -8,11 +8,20 @@
 #include "MassCommonTypes.h"
 #include "MassCommonFragments.h"
 
+// Collected ISM instance update for batched dispatch
+struct FResourceISMInstanceUpdate
+{
+    int32 InstanceIndex;
+    FTransform NewTransform;
+    bool bTeleport;
+};
+
 UMassResourcePlacementProcessor::UMassResourcePlacementProcessor() {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     bRequiresGameThreadExecution = true;
+    ExecutionOrder.ExecuteAfter.Add(TEXT("ActorTransformSyncProcessor"));
 }
 
 void UMassResourcePlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) {
@@ -24,12 +33,15 @@ void UMassResourcePlacementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 }
 
 void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
-    TSet<UInstancedStaticMeshComponent*> AffectedISMs;
+    // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
+    TMap<UInstancedStaticMeshComponent*, TArray<FResourceISMInstanceUpdate>> BatchedUpdates;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&AffectedISMs](FMassExecutionContext& Context) {
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&BatchedUpdates](FMassExecutionContext& Context) {
         TArrayView<FMassActorFragment> ActorList = Context.GetMutableFragmentView<FMassActorFragment>();
         TArrayView<FMassCarriedResourceFragment> ResourceList = Context.GetMutableFragmentView<FMassCarriedResourceFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
+
+        const FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
 
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassActorFragment& ActorFrag = ActorList[i];
@@ -40,7 +52,6 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
 
             if (ResourceFrag.bIsCarrying && ResourceFrag.TargetISM.IsValid()) {
                 UInstancedStaticMeshComponent* ISM = ResourceFrag.TargetISM.Get();
-                AffectedISMs.Add(ISM);
                 AActor* Actor = ActorFrag.GetMutable();
                 AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Actor);
                 if (Worker && Worker->GetMesh() && !Worker->IsHidden() && bUnitVisible) {
@@ -55,25 +66,80 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
                     SocketTransform.SetScale3D(ResourceFrag.ResourceScale);
                     
                     bool bTeleport = !ResourceFrag.bWasVisible;
-                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, SocketTransform, true, false, bTeleport);
+                    FResourceISMInstanceUpdate& Update = BatchedUpdates.FindOrAdd(ISM).AddDefaulted_GetRef();
+                    Update.InstanceIndex = ResourceFrag.InstanceIndex;
+                    Update.NewTransform = SocketTransform;
+                    Update.bTeleport = bTeleport;
                     ResourceFrag.bWasVisible = true;
                 } else {
                     // Hide if worker is hidden, invalid or not visible
-                    ISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform::Identity, true, false, true);
+                    FResourceISMInstanceUpdate& Update = BatchedUpdates.FindOrAdd(ISM).AddDefaulted_GetRef();
+                    Update.InstanceIndex = ResourceFrag.InstanceIndex;
+                    Update.NewTransform = HiddenTransform;
+                    Update.bTeleport = true;
                     ResourceFrag.bWasVisible = false;
                 }
             } else if (ResourceFrag.TargetISM.IsValid()) {
                 // Ensure it's hidden if we stopped carrying
-                AffectedISMs.Add(ResourceFrag.TargetISM.Get());
-                ResourceFrag.TargetISM->UpdateInstanceTransform(ResourceFrag.InstanceIndex, FTransform::Identity, true, false, true);
+                UInstancedStaticMeshComponent* ISM = ResourceFrag.TargetISM.Get();
+                FResourceISMInstanceUpdate& Update = BatchedUpdates.FindOrAdd(ISM).AddDefaulted_GetRef();
+                Update.InstanceIndex = ResourceFrag.InstanceIndex;
+                Update.NewTransform = HiddenTransform;
+                Update.bTeleport = true;
                 ResourceFrag.bWasVisible = false;
             }
         }
     }));
 
-    for (UInstancedStaticMeshComponent* ISM : AffectedISMs) {
-        if (ISM) {
-            ISM->MarkRenderStateDirty();
+    // Batched dispatch: sort by index for cache-friendliness, use BatchUpdateInstancesTransforms when contiguous
+    for (auto& [ISM, Updates] : BatchedUpdates)
+    {
+        if (!ISM) continue;
+
+        // Sort by InstanceIndex for cache-friendly access
+        Updates.Sort([](const FResourceISMInstanceUpdate& A, const FResourceISMInstanceUpdate& B)
+        {
+            return A.InstanceIndex < B.InstanceIndex;
+        });
+
+        // Check if indices form a contiguous range
+        bool bContiguous = Updates.Num() > 1;
+        for (int32 j = 1; j < Updates.Num() && bContiguous; ++j)
+        {
+            if (Updates[j].InstanceIndex != Updates[j-1].InstanceIndex + 1)
+            {
+                bContiguous = false;
+            }
         }
+
+        if (bContiguous)
+        {
+            // Contiguous range — use BatchUpdateInstancesTransforms
+            TArray<FTransform> Transforms;
+            Transforms.Reserve(Updates.Num());
+            bool bAnyTeleport = false;
+            for (const FResourceISMInstanceUpdate& U : Updates)
+            {
+                Transforms.Add(U.NewTransform);
+                bAnyTeleport |= U.bTeleport;
+            }
+            ISM->BatchUpdateInstancesTransforms(
+                Updates[0].InstanceIndex,
+                MakeArrayView(Transforms),
+                /*bWorldSpace=*/ true,
+                /*bMarkRenderStateDirty=*/ false,
+                bAnyTeleport);
+        }
+        else
+        {
+            // Non-contiguous — individual updates (but sorted for better cache usage)
+            for (const FResourceISMInstanceUpdate& U : Updates)
+            {
+                ISM->UpdateInstanceTransform(U.InstanceIndex, U.NewTransform, true, false, U.bTeleport);
+            }
+        }
+
+        // Update only dynamic data (transforms) on GPU
+        ISM->MarkRenderDynamicDataDirty();
     }
 }
