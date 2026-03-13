@@ -123,6 +123,9 @@ private:
     /** Initializes the transient texture and pixel buffer. */
     void InitMinimapTexture();
 
+    /** Executes the actual SceneCaptureComponent->CaptureScene() call. Called on a delayed timer. */
+    void ExecuteSceneCapture();
+
     /** Helper function to draw a filled circle into the pixel array. */
     void DrawFilledCircle(TArray<FColor>& Pixels, int32 TexSize, int32 CenterX, int32 CenterY, int32 Radius, const FColor& Color);
 
@@ -131,4 +134,5 @@ private:
     TArray<FColor> MinimapPixels;
 
     FTimerHandle CaptureTimerHandle;
+    FTimerHandle SceneCaptureTimerHandle;
 };

@@ -2860,8 +2860,8 @@ void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEnti
 
 	AsyncTask(ENamedThreads::GameThread, [CustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
 	{
-		CustomPC->UpdateFogMaskWithCircles(CopiedEntities);
-		CustomPC->UpdateMinimap(CopiedEntities);
+		//CustomPC->UpdateFogMaskWithCircles(CopiedEntities);
+		//CustomPC->UpdateMinimap(CopiedEntities);
 	});
 }
 

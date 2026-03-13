@@ -72,9 +72,8 @@ void AMinimapActor::CaptureMapTopography()
 {
     if (!SceneCaptureComponent) return;
 
-    // --- Enable Post-Processing and apply Brightness/Contrast ---
     
-    // Switch to FinalColor to enable PostProcessSettings
+    // --- Configure for the real capture ---
     SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
     
     // Disable lighting to maintain the "unlit" look
@@ -119,24 +118,38 @@ void AMinimapActor::CaptureMapTopography()
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMapSwitchActor::StaticClass(), ActorsToHide);
         SceneCaptureComponent->HiddenActors.Append(ActorsToHide);
     }
+    
     // 2. Erstelle oder hole das Render Target (die "Leinwand" für unser Foto)
     if (!TopographyRenderTarget)
     {
-        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
-        TopographyRenderTarget->InitCustomFormat(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8, false); // false for sRGB
-        TopographyRenderTarget->UpdateResource();
+        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("TopographyRT"), RF_Transient);
+        TopographyRenderTarget->RenderTargetFormat = RTF_RGBA8;
+        TopographyRenderTarget->ClearColor = FLinearColor::Black;
+        TopographyRenderTarget->InitAutoFormat(MinimapTexSize, MinimapTexSize);
+        TopographyRenderTarget->UpdateResourceImmediate(true);
     }
     
     if (TopographyRenderTarget)
     {
-        // 3. Weise das Render Target der Capture-Komponente zu
         SceneCaptureComponent->TextureTarget = TopographyRenderTarget;
-
-        // 4. Mache die Aufnahme!
-        SceneCaptureComponent->CaptureScene();
-
-        UE_LOG(LogTemp, Log, TEXT("Minimap topography successfully captured."));
+        // 4. Mache die Aufnahme mit Verzögerung!
+        GetWorldTimerManager().SetTimer(SceneCaptureTimerHandle, this, &AMinimapActor::ExecuteSceneCapture, 1.f, false);
     }
+}
+
+void AMinimapActor::ExecuteSceneCapture()
+{
+    if (!SceneCaptureComponent || !TopographyRenderTarget) return;
+
+    // Warmup capture — primes RDG resources.
+    // The first call may trigger a non-fatal "handled ensure" — this is expected
+    // and matches Epic's own pattern in AsyncCaptureScene.cpp.
+    SceneCaptureComponent->CaptureScene();
+
+    // Real capture — RDG resources are now initialized.
+    SceneCaptureComponent->CaptureScene();
+
+    UE_LOG(LogTemp, Log, TEXT("Minimap topography successfully captured."));
 }
 
 void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -164,9 +177,11 @@ void AMinimapActor::InitMinimapTexture()
 
     if (!TopographyRenderTarget)
     {
-        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this);
-        TopographyRenderTarget->InitCustomFormat(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8, false); // false for sRGB
-        TopographyRenderTarget->UpdateResource();
+        TopographyRenderTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("TopographyRT"), RF_Transient);
+        TopographyRenderTarget->RenderTargetFormat = RTF_RGBA8;
+        TopographyRenderTarget->ClearColor = FLinearColor::Black;
+        TopographyRenderTarget->InitAutoFormat(MinimapTexSize, MinimapTexSize);
+        TopographyRenderTarget->UpdateResourceImmediate(true);
     }
 }
 

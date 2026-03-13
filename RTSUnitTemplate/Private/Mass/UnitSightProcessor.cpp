@@ -70,6 +70,7 @@ void UUnitSightProcessor::HandleUpdateFogMask(FName /*SignalName*/, TArray<FMass
     {
         return;
     }
+    
     // Copy entity array for async safety
     TArray<FMassEntityHandle> Copied = Entities;
     AsyncTask(ENamedThreads::GameThread, [CustomPC, Copied = MoveTemp(Copied)]()
@@ -77,6 +78,7 @@ void UUnitSightProcessor::HandleUpdateFogMask(FName /*SignalName*/, TArray<FMass
         CustomPC->UpdateFogMaskWithCircles(Copied);
         CustomPC->UpdateMinimap(Copied);
     });
+    
 }
 
 void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
