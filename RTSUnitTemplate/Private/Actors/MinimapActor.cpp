@@ -12,6 +12,7 @@
 #include "LandscapeProxy.h"
 #include "Actors/WorkArea.h"
 #include "Actors/Pickup.h"
+#include "GameFramework/PlayerController.h"
 
 // Sets default values
 AMinimapActor::AMinimapActor()
@@ -630,6 +631,118 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
         }
     }
 
+    // --- Pass 5: Draw the player viewport rectangle ---
+    if (bDrawViewport)
+    {
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC)
+        {
+            // Get viewport size
+            int32 ViewportWidth = 0;
+            int32 ViewportHeight = 0;
+            PC->GetViewportSize(ViewportWidth, ViewportHeight);
+
+            if (ViewportWidth > 0 && ViewportHeight > 0)
+            {
+                // Deproject the four screen corners to world positions on a horizontal plane
+                auto DeprojectToWorld = [&](const FVector2D& ScreenPos, FVector& OutWorldPos) -> bool
+                {
+                    FVector WorldPos, WorldDir;
+                    if (PC->DeprojectScreenPositionToWorld(ScreenPos.X, ScreenPos.Y, WorldPos, WorldDir))
+                    {
+                        // Intersect ray with Z=0 plane (ground level)
+                        if (FMath::Abs(WorldDir.Z) > KINDA_SMALL_NUMBER)
+                        {
+                            const float T = -WorldPos.Z / WorldDir.Z;
+                            if (T > 0.f)
+                            {
+                                OutWorldPos = WorldPos + WorldDir * T;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+
+                FVector Corners[4];
+                const FVector2D ScreenCorners[4] = {
+                    FVector2D(0.f, 0.f),                                                  // Top-Left
+                    FVector2D(static_cast<float>(ViewportWidth), 0.f),                     // Top-Right
+                    FVector2D(static_cast<float>(ViewportWidth), static_cast<float>(ViewportHeight)), // Bottom-Right
+                    FVector2D(0.f, static_cast<float>(ViewportHeight))                     // Bottom-Left
+                };
+
+                bool bAllValid = true;
+                for (int32 c = 0; c < 4; ++c)
+                {
+                    if (!DeprojectToWorld(ScreenCorners[c], Corners[c]))
+                    {
+                        bAllValid = false;
+                        break;
+                    }
+                }
+
+                if (bAllValid)
+                {
+                    // Convert world positions to pixel coordinates
+                    auto WorldToPixel = [&](const FVector& WorldPos, int32& OutX, int32& OutY)
+                    {
+                        const float U = (WorldPos.X - MinimapMinBounds.X) / WorldExtentX;
+                        const float V = (WorldPos.Y - MinimapMinBounds.Y) / WorldExtentY;
+                        OutX = FMath::Clamp(FMath::RoundToInt(U * (MinimapTexSize - 1)), 0, MinimapTexSize - 1);
+                        OutY = FMath::Clamp(FMath::RoundToInt(V * (MinimapTexSize - 1)), 0, MinimapTexSize - 1);
+                    };
+
+                    int32 PixelCorners[4][2];
+                    for (int32 c = 0; c < 4; ++c)
+                    {
+                        WorldToPixel(Corners[c], PixelCorners[c][0], PixelCorners[c][1]);
+                    }
+
+                    // Draw lines between consecutive corners (closed quad)
+                    auto DrawLine = [&](int32 X0, int32 Y0, int32 X1, int32 Y1)
+                    {
+                        // Bresenham line with thickness
+                        const int32 DX = FMath::Abs(X1 - X0);
+                        const int32 DY = FMath::Abs(Y1 - Y0);
+                        const int32 SX = (X0 < X1) ? 1 : -1;
+                        const int32 SY = (Y0 < Y1) ? 1 : -1;
+                        int32 Err = DX - DY;
+                        const int32 HalfThick = ViewportLineThickness / 2;
+
+                        while (true)
+                        {
+                            // Draw a small square at each point for thickness
+                            for (int32 TY = -HalfThick; TY <= HalfThick; ++TY)
+                            {
+                                for (int32 TX = -HalfThick; TX <= HalfThick; ++TX)
+                                {
+                                    const int32 PX = X0 + TX;
+                                    const int32 PY = Y0 + TY;
+                                    if (PX >= 0 && PX < MinimapTexSize && PY >= 0 && PY < MinimapTexSize)
+                                    {
+                                        MinimapPixels[PY * MinimapTexSize + PX] = ViewportColor;
+                                    }
+                                }
+                            }
+
+                            if (X0 == X1 && Y0 == Y1) break;
+                            const int32 E2 = 2 * Err;
+                            if (E2 > -DY) { Err -= DY; X0 += SX; }
+                            if (E2 < DX) { Err += DX; Y0 += SY; }
+                        }
+                    };
+
+                    for (int32 c = 0; c < 4; ++c)
+                    {
+                        const int32 Next = (c + 1) % 4;
+                        DrawLine(PixelCorners[c][0], PixelCorners[c][1], PixelCorners[Next][0], PixelCorners[Next][1]);
+                    }
+                }
+            }
+        }
+    }
+
     // --- Upload updated pixels to the GPU texture ---
     FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, MinimapTexSize, MinimapTexSize);
     MinimapTexture->UpdateTextureRegions(0, 1, Region, MinimapTexSize * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(MinimapPixels.GetData()));
@@ -666,6 +779,45 @@ void AMinimapActor::DrawCircleOutline(TArray<FColor>& Pixels, int32 TexSize, int
                     Pixels[PY * TexSize + PX] = Color;
                 }
             }
+        }
+    }
+}
+
+void AMinimapActor::DrawRectOutline(TArray<FColor>& Pixels, int32 TexSize, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 Thickness, const FColor& Color)
+{
+    // Ensure X0 <= X1 and Y0 <= Y1
+    if (X0 > X1) Swap(X0, X1);
+    if (Y0 > Y1) Swap(Y0, Y1);
+
+    for (int32 T = 0; T < Thickness; ++T)
+    {
+        // Top edge
+        for (int32 X = X0 - T; X <= X1 + T; ++X)
+        {
+            const int32 Y = Y0 - T;
+            if (X >= 0 && X < TexSize && Y >= 0 && Y < TexSize)
+                Pixels[Y * TexSize + X] = Color;
+        }
+        // Bottom edge
+        for (int32 X = X0 - T; X <= X1 + T; ++X)
+        {
+            const int32 Y = Y1 + T;
+            if (X >= 0 && X < TexSize && Y >= 0 && Y < TexSize)
+                Pixels[Y * TexSize + X] = Color;
+        }
+        // Left edge
+        for (int32 Y = Y0 - T; Y <= Y1 + T; ++Y)
+        {
+            const int32 X = X0 - T;
+            if (X >= 0 && X < TexSize && Y >= 0 && Y < TexSize)
+                Pixels[Y * TexSize + X] = Color;
+        }
+        // Right edge
+        for (int32 Y = Y0 - T; Y <= Y1 + T; ++Y)
+        {
+            const int32 X = X1 + T;
+            if (X >= 0 && X < TexSize && Y >= 0 && Y < TexSize)
+                Pixels[Y * TexSize + X] = Color;
         }
     }
 }

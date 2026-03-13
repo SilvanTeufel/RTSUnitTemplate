@@ -237,6 +237,20 @@ public:
     /** Additional actor classes to ignore during topography LineTraces (editable in Detail Panel). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
     TArray<TSubclassOf<AActor>> TopographyIgnoredActorClasses;
+
+    // --- Viewport Indicator ---
+
+    /** If true, draws the player camera viewport rectangle on the minimap. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Viewport")
+    bool bDrawViewport = true;
+
+    /** Color of the viewport rectangle. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Viewport", meta = (EditCondition = "bDrawViewport"))
+    FColor ViewportColor = FColor(255, 255, 255, 255);
+
+    /** Thickness of the viewport rectangle outline (in pixels). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Viewport", meta = (EditCondition = "bDrawViewport", ClampMin = "1", ClampMax = "5"))
+    int32 ViewportLineThickness = 1;
     
     UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = "Minimap")
     void Multicast_UpdateMinimap(
@@ -264,6 +278,9 @@ private:
 
     /** Helper function to draw a circle outline into the pixel array. */
     void DrawCircleOutline(TArray<FColor>& Pixels, int32 TexSize, int32 CenterX, int32 CenterY, int32 Radius, int32 Thickness, const FColor& Color);
+
+    /** Helper function to draw a rectangle outline into the pixel array. */
+    void DrawRectOutline(TArray<FColor>& Pixels, int32 TexSize, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 Thickness, const FColor& Color);
 
     /** Tries to extract a base color from the material at the hit location. Returns true if successful. */
     bool TryGetMaterialColor(const FHitResult& Hit, FLinearColor& OutColor) const;
