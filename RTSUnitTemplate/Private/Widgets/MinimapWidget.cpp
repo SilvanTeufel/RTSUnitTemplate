@@ -7,7 +7,6 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h" // Change this path to match your file structure
-#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture2D.h"
 
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
@@ -35,7 +34,7 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
     if (MinimapActorRef && MinimapImage)
     {
         // 1. Erstellen Sie eine dynamische Instanz des Materials, das dem Image zugewiesen ist.
-        UTextureRenderTarget2D* TopoTexture = MinimapActorRef->GetTopographyTexture();
+        UTexture2D* TopoTexture = MinimapActorRef->GetTopographyTexture();
         UTexture2D* DataTexture = MinimapActorRef->GetDynamicDataTexture();
         UMaterialInstanceDynamic* MID = MinimapImage->GetDynamicMaterial();
 
