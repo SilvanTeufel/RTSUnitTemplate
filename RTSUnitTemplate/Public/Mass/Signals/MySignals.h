@@ -80,6 +80,9 @@ namespace UnitSignals
 	const FName InitUnit(TEXT("InitUnit"));
 	// Follow feature signals removed (replaced by FriendlyTargetEntity-driven processors)
 	// Client-side navigation mirror signals
+
+	// Client-side resource scale update
+	const FName UpdateResourceScale(TEXT("UpdateResourceScale"));
 }
 
 USTRUCT()

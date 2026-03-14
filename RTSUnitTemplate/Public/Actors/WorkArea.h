@@ -132,11 +132,14 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float CurrentBuildTime = 0.0f;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float AvailableResourceAmount = 200.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxAvailableResourceAmount = AvailableResourceAmount;
+
+	UPROPERTY()
+	FVector OriginalActorScale = FVector(1.f);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildZOffset = 200.f;

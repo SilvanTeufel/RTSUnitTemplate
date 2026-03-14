@@ -71,9 +71,9 @@ void AWorkArea::BeginPlay()
 {
 	Super::BeginPlay();
 	MaxAvailableResourceAmount = AvailableResourceAmount;
+	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
 	InitWorkerOverflowTimer();
-
 }
 
 void AWorkArea::InitWorkerOverflowTimer_Implementation()
@@ -214,6 +214,8 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, bMIDEnabled);
 	DOREPLIFETIME(AWorkArea, BuildTime);
 	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
+	DOREPLIFETIME(AWorkArea, AvailableResourceAmount);
+	DOREPLIFETIME(AWorkArea, MaxAvailableResourceAmount);
 }
 
 void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -534,7 +536,7 @@ void AWorkArea::DespawnWorkResource(AWorkResource* WorkResource)
 
 void AWorkArea::Multicast_SetScale_Implementation(FVector NewScale)
 {
-	SetActorScale3D(NewScale);
+	SetActorScale3D(OriginalActorScale * NewScale);
 }
 
 void AWorkArea::TemporarilyChangeMaterial()

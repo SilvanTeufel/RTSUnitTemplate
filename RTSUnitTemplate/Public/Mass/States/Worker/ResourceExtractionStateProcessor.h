@@ -5,6 +5,7 @@
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"             // Required for FMassEntityQuery
 #include "MassSignalSubsystem.h"
+#include "MassEntitySubsystem.h"
 #include "ResourceExtractionStateProcessor.generated.h"
 
 // Forward declaration
@@ -30,6 +31,8 @@ protected:
 	void ServerExecute(FMassExecutionContext& Context);
 	void ClientExecute(FMassExecutionContext& Context);
 
+	void HandleUpdateResourceScale(FName SignalName, TArrayView<const FMassEntityHandle> Entities);
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
 	
@@ -40,4 +43,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 };

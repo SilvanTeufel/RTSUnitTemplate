@@ -9,6 +9,9 @@
 #include "MassCommonFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Actors/WorkArea.h"
+#include "MassActorSubsystem.h"
 
 // Make sure UnitSignals::GoToBase and UnitSignals::Idle (or your equivalents) are defined and accessible
 
@@ -64,6 +67,13 @@ void UResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, const
 {
     Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+    EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(Owner.GetWorld());
+
+    if (SignalSubsystem)
+    {
+        SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateResourceScale)
+            .AddUObject(this, &UResourceExtractionStateProcessor::HandleUpdateResourceScale);
+    }
 }
 
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -130,6 +140,7 @@ void UResourceExtractionStateProcessor::ServerExecute(FMassExecutionContext& Con
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UpdateResourceScale, Entity);
                 }
                 continue;
             }else if (StateFrag.StateTimer >= WorkerStatsFrag.ResourceExtractionTime*1.5f && StateFrag.SwitchingState)
@@ -148,14 +159,13 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
     APlayerController* PC = World->GetFirstPlayerController();
     ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(PC);
 
-    // AI check as requested: "We dont want to play the Sound for AI for AI PlayerControllers we added a flag. check void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation() Which flagg we added"
-    // In RTSGameModeBase, AIPC->bIsAi = true; was set.
     if (CameraPC && CameraPC->bIsAi)
     {
         return;
     }
 
     TArray<FMassEntityHandle> EntitiesToSignal;
+    TArray<FMassEntityHandle> ScaleEntitiesToSignal;
 
     EntityQuery.ForEachEntityChunk(Context,
         [&](FMassExecutionContext& ChunkContext)
@@ -164,15 +174,26 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
         if (NumEntities == 0) return;
 
         const auto VisibilityList = ChunkContext.GetFragmentView<FMassVisibilityFragment>();
+        const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassVisibilityFragment& Vis = VisibilityList[i];
 
-            // Only signal if visible on viewport as requested: "We dont want to Play the Sound if the Unit (worker) is not on Viewport. U can use bIsOnViewport for that"
             if (Vis.bIsOnViewport)
             {
                 EntitiesToSignal.Add(ChunkContext.GetEntity(i));
+            }
+            
+            FMassAIStateFragment& StateFrag = StateList[i];
+            StateFrag.StateTimerClient += ExecutionInterval;
+            const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
+
+            if (StateFrag.StateTimerClient >= (WorkerStatsFrag.ResourceExtractionTime-ExecutionInterval))
+            {
+                StateFrag.StateTimerClient = 0.f;
+                ScaleEntitiesToSignal.Add(ChunkContext.GetEntity(i));
             }
         }
     });
@@ -181,4 +202,39 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
     {
         SignalSubsystem->SignalEntities(UnitSignals::ResourceExtraction, EntitiesToSignal);
     }
+
+    if (ScaleEntitiesToSignal.Num() > 0 && SignalSubsystem)
+    {
+        SignalSubsystem->SignalEntities(UnitSignals::UpdateResourceScale, ScaleEntitiesToSignal);
+    }
+}
+
+void UResourceExtractionStateProcessor::HandleUpdateResourceScale(FName SignalName, TArrayView<const FMassEntityHandle> Entities)
+{
+    TArray<FMassEntityHandle> EntitiesArray(Entities.GetData(), Entities.Num());
+    AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy = MoveTemp(EntitiesArray)]()
+    {
+        if (!EntitySubsystem) return;
+        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        for (const FMassEntityHandle& Entity : EntitiesCopy)
+        {
+            if (!EntityManager.IsEntityValid(Entity)) continue;
+
+            FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+            if (!ActorFrag) continue;
+
+            AActor* Actor = ActorFrag->GetMutable();
+            AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+            if (!UnitBase || !UnitBase->ResourcePlace || !IsValid(UnitBase->ResourcePlace)) continue;
+
+            AWorkArea* WA = UnitBase->ResourcePlace;
+
+            float Ratio = WA->MaxAvailableResourceAmount > KINDA_SMALL_NUMBER
+                ? WA->AvailableResourceAmount / WA->MaxAvailableResourceAmount : 0.f;
+            float ScaleFactor = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
+
+            WA->SetActorScale3D(WA->OriginalActorScale * FVector(ScaleFactor));
+        }
+    });
 }

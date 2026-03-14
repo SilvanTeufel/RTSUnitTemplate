@@ -2018,13 +2018,9 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 							UnitBase->ResourcePlace->Destroy();
 							UnitBase->ResourcePlace = nullptr;
 						}
-						else
+ 					else
 						{
-							float Ratio = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;
-							if (UnitBase->ResourcePlace->Mesh)
-							{
-								UnitBase->ResourcePlace->Mesh->SetWorldScale3D(FVector(Ratio));
-							}
+							// Scale update is handled by ResourceExtractionStateProcessor signal
 						}
 						
 						SwitchState(UnitSignals::GoToBase, Entity, EntityManager);
