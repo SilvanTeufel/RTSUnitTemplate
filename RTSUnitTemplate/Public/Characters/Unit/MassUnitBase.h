@@ -347,6 +347,19 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastMoveUnitLinear(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent);
 
+	// Continuously rotate an ISM instance's Yaw at a constant rate (runs on server and clients)
+	// YawRate is in degrees per second. Duration <= 0 means infinite.
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastContinuousISMRotation(float YawRate, bool bEnable, float Duration = -1.f, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+
+	// Smoothly move an ISM instance by a relative offset (runs on server and clients)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastMoveISMLinearRelative(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+
+	// Instantly sync the transform of an ISM instance across the network
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastISMTransformSync(const FVector& Location, const FRotator& Rotation, const FVector& Scale, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

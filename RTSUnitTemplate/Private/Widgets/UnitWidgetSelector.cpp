@@ -192,6 +192,11 @@ void UUnitWidgetSelector::UpdateAbilityCooldowns()
 			return;
 		}
 
+		if (!AbilityArray[AbilityIndex])
+		{
+			continue;
+		}
+
 		UGameplayAbilityBase* Ability = AbilityArray[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>();
 		if (!Ability)
 		{

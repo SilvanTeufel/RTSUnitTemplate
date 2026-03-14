@@ -73,6 +73,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetCollisionResponseToChannels(TemplateISM->GetCollisionResponseToChannels());
 	ISM->SetCollisionObjectType(TemplateISM->GetCollisionObjectType());
 	if (ISM->GetCollisionObjectType() == ECC_WorldStatic) { ISM->SetCollisionObjectType(ECC_WorldDynamic); }
+	ISM->SetReceivesDecals(TemplateISM->bReceivesDecals);
 	
 	// Create a new instance with zero scale to avoid flicker
 	int32 NewIndex = ISM->AddInstance(FTransform::Identity);

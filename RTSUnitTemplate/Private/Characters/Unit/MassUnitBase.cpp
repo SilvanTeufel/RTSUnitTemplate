@@ -1460,6 +1460,13 @@ bool AMassUnitBase::SyncTranslation()
 	FTransform& Current = TransformFrag->GetMutableTransform();
 	Current.SetTranslation(GetActorLocation()); Current.SetRotation(GetActorRotation().Quaternion()); Current.SetScale3D(GetActorScale3D());
 
+	// Mark dirty so PlacementProcessor picks it up
+	if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+	{
+		CharFrag->PositionedTransform = Current;
+		CharFrag->bTransformDirty = true;
+	}
+
 	return true;
 }
 
@@ -1499,6 +1506,13 @@ bool AMassUnitBase::SyncRotation()
 	FTransform& Current = TransformFrag->GetMutableTransform();
 	Current.SetRotation(GetActorRotation().Quaternion());
 
+	// Mark dirty so PlacementProcessor picks it up
+	if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+	{
+		CharFrag->PositionedTransform.SetRotation(Current.GetRotation());
+		CharFrag->bTransformDirty = true;
+	}
+
 	return true;
 }
 
@@ -1537,6 +1551,13 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 	// Sync
 	FTransform& Current = TransformFrag->GetMutableTransform();
 	Current.SetTranslation(NewLocation);
+
+	// Mark dirty so PlacementProcessor picks it up
+	if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+	{
+		CharFrag->PositionedTransform.SetTranslation(NewLocation);
+		CharFrag->bTransformDirty = true;
+	}
 
 	return true;
 }
@@ -2334,10 +2355,19 @@ void AMassUnitBase::MulticastRotateUnitYawToChase_Implementation(float InRotateD
 
 void AMassUnitBase::MulticastContinuousUnitRotation_Implementation(float YawRate, bool bEnable)
 {
+	// Update persistent state on Server
+	if (HasAuthority())
+	{
+		if (bEnable) Rep_VE_ActiveEffects |= (1 << 1);
+		else Rep_VE_ActiveEffects &= ~(1 << 1);
+		Rep_VE_RotationDegreesPerSecond = YawRate;
+		Rep_VE_RotationAxis = FVector::UpVector;
+	}
+
 	bContinuousUnitRotationEnabled = bEnable;
 	ContinuousUnitYawRate = YawRate;
 
-	if (bContinuousUnitRotationEnabled)
+	if (bEnable)
 	{
 		// Disable unit-to-chase yaw follow if it was active
 		FMassEntityManager* EntityManager;
@@ -2347,17 +2377,41 @@ void AMassUnitBase::MulticastContinuousUnitRotation_Implementation(float YawRate
 			EntityManager->Defer().RemoveTag<FMassUnitYawFollowTag>(EntityHandle);
 		}
 
-		const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
-		const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
-
-		if (!GetWorldTimerManager().IsTimerActive(ContinuousUnitRotationTimerHandle))
+		// Handle Actor spin (for non-Mass units or skeletal meshes)
+		if (bUseSkeletalMovement || !bIsMassUnit)
 		{
-			GetWorldTimerManager().SetTimer(ContinuousUnitRotationTimerHandle, this, &AMassUnitBase::ContinuousUnitRotation_Step, TimerRate, true);
+			if (!GetWorldTimerManager().IsTimerActive(ContinuousUnitRotationTimerHandle))
+			{
+				const float FrameDt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+				const float TimerRate = (FrameDt > 0.f) ? FrameDt : (1.f / 60.f);
+				GetWorldTimerManager().SetTimer(ContinuousUnitRotationTimerHandle, this, &AMassUnitBase::ContinuousUnitRotation_Step, TimerRate, true);
+			}
+		}
+		else
+		{
+			GetWorldTimerManager().ClearTimer(ContinuousUnitRotationTimerHandle);
+		}
+
+		// Handle ISM spin via EffectFragment (for Mass units)
+		if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+		{
+			EffectFrag->bRotationEnabled = true;
+			EffectFrag->RotationAxis = FVector::UpVector;
+			EffectFrag->RotationDegreesPerSecond = YawRate;
+			EffectFrag->RotationDuration = -1.f;
+			EffectFrag->RotationElapsed = 0.f;
+			EffectFrag->RotationTargetISM = nullptr; // Apply to all instances for whole unit rotation
 		}
 	}
 	else
 	{
 		GetWorldTimerManager().ClearTimer(ContinuousUnitRotationTimerHandle);
+
+		// Also disable ISM continuous rotation
+		if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+		{
+			EffectFrag->bRotationEnabled = false;
+		}
 	}
 }
 
@@ -2381,10 +2435,12 @@ void AMassUnitBase::ContinuousUnitRotation_Step()
 
 void AMassUnitBase::MulticastMoveUnitLinear_Implementation(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent)
 {
+	const FVector WorldOffset = GetActorRotation().RotateVector(RelativeLocationChange);
+
 	// Snap if no duration
 	if (InMoveDuration <= 0.f)
 	{
-		const FVector TargetLoc = GetActorLocation() + GetActorRotation().RotateVector(RelativeLocationChange);
+		const FVector TargetLoc = GetActorLocation() + WorldOffset;
 		SetActorLocation(TargetLoc, false, nullptr, ETeleportType::TeleportPhysics);
 		SyncTranslation();
 		return;
@@ -2396,7 +2452,7 @@ void AMassUnitBase::MulticastMoveUnitLinear_Implementation(const FVector& Relati
 	UnitMoveTween.Elapsed = 0.f;
 	UnitMoveTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
 	UnitMoveTween.Start = GetActorLocation();
-	UnitMoveTween.Target = UnitMoveTween.Start + GetActorRotation().RotateVector(RelativeLocationChange);
+	UnitMoveTween.Target = UnitMoveTween.Start + WorldOffset;
 
 	// Immediate step then start timer
 	UnitMove_Step();
@@ -2440,6 +2496,106 @@ void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLoca
 		TweenFrag->LocationTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
 		TweenFrag->LocationTween.bActive = true;
 		TweenFrag->LocationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
+	}
+}
+
+void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate, bool bEnable, float Duration, UInstancedStaticMeshComponent* InISMComponent)
+{
+	if (HasAuthority())
+	{
+		if (bEnable) Rep_VE_ActiveEffects |= (1 << 1);
+		else Rep_VE_ActiveEffects &= ~(1 << 1);
+		Rep_VE_RotationDegreesPerSecond = YawRate;
+		Rep_VE_RotationAxis = FVector::UpVector;
+	}
+
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+	{
+		EffectFrag->bRotationEnabled = bEnable;
+		if (bEnable)
+		{
+			EffectFrag->RotationAxis = FVector::UpVector;
+			EffectFrag->RotationDegreesPerSecond = YawRate;
+			EffectFrag->RotationDuration = Duration;
+			EffectFrag->RotationElapsed = 0.f;
+			EffectFrag->RotationTargetISM = InISMComponent ? InISMComponent : ISMComponent;
+		}
+	}
+}
+
+void AMassUnitBase::MulticastMoveISMLinearRelative_Implementation(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
+{
+	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
+	{
+		FVector CurrentLoc = GetCurrentLocalVisualLocation(InISMComponent);
+		TweenFrag->LocationTween.StartLocation = CurrentLoc;
+		TweenFrag->LocationTween.TargetLocation = CurrentLoc + RelativeLocationChange;
+		TweenFrag->LocationTween.Duration = InMoveDuration;
+		TweenFrag->LocationTween.Elapsed = 0.f;
+		TweenFrag->LocationTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
+		TweenFrag->LocationTween.bActive = true;
+		TweenFrag->LocationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
+	}
+}
+
+void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Location, const FRotator& Rotation, const FVector& Scale, UInstancedStaticMeshComponent* InISMComponent)
+{
+	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
+	{
+		UInstancedStaticMeshComponent* TargetISM = InISMComponent ? InISMComponent : ISMComponent;
+
+		// Snap location
+		TweenFrag->LocationTween.StartLocation = Location;
+		TweenFrag->LocationTween.TargetLocation = Location;
+		TweenFrag->LocationTween.Duration = 0.f;
+		TweenFrag->LocationTween.Elapsed = 0.f;
+		TweenFrag->LocationTween.bActive = false;
+		TweenFrag->LocationTween.TargetISM = TargetISM;
+
+		// Snap rotation
+		TweenFrag->RotationTween.StartRotation = Rotation.Quaternion().GetNormalized();
+		TweenFrag->RotationTween.TargetRotation = Rotation.Quaternion().GetNormalized();
+		TweenFrag->RotationTween.Duration = 0.f;
+		TweenFrag->RotationTween.Elapsed = 0.f;
+		TweenFrag->RotationTween.bActive = false;
+		TweenFrag->RotationTween.TargetISM = TargetISM;
+
+		// Snap scale
+		TweenFrag->ScaleTween.StartScale = Scale;
+		TweenFrag->ScaleTween.TargetScale = Scale;
+		TweenFrag->ScaleTween.Duration = 0.f;
+		TweenFrag->ScaleTween.Elapsed = 0.f;
+		TweenFrag->ScaleTween.bActive = false;
+		TweenFrag->ScaleTween.TargetISM = TargetISM;
+	}
+
+	// Also directly apply to the visual fragment so PlacementProcessor picks it up immediately
+	if (FMassUnitVisualFragment* VisualFrag = GetMutableVisualFragment())
+	{
+		UInstancedStaticMeshComponent* TargetISM = InISMComponent ? InISMComponent : ISMComponent;
+		for (FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+		{
+			if (!Instance.TemplateISM.IsValid()) continue;
+			if (Instance.TemplateISM == TargetISM)
+			{
+				FTransform NewTransform;
+				NewTransform.SetLocation(Location);
+				NewTransform.SetRotation(Rotation.Quaternion().GetNormalized());
+				NewTransform.SetScale3D(Scale);
+				Instance.CurrentRelativeTransform = NewTransform;
+			}
+		}
+	}
+
+	// Mark transform dirty so PlacementProcessor updates this frame
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+		{
+			CharFrag->bTransformDirty = true;
+		}
 	}
 }
 
@@ -2799,6 +2955,15 @@ void AMassUnitBase::StaticMeshScales_Step()
 
 void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, UInstancedStaticMeshComponent* InISMComponent)
 {
+	if (HasAuthority())
+	{
+		if (bEnable) Rep_VE_ActiveEffects |= (1 << 0);
+		else Rep_VE_ActiveEffects &= ~(1 << 0);
+		Rep_VE_PulsateMinScale = InMinScale;
+		Rep_VE_PulsateMaxScale = InMaxScale;
+		Rep_VE_PulsateHalfPeriod = TimeMinToMax;
+	}
+
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
 		EffectFrag->bPulsateEnabled = bEnable;

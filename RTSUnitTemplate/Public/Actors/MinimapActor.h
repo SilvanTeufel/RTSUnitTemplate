@@ -70,7 +70,7 @@ public:
 
     /** The color of the fog of war covering unexplored areas. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
-    FColor FogColor = FColor(0.007, 0.01, 0.007, 0.863);
+    FColor FogColor = FColor(54, 54, 54, 0.194);
 
     /** Opacity of the fog of war (0.0 = fully transparent, 1.0 = fully opaque). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors", meta = (ClampMin = "0.0", ClampMax = "1.0"))
