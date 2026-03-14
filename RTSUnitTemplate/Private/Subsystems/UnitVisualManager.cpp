@@ -48,8 +48,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 							 Existing.TargetISM->CastShadow == bCastShadow);
 
 		if (bIsSameTemplate || bIsStaleMatch) {
-			UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Reusing instance %d for entity %s to avoid duplication."), Existing.InstanceIndex, *Entity.DebugGetDescription());
-			
 			Existing.TemplateISM = TemplateISM;
 			Existing.BaseOffset = TemplateISM->GetRelativeTransform();
 			Existing.CurrentRelativeTransform = Existing.BaseOffset;
@@ -62,9 +60,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 			return; // Successfully reused/updated
 		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Entity %s, Mesh %s, Material %s, Unit %s, CastShadow %d"), 
-		*Entity.DebugGetDescription(), *Mesh->GetName(), Material ? *Material->GetName() : TEXT("None"), Unit ? *Unit->GetName() : TEXT("None"), (int32)bCastShadow);
 
 	UInstancedStaticMeshComponent* ISM = GetOrCreateISM(Mesh, Material, bCastShadow);
 	if (!ISM) {
@@ -79,9 +74,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetCollisionObjectType(TemplateISM->GetCollisionObjectType());
 	if (ISM->GetCollisionObjectType() == ECC_WorldStatic) { ISM->SetCollisionObjectType(ECC_WorldDynamic); }
 	
-	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: Transferred collision from %s to pooled ISM %s (Enabled: %d)"), 
-		*TemplateISM->GetName(), *ISM->GetName(), (int32)ISM->GetCollisionEnabled());
-
 	// Create a new instance with zero scale to avoid flicker
 	int32 NewIndex = ISM->AddInstance(FTransform::Identity);
 	ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
@@ -100,9 +92,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	NewInstance.BaseOffset = TemplateISM->GetRelativeTransform();
 	NewInstance.CurrentRelativeTransform = NewInstance.BaseOffset;
 	NewInstance.bWasVisible = false;
-
-	UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::AssignUnitVisual: NewInstance at Index %d, BaseOffset: %s"), 
-		NewIndex, *NewInstance.BaseOffset.ToString());
 
 	VisualFrag->VisualInstances.Add(NewInstance);
 }
@@ -203,8 +192,6 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     // Collision will be set in AssignUnitVisual from Template
     NewISM->SetGenerateOverlapEvents(false);
     NewISM->SetCanEverAffectNavigation(false);
-
-    UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::GetOrCreateISM: Created new ISM for mesh %s in ManagerActor %s"), *Mesh->GetName(), *ManagerActor->GetName());
 
     NewISM->AttachToComponent(ManagerActor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
     NewISM->RegisterComponent();

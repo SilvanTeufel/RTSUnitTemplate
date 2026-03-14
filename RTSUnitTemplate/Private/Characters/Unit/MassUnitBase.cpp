@@ -1210,8 +1210,6 @@ bool AMassUnitBase::RegisterVisualsToMass()
 {
 	if (!GetWorld() || !GetWorld()->IsGameWorld() || bMassVisualsRegistered) return true;
 
-	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Called for unit %s (bUseSkeletalMovement: %d)"), *GetName(), bUseSkeletalMovement);
-
 	if (!bUseSkeletalMovement)
 	{
 		UCharacterMovementComponent* MoveComp = GetCharacterMovement();
@@ -1231,8 +1229,7 @@ bool AMassUnitBase::RegisterVisualsToMass()
 					FMassEntityHandle EntityHandle = MassActorBindingComponent->GetEntityHandle();
 					if (EntityHandle.IsValid())
 					{
-						UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterVisualsToMass: Assigning main ISM %s for unit %s to entity %s"), *ISMComponent->GetName(), *GetName(), *EntityHandle.DebugGetDescription());
-						VisualManager->AssignUnitVisual(EntityHandle, ISMComponent, this);
+ 					VisualManager->AssignUnitVisual(EntityHandle, ISMComponent, this);
 
 						if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 						{
