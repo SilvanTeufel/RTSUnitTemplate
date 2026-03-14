@@ -193,14 +193,6 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 		}
 	}
 	
-	if(UnitBase->WorkResource)
-	{
-		//ResourceGameMode->ModifyTeamResourceAttributes(Worker->TeamId, Worker->WorkResource->ResourceType, Worker->WorkResource->Amount);
-		ResourceGameMode->ModifyResource(UnitBase->WorkResource->ResourceType, UnitBase->TeamId, UnitBase->WorkResource->Amount);
-		DespawnWorkResource(UnitBase->WorkResource);
-	}
-	
-	
 	if (!SwitchBuildArea( UnitBase, ResourceGameMode))
 	{
 		SwitchResourceArea(UnitBase, ResourceGameMode);

@@ -275,6 +275,8 @@ struct FMassCarriedResourceFragment : public FMassFragment {
     FVector ResourceScale = FVector(1.0f);
     FRotator ResourceRotation = FRotator::ZeroRotator;
     bool bWasVisible = false;
+
+    float MinedAmount = 0.f;
 };
 
 USTRUCT()

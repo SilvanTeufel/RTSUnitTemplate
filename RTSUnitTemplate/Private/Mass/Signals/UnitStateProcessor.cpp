@@ -2000,13 +2000,21 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 						}
 						
 						// Resource Depletion Logic (moved from SpawnWorkResource)
-						float AmountTaken = 10.0f; // Default? We should probably get this from somewhere
+						float AmountTaken = 10.0f;
 						if (UnitBase->ResourcePlace->WorkResourceClass)
 						{
 							if (AWorkResource* WRDefault = UnitBase->ResourcePlace->WorkResourceClass->GetDefaultObject<AWorkResource>())
 							{
 								AmountTaken = WRDefault->Amount;
 							}
+						}
+
+						FMassCarriedResourceFragment* CarriedFrag = EntityManager.GetFragmentDataPtr<FMassCarriedResourceFragment>(Entity);
+						if (CarriedFrag)
+						{
+							CarriedFrag->ResourceType = CorrectResourceType;
+							CarriedFrag->MinedAmount = AmountTaken;
+							CarriedFrag->bIsCarrying = true;
 						}
 						
 						float& Remaining = UnitBase->ResourcePlace->AvailableResourceAmount;
@@ -2072,6 +2080,17 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 					
 						if (UnitBase && UnitBase->IsWorker)
 						{
+							if (!ResourceGameMode)
+								ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+
+							FMassCarriedResourceFragment* CarriedFrag = EntityManager.GetFragmentDataPtr<FMassCarriedResourceFragment>(Entity);
+							if (CarriedFrag && CarriedFrag->bIsCarrying && ResourceGameMode)
+							{
+								ResourceGameMode->ModifyResource(CarriedFrag->ResourceType, UnitBase->TeamId, CarriedFrag->MinedAmount);
+								CarriedFrag->bIsCarrying = false;
+								CarriedFrag->MinedAmount = 0.f;
+							}
+
 							if (UResourceVisualManager* VisualManager = World->GetSubsystem<UResourceVisualManager>())
 							{
 								VisualManager->RemoveResource(Entity);
@@ -2081,9 +2100,6 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 							{
 								WorkingUnit->CarryingResourceType = EResourceType::MAX;
 							}
-							
-							if (!ResourceGameMode)
-								ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 						bool CanAffordConstruction = false;
 
