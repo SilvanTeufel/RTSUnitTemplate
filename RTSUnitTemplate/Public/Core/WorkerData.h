@@ -119,4 +119,7 @@ struct FWorkResourceVisuals
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
 	FVector SocketOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
+	FRotator Rotation = FRotator::ZeroRotator;
 };

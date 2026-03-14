@@ -60,6 +60,7 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
     UMaterialInterface* SelectedMaterial = nullptr;
     FVector SelectedScale = FVector(1.0f);
     FVector SelectedOffset = FVector::ZeroVector;
+    FRotator SelectedRotation = FRotator::ZeroRotator;
     bool bHasOverrideOffset = false;
 
     // 1. Check Worker Overrides
@@ -69,6 +70,7 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
         SelectedMaterial = Worker->WorkResourceVisuals[ResIndex].Material;
         SelectedScale = Worker->WorkResourceVisuals[ResIndex].Scale;
         SelectedOffset = Worker->WorkResourceVisuals[ResIndex].SocketOffset;
+        SelectedRotation = Worker->WorkResourceVisuals[ResIndex].Rotation;
         if (!SelectedOffset.IsNearlyZero()) {
             bHasOverrideOffset = true;
         }
@@ -154,6 +156,7 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
     ResourceFrag->bIsCarrying = true;
     ResourceFrag->ResourceType = ResourceType;
     ResourceFrag->ResourceScale = SelectedScale;
+    ResourceFrag->ResourceRotation = SelectedRotation;
     ResourceFrag->SocketOffset = SelectedOffset;
     ResourceFrag->bWasVisible = false;
 }

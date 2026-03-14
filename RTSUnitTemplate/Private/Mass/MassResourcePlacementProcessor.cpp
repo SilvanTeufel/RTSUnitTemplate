@@ -64,6 +64,11 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
                     }
 
                     SocketTransform.SetScale3D(ResourceFrag.ResourceScale);
+
+                    if (!ResourceFrag.ResourceRotation.IsNearlyZero()) {
+                        FQuat AdditionalRotation = ResourceFrag.ResourceRotation.Quaternion();
+                        SocketTransform.SetRotation(SocketTransform.GetRotation() * AdditionalRotation);
+                    }
                     
                     bool bTeleport = !ResourceFrag.bWasVisible;
                     FResourceISMInstanceUpdate& Update = BatchedUpdates.FindOrAdd(ISM).AddDefaulted_GetRef();
