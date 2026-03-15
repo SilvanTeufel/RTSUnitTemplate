@@ -125,6 +125,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
 	bool bFlickerOnDespawn = true;
 
+	UFUNCTION(BlueprintPure, Category = "EnergyWall")
+	ABuildingBase* GetBuildingA() const { return CachedBuildingA; }
+
+	UFUNCTION(BlueprintPure, Category = "EnergyWall")
+	ABuildingBase* GetBuildingB() const { return CachedBuildingB; }
+
 private:
 	UPROPERTY(Replicated)
 	ABuildingBase* CachedBuildingA;

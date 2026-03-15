@@ -1103,13 +1103,24 @@ TArray<AUnitBase*> AUnitBase::SpawnUnitsFromParameters(
 TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 TEnumAsByte<UnitData::EState> UState,
 TEnumAsByte<UnitData::EState> UStatePlaceholder,
-int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable)
+int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int UnitCount, bool SummonContinuously, bool SpawnAsSquad, bool UseSummonDataSet, bool bSelectable,
+bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 {
 	TArray<AUnitBase*> SpawnedUnits;
 
 	if (!IsValid(this))
 	{
 		return SpawnedUnits;
+	}
+
+	FVector BaseSpawnLocation = Location + OffsetLocation;
+
+	if (WaypointDirectionOffset > 0.f && Waypoint && IsValid(Waypoint))
+	{
+		FVector Direction = (Waypoint->GetActorLocation() - Location).GetSafeNormal2D();
+		float SpawnerRadius = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleRadius() : 0.f;
+		float TotalOffset = SpawnerRadius + WaypointDirectionOffset;
+		BaseSpawnLocation += Direction * TotalOffset;
 	}
 
 	FUnitSpawnParameter SpawnParameter;
@@ -1139,7 +1150,33 @@ int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint, int Unit
 	{
 		FTransform UnitTransform;
 	
-		UnitTransform.SetLocation(FVector(Location.X+SpawnParameter.UnitOffset.X, Location.Y+SpawnParameter.UnitOffset.Y, Location.Z+SpawnParameter.UnitOffset.Z));
+		FVector FinalSpawnLocation = BaseSpawnLocation + (FVector)SpawnParameter.UnitOffset;
+
+		if (bDoGroundTrace)
+		{
+			FHitResult HitResult;
+			FVector TraceStart = FinalSpawnLocation + FVector(0.f, 0.f, 1000.f);
+			FVector TraceEnd = FinalSpawnLocation - FVector(0.f, 0.f, 1000.f);
+			FCollisionQueryParams TraceParams(FName(TEXT("SpawnTrace")), true, this);
+
+			if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, TraceParams))
+			{
+				float CapsuleHalfHeight = 0.f;
+				if (UnitBaseClass)
+				{
+					if (AUnitBase* DefaultUnit = UnitBaseClass->GetDefaultObject<AUnitBase>())
+					{
+						if (UCapsuleComponent* Capsule = DefaultUnit->GetCapsuleComponent())
+						{
+							CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+						}
+					}
+				}
+				FinalSpawnLocation.Z = HitResult.Location.Z + CapsuleHalfHeight + OffsetLocation.Z;
+			}
+		}
+
+		UnitTransform.SetLocation(FinalSpawnLocation);
 		
 		const auto UnitBase = Cast<AUnitBase>
 			(UGameplayStatics::BeginDeferredActorSpawnFromClass

@@ -372,7 +372,8 @@ public:
 		TSubclassOf<class AUnitBase> UnitBaseClass, UMaterialInstance* Material, USkeletalMesh* CharacterMesh, FRotator HostMeshRotation, FVector Location,
 		TEnumAsByte<UnitData::EState> UState,
 		TEnumAsByte<UnitData::EState> UStatePlaceholder,
-		int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true, bool UseSummonDataSet = false, bool bSelectable = true);
+		int NewTeamId, FBuildingCost UsedConstructionCost, AWaypoint* Waypoint = nullptr, int UnitCount = 1, bool SummonContinuously = true, bool SpawnAsSquad = true, bool UseSummonDataSet = false, bool bSelectable = true,
+		bool bDoGroundTrace = true, float WaypointDirectionOffset = 50.f, FVector OffsetLocation = FVector(0.f, 0.f, 0.f));
 
 	// Applies/clears a follow target for this single unit on the server and updates the Mass AI fragment flag.
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)

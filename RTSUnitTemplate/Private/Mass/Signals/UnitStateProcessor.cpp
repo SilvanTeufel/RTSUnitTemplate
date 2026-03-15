@@ -2265,8 +2265,17 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
 
-								bool bDoGroundTrace = false;
+								bool bDoGroundTrace = true;
 
+   								ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase);
+								if (BuildingBase)
+								{
+									if (UnitBase->BuildArea && UnitBase->BuildArea->IsExtensionArea && !BuildingBase->ExtensionGroundTrace)
+									{
+										bDoGroundTrace = false;
+									}
+								}
+   								
     							if(!ControllerBase)
     							{
 									ControllerBase = Cast<AExtendedControllerBase>(GetWorld()->GetFirstPlayerController());
@@ -2389,7 +2398,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     // --------------------------------------------
 
 	FVector FinalLocation = Location;
-	
+
 	if (bDoGroundTrace)
 	{
 		// Wir versuchen, das Mesh zu holen (falls vorhanden),
@@ -2449,9 +2458,14 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 
 			if (bHit)
 			{
-				// New robust calculation: NewZ = CurrentZ + (GroundZ - BottomZ)
-				//FinalLocation.Z = Location.Z + (HitResult.ImpactPoint.Z - (MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z));
-				FinalLocation.Z = HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z - MeshBounds.Origin.Z;
+				if (UCapsuleComponent* Capsule = UnitBase->FindComponentByClass<UCapsuleComponent>())
+				{
+					FinalLocation.Z = HitResult.ImpactPoint.Z + Capsule->GetScaledCapsuleHalfHeight();
+				}
+				else
+				{
+					FinalLocation.Z = HitResult.ImpactPoint.Z + MeshBounds.BoxExtent.Z - MeshBounds.Origin.Z;
+				}
 			}
 		}
 	}
@@ -2463,9 +2477,10 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     // --------------------------------------------
     // 6) Jetzt wird der Actor final in die Welt gesetzt
     // --------------------------------------------
+	ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase);
 	if (BuildArea && BuildArea->IsExtensionArea)
 	{
-		if (ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase))
+		if (BuildingBase)
 		{
 			BuildingBase->Origin = Cast<ABuildingBase>(BuildArea->Origin);
 			if (BuildingBase->Origin) 

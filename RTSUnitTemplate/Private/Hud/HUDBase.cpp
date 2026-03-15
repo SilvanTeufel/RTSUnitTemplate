@@ -246,9 +246,23 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 	}
 }
 
+void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color)
+{
+	ExtensionPreviewLine.Start = Start;
+	ExtensionPreviewLine.End = End;
+	ExtensionPreviewLine.Color = Color;
+	ExtensionPreviewLine.bIsActive = true;
+}
+
 void AHUDBase::DrawHUD()
 {
 	Super::DrawHUD();
+
+	if (ExtensionPreviewLine.bIsActive)
+	{
+		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, 50.f, 10.f, ExtensionPreviewLine.Color, 2.f, 0.f);
+		ExtensionPreviewLine.bIsActive = false;
+	}
 
 	float CurrentTime = GetWorld()->GetTimeSeconds();
 	for (int32 i = ClickIndicators.Num() - 1; i >= 0; --i)

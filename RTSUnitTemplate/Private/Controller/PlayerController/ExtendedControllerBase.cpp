@@ -10,6 +10,7 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Actors/EnergyWall.h"
 #include "Actors/WorkArea.h"
 #include "Actors/AbilityIndicator.h"
 #include "Kismet/KismetSystemLibrary.h"  
@@ -24,6 +25,7 @@
 #include "GameplayAbilitySpec.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
@@ -549,7 +551,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
 		bActivatedAny = true;
 	}
-	else if(HUDBase)
+	else if (HUDBase)
 	{
 		FVector CameraLocation = GetPawn()->GetActorLocation();
 		ActivateKeyboardAbilitiesOnCloseUnits(InputID, CameraLocation, SelectableTeamId, HUDBase);
@@ -1913,112 +1915,195 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	Unit->ShowWorkAreaIfNoFog_Implementation(DraggedWorkArea);
 
 	FHitResult Hit;
-	if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
-	{
-		return;
-	}
+	if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit)) return;
 
 	FVector TargetLoc;
 	FRotator TargetRot;
 	GetSnappedExtensionTransform(Unit, Hit.Location, TargetLoc, TargetRot);
 
-	// Apply rotation
+	// Rotation anwenden
 	DraggedWorkArea->SetActorRotation(TargetRot);
 	DraggedWorkArea->ServerMeshRotationBuilding = TargetRot;
 
-	if (Unit->ExtensionGroundTrace)
+	bool bFoundCompatible = false;
+	ABuildingBase* TargetBuilding = nullptr;
+
+	if (Unit->ExtensionMovementAllowed)
 	{
-		const FVector TraceStart = TargetLoc + FVector(0, 0, 2000.f);
-		const FVector TraceEnd   = TargetLoc - FVector(0, 0, 2000.f);
-		FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), true);
-		Params.AddIgnoredActor(Unit);
-		Params.AddIgnoredActor(DraggedWorkArea);
-		
-		FHitResult GroundHit;
-		const int32 MaxTries = 8;
-		bool bFoundValidGround = false;
-		for (int32 Try = 0; Try < MaxTries; ++Try)
+		// 1. Direkter Treffer-Check unter dem Cursor
+		ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
+		if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget))
 		{
-			if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
-			{
-				break;
-			}
-			AActor* HitActor = GroundHit.GetActor();
-			if (HitActor && (HitActor->IsA(AWorkArea::StaticClass()) || HitActor->IsA(ABuildingBase::StaticClass())))
-			{
-				Params.AddIgnoredActor(HitActor);
-				continue;
-			}
-			bFoundValidGround = true;
-			break;
+			TargetBuilding = DirectTarget;
+			bFoundCompatible = true;
 		}
-		
-		if (bFoundValidGround)
+
+		// 2. Sticky Snapping (Bestehenden Snap halten, solange Maus nah genug)
+		if (!bFoundCompatible)
 		{
-			TargetLoc.Z = GroundHit.Location.Z;
-		}
-	}
-	else
-	{
-		FVector UnitCenterBounds, UnitExtentBounds;
-		GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
-		TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
-	}
-
-	// Adjust Z for mesh bottom clearance
-	if (UStaticMeshComponent* MeshComp = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
-	{
-		const FBoxSphereBounds Bounds = MeshComp->CalcBounds(MeshComp->GetComponentTransform());
-		const float BottomZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
-		const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
-		const float Clearance = 2.f;
-		const float NewZ = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
-		TargetLoc.Z = NewZ;
-
-		// Overlap check
-		const FTransform PreviewTM(DraggedWorkArea->GetActorRotation(), TargetLoc, DraggedWorkArea->GetActorScale3D());
-		const FBoxSphereBounds PreviewBounds = MeshComp->CalcBounds(PreviewTM);
-		const FVector OverlapCenter = PreviewBounds.Origin;
-		const float OverlapRadius = PreviewBounds.SphereRadius;
-
-		TArray<AActor*> ActorsToIgnore;
-		ActorsToIgnore.Add(DraggedWorkArea);
-		ActorsToIgnore.Add(Unit);
-
-		TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
-		ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldStatic));
-		ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
-		ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
-
-		TArray<AActor*> OverlappedActors;
-		const bool bAnyOverlap = UKismetSystemLibrary::SphereOverlapActors(
-			this,
-			OverlapCenter,
-			OverlapRadius,
-			ObjectTypes,
-			AActor::StaticClass(),
-			ActorsToIgnore,
-			OverlappedActors
-		);
-
-		if (bAnyOverlap)
-		{
-			for (AActor* Overlapped : OverlappedActors)
+			TArray<AActor*> CurrentOverlaps;
+			DraggedWorkArea->GetOverlappingActors(CurrentOverlaps);
+			for (AActor* OA : CurrentOverlaps)
 			{
-				if (Overlapped && (Overlapped->IsA(AWorkArea::StaticClass()) || Overlapped->IsA(ABuildingBase::StaticClass())))
+				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
+				if (BB && IsCompatibleForEnergyWall(Unit, BB))
 				{
-					DraggedWorkArea->TemporarilyChangeMaterial();
-					break;
+					float MouseDist = FVector::Dist(Hit.Location, BB->GetActorLocation());
+					if (MouseDist < 500.f)
+					{
+						TargetBuilding = BB;
+						bFoundCompatible = true;
+						break;
+					}
 				}
 			}
 		}
 	}
 
-	DraggedWorkArea->SetActorLocation(TargetLoc);
+	// 3. Boden-Logik & Z-Korrektur (NUR wenn NICHT an Gebäude gesnappt)
+	if (!bFoundCompatible)
+	{
+		if (Unit->ExtensionGroundTrace)
+		{
+			const FVector TraceStart = TargetLoc + FVector(0, 0, 2000.f);
+			const FVector TraceEnd   = TargetLoc - FVector(0, 0, 2000.f);
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), true);
+			Params.AddIgnoredActor(Unit);
+			Params.AddIgnoredActor(DraggedWorkArea);
+			
+			FHitResult GroundHit;
+			const int32 MaxTries = 10;
+			bool bFoundValidGround = false;
+			for (int32 Try = 0; Try < MaxTries; ++Try)
+			{
+				if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params)) break;
+				
+				AActor* HitActor = GroundHit.GetActor();
+				if (HitActor && (HitActor->IsA(AWorkArea::StaticClass()) || GetBuildingBaseFromActor(HitActor) != nullptr))
+				{
+					Params.AddIgnoredActor(HitActor);
+					continue;
+				}
+				bFoundValidGround = true;
+				break;
+			}
+			
+			if (bFoundValidGround)
+			{
+				TargetLoc.Z = GroundHit.Location.Z;
+			}
+		}
+		else
+		{
+			FVector UnitCenterBounds, UnitExtentBounds;
+			GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
+			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
+		}
+
+		// Z-Korrektur für Mesh-Bodenabstand (Nur bei Bodenplatzierung)
+		if (UStaticMeshComponent* MeshComp = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
+		{
+			const FBoxSphereBounds Bounds = MeshComp->CalcBounds(MeshComp->GetComponentTransform());
+			const float BottomZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+			const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
+			const float Clearance = 2.f;
+			// Berechnet die neue Z-Position so, dass die Unterkante des Meshes auf Bodenhöhe + Clearance liegt
+			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
+		}
+
+		// 4. Overlap Snap Check (An der nun korrigierten Bodenposition)
+		FVector PreOverlapCheckLoc = DraggedWorkArea->GetActorLocation();
+		DraggedWorkArea->SetActorLocation(TargetLoc);
+		DraggedWorkArea->UpdateOverlaps();
+		
+		TArray<AActor*> Overlaps;
+		DraggedWorkArea->GetOverlappingActors(Overlaps);
+		
+		// Priorität 1: Kompatible Gebäude suchen
+		if (Unit->ExtensionMovementAllowed)
+		{
+			for (AActor* OA : Overlaps)
+			{
+				if (!OA || OA == Unit) continue;
+				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
+				if (BB && IsCompatibleForEnergyWall(Unit, BB))
+				{
+					TargetBuilding = BB;
+					bFoundCompatible = true;
+					break;
+				}
+			}
+		}
+		
+		// Priorität 2: Visuelles Feedback für blockierende Overlaps (wenn kein Snap gefunden)
+		if (!bFoundCompatible)
+		{
+			for (AActor* OA : Overlaps)
+			{
+				if (!OA) continue;
+
+				// Feedback bei Überlappung mit Initiator
+				if (Unit->ExtensionMovementAllowed && OA == Unit)
+				{
+					DraggedWorkArea->TemporarilyChangeMaterial();
+					break;
+				}
+
+				if (OA == Unit) continue;
+
+				if (OA->IsA(AWorkArea::StaticClass()) || OA->IsA(ABuildingBase::StaticClass()))
+				{
+					DraggedWorkArea->TemporarilyChangeMaterial();
+					break;
+				}
+			}
+			// Position für die folgende Interpolation zurücksetzen, um Sprünge zu vermeiden
+			DraggedWorkArea->SetActorLocation(PreOverlapCheckLoc);
+		}
+	}
+
+	// 5. Finalisierung: Bei Snapping exakt die Gebäudeposition übernehmen
+	if (bFoundCompatible && TargetBuilding)
+	{
+		TargetLoc = TargetBuilding->GetActorLocation();
+	}
+
+	// 6. Finale Bewegung
+	if (bFoundCompatible)
+	{
+		// Harter Snap ohne Verzögerung an das Gebäude
+		DraggedWorkArea->SetActorLocation(TargetLoc);
+	}
+	else
+	{
+		// Weiche Interpolation ("Lag") zur Bodenposition
+		float InterpSpeed = 15.f;
+		FVector CurrentLoc = DraggedWorkArea->GetActorLocation();
+		DraggedWorkArea->SetActorLocation(FMath::VInterpTo(CurrentLoc, TargetLoc, DeltaSeconds, InterpSpeed));
+	}
 
 	if (DraggedWorkArea->InstantDrop)
 	{
 		Server_DropWorkAreaForUnit(Unit, true, DropWorkAreaFailedSound, DraggedWorkArea->GetActorTransform());
+	}
+
+	// 7. Pfad-Blockierungs-Check (LineTrace)
+	if (Unit->ExtensionMovementAllowed)
+	{
+		FVector TraceStart, TraceEnd;
+		bool bPathBlocked = IsPathBlockedByBuilding(Unit, DraggedWorkArea, TraceStart, TraceEnd, TargetBuilding);
+
+		// Visualisierung im HUD via Puffer
+		if (AHUDBase* HUD = Cast<AHUDBase>(GetHUD()))
+		{
+			FColor LineColor = bPathBlocked ? FColor::Red : FColor::Green;
+			HUD->SetExtensionPreviewLine(TraceStart, TraceEnd, LineColor);
+		}
+
+		if (bPathBlocked)
+		{
+			DraggedWorkArea->TemporarilyChangeMaterial();
+		}
 	}
 }
 
@@ -3531,6 +3616,61 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		}
 		else
 		{
+			// Abbruch bei Überlappung mit Initiator
+			ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+			if (InitiatingBuilding && InitiatingBuilding->ExtensionMovementAllowed)
+			{
+				TArray<AActor*> OverlappingActors;
+				DraggedWorkArea->GetOverlappingActors(OverlappingActors);
+				for (AActor* OA : OverlappingActors)
+				{
+					if (OA == InitiatingBuilding)
+					{
+						if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
+						DraggedWorkArea->Destroy();
+						UnitBase->BuildArea = nullptr;
+						UnitBase->CurrentDraggedWorkArea = nullptr;
+						CancelCurrentAbility(UnitBase);
+						SendWorkerToBase(UnitBase);
+						return true;
+					}
+				}
+			}
+
+			// Pfad-Blockierungs-Check
+			if (InitiatingBuilding && InitiatingBuilding->ExtensionMovementAllowed)
+			{
+				ABuildingBase* TargetBuilding = nullptr;
+				TArray<AActor*> OverlappingActors;
+				DraggedWorkArea->GetOverlappingActors(OverlappingActors);
+				for (AActor* OA : OverlappingActors)
+				{
+					ABuildingBase* BB = GetBuildingBaseFromActor(OA);
+					if (BB && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
+					{
+						TargetBuilding = BB;
+						break;
+					}
+				}
+
+				FVector DummyStart, DummyEnd;
+				if (IsPathBlockedByBuilding(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, TargetBuilding))
+				{
+					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
+					DraggedWorkArea->Destroy();
+					UnitBase->BuildArea = nullptr;
+					UnitBase->CurrentDraggedWorkArea = nullptr;
+					CancelCurrentAbility(UnitBase);
+					SendWorkerToBase(UnitBase);
+					return true;
+				}
+			}
+
+			if (TryConnectEnergyWall(UnitBase, DraggedWorkArea))
+			{
+				return true;
+			}
+
 			// Height difference check for extensions
 			FHitResult UnitHit, WAHit;
 			FVector TraceOffset(0, 0, 2000.f);
@@ -3596,6 +3736,155 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 	return false;
 }
 
+bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkArea* DraggedWorkArea)
+{
+	if (!UnitBase || !DraggedWorkArea || !DraggedWorkArea->IsExtensionArea)
+	{
+		return false;
+	}
+
+	ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+	if (!InitiatingBuilding || !InitiatingBuilding->ExtensionMovementAllowed)
+	{
+		return false;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	DraggedWorkArea->GetOverlappingActors(OverlappingActors);
+
+	for (AActor* OverlappedActor : OverlappingActors)
+	{
+		if (!OverlappedActor || OverlappedActor == InitiatingBuilding) continue;
+
+		ABuildingBase* OverlappedBuilding = GetBuildingBaseFromActor(OverlappedActor);
+
+		if (OverlappedBuilding)
+		{
+			if (IsCompatibleForEnergyWall(InitiatingBuilding, OverlappedBuilding))
+			{
+				if (HasAuthority())
+				{
+					// Spawn the wall connecting the buildings. 
+					// Wall Origin will be the InitiatingBuilding.
+					OverlappedBuilding->SpawnEnergyWall(InitiatingBuilding->EnergyWallClass, InitiatingBuilding);
+				}
+
+				// Cancel the WorkArea placement as we converted it to a wall connection
+				DraggedWorkArea->Destroy();
+				UnitBase->BuildArea = nullptr;
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+				CancelCurrentAbility(UnitBase);
+				SendWorkerToBase(UnitBase);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator, ABuildingBase* Target) const
+{
+	if (!Initiator || !Target || Initiator == Target)
+	{
+		return false;
+	}
+
+	// Check if they already have a connection
+	for (AEnergyWall* Wall : Initiator->EnergyWallArray)
+	{
+		if (Wall && (Wall->GetBuildingA() == Target || Wall->GetBuildingB() == Target))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] Connection already exists between %s and %s"), *Initiator->GetName(), *Target->GetName());
+			return false;
+		}
+	}
+
+	bool bSameClass = Initiator->EnergyWallClass && Initiator->EnergyWallClass == Target->EnergyWallClass;
+	bool bInitiatorHasSpace = Initiator->EnergyWallArray.Num() < 2;
+	bool bTargetHasSpace = Target->EnergyWallArray.Num() < 2;
+	float ZDiff = FMath::Abs(Target->GetActorLocation().Z - Initiator->GetActorLocation().Z);
+	bool bZValid = ZDiff < 10.f;
+
+	if (!bSameClass || !bInitiatorHasSpace || !bTargetHasSpace || !bZValid)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] Incompatible: %s -> %s | SameClass: %d, InitSpace: %d (%d/2), TargetSpace: %d (%d/2), ZValid: %d (Diff: %f)"),
+			*Initiator->GetName(), *Target->GetName(), bSameClass, bInitiatorHasSpace, Initiator->EnergyWallArray.Num(), bTargetHasSpace, Target->EnergyWallArray.Num(), bZValid, ZDiff);
+		return false;
+	}
+
+	return true;
+}
+
+bool AExtendedControllerBase::IsPathBlockedByBuilding(ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, AActor* IgnoreBuilding)
+{
+	if (!Unit || !TargetActor) return false;
+
+	float TraceZOffset = 0.f;
+	if (UCapsuleComponent* Capsule = Unit->FindComponentByClass<UCapsuleComponent>())
+	{
+		TraceZOffset = Capsule->GetScaledCapsuleHalfHeight() / 2.f;
+	}
+
+	OutStart = Unit->GetActorLocation() - FVector(0, 0, TraceZOffset);
+	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, TraceZOffset);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ExtensionPathTrace), true);
+	Params.AddIgnoredActor(Unit);
+	Params.AddIgnoredActor(TargetActor);
+	if (IgnoreBuilding)
+	{
+		Params.AddIgnoredActor(IgnoreBuilding);
+	}
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, OutStart, OutEnd, ECC_Pawn, Params))
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (HitActor && GetBuildingBaseFromActor(HitActor))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+ABuildingBase* AExtendedControllerBase::GetBuildingBaseFromActor(AActor* Actor) const
+{
+	if (!Actor) return nullptr;
+	
+	AActor* Current = Actor;
+	// Limit iterations to prevent infinite loops in weird hierarchies
+	for (int32 i = 0; i < 5; ++i)
+	{
+		if (ABuildingBase* Building = Cast<ABuildingBase>(Current))
+		{
+			return Building;
+		}
+
+		AActor* Next = Current->GetOwner();
+		
+		// If owner is same as current or null, try attach parent
+		if (!Next || Next == Current)
+		{
+			Next = Current->GetAttachParentActor();
+		}
+
+		// If still nothing, try to find owner of parent component (for ChildActorComponents)
+		if (!Next || Next == Current)
+		{
+			if (UChildActorComponent* CAC = Current->GetParentComponent())
+			{
+				Next = CAC->GetOwner();
+			}
+		}
+
+		if (!Next || Next == Current) break;
+		Current = Next;
+	}
+	return nullptr;
+}
+
 void AExtendedControllerBase::Server_DropWorkAreaForUnit_Implementation(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, FTransform ClientWorkAreaTransform)
 {
 	if (!UnitBase || !UnitBase->CurrentDraggedWorkArea || UnitBase->CurrentDraggedWorkArea->AreaDropped) return;
@@ -3654,15 +3943,16 @@ void AExtendedControllerBase::DragUnitBase(AUnitBase* UnitToDrag)
 void AExtendedControllerBase::DropUnitBase()
 {
 	AUnitSpawnPlatform* CurrentSpawnPlatform = Cast<AUnitSpawnPlatform>(CurrentDraggedGround);
-	if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !CurrentSpawnPlatform && SpawnPlatform)
+	if (CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && !CurrentSpawnPlatform && SpawnPlatform)
 	{
 		CurrentDraggedUnitBase->IsOnPlattform = false;
 		CurrentDraggedUnitBase->IsDragged = false;
 		CurrentDraggedUnitBase->SetUnitState(UnitData::PatrolRandom);
 		CurrentDraggedUnitBase = nullptr;
-	}else if(CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && SpawnPlatform)
+	}
+	else if (CurrentDraggedUnitBase && CurrentDraggedUnitBase->IsOnPlattform && SpawnPlatform)
 	{
-		SpawnPlatform->SetEnergy(SpawnPlatform->Energy+CurrentDraggedUnitBase->EnergyCost);
+		SpawnPlatform->SetEnergy(SpawnPlatform->Energy + CurrentDraggedUnitBase->EnergyCost);
 		CurrentDraggedUnitBase->IsDragged = false;
 		CurrentDraggedUnitBase->SetUnitState(UnitData::Idle);
 		CurrentDraggedUnitBase = nullptr;

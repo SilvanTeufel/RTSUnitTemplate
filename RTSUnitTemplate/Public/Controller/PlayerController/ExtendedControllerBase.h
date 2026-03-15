@@ -116,6 +116,17 @@ public:
 	// New variant that operates on a specific unit (no UFUNCTION to avoid UHT overloading conflicts)
 	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
 
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool TryConnectEnergyWall(class AUnitBase* UnitBase, class AWorkArea* DraggedWorkArea);
+
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool IsCompatibleForEnergyWall(class ABuildingBase* Initiator, class ABuildingBase* Target) const;
+
+	// Prüft, ob ein Gebäude den Pfad zwischen Unit und Target blockiert und gibt Start/End für die Visualisierung aus
+	bool IsPathBlockedByBuilding(class ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, AActor* IgnoreBuilding = nullptr);
+
+	class ABuildingBase* GetBuildingBaseFromActor(AActor* Actor) const;
+
 	UFUNCTION(Server, Reliable)
 	void Server_DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, FTransform ClientWorkAreaTransform);
 	
