@@ -87,6 +87,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetCollisionObjectType(TemplateISM->GetCollisionObjectType());
 	if (ISM->GetCollisionObjectType() == ECC_WorldStatic) { ISM->SetCollisionObjectType(ECC_WorldDynamic); }
 	ISM->SetReceivesDecals(TemplateISM->bReceivesDecals);
+	ISM->SetGenerateOverlapEvents(TemplateISM->GetGenerateOverlapEvents());
 	
 	// Create a new instance with zero scale to avoid flicker
 	int32 NewIndex = ISM->AddInstance(FTransform::Identity);
@@ -216,7 +217,6 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     NewISM->SetMobility(EComponentMobility::Movable);
     NewISM->SetCastShadow(bCastShadow);
     // Collision will be set in AssignUnitVisual from Template
-    NewISM->SetGenerateOverlapEvents(false);
     NewISM->SetCanEverAffectNavigation(false);
 
     NewISM->AttachToComponent(ManagerActor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);

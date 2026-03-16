@@ -13,6 +13,7 @@
 #include "Actors/WorkArea.h"
 #include "Actors/Pickup.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 // Sets default values
 AMinimapActor::AMinimapActor()
@@ -29,6 +30,15 @@ AMinimapActor::AMinimapActor()
 
     SetNetUpdateFrequency(10);
     SetMinNetUpdateFrequency(10);
+
+    TagConfigs.Add({FName(TEXT("ColorA")), FLinearColor(0.8f, 0.2f, 0.2f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorB")), FLinearColor(0.2f, 0.6f, 0.8f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorC")), FLinearColor(0.8f, 0.7f, 0.1f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorD")), FLinearColor(0.6f, 0.2f, 0.8f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorE")), FLinearColor(1.0f, 0.5f, 0.0f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorF")), FLinearColor(0.0f, 1.0f, 1.0f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorG")), FLinearColor(0.5f, 1.0f, 0.0f), 1.0f});
+    TagConfigs.Add({FName(TEXT("ColorH")), FLinearColor(1.0f, 0.0f, 1.0f), 1.0f});
 }
 
 void AMinimapActor::BeginPlay()
@@ -61,29 +71,17 @@ bool AMinimapActor::TryGetMaterialColor(const FHitResult& Hit, FLinearColor& Out
     UPrimitiveComponent* HitComp = Hit.GetComponent();
     if (!HitComp) return false;
 
-    // --- Strategy 0 (highest priority): Check actor tags for ColorA-D ---
+    // --- Strategy 0 (highest priority): Check actor tags for dynamic TagConfigs ---
     AActor* TagActor = Hit.GetActor();
     if (TagActor)
     {
-        if (TagActor->Tags.Contains(FName(TEXT("ColorA"))))
+        for (const FMinimapTagConfig& Config : TagConfigs)
         {
-            OutColor = TagColorA;
-            return true;
-        }
-        if (TagActor->Tags.Contains(FName(TEXT("ColorB"))))
-        {
-            OutColor = TagColorB;
-            return true;
-        }
-        if (TagActor->Tags.Contains(FName(TEXT("ColorC"))))
-        {
-            OutColor = TagColorC;
-            return true;
-        }
-        if (TagActor->Tags.Contains(FName(TEXT("ColorD"))))
-        {
-            OutColor = TagColorD;
-            return true;
+            if (TagActor->Tags.Contains(Config.Tag))
+            {
+                OutColor = Config.Color;
+                return true;
+            }
         }
     }
 
@@ -488,6 +486,34 @@ void AMinimapActor::CaptureMapTopography()
         }
     }
 
+    // --- Pass 2.6: Tagged Actor Markers (Scaling) ---
+    for (const FMinimapTagConfig& Config : TagConfigs)
+    {
+        if (Config.Scale <= 1.0f) continue; // Only draw markers for scaled-up actors, others use line-trace coloring
+
+        TArray<AActor*> TaggedActors;
+        UGameplayStatics::GetAllActorsWithTag(World, Config.Tag, TaggedActors);
+
+        for (AActor* Actor : TaggedActors)
+        {
+            if (!Actor) continue;
+            
+            const FVector Loc = Actor->GetActorLocation();
+            const float U_Tag = (Loc.X - WorldMinX) / WorldExtentX;
+            const float V_Tag = (Loc.Y - WorldMinY) / WorldExtentY;
+
+            if (U_Tag < 0.f || U_Tag > 1.f || V_Tag < 0.f || V_Tag > 1.f) continue;
+
+            const int32 CenterX = FMath::Clamp(FMath::RoundToInt(U_Tag * (TexSize - 1)), 0, TexSize - 1);
+            const int32 CenterY = FMath::Clamp(FMath::RoundToInt(V_Tag * (TexSize - 1)), 0, TexSize - 1);
+            
+            // Base marker radius is 5.f
+            const int32 ScaledRadius = FMath::RoundToInt(5.f * Config.Scale);
+
+            DrawFilledCircle(Pixels, TexSize, CenterX, CenterY, ScaledRadius, Config.Color.ToFColor(true));
+        }
+    }
+
     // --- Pass 3: In UTexture2D schreiben ---
     if (!TopographyTexture)
     {
@@ -515,7 +541,7 @@ void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     DOREPLIFETIME(AMinimapActor, TeamId);
     DOREPLIFETIME(AMinimapActor, MinimapMinBounds);
     DOREPLIFETIME(AMinimapActor, MinimapMaxBounds);
-    
+    DOREPLIFETIME(AMinimapActor, TagConfigs);
 }
 
 void AMinimapActor::InitMinimapTexture()

@@ -1926,12 +1926,40 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 	Unit->ShowWorkAreaIfNoFog_Implementation(DraggedWorkArea);
 
+	// 1. Stable Cursor Trace
+	FVector PlacementTraceStart, TraceDir;
+	if (!DeprojectMousePositionToWorld(PlacementTraceStart, TraceDir)) return;
+
+	FVector PlacementTraceEnd = PlacementTraceStart + TraceDir * 100000.f;
+	FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(ExtensionPlacementTrace), true);
+	TraceParams.AddIgnoredActor(Unit);
+	TraceParams.AddIgnoredActor(DraggedWorkArea); // Prevent ghost from blocking its own trace
+
 	FHitResult Hit;
-	if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit)) return;
+	bool bHitOccurred = GetWorld()->LineTraceSingleByChannel(Hit, PlacementTraceStart, PlacementTraceEnd, ECC_Visibility, TraceParams);
+
+	// Calculate a stable ground-plane projection at the initiator building's base level.
+	// This prevents "jumps" in world position when the trace hits building tops vs. ground.
+	FVector UnitCenter, UnitExtent;
+	float PlaneZ = Unit->GetActorLocation().Z;
+	if (GetActorBoundsForSnap(Unit, UnitCenter, UnitExtent))
+	{
+		PlaneZ = UnitCenter.Z - UnitExtent.Z;
+	}
+
+	FVector StableMouseLocation = bHitOccurred ? Hit.Location : PlacementTraceEnd;
+	if (!FMath::IsNearlyZero(TraceDir.Z))
+	{
+		float t = (PlaneZ - PlacementTraceStart.Z) / TraceDir.Z;
+		StableMouseLocation = PlacementTraceStart + TraceDir * t;
+	}
+	
+	// Fallback for distance checks if no hit occurred
+	if (!bHitOccurred) { Hit.Location = StableMouseLocation; }
 
 	FVector TargetLoc;
 	FRotator TargetRot;
-	GetSnappedExtensionTransform(Unit, Hit.Location, TargetLoc, TargetRot);
+	GetSnappedExtensionTransform(Unit, StableMouseLocation, TargetLoc, TargetRot);
 
 	// Rotation anwenden
 	DraggedWorkArea->SetActorRotation(TargetRot);
@@ -1942,17 +1970,54 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 	if (Unit->ExtensionMovementAllowed)
 	{
-		// 1. Direkter Treffer-Check unter dem Cursor
-		ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
-		if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget))
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		const float ReleaseDist = SnapReleaseDistance; // controller setting
+		const float AcquireDist = FMath::Max(50.f, ReleaseDist * AcquireHysteresisFactor);
+
+		// 1) Prefer to maintain the current snap target with hysteresis
+		ABuildingBase* CurrentBB = Cast<ABuildingBase>(CurrentSnapActor);
+		if (CurrentBB && (!IsValid(CurrentBB) || !IsCompatibleForEnergyWall(Unit, CurrentBB)))
 		{
-			TargetBuilding = DirectTarget;
-			bFoundCompatible = true;
+			CurrentSnapActor = nullptr;
+			CurrentBB = nullptr;
+			LastBeyondReleaseTime = -1.f;
 		}
 
-		// 2. Sticky Snapping (Bestehenden Snap halten, solange Maus nah genug)
+		if (CurrentBB)
+		{
+			const float DistToCurrent = FVector::Dist2D(StableMouseLocation, CurrentBB->GetActorLocation());
+			if (DistToCurrent <= ReleaseDist)
+			{
+				TargetBuilding = CurrentBB;
+				bFoundCompatible = true;
+				LastBeyondReleaseTime = -1.f; // we’re back inside the release radius
+			}
+			else
+			{
+				// Start/advance the unsnap grace timer; only unsnap if we’ve stayed beyond the radius long enough
+				if (LastBeyondReleaseTime < 0.f) { LastBeyondReleaseTime = Now; }
+				else if ((Now - LastBeyondReleaseTime) >= UnsnapGraceSeconds)
+				{
+					CurrentSnapActor = nullptr; // actually release
+					LastBeyondReleaseTime = -1.f;
+				}
+			}
+		}
+
+		// 2) If we don’t keep the current, try to acquire the best nearby compatible building
 		if (!bFoundCompatible)
 		{
+			ABuildingBase* Best = nullptr; float BestD = TNumericLimits<float>::Max();
+
+			// a) Direct hit under cursor
+			ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
+			if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget))
+			{
+				const float D = FVector::Dist2D(StableMouseLocation, DirectTarget->GetActorLocation());
+				Best = DirectTarget; BestD = D;
+			}
+
+			// b) Overlaps as secondary source
 			TArray<AActor*> CurrentOverlaps;
 			DraggedWorkArea->GetOverlappingActors(CurrentOverlaps);
 			for (AActor* OA : CurrentOverlaps)
@@ -1960,14 +2025,21 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
 				if (BB && IsCompatibleForEnergyWall(Unit, BB))
 				{
-					float MouseDist = FVector::Dist(Hit.Location, BB->GetActorLocation());
-					if (MouseDist < 500.f)
+					const float D = FVector::Dist2D(StableMouseLocation, BB->GetActorLocation());
+					if (D < BestD)
 					{
-						TargetBuilding = BB;
-						bFoundCompatible = true;
-						break;
+						Best = BB; BestD = D;
 					}
 				}
+			}
+
+			// c) Acquire only within tighter radius and respect snap cooldown for switching
+			if (Best && BestD <= AcquireDist && Now >= NextAllowedSnapTime)
+			{
+				TargetBuilding = Best;
+				bFoundCompatible = true;
+				CurrentSnapActor = Best;
+				NextAllowedSnapTime = Now + SnapCooldownSeconds;
 			}
 		}
 	}
@@ -1982,6 +2054,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			FCollisionQueryParams Params(SCENE_QUERY_STAT(MoveExtensionAreaGround), true);
 			Params.AddIgnoredActor(Unit);
 			Params.AddIgnoredActor(DraggedWorkArea);
+			
 			
 			FHitResult GroundHit;
 			const int32 MaxTries = 10;
@@ -2077,7 +2150,69 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	// 5. Finalisierung: Bei Snapping exakt die Gebäudeposition übernehmen
 	if (bFoundCompatible && TargetBuilding)
 	{
-		TargetLoc = TargetBuilding->GetActorLocation();
+		FVector BuildingLoc = TargetBuilding->GetActorLocation();
+		TargetLoc.X = BuildingLoc.X;
+		TargetLoc.Y = BuildingLoc.Y;
+
+		bool bGroundSet = false;
+
+		// Use a LineTrace to find the ground/floor at the snapped building's position
+		if (Unit->ExtensionGroundTrace)
+		{
+			const FVector TraceStart = BuildingLoc + FVector(0.f, 0.f, 1000.f);
+			const FVector TraceEnd   = BuildingLoc - FVector(0.f, 0.f, 2000.f);
+			FHitResult GroundHit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(SnapGroundTrace), true);
+			Params.AddIgnoredActor(Unit);
+			Params.AddIgnoredActor(DraggedWorkArea);
+
+			// Iteratively ignore buildings and work areas to hit the actual ground/static floor
+			for (int32 Try = 0; Try < 5; ++Try)
+			{
+				// Try WorldStatic first (for floors/platforms), then Visibility (for Landscapes)
+				if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_WorldStatic, Params) &&
+					!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+				{
+					break;
+				}
+
+				AActor* HitActor = GroundHit.GetActor();
+				if (HitActor && (HitActor->IsA(AWorkArea::StaticClass()) || GetBuildingBaseFromActor(HitActor)))
+				{
+					Params.AddIgnoredActor(HitActor);
+					continue;
+				}
+
+				TargetLoc.Z = GroundHit.Location.Z;
+				bGroundSet = true;
+				break;
+			}
+		}
+
+		if (!bGroundSet)
+		{
+			// Fallback: Adjust Z to the bottom of the target building's capsule (using helper)
+			FVector TB_Center, TB_Extent;
+			if (GetActorBoundsForSnap(TargetBuilding, TB_Center, TB_Extent))
+			{
+				TargetLoc.Z = TB_Center.Z - TB_Extent.Z;
+			}
+			else
+			{
+				// If bounds fail, fall back to building center (pivot)
+				TargetLoc.Z = BuildingLoc.Z;
+			}
+		}
+
+		// Apply Z-Correction for WorkArea mesh bottom alignment
+		if (UStaticMeshComponent* MeshComp = DraggedWorkArea->FindComponentByClass<UStaticMeshComponent>())
+		{
+			const FBoxSphereBounds Bounds = MeshComp->CalcBounds(MeshComp->GetComponentTransform());
+			const float BottomZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+			const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
+			const float Clearance = 2.f; // Match the clearance used in non-snapped logic
+			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
+		}
 	}
 
 	// 6. Finale Bewegung
@@ -2094,11 +2229,21 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		DraggedWorkArea->SetActorLocation(FMath::VInterpTo(CurrentLoc, TargetLoc, DeltaSeconds, InterpSpeed));
 	}
 
+	if (bFoundCompatible && TargetBuilding)
+	{
+		CurrentSnapActor = TargetBuilding;
+	}
+	else if (!CurrentSnapActor)
+	{
+		LastBeyondReleaseTime = -1.f; // reset grace if we’re fully free
+	}
+
 	if (DraggedWorkArea->InstantDrop)
 	{
 		Server_DropWorkAreaForUnit(Unit, true, DropWorkAreaFailedSound, DraggedWorkArea->GetActorTransform());
 	}
 
+	
 	// 7. Pfad-Blockierungs-Check (LineTrace)
 	if (Unit->ExtensionMovementAllowed)
 	{

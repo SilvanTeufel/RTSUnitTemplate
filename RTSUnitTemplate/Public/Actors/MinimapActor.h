@@ -7,6 +7,21 @@
 #include "Components/BoxComponent.h"
 #include "MinimapActor.generated.h"
 
+USTRUCT(BlueprintType)
+struct FMinimapTagConfig
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    FName Tag;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    FLinearColor Color = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    float Scale = 1.0f;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AMinimapActor : public AActor
 {
@@ -129,23 +144,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HeightShadingStrength = 0.5f;
 
-    // --- Tag-based Color Overrides (highest priority) ---
+    // --- Tag-based Color and Scale Overrides (highest priority) ---
 
-    /** Color for actors tagged with "ColorA". */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagColors")
-    FLinearColor TagColorA = FLinearColor(0.8f, 0.2f, 0.2f);  // Red
-
-    /** Color for actors tagged with "ColorB". */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagColors")
-    FLinearColor TagColorB = FLinearColor(0.2f, 0.6f, 0.8f);  // Blue
-
-    /** Color for actors tagged with "ColorC". */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagColors")
-    FLinearColor TagColorC = FLinearColor(0.8f, 0.7f, 0.1f);  // Yellow
-
-    /** Color for actors tagged with "ColorD". */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagColors")
-    FLinearColor TagColorD = FLinearColor(0.6f, 0.2f, 0.8f);  // Purple
+    /** Dynamic array of tag configurations for coloring and scaling actors on the minimap. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagConfigs")
+    TArray<FMinimapTagConfig> TagConfigs;
 
     // --- Topography Color Overrides by Actor Type ---
 
