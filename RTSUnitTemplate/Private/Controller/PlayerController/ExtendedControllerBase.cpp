@@ -60,7 +60,11 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 	{
 		if (UCapsuleComponent* Capsule = Bld->FindComponentByClass<UCapsuleComponent>())
 		{
-			const float R = Capsule->GetScaledCapsuleRadius();
+			float R = Capsule->GetScaledCapsuleRadius();
+			if (Bld->MassActorBindingComponent)
+			{
+				R += Bld->MassActorBindingComponent->AdditionalCapsuleRadius;
+			}
 			OutCenter = Bld->GetActorLocation();
 			// Use radius for XY half-extents; keep Z from capsule half-height
 			OutExtent.X = R;
@@ -856,7 +860,11 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         // Use the capsule as the footprint when available and take actor location as center.
         if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
         {
-            const float R = Capsule->GetScaledCapsuleRadius();
+            float R = Capsule->GetScaledCapsuleRadius();
+            if (TargetBuilding->MassActorBindingComponent)
+            {
+                R += TargetBuilding->MassActorBindingComponent->AdditionalCapsuleRadius;
+            }
             OtherExtent.X = R;
             OtherExtent.Y = R;
             OtherCenter = TargetBuilding->GetActorLocation();
@@ -872,6 +880,10 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
             if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
             {
                 CandidateRadius = Capsule->GetScaledCapsuleRadius();
+                if (TargetBuilding->MassActorBindingComponent)
+                {
+                    CandidateRadius += TargetBuilding->MassActorBindingComponent->AdditionalCapsuleRadius;
+                }
             }
         }
         TooCloseThreshold = CandidateRadius * (2.f / 3.f);
@@ -2987,7 +2999,11 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 EffectiveGap = FMath::Max(0.f, SnapGap + TargetBuilding->SnapGapAdjustment);
                 if (UCapsuleComponent* Capsule = TargetBuilding->FindComponentByClass<UCapsuleComponent>())
                 {
-                    const float R = Capsule->GetScaledCapsuleRadius();
+                    float R = Capsule->GetScaledCapsuleRadius();
+                    if (TargetBuilding->MassActorBindingComponent)
+                    {
+                        R += TargetBuilding->MassActorBindingComponent->AdditionalCapsuleRadius;
+                    }
                     OtherExt.X = R; OtherExt.Y = R;
                     OtherCenter = TargetBuilding->GetActorLocation();
                 }
