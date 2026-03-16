@@ -61,6 +61,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     float DotMultiplier = 1.f;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
+    float MapSwitcherDotMultiplier = 4.0f;
+
     /** The delay before capturing the map topography. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     float DelayTime = 2.f;

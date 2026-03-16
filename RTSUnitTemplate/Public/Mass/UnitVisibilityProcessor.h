@@ -26,7 +26,7 @@ protected:
 	void HandleVisibilitySignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 private:
-	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	//void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 
 	UPROPERTY(Transient)
 	UWorld* World;

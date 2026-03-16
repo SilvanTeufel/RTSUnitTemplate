@@ -212,7 +212,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			{
 				Unit->IsMyTeam = Vis.bIsMyTeam;
 				Unit->IsOnViewport = Vis.bIsOnViewport;
-				Unit->IsVisibleEnemy = bIsVisibleByFog;
+				// Unit->IsVisibleEnemy = bIsVisibleByFog;
 				
 				if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
 				{

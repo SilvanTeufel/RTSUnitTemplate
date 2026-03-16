@@ -31,7 +31,7 @@ protected:
 private:
 	// Split execute paths for server and client
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
-	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	//void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	
 	UPROPERTY(Transient)
 	UWorld* World;

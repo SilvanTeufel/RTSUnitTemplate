@@ -623,8 +623,9 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
                 const int32 CenterX = FMath::RoundToInt(U * MinimapTexSize);
                 const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
 
-                const float NormalizedRadius = 45.f / WorldExtentX;
-                const int32 PixelRadius = FMath::Max(2, FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier));
+                const float ActorRadius = SwitchActor->GetMinimapRadius();
+                const float NormalizedRadius = ActorRadius / WorldExtentX;
+                const int32 PixelRadius = FMath::Max(2, FMath::RoundToInt(NormalizedRadius * MinimapTexSize * MapSwitcherDotMultiplier));
 
                 DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, MapSwitcherColor);
             }

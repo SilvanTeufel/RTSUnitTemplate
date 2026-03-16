@@ -29,6 +29,8 @@ public:
     UFUNCTION()
     void CloseWidget();
 
+    float GetMinimapRadius() const { return CachedMinimapRadius; }
+
 protected:
     virtual void BeginPlay() override;
 
@@ -37,6 +39,9 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
     UWidgetComponent* MarkerWidgetComponent;
+
+    UPROPERTY()
+    float CachedMinimapRadius = 45.f;
 
     UPROPERTY(EditAnywhere, Category = "UI")
     TSubclassOf<UMapSwitchWidget> MapSwitchWidgetClass;

@@ -160,7 +160,7 @@ void UUnitSightProcessor::ExecuteServer(
                     const float Age = World->GetTimeSeconds() - State.BirthTime;
                     const float SinceDeath = World->GetTimeSeconds() - State.DeathTime;
 
-                    const bool bIsTooYoung = (Age < 1.f && Age >= 0.f);
+                    const bool bIsTooYoung = false; //(Age < 1.f && Age >= 0.f);
                     const bool bIsDeadTooLong = (SinceDeath > 4.f && SinceDeath >= 0.f);
 
                     if (bIsDeadTooLong || !State.IsInitialized || (bIsTooYoung && !bIsDead))

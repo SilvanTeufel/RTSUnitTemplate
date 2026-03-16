@@ -1,5 +1,6 @@
 ﻿#include "Actors/MapSwitchActor.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "Widgets/MapMarkerWidget.h"
@@ -56,6 +57,22 @@ FName AMapSwitchActor::GetDestinationSwitchTagToEnable() const
 void AMapSwitchActor::BeginPlay()
 {
     Super::BeginPlay();
+
+    // 1. Initialer Wert aus der Kapsel (Default)
+    CachedMinimapRadius = OverlapCapsule ? OverlapCapsule->GetScaledCapsuleRadius() : 45.f;
+
+    // 2. Suche nach einem StaticMesh (bevorzugt, falls im Blueprint zugewiesen)
+    if (const UStaticMeshComponent* MeshComp = FindComponentByClass<UStaticMeshComponent>())
+    {
+        if (MeshComp->GetStaticMesh())
+        {
+            // Nutzt den Kugel-Radius der Mesh-Bounds als visuelle Repräsentation
+            CachedMinimapRadius = MeshComp->Bounds.SphereRadius;
+        }
+    }
+
+    // Sicherheits-Fallback
+    if (CachedMinimapRadius <= 0.f) CachedMinimapRadius = 45.f;
     
     OverlapCapsule->OnComponentBeginOverlap.AddDynamic(this, &AMapSwitchActor::OnOverlapBegin);
     OverlapCapsule->OnComponentEndOverlap.AddDynamic(this, &AMapSwitchActor::OnOverlapEnd);
