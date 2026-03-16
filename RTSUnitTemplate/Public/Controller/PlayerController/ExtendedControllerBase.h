@@ -238,6 +238,10 @@ public:
 	// Distance threshold between mouse and snapped actor to release the snap
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapReleaseDistance = 400.f;
+
+	/** Maximum Z difference (base-to-base) allowed for two buildings to connect with an energy wall. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float EnergyWallSnapZTolerance = 50.f;
 	
 	// The actor we are currently snapped to (if any)
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)

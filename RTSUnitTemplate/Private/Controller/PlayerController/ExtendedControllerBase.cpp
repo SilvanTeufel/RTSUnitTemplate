@@ -2232,10 +2232,15 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	if (bFoundCompatible && TargetBuilding)
 	{
 		CurrentSnapActor = TargetBuilding;
+		WorkAreaIsSnapped = true;
 	}
-	else if (!CurrentSnapActor)
+	else
 	{
-		LastBeyondReleaseTime = -1.f; // reset grace if we’re fully free
+		WorkAreaIsSnapped = false;
+		if (!CurrentSnapActor)
+		{
+			LastBeyondReleaseTime = -1.f; // reset grace if we’re fully free
+		}
 	}
 
 	if (DraggedWorkArea->InstantDrop)
@@ -3966,8 +3971,24 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	bool bSameClass = Initiator->EnergyWallClass && Initiator->EnergyWallClass == Target->EnergyWallClass;
 	bool bInitiatorHasSpace = Initiator->EnergyWallArray.Num() < 2;
 	bool bTargetHasSpace = Target->EnergyWallArray.Num() < 2;
-	float ZDiff = FMath::Abs(Target->GetActorLocation().Z - Initiator->GetActorLocation().Z);
-	bool bZValid = ZDiff < 10.f;
+
+	float ZDiff = 0.f;
+	FVector InitC, InitE, TargetC, TargetE;
+
+	// Use the helper to find the physical bottom of both buildings
+	if (GetActorBoundsForSnap(Initiator, InitC, InitE) && GetActorBoundsForSnap(Target, TargetC, TargetE))
+	{
+		float InitBottomZ = InitC.Z - InitE.Z;
+		float TargetBottomZ = TargetC.Z - TargetE.Z;
+		ZDiff = FMath::Abs(InitBottomZ - TargetBottomZ);
+	}
+	else
+	{
+		// Fallback if bounds fail
+		ZDiff = FMath::Abs(Target->GetActorLocation().Z - Initiator->GetActorLocation().Z);
+	}
+
+	bool bZValid = ZDiff < EnergyWallSnapZTolerance;
 
 	if (!bSameClass || !bInitiatorHasSpace || !bTargetHasSpace || !bZValid)
 	{
