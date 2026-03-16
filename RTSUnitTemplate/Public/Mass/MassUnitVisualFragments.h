@@ -88,6 +88,13 @@ struct RTSUNITTEMPLATE_API FMassUnitVisualInstance
 
     UPROPERTY()
     bool bWasVisible = false;
+
+    // Relativer Transform von ProjectileSpawn zu dieser TemplateISM
+    UPROPERTY()
+    FTransform MuzzleOffset = FTransform::Identity;
+
+    UPROPERTY()
+    bool bHasMuzzle = false;
 };
 
 USTRUCT()

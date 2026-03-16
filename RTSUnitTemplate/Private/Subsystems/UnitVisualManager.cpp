@@ -51,6 +51,19 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 			Existing.TemplateISM = TemplateISM;
 			Existing.BaseOffset = TemplateISM->GetRelativeTransform();
 			Existing.CurrentRelativeTransform = Existing.BaseOffset;
+
+			// Suche nach ProjectileSpawn Child unter dem TemplateISM
+			const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
+			TArray<USceneComponent*> Children;
+			TemplateISM->GetChildrenComponents(true, Children);
+			Existing.bHasMuzzle = false;
+			for (USceneComponent* Child : Children) {
+				if (Child->ComponentHasTag(ProjectileSpawnTag)) {
+					Existing.MuzzleOffset = Child->GetRelativeTransform();
+					Existing.bHasMuzzle = true;
+					break;
+				}
+			}
 			
 			// Re-map the unit in the manager
 			TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(Existing.TargetISM.Get());
@@ -93,6 +106,18 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	NewInstance.BaseOffset = TemplateISM->GetRelativeTransform();
 	NewInstance.CurrentRelativeTransform = NewInstance.BaseOffset;
 	NewInstance.bWasVisible = false;
+
+	// Suche nach ProjectileSpawn Child unter dem TemplateISM
+	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
+	TArray<USceneComponent*> Children;
+	TemplateISM->GetChildrenComponents(true, Children);
+	for (USceneComponent* Child : Children) {
+		if (Child->ComponentHasTag(ProjectileSpawnTag)) {
+			NewInstance.MuzzleOffset = Child->GetRelativeTransform();
+			NewInstance.bHasMuzzle = true;
+			break;
+		}
+	}
 
 	VisualFrag->VisualInstances.Add(NewInstance);
 }

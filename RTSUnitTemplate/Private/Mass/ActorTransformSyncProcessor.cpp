@@ -370,8 +370,8 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
 
             FQuat DesiredQuat = LookAtDir.ToOrientationQuat();
 
-            if (!UnitBase->bUseSkeletalMovement)
-                DesiredQuat *= UnitBase->MeshRotationOffset;
+            //if (!UnitBase->bUseSkeletalMovement)
+                //DesiredQuat *= UnitBase->MeshRotationOffset;
 
             TargetYaw = DesiredQuat.Rotator().Yaw;
         }
@@ -423,8 +423,8 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     
     FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-    if (!UnitBase->bUseSkeletalMovement)
-        DesiredQuat *= UnitBase->MeshRotationOffset;
+    //if (!UnitBase->bUseSkeletalMovement)
+        //DesiredQuat *= UnitBase->MeshRotationOffset;
     
     float TargetYaw = DesiredQuat.Rotator().Yaw;
     FRotator CurrentRot = InOutMassTransform.GetRotation().Rotator();
@@ -455,9 +455,9 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
 
     FQuat DesiredQuat = Dir.ToOrientationQuat();
 
-    if (!UnitBase->bUseSkeletalMovement)
+    //if (!UnitBase->bUseSkeletalMovement)
     {
-        DesiredQuat *= UnitBase->MeshRotationOffset;
+        //DesiredQuat *= UnitBase->MeshRotationOffset;
     }
 
     float TargetYaw = DesiredQuat.Rotator().Yaw;
@@ -567,7 +567,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
             
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
-            const FQuat CurrentRotation = MassTransform.GetRotation();
+            const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
             
             // Determine the actor's current location once
@@ -745,7 +745,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
 
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
-            const FQuat CurrentRotation = MassTransform.GetRotation();
+            const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
             
             // Determine the actor's current location once, as it's used by multiple functions

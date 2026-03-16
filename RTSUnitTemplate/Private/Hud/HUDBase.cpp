@@ -246,11 +246,12 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 	}
 }
 
-void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color)
+void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color, float HeightOffset)
 {
 	ExtensionPreviewLine.Start = Start;
 	ExtensionPreviewLine.End = End;
 	ExtensionPreviewLine.Color = Color;
+	ExtensionPreviewLine.HeightOffset = HeightOffset;
 	ExtensionPreviewLine.bIsActive = true;
 }
 
@@ -260,7 +261,8 @@ void AHUDBase::DrawHUD()
 
 	if (ExtensionPreviewLine.bIsActive)
 	{
-		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, 50.f, 10.f, ExtensionPreviewLine.Color, 2.f, 0.f);
+		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, 0.f);
+		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, ExtensionPreviewLine.HeightOffset * 2.f);
 		ExtensionPreviewLine.bIsActive = false;
 	}
 

@@ -142,6 +142,8 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 			if (bLocationChanged || bRotationChanged)
 			{
+				CharList[i].bTransformDirty = true;
+				
 				if (UnitBase->bUseSkeletalMovement)
 				{
 					Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::None);

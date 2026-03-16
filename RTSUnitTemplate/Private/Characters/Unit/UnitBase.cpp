@@ -38,6 +38,8 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "MassSignalSubsystem.h"
 #include "Mass/Signals/MySignals.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/MassUnitVisualFragments.h"
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -725,7 +727,23 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 {
 	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
 
-	// 1. Try to find a component with the specific tag
+	// 1. Prüfen, ob wir eine Mass-Einheit sind
+	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
+	if (MassUnit) {
+		const FMassUnitVisualFragment* VisualFrag = MassUnit->GetVisualFragment();
+		if (VisualFrag) {
+			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances) {
+				if (Instance.bHasMuzzle) {
+					// VERBESSERUNG: Nutze GetMassActorTransform() statt GetActorTransform()
+					// GetMassActorTransform() liefert bei ISM-Einheiten den aktuellen PositionedTransform aus Mass.
+					FTransform VisualMuzzleTransform = Instance.MuzzleOffset * Instance.CurrentRelativeTransform * MassUnit->GetMassActorTransform();
+					return VisualMuzzleTransform.GetLocation();
+				}
+			}
+		}
+	}
+
+	// 2. Try to find a component with the specific tag
 	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
 	if (Comps.Num() > 0)
 	{
@@ -735,10 +753,14 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 		}
 	}
 
-	// 2. Fallback to default offset logic
+	// 3. Fallback to default offset logic
+	// Auch hier verwenden wir die Mass-Location und Rotation für korrekte Ergebnisse bei ISM-Einheiten
 	const FVector ShootingUnitLocation = GetMassActorLocation();
-	const FVector RotatedProjectileSpawnOffset = GetActorRotation().RotateVector(ProjectileSpawnOffset);
-	return ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset() * GetActorForwardVector() + RotatedProjectileSpawnOffset + AdditionalOffset;
+	const FRotator ShootingUnitRotation = MassUnit ? MassUnit->GetMassActorRotation() : GetActorRotation();
+	const FVector ShootingUnitForward = ShootingUnitRotation.Vector();
+	
+	const FVector RotatedProjectileSpawnOffset = ShootingUnitRotation.RotateVector(ProjectileSpawnOffset);
+	return ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset() * ShootingUnitForward + RotatedProjectileSpawnOffset + AdditionalOffset;
 }
 
 

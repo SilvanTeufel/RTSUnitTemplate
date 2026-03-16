@@ -2091,13 +2091,14 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	if (Unit->ExtensionMovementAllowed)
 	{
 		FVector TraceStart, TraceEnd;
-		bool bPathBlocked = IsPathBlockedByBuilding(Unit, DraggedWorkArea, TraceStart, TraceEnd, TargetBuilding);
+		float TraceZOffset = 0.f;
+		bool bPathBlocked = IsPathBlockedByBuilding(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
 
 		// Visualisierung im HUD via Puffer
 		if (AHUDBase* HUD = Cast<AHUDBase>(GetHUD()))
 		{
 			FColor LineColor = bPathBlocked ? FColor::Red : FColor::Green;
-			HUD->SetExtensionPreviewLine(TraceStart, TraceEnd, LineColor);
+			HUD->SetExtensionPreviewLine(TraceStart, TraceEnd, LineColor, TraceZOffset);
 		}
 
 		if (bPathBlocked)
@@ -3654,7 +3655,8 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 
 				FVector DummyStart, DummyEnd;
-				if (IsPathBlockedByBuilding(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, TargetBuilding))
+				float DummyTraceZOffset = 0.f;
+				if (IsPathBlockedByBuilding(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
 				{
 					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
 					DraggedWorkArea->Destroy();
@@ -3816,18 +3818,18 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	return true;
 }
 
-bool AExtendedControllerBase::IsPathBlockedByBuilding(ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, AActor* IgnoreBuilding)
+bool AExtendedControllerBase::IsPathBlockedByBuilding(ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, float& OutTraceZOffset, AActor* IgnoreBuilding)
 {
+	OutTraceZOffset = 0.f;
 	if (!Unit || !TargetActor) return false;
 
-	float TraceZOffset = 0.f;
 	if (UCapsuleComponent* Capsule = Unit->FindComponentByClass<UCapsuleComponent>())
 	{
-		TraceZOffset = Capsule->GetScaledCapsuleHalfHeight() / 2.f;
+		OutTraceZOffset = Capsule->GetScaledCapsuleHalfHeight() / 2.f;
 	}
 
-	OutStart = Unit->GetActorLocation() - FVector(0, 0, TraceZOffset);
-	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, TraceZOffset);
+	OutStart = Unit->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
+	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
 
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(ExtensionPathTrace), true);

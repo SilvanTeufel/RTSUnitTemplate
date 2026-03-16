@@ -165,17 +165,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawDashedLine3D(const FVector& Start, const FVector& End, float DashLen = 200.f, float GapLen = 120.f, FColor Color = FColor::Yellow, float Thickness = 2.f, float ZOffset = 30.f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtensionLineDashLen = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtensionLineGapLen = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtensionLineThickness = 2.f;
+
 	// Puffer für eine einzelne Extension-Vorschau-Linie (wird jeden Frame in DrawHUD gezeichnet und zurückgesetzt)
 	struct FExtensionPreviewLine
 	{
 		FVector Start;
 		FVector End;
 		FColor Color;
+		float HeightOffset = 0.f;
 		bool bIsActive = false;
 	} ExtensionPreviewLine;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetExtensionPreviewLine(FVector Start, FVector End, FColor Color);
+	void SetExtensionPreviewLine(FVector Start, FVector End, FColor Color, float HeightOffset = 0.f);
 
 	// Iterate selected units and draw building->waypoint dashed links while buildings are selected
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
