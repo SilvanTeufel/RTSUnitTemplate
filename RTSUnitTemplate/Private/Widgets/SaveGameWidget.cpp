@@ -10,7 +10,6 @@
 #include "System/GameSaveSubsystem.h"
 #include "Misc/DateTime.h"
 #include "Widgets/SaveSlotClickHandler.h"
-#include "Widgets/SaveSlotClickHandler.h"
 #include "Blueprint/WidgetTree.h"
 
 void USaveGameWidget::InitializeWidget(const FString& InSlotName, ASaveGameActor* InOwningActor)
@@ -80,6 +79,11 @@ void USaveGameWidget::PopulateSavesList()
                     FString MapLong;
                     int64 Unix = 0;
                     const bool bHasSummary = SaveSubsystem->LoadSaveSummary(ASlot, MapAssetName, MapLong, Unix);
+
+                    if (!bHasSummary)
+                    {
+                        continue;
+                    }
 
                     FString When = TEXT("Unknown time");
                     if (bHasSummary && Unix > 0)

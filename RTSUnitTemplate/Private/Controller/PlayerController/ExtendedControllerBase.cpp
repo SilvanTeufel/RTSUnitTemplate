@@ -3820,6 +3820,25 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					}
 				}
 
+				// Fallback: Proximity search if snapped but overlap is missing on server
+				if (!TargetBuilding && bWorkAreaIsSnapped)
+				{
+					float BestD = 250.f; // Small radius search
+					for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+					{
+						ABuildingBase* BB = *It;
+						if (BB && BB != InitiatingBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
+						{
+							float D = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), BB->GetActorLocation());
+							if (D < BestD)
+							{
+								TargetBuilding = BB;
+								BestD = D;
+							}
+						}
+					}
+				}
+
 				FVector DummyStart, DummyEnd;
 				float DummyTraceZOffset = 0.f;
 				if (IsPathBlockedByBuilding(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
@@ -3834,7 +3853,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 			}
 
-			if (TryConnectEnergyWall(UnitBase, DraggedWorkArea))
+			if (TryConnectEnergyWall(UnitBase, DraggedWorkArea, bWorkAreaIsSnapped))
 			{
 				return true;
 			}
@@ -3859,7 +3878,8 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				WAGroundZ = WAHit.Location.Z;
 			}
 
- 			if (FMath::Abs(UnitGroundZ - WAGroundZ) > 10.f)
+ 			float ZThreshold = bWorkAreaIsSnapped ? (ExtensionGroundZThreshold * 2.f) : ExtensionGroundZThreshold;
+ 			if (FMath::Abs(UnitGroundZ - WAGroundZ) > ZThreshold)
  			{
  				if (InDropWorkAreaFailedSound)
 				{
@@ -3904,7 +3924,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 	return false;
 }
 
-bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkArea* DraggedWorkArea)
+bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkArea* DraggedWorkArea, bool bIsSnapped)
 {
 	if (!UnitBase || !DraggedWorkArea || !DraggedWorkArea->IsExtensionArea)
 	{
@@ -3917,6 +3937,8 @@ bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkAre
 		return false;
 	}
 
+	ABuildingBase* TargetBuilding = nullptr;
+
 	TArray<AActor*> OverlappingActors;
 	DraggedWorkArea->GetOverlappingActors(OverlappingActors);
 
@@ -3926,26 +3948,47 @@ bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkAre
 
 		ABuildingBase* OverlappedBuilding = GetBuildingBaseFromActor(OverlappedActor);
 
-		if (OverlappedBuilding)
+		if (OverlappedBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, OverlappedBuilding))
 		{
-			if (IsCompatibleForEnergyWall(InitiatingBuilding, OverlappedBuilding))
-			{
-				if (HasAuthority())
-				{
-					// Spawn the wall connecting the buildings. 
-					// Wall Origin will be the InitiatingBuilding.
-					OverlappedBuilding->SpawnEnergyWall(InitiatingBuilding->EnergyWallClass, InitiatingBuilding);
-				}
+			TargetBuilding = OverlappedBuilding;
+			break;
+		}
+	}
 
-				// Cancel the WorkArea placement as we converted it to a wall connection
-				DraggedWorkArea->Destroy();
-				UnitBase->BuildArea = nullptr;
-				UnitBase->CurrentDraggedWorkArea = nullptr;
-				CancelCurrentAbility(UnitBase);
-				SendWorkerToBase(UnitBase);
-				return true;
+	// Fallback: Proximity search if snapped but physics overlaps are missing on server
+	if (!TargetBuilding && bIsSnapped)
+	{
+		float BestD = 250.f;
+		for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+		{
+			ABuildingBase* BB = *It;
+			if (BB && BB != InitiatingBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
+			{
+				float D = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), BB->GetActorLocation());
+				if (D < BestD)
+				{
+					TargetBuilding = BB;
+					BestD = D;
+				}
 			}
 		}
+	}
+
+	if (TargetBuilding)
+	{
+		if (HasAuthority())
+		{
+			// Spawn the wall connecting the buildings. 
+			TargetBuilding->SpawnEnergyWall(InitiatingBuilding->EnergyWallClass, InitiatingBuilding);
+		}
+
+		// Cancel the WorkArea placement as we converted it to a wall connection
+		DraggedWorkArea->Destroy();
+		UnitBase->BuildArea = nullptr;
+		UnitBase->CurrentDraggedWorkArea = nullptr;
+		CancelCurrentAbility(UnitBase);
+		SendWorkerToBase(UnitBase);
+		return true;
 	}
 
 	return false;

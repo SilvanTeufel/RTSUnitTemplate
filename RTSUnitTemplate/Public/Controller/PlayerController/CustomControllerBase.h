@@ -20,6 +20,7 @@
 class USoundBase;
 class AUnitBase;
 class AMassUnitBase;
+class AMinimapActor;
 
 #include "CustomControllerBase.generated.h"
 
@@ -225,13 +226,6 @@ public:
 
 	UFUNCTION()
 	void UpdateMinimap(const TArray<FMassEntityHandle>& Entities);
-	
-	UPROPERTY()
-	ASelectionCircleActor* SelectionCircleActor;
-	
-	/** The extent used when projecting a point to the NavMesh to validate move commands. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Navigation")
-	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
 
 	UFUNCTION()
 	void UpdateSelectionCircles();
@@ -244,10 +238,10 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_RequestCooldown(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability);
-	
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RequestSetTeam(int32 NewTeamId);
-	
+
 	UFUNCTION(Server, Reliable)
 	void Server_SetPendingTeam(int32 TeamId);
 
@@ -272,4 +266,18 @@ public:
 	void Client_InitializeMainHUD();
 
 	void Retry_InitializeMainHUD();
+
+protected:
+	UPROPERTY()
+	AMinimapActor* CachedMinimapActor = nullptr;
+
+	bool bStopMinimapSearch = false;
+	float MinimapSearchEndTime = 0.0f;
+	
+	UPROPERTY()
+	ASelectionCircleActor* SelectionCircleActor;
+	
+	/** The extent used when projecting a point to the NavMesh to validate move commands. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Navigation")
+	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
 };

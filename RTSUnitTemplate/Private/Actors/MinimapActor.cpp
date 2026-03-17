@@ -25,6 +25,7 @@ AMinimapActor::AMinimapActor()
     MapBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("MapBoundsComponent"));
     SetRootComponent(MapBoundsComponent);
     MapBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    MapBoundsComponent->SetBoxExtent(FVector(15000.f, 15000.f, 1000.f));
 
     // Kein SceneCaptureComponent mehr nötig — Topographie wird per LineTrace erzeugt.
 
@@ -39,6 +40,9 @@ AMinimapActor::AMinimapActor()
     TagConfigs.Add({FName(TEXT("ColorF")), FLinearColor(0.0f, 1.0f, 1.0f), 1.0f});
     TagConfigs.Add({FName(TEXT("ColorG")), FLinearColor(0.5f, 1.0f, 0.0f), 1.0f});
     TagConfigs.Add({FName(TEXT("ColorH")), FLinearColor(1.0f, 0.0f, 1.0f), 1.0f});
+
+    MaxHeightLimit = 1000.f;
+    MinHeightLimit = -500.f;
 }
 
 void AMinimapActor::BeginPlay()
@@ -285,12 +289,12 @@ void AMinimapActor::CaptureMapTopography()
     TArray<FColor> Pixels;
     Pixels.SetNumUninitialized(TexSize * TexSize);
 
-    const float HeightRange = MaxHeight - MinHeight;
+    const float HeightRange = MaxHeightLimit - MinHeightLimit;
     const float InvHeightRange = (HeightRange > KINDA_SMALL_NUMBER) ? (1.0f / HeightRange) : 0.0f;
 
     for (int32 i = 0; i < TexSize * TexSize; ++i)
     {
-        const float NormalizedHeight = (Heights[i] - MinHeight) * InvHeightRange;
+        const float NormalizedHeight = FMath::Clamp((Heights[i] - MinHeightLimit) * InvHeightRange, 0.0f, 1.0f);
         
         // Height-Gradient: Always interpolate between TopoLowColor and TopoHighColor
         const FLinearColor HeightGradient = FLinearColor(
@@ -579,8 +583,8 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     }
 
     // --- Pass 2: Reveal the fog for friendly units ---
-    const float WorldExtentX = MinimapMaxBounds.X - MinimapMinBounds.X;
-    const float WorldExtentY = MinimapMaxBounds.Y - MinimapMinBounds.Y;
+    const float WorldExtentX = FMath::Max(100.0f, MinimapMaxBounds.X - MinimapMinBounds.X);
+    const float WorldExtentY = FMath::Max(100.0f, MinimapMaxBounds.Y - MinimapMinBounds.Y);
     if (WorldExtentX <= 0 || WorldExtentY <= 0) return;
     const int32 Count = FMath::Min(UnitRefs.Num(), Positions.Num());
 

@@ -49,6 +49,11 @@
 void ACustomControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UWorld* World = GetWorld())
+	{
+		MinimapSearchEndTime = World->GetTimeSeconds() + 10.0f;
+	}
 }
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
@@ -2698,65 +2703,87 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
 
 void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entities)
 {
-    UWorld* World = GetWorld();
-    if (!ensure(World)) return;
+	if (bStopMinimapSearch) return;
 
-    // Bereite die Arrays vor. NEU: Ein Array für die Aktor-Referenzen.
-    TArray<AUnitBase*>             ActorRefs;
-    TArray<FVector_NetQuantize> Positions;
-    TArray<float>               UnitRadii;
-    TArray<float>               FogRadii;
-    TArray<uint8>               UnitTeamIds;
+	UWorld* World = GetWorld();
+	if (!ensure(World)) return;
 
-    if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-    {
-       FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+	// --- Suche/Cache Logik ---
+	if (!CachedMinimapActor)
+	{
+		for (TActorIterator<AMinimapActor> It(World); It; ++It)
+		{
+			CachedMinimapActor = *It;
+			break; // Nur den ersten nehmen
+		}
 
-       for (const FMassEntityHandle& E : Entities)
-       {
-          if (!EM.IsEntityValid(E)) continue;
+		if (!CachedMinimapActor)
+		{
+			if (World->GetTimeSeconds() > MinimapSearchEndTime)
+			{
+				bStopMinimapSearch = true;
+				UE_LOG(LogTemp, Warning, TEXT("Kein MinimapActor nach 10 Sek. gefunden. Suche gestoppt."));
+			}
+			return;
+		}
+	}
 
-          // Hole alle notwendigen Fragmente
-          FMassActorFragment* ActorFrag = EM.GetFragmentDataPtr<FMassActorFragment>(E);
-          const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
-          const FMassCombatStatsFragment* StateFrag = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
-          const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
-          const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+	// Bereite die Arrays vor. NEU: Ein Array für die Aktor-Referenzen.
+	TArray<AUnitBase*>             ActorRefs;
+	TArray<FVector_NetQuantize> Positions;
+	TArray<float>               UnitRadii;
+	TArray<float>               FogRadii;
+	TArray<uint8>               UnitTeamIds;
 
-          // Wir brauchen den Aktor, also ist das ActorFragment jetzt zwingend erforderlich
-          if (!ActorFrag || !TF || !StateFrag || !AI || !CharFrag) continue;
-          if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
+	if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
 
-       	AActor* UnitActor = ActorFrag->GetMutable();
-       	if (!UnitActor) continue;
-       	// --- NEUE LOGIK ZUR ERMITTLUNG DES DYNAMISCHEN RADIUS ---
-       	float CapsuleRadius = 150.f; // Wir verwenden 150.f als Fallback-Wert.
+		for (const FMassEntityHandle& E : Entities)
+		{
+			if (!EM.IsEntityValid(E)) continue;
+
+			// Hole alle notwendigen Fragmente
+			FMassActorFragment* ActorFrag = EM.GetFragmentDataPtr<FMassActorFragment>(E);
+			const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
+			const FMassCombatStatsFragment* StateFrag = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
+			const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
+			const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+
+			// Wir brauchen den Aktor, also ist das ActorFragment jetzt zwingend erforderlich
+			if (!ActorFrag || !TF || !StateFrag || !AI || !CharFrag) continue;
+			if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
+
+			AActor* UnitActor = ActorFrag->GetMutable();
+			if (!UnitActor) continue;
+			// --- NEUE LOGIK ZUR ERMITTLUNG DES DYNAMISCHEN RADIUS ---
+			float CapsuleRadius = 150.f; // Wir verwenden 150.f als Fallback-Wert.
           
-       	// Wir casten zum ACharacter, da dieser standardmäßig eine Kapsel hat.
-       	// Wenn Ihre AUnitBase von ACharacter erbt, ist dies der richtige Weg.
-       	AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
-       	if (Unit && Unit->GetCapsuleComponent())
-       	{
-       		// GetScaledCapsuleRadius() berücksichtigt die Skalierung des Aktors.
-       		CapsuleRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*3.f;
-       	}
+			// Wir casten zum ACharacter, da dieser standardmäßig eine Kapsel hat.
+			// Wenn Ihre AUnitBase von ACharacter erbt, ist dies der richtige Weg.
+			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
+			if (Unit && Unit->GetCapsuleComponent())
+			{
+				// GetScaledCapsuleRadius() berücksichtigt die Skalierung des Aktors.
+				CapsuleRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*3.f;
+			}
        	
-       	if (!Unit) continue;
-       	// --- ENDE DER NEUEN LOGIK ---
-          // --- Fülle die Arrays ---
-          ActorRefs.Add(Unit); // NEU: Füge den Aktor-Pointer hinzu
-          Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
-          UnitRadii.Add(CapsuleRadius); 
-          FogRadii.Add(StateFrag->SightRadius);
-          UnitTeamIds.Add(StateFrag->TeamId);
-       }
-    }
+			if (!Unit) continue;
+			// --- ENDE DER NEUEN LOGIK ---
+			// --- Fülle die Arrays ---
+			ActorRefs.Add(Unit); // NEU: Füge den Aktor-Pointer hinzu
+			Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
+			UnitRadii.Add(CapsuleRadius); 
+			FogRadii.Add(StateFrag->SightRadius);
+			UnitTeamIds.Add(StateFrag->TeamId);
+		}
+	}
 
-    // Rufe den Multicast auf allen MinimapActors auf und sende ALLE Arrays.
-    for (TActorIterator<AMinimapActor> It(World); It; ++It)
-    {
-       It->UpdateMinimap_Local(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
-    }
+	// Nutze den Cache
+	if (CachedMinimapActor)
+	{
+		CachedMinimapActor->UpdateMinimap_Local(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
+	}
 }
 
 

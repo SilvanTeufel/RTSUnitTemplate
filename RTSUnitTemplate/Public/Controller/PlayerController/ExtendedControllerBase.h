@@ -117,7 +117,7 @@ public:
 	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool TryConnectEnergyWall(class AUnitBase* UnitBase, class AWorkArea* DraggedWorkArea);
+	bool TryConnectEnergyWall(class AUnitBase* UnitBase, class AWorkArea* DraggedWorkArea, bool bIsSnapped = false);
 
 	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
 	bool IsCompatibleForEnergyWall(class ABuildingBase* Initiator, class ABuildingBase* Target) const;
@@ -241,7 +241,11 @@ public:
 
 	/** Maximum Z difference (base-to-base) allowed for two buildings to connect with an energy wall. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float EnergyWallSnapZTolerance = 50.f;
+	float EnergyWallSnapZTolerance = 10.f;
+
+	/** Maximum ground height difference allowed for extension placement. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float ExtensionGroundZThreshold = 10.f;
 	
 	// The actor we are currently snapped to (if any)
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)

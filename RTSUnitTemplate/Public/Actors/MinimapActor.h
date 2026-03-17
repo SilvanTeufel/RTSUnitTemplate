@@ -65,6 +65,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
     float MinimapContrast = 1.0f;
 
+    /** The maximum height for the topography color gradient. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
+    float MaxHeightLimit = 1000.f;
+
+    /** The minimum height for the topography color gradient. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography")
+    float MinHeightLimit = -500.f;
+
     /** The generated minimap texture, ready to be used in a UMG widget. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
     UTexture2D* MinimapTexture;
@@ -88,7 +96,7 @@ public:
 
     /** The color of the fog of war covering unexplored areas. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
-    FColor FogColor = FColor(54, 54, 54, 0.194);
+    FColor FogColor = FColor(26, 26, 26, 0);
 
     /** Opacity of the fog of war (0.0 = fully transparent, 1.0 = fully opaque). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors", meta = (ClampMin = "0.0", ClampMax = "1.0"))
