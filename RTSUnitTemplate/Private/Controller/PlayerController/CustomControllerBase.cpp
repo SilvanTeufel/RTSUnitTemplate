@@ -2452,7 +2452,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
     if (HitPawn.bBlockingHit && HUDBase)
     {
         AActor* HitActor = HitPawn.GetActor();
-        if (!HitActor->IsA(ALandscape::StaticClass()))
+        if (HitActor && !HitActor->IsA(ALandscape::StaticClass()))
             ClickedActor = HitActor;
         else
             ClickedActor = nullptr;

@@ -155,7 +155,7 @@ public:
     // --- Tag-based Color and Scale Overrides (highest priority) ---
 
     /** Dynamic array of tag configurations for coloring and scaling actors on the minimap. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Topography|TagConfigs")
+    UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "Minimap|Topography|TagConfigs")
     TArray<FMinimapTagConfig> TagConfigs;
 
     // --- Topography Color Overrides by Actor Type ---

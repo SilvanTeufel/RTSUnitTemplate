@@ -1940,7 +1940,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 	// Calculate a stable ground-plane projection at the initiator building's base level.
 	// This prevents "jumps" in world position when the trace hits building tops vs. ground.
-	FVector UnitCenter, UnitExtent;
+	FVector UnitCenter, UnitExtent(100.f, 100.f, 100.f);
 	float PlaneZ = Unit->GetActorLocation().Z;
 	if (GetActorBoundsForSnap(Unit, UnitCenter, UnitExtent))
 	{
@@ -1968,6 +1968,55 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	bool bFoundCompatible = false;
 	ABuildingBase* TargetBuilding = nullptr;
 
+	// Reach limit check helper
+	FVector UnitCenterBounds, UnitExtentBounds(100.f, 100.f, 100.f);
+	GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
+	const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
+	const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+	const float SnapBuffer = 200.f;
+
+	auto IsWithinSnapReach = [&](ABuildingBase* Target) -> bool
+	{
+		if (!Target || !Unit) return false;
+		const FVector UnitLoc = Unit->GetMassActorLocation();
+		const FVector TargetLocPos = Target->GetActorLocation();
+		const FVector2D Dir = FVector2D(TargetLocPos.X - UnitLoc.X, TargetLocPos.Y - UnitLoc.Y);
+		const float ActualDist = Dir.Size();
+		float MaxDist = 0.f;
+
+		if (Unit->ExtensionExtendedDominantSideSelection)
+		{
+			float AngleRad = FMath::Atan2(Dir.Y, Dir.X);
+			float AngleDeg = FMath::RadiansToDegrees(AngleRad);
+			if (AngleDeg < 0) AngleDeg += 360.f;
+			float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
+			if (SnappedAngle >= 360.f) SnappedAngle -= 360.f;
+			float SnappedRad = FMath::DegreesToRadians(SnappedAngle);
+			float CosA = FMath::Cos(SnappedRad);
+			float SinA = FMath::Sin(SnappedRad);
+			float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
+			float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
+			MaxDist = FVector2D(TargetX, TargetY).Size();
+		}
+		else if (Unit->ExtensionDominantSideSelection)
+		{
+			if (FMath::Abs(Dir.X) >= FMath::Abs(Dir.Y))
+			{
+				MaxDist = AbsX;
+			}
+			else
+			{
+				MaxDist = AbsY;
+			}
+		}
+		else
+		{
+			MaxDist = Unit->ExtensionOffset.Size();
+		}
+
+		return ActualDist <= (MaxDist + SnapBuffer);
+	};
+
 	if (Unit->ExtensionMovementAllowed)
 	{
 		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
@@ -1985,21 +2034,30 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 		if (CurrentBB)
 		{
-			const float DistToCurrent = FVector::Dist2D(StableMouseLocation, CurrentBB->GetActorLocation());
-			if (DistToCurrent <= ReleaseDist)
+			if (!IsWithinSnapReach(CurrentBB))
 			{
-				TargetBuilding = CurrentBB;
-				bFoundCompatible = true;
-				LastBeyondReleaseTime = -1.f; // we’re back inside the release radius
+				CurrentSnapActor = nullptr;
+				CurrentBB = nullptr;
+				LastBeyondReleaseTime = -1.f;
 			}
 			else
 			{
-				// Start/advance the unsnap grace timer; only unsnap if we’ve stayed beyond the radius long enough
-				if (LastBeyondReleaseTime < 0.f) { LastBeyondReleaseTime = Now; }
-				else if ((Now - LastBeyondReleaseTime) >= UnsnapGraceSeconds)
+				const float DistToCurrent = FVector::Dist2D(StableMouseLocation, CurrentBB->GetActorLocation());
+				if (DistToCurrent <= ReleaseDist)
 				{
-					CurrentSnapActor = nullptr; // actually release
-					LastBeyondReleaseTime = -1.f;
+					TargetBuilding = CurrentBB;
+					bFoundCompatible = true;
+					LastBeyondReleaseTime = -1.f; // we’re back inside the release radius
+				}
+				else
+				{
+					// Start/advance the unsnap grace timer; only unsnap if we’ve stayed beyond the radius long enough
+					if (LastBeyondReleaseTime < 0.f) { LastBeyondReleaseTime = Now; }
+					else if ((Now - LastBeyondReleaseTime) >= UnsnapGraceSeconds)
+					{
+						CurrentSnapActor = nullptr; // actually release
+						LastBeyondReleaseTime = -1.f;
+					}
 				}
 			}
 		}
@@ -2011,7 +2069,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 			// a) Direct hit under cursor
 			ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
-			if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget))
+			if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget) && IsWithinSnapReach(DirectTarget))
 			{
 				const float D = FVector::Dist2D(StableMouseLocation, DirectTarget->GetActorLocation());
 				Best = DirectTarget; BestD = D;
@@ -2023,7 +2081,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			for (AActor* OA : CurrentOverlaps)
 			{
 				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
-				if (BB && IsCompatibleForEnergyWall(Unit, BB))
+				if (BB && IsCompatibleForEnergyWall(Unit, BB) && IsWithinSnapReach(BB))
 				{
 					const float D = FVector::Dist2D(StableMouseLocation, BB->GetActorLocation());
 					if (D < BestD)
@@ -2080,8 +2138,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		}
 		else
 		{
-			FVector UnitCenterBounds, UnitExtentBounds;
-			GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
 			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
 		}
 
@@ -2111,7 +2167,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			{
 				if (!OA || OA == Unit) continue;
 				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
-				if (BB && IsCompatibleForEnergyWall(Unit, BB))
+				if (BB && IsCompatibleForEnergyWall(Unit, BB) && IsWithinSnapReach(BB))
 				{
 					TargetBuilding = BB;
 					bFoundCompatible = true;
@@ -2254,7 +2310,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	{
 		FVector TraceStart, TraceEnd;
 		float TraceZOffset = 0.f;
-		bool bPathBlocked = IsPathBlockedByBuilding(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
+		bool bPathBlocked = WallTrace(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
 
 		// Visualisierung im HUD via Puffer
 		if (AHUDBase* HUD = Cast<AHUDBase>(GetHUD()))
@@ -3580,7 +3636,7 @@ bool AExtendedControllerBase::DropWorkArea()
 			{
 				continue;
 			}
-			if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
+			if (OverlappedActor && (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass())))
 			{
 				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
 				if (NoBuildZone && NoBuildZone->IsNoBuildZone == true) IsNoBuildZone = NoBuildZone->IsNoBuildZone;
@@ -3707,7 +3763,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				{
 					continue;
 				}
-				if (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass()))
+				if (OverlappedActor && (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass())))
 				{
 					AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
 					if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
@@ -3841,7 +3897,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 				FVector DummyStart, DummyEnd;
 				float DummyTraceZOffset = 0.f;
-				if (IsPathBlockedByBuilding(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
+				if (WallTrace(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
 				{
 					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
 					DraggedWorkArea->Destroy();
@@ -4043,7 +4099,7 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	return true;
 }
 
-bool AExtendedControllerBase::IsPathBlockedByBuilding(ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, float& OutTraceZOffset, AActor* IgnoreBuilding)
+bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, float& OutTraceZOffset, AActor* IgnoreBuilding)
 {
 	OutTraceZOffset = 0.f;
 	if (!Unit || !TargetActor) return false;
@@ -4056,20 +4112,71 @@ bool AExtendedControllerBase::IsPathBlockedByBuilding(ABuildingBase* Unit, AActo
 	OutStart = Unit->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
 	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
 
-	FHitResult Hit;
+	TArray<FHitResult> Hits;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(ExtensionPathTrace), true);
 	Params.AddIgnoredActor(Unit);
 	Params.AddIgnoredActor(TargetActor);
+	
+	// Add all attached actors of initiator and ghost to ignore list
+	TArray<AActor*> InitiatorAttached;
+	Unit->GetAttachedActors(InitiatorAttached, true);
+	Params.AddIgnoredActors(InitiatorAttached);
+	
+	TArray<AActor*> GhostAttached;
+	TargetActor->GetAttachedActors(GhostAttached, true);
+	Params.AddIgnoredActors(GhostAttached);
+
 	if (IgnoreBuilding)
 	{
 		Params.AddIgnoredActor(IgnoreBuilding);
+		TArray<AActor*> TargetAttached;
+		IgnoreBuilding->GetAttachedActors(TargetAttached, true);
+		Params.AddIgnoredActors(TargetAttached);
 	}
 
-	if (GetWorld()->LineTraceSingleByChannel(Hit, OutStart, OutEnd, ECC_Pawn, Params))
+	ABuildingBase* IgnoreBuildingBase = GetBuildingBaseFromActor(IgnoreBuilding);
+
+	// Perform Multi-Trace to filter hits manually
+	if (GetWorld()->LineTraceMultiByChannel(Hits, OutStart, OutEnd, ECC_Visibility, Params))
 	{
-		AActor* HitActor = Hit.GetActor();
-		if (HitActor && GetBuildingBaseFromActor(HitActor))
+		for (const FHitResult& Hit : Hits)
 		{
+			AActor* HitActor = Hit.GetActor();
+			if (!HitActor) continue;
+
+			// Skip landscape/ground
+			if (HitActor->IsA<ALandscape>() || HitActor->IsA<ALandscapeProxy>()) continue;
+
+			// Skip ALL WorkAreas to prevent blocking by foundation actors
+			if (HitActor->IsA<AWorkArea>()) continue;
+
+			// Skip Energy Walls connected to the involved buildings
+			if (AEnergyWall* Wall = Cast<AEnergyWall>(HitActor))
+			{
+				if (Wall->GetBuildingA() == Unit || Wall->GetBuildingB() == Unit ||
+					(IgnoreBuildingBase && (Wall->GetBuildingA() == IgnoreBuildingBase || Wall->GetBuildingB() == IgnoreBuildingBase)))
+				{
+					continue;
+				}
+			}
+
+			// Check if it belongs to a building we should ignore
+			ABuildingBase* HitBuilding = GetBuildingBaseFromActor(HitActor);
+			if (HitBuilding)
+			{
+				if (HitBuilding == Unit) continue;
+				if (IgnoreBuildingBase && HitBuilding == IgnoreBuildingBase) continue;
+				// Fallback if IgnoreBuildingBase was not resolvable but IgnoreBuilding matches
+				if (IgnoreBuilding && (HitBuilding == GetBuildingBaseFromActor(IgnoreBuilding))) continue;
+			}
+
+			// Final fallback: check direct equality and attachment
+			if (HitActor == Unit || HitActor == IgnoreBuilding) continue;
+			if (HitActor->IsAttachedTo(Unit) || (IgnoreBuilding && HitActor->IsAttachedTo(IgnoreBuilding))) continue;
+
+			// If we got here, we hit something that is not ground, not the initiator building, 
+			// not the target building, not a work area, and not a connected energy wall. 
+			// This is a real obstruction (mobile units, rocks, other buildings).
 			return true;
 		}
 	}
@@ -4082,11 +4189,16 @@ ABuildingBase* AExtendedControllerBase::GetBuildingBaseFromActor(AActor* Actor) 
 	
 	AActor* Current = Actor;
 	// Limit iterations to prevent infinite loops in weird hierarchies
-	for (int32 i = 0; i < 5; ++i)
+	for (int32 i = 0; i < 10; ++i)
 	{
 		if (ABuildingBase* Building = Cast<ABuildingBase>(Current))
 		{
 			return Building;
+		}
+
+		if (AWorkArea* WA = Cast<AWorkArea>(Current))
+		{
+			if (WA->Building) return WA->Building;
 		}
 
 		AActor* Next = Current->GetOwner();
