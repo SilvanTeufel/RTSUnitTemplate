@@ -68,6 +68,41 @@ void ABuildingBase::SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, 
 	}
 }
 
+void ABuildingBase::SetEnergyWallsActive(bool bActive)
+{
+	for (AEnergyWall* Wall : EnergyWallArray)
+	{
+		if (IsValid(Wall))
+		{
+			if (bActive)
+			{
+				Wall->Multicast_ActivateWall();
+				/*
+				if (EnergyWallClass && Origin)
+				{
+					Wall->Multicast_InitializeWall(Origin, this);
+				}*/
+			}
+			else
+			{
+				Wall->Multicast_DeactivateWall();
+			}
+		}
+	}
+}
+
+bool ABuildingBase::GetEnergyWallActive() const
+{
+	for (AEnergyWall* Wall : EnergyWallArray)
+	{
+		if (IsValid(Wall))
+		{
+			return !Wall->IsDeactivated();
+		}
+	}
+	return false;
+}
+
 void ABuildingBase::Destroyed()
 {
 	Super::Destroyed();

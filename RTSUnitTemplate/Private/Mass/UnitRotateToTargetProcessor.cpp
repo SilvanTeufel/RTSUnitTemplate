@@ -88,7 +88,7 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 				bHasTarget = true;
 			}
 
-			FQuat TargetQuat = FRotator(0.f, UnitBase->GetActorRotation().Yaw + FollowFrag.OffsetDegrees, 0.f).Quaternion();
+			FQuat TargetQuat = CurrentQuat;
 
 			if (bHasTarget)
 			{

@@ -76,6 +76,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, ABuildingBase* InOrigin);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetEnergyWallsActive(bool bActive);
+
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool GetEnergyWallActive() const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetBeaconRange(float NewRange);

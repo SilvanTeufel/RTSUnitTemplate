@@ -184,7 +184,14 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 						}
 						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
 					}
-					Vis.bIsVisibleEnemy = bIsVisibleByFog;
+					if (bIsVisibleByFog)
+					{
+						Vis.bIsVisibleEnemy = true;
+					}
+					else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(i), FMassStateStopMovementTag::StaticStruct()))
+					{
+						Vis.bIsVisibleEnemy = false;
+					}
 				}
 				else
 				{
@@ -203,7 +210,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
 							(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
-							(bIsVisibleByFog != Vis.bLastIsVisibleEnemy) ||
+							(Vis.bIsVisibleEnemy != Vis.bLastIsVisibleEnemy) ||
 							(CharList[i].bIsInvisible != Vis.bLastIsInvisible);
 
 			if (Unit) bChanged = bChanged || (Unit->OpenHealthWidget != Vis.bLastOpenHealthWidget) || (Unit->bShowLevelOnly != Vis.bLastShowLevelOnly);
@@ -212,7 +219,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			{
 				Unit->IsMyTeam = Vis.bIsMyTeam;
 				Unit->IsOnViewport = Vis.bIsOnViewport;
-				// Unit->IsVisibleEnemy = bIsVisibleByFog;
+				Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
 				
 				if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
 				{
@@ -231,7 +238,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				
 				Vis.bLastIsMyTeam = Vis.bIsMyTeam;
 				Vis.bLastIsOnViewport = Vis.bIsOnViewport;
-				Vis.bLastIsVisibleEnemy = bIsVisibleByFog;
+				Vis.bLastIsVisibleEnemy = Vis.bIsVisibleEnemy;
 				Vis.bLastIsInvisible = CharList[i].bIsInvisible;
 
 				if (Unit)

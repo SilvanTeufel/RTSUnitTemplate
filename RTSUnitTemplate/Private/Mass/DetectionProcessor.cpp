@@ -164,7 +164,7 @@ void UDetectionProcessor::Execute(
         }
         
         const float Age = World->GetTimeSeconds() - TgtState->BirthTime;
-        if (Age < 1.f && Age >= 0.f) 
+        if (Age < 0.1f && Age >= 0.f) 
             continue;
         
         TargetUnits.Add({
@@ -196,7 +196,7 @@ void UDetectionProcessor::Execute(
         {
             // skip too‐young
             const float Age = World->GetTimeSeconds() - StateList[i].BirthTime;
-            if (Age < 1.f && Age >= 0.f) 
+            if (Age < 0.1f && Age >= 0.f) 
                 continue;
 
             DetectorUnits.Add({

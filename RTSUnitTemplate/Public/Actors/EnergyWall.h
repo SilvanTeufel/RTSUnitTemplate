@@ -89,6 +89,18 @@ public:
 	UFUNCTION()
 	void StartDespawn(AActor* DestroyedActor);
 
+	/**
+	 * Deactivates the wall visually and for navigation, without destroying the actor.
+	 */
+	UFUNCTION(NetMulticast, Reliable, Category = "EnergyWall")
+	void Multicast_DeactivateWall();
+
+	/**
+	 * Activates the wall visually and for navigation.
+	 */
+	UFUNCTION(NetMulticast, Reliable, Category = "EnergyWall")
+	void Multicast_ActivateWall();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall")
 	float DespawnDelay = 2.0f;
 
@@ -131,6 +143,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "EnergyWall")
 	ABuildingBase* GetBuildingB() const { return CachedBuildingB; }
 
+	UFUNCTION(BlueprintPure, Category = "EnergyWall")
+	bool IsDeactivated() const { return bIsDeactivated; }
+
 private:
 	UPROPERTY(Replicated)
 	ABuildingBase* CachedBuildingA;
@@ -139,11 +154,20 @@ private:
 	ABuildingBase* CachedBuildingB;
 
 	bool bIsInitialized = false;
-
+	void UpdateWallTransformAndDimensions();
 	void RegisterObstacle(float Length, float Height);
+
+	void DeactivateNavigation();
+
+	void ApplyDespawnEffects();
+
+	void ActivateNavigation();
 
 	UFUNCTION()
 	void OnInitializationTimerComplete();
+
+	UFUNCTION()
+	void OnDeactivationTimerComplete();
 
 	FTimerHandle InitializationTimerHandle;
 	float TargetScaleY = 1.0f;
@@ -153,4 +177,7 @@ private:
 	bool bIsInitializing = false;
 	bool bIsDespawning = false;
 	bool bIsVisibleByFoW = false;
+
+	UPROPERTY(Replicated)
+	bool bIsDeactivated = false;
 };

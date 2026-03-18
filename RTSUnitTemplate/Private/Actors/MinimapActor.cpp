@@ -214,6 +214,11 @@ void AMinimapActor::CaptureMapTopography()
         UGameplayStatics::GetAllActorsOfClass(World, AUnitBase::StaticClass(), ActorsToIgnore);
         TraceParams.AddIgnoredActors(ActorsToIgnore);
 
+        // Visual ISM Manager der Units ignorieren
+        ActorsToIgnore.Reset();
+        UGameplayStatics::GetAllActorsWithTag(World, FName(TEXT("UnitVisualISMManager")), ActorsToIgnore);
+        TraceParams.AddIgnoredActors(ActorsToIgnore);
+
         // Pickups ignorieren (APickup)
         ActorsToIgnore.Reset();
         UGameplayStatics::GetAllActorsOfClass(World, APickup::StaticClass(), ActorsToIgnore);

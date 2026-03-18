@@ -36,10 +36,10 @@ AEnergyWall::AEnergyWall()
 	NavObstacleBox = CreateDefaultSubobject<UBoxComponent>(TEXT("NavObstacleBox"));
 	NavObstacleBox->SetupAttachment(WallRoot);
 	// Collision for physical blocking and projectile interception, but NOT for NavMesh generation
-	NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	NavObstacleBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
-	NavObstacleBox->SetCanEverAffectNavigation(false);
+	NavObstacleBox->SetCanEverAffectNavigation(true);
 
 	NavModifier = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifier"));
 	NavModifier->SetAreaClass(nullptr); 
@@ -88,9 +88,19 @@ void AEnergyWall::Tick(float DeltaTime)
 		}
 		else // bIsDespawning
 		{
-			float Remaining = GetLifeSpan();
+			float Elapsed = GetWorldTimerManager().GetTimerElapsed(InitializationTimerHandle);
 			float TotalDespawnTime = FMath::Max(DespawnDelay, 0.001f);
-			Alpha = 1.f - FMath::Clamp(Remaining / TotalDespawnTime, 0.f, 1.f);
+			
+			// Fallback to LifeSpan if timer is not active (e.g. real destruction)
+			if (Elapsed < 0.f && GetLifeSpan() > 0.f)
+			{
+				float Remaining = GetLifeSpan();
+				Alpha = 1.f - FMath::Clamp(Remaining / TotalDespawnTime, 0.f, 1.f);
+			}
+			else
+			{
+				Alpha = FMath::Clamp(Elapsed / TotalDespawnTime, 0.f, 1.f);
+			}
 
 			if (Alpha >= 0.5f)
 			{
@@ -193,11 +203,9 @@ void AEnergyWall::Multicast_InitializeWall_Implementation(ABuildingBase* Buildin
 	}
 }
 
-void AEnergyWall::InitializeWallInternal()
+void AEnergyWall::UpdateWallTransformAndDimensions()
 {
-	if (bIsInitialized || !CachedBuildingA || !CachedBuildingB) return;
-
-	if (NavModifier) NavModifier->SetActive(false);
+	if (!CachedBuildingA || !CachedBuildingB) return;
 
 	FVector LocA = CachedBuildingA->GetActorLocation();
 	FVector LocB = CachedBuildingB->GetActorLocation();
@@ -228,13 +236,6 @@ void AEnergyWall::InitializeWallInternal()
 	FRotator Rotation = Direction.Rotation() + FRotator(0, -90.f, 0.f);
 	SetActorRotation(Rotation);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Actor Rotation=%s"), *Rotation.ToString());
-
-	// Setup instances for the rods and the shield
-	TopRodISM->ClearInstances();
-	BottomRodISM->ClearInstances();
-	ShieldISM->ClearInstances();
-
 	float NativeTopZ = TopRodISM->GetRelativeLocation().Z;
 	float NativeBottomZ = BottomRodISM->GetRelativeLocation().Z;
 	float NativeHeight = FMath::Max(FMath::Abs(NativeTopZ - NativeBottomZ), 1.0f);
@@ -247,15 +248,27 @@ void AEnergyWall::InitializeWallInternal()
 		}
 	}
 
-	// Dynamic height calculation removed - using Blueprint positions
-	float WallHeight = NativeHeight;
-
-	// Use distance / NativeLength for length scaling
-	float ScaleY = Distance2D / NativeLength;
-	
-	TargetScaleY = ScaleY;
+	TargetScaleY = Distance2D / NativeLength;
 	TargetDistance2D = Distance2D;
-	TargetWallHeight = WallHeight;
+	TargetWallHeight = NativeHeight;
+
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall Calculation: Dist2D=%f, TargetScaleY=%f, LocA=%s, LocB=%s"), 
+		TargetDistance2D, TargetScaleY, *LocA.ToString(), *LocB.ToString());
+}
+
+void AEnergyWall::InitializeWallInternal()
+{
+	if (bIsInitialized || !CachedBuildingA || !CachedBuildingB) return;
+
+	if (NavModifier) NavModifier->SetActive(false);
+
+	UpdateWallTransformAndDimensions();
+
+	// Setup instances for the rods and the shield
+	TopRodISM->ClearInstances();
+	BottomRodISM->ClearInstances();
+	ShieldISM->ClearInstances();
+
 	bIsInitializing = true;
 	bIsInitialized = true;
 
@@ -266,13 +279,13 @@ void AEnergyWall::InitializeWallInternal()
 	BottomRodISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, 0.f, 1.f)));
 
 	// Add instance for shield plane at its Blueprint position, and hide it
-	ShieldISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, ScaleY, 1.f)));
+	ShieldISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, TargetScaleY, 1.f)));
 	ShieldISM->SetHiddenInGame(true);
 
 	GetWorldTimerManager().SetTimer(InitializationTimerHandle, this, &AEnergyWall::OnInitializationTimerComplete, InitializationDuration, false);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Instances Added. ScaleY=%f, WallHeight=%f"), ScaleY, WallHeight);
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Timer started. Distance2D=%f, WallHeight=%f, ScaleY=%f"), Distance2D, WallHeight, ScaleY);
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Instances Added. TargetScaleY=%f, TargetWallHeight=%f"), TargetScaleY, TargetWallHeight);
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Timer started. TargetDistance2D=%f"), TargetDistance2D);
 	UpdateVisibility();
 }
 
@@ -294,7 +307,7 @@ void AEnergyWall::UpdateVisibility()
 	
 	if (ShieldISM)
 	{
-		if (!bIsVisibleByFoW)
+		if (!bIsVisibleByFoW || bIsDeactivated)
 		{
 			ShieldISM->SetHiddenInGame(true);
 		}
@@ -311,6 +324,7 @@ void AEnergyWall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 
 	DOREPLIFETIME(AEnergyWall, CachedBuildingA);
 	DOREPLIFETIME(AEnergyWall, CachedBuildingB);
+	DOREPLIFETIME(AEnergyWall, bIsDeactivated);
 }
 
 void AEnergyWall::OnInitializationTimerComplete()
@@ -425,6 +439,9 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 
 	if (NavObstacleBox)
 	{
+		// Toggle collision instead of CanEverAffectNavigation for more reliable updates
+		NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
 		FVector BoxExtent;
 		
 		// Thickness adjusted based on angle - use more generous thickness for diagonals
@@ -451,10 +468,9 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 		if (NavModifier)
 		{
 			NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
+			UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::RegisterObstacle: [FAILSAFE] BoxExtent=%s"), *BoxExtent.ToString());
 			NavModifier->FailsafeExtent = BoxExtent;
-			NavModifier->SetActive(false);
 			NavModifier->SetActive(true);
-			NavModifier->RefreshNavigationModifiers();
 		}
 	}
 
@@ -472,22 +488,53 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 			// Update Octree
 			NavSys->UpdateNavOctreeBounds(this);
 			NavSys->UpdateActorInNavOctree(*this);
+
+			// Refresh modifiers after the octree update
+			if (NavModifier)
+			{
+				NavModifier->RefreshNavigationModifiers();
+			}
 		}
 	}
 }
 
-void AEnergyWall::StartDespawn(AActor* DestroyedActor)
+void AEnergyWall::DeactivateNavigation()
 {
-	if (bIsDespawning) return;
-	bIsDespawning = true;
-	bIsInitializing = false;
-	GetWorldTimerManager().ClearTimer(InitializationTimerHandle);
+	if (NavObstacleBox)
+	{
+		// Use collision toggling for dynamic navigation state changes
+		NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 
-	// Unbind to prevent multiple calls
-	if (CachedBuildingA) CachedBuildingA->OnDestroyed.RemoveAll(this);
-	if (CachedBuildingB) CachedBuildingB->OnDestroyed.RemoveAll(this);
+	if (NavModifier)
+	{
+		NavModifier->SetAreaClass(nullptr);
+		NavModifier->SetActive(false);
+	}
 
-	// Create dynamic material instances and set the start time for the despawn effect
+	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::DeactivateNavigation: Navigation disabled and area dirtied."));
+
+	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+	{
+		// Force refresh of the octree and then modifiers
+		NavSys->UpdateNavOctreeBounds(this);
+		NavSys->UpdateActorInNavOctree(*this);
+
+		if (NavModifier)
+		{
+			NavModifier->RefreshNavigationModifiers();
+		}
+
+		if (NavObstacleBox)
+		{
+			FBox DirtyBox = NavObstacleBox->Bounds.GetBox().ExpandBy(DirtyAreaExpansion);
+			NavSys->AddDirtyArea(DirtyBox, ENavigationDirtyFlag::All);
+		}
+	}
+}
+
+void AEnergyWall::ApplyDespawnEffects()
+{
 	TArray<UInstancedStaticMeshComponent*> Components = { ShieldISM, TopRodISM, BottomRodISM };
 	for (UInstancedStaticMeshComponent* Comp : Components)
 	{
@@ -504,34 +551,84 @@ void AEnergyWall::StartDespawn(AActor* DestroyedActor)
 			}
 		}
 	}
+}
 
-	// Update navigation to mark the area as clear
-	if (NavObstacleBox)
+void AEnergyWall::ActivateNavigation()
+{
+	RegisterObstacle(TargetDistance2D, TargetWallHeight);
+}
+
+void AEnergyWall::Multicast_DeactivateWall_Implementation()
+{
+	if (bIsDeactivated || bIsDespawning) return;
+
+	bIsDespawning = true;
+	bIsInitializing = false;
+	bIsDeactivated = true;
+
+	ApplyDespawnEffects();
+	DeactivateNavigation();
+
+	GetWorldTimerManager().SetTimer(InitializationTimerHandle, this, &AEnergyWall::OnDeactivationTimerComplete, DespawnDelay, false);
+}
+
+void AEnergyWall::Multicast_ActivateWall_Implementation()
+{
+	if (!bIsDeactivated && !bIsDespawning) return;
+
+	UpdateWallTransformAndDimensions();
+	
+	bIsInitializing = true;
+	bIsDespawning = false;
+	bIsDeactivated = false;
+
+	GetWorldTimerManager().SetTimer(InitializationTimerHandle, this, &AEnergyWall::OnInitializationTimerComplete, InitializationDuration, false);
+
+	UpdateVisibility();
+}
+
+void AEnergyWall::OnDeactivationTimerComplete()
+{
+	bIsDespawning = false;
+	CurrentScaleY = 0.f;
+
+	// Final scale update to ensure it's hidden
+	FTransform TopTransform;
+	if (TopRodISM->GetInstanceTransform(0, TopTransform))
 	{
-		NavObstacleBox->SetCanEverAffectNavigation(false);
+		TopTransform.SetScale3D(FVector(1.f, 0.f, 1.f));
+		TopRodISM->UpdateInstanceTransform(0, TopTransform, false, true, true);
 	}
 
-	if (NavModifier)
+	FTransform BottomTransform;
+	if (BottomRodISM->GetInstanceTransform(0, BottomTransform))
 	{
-		NavModifier->SetAreaClass(nullptr);
+		BottomTransform.SetScale3D(FVector(1.f, 0.f, 1.f));
+		BottomRodISM->UpdateInstanceTransform(0, BottomTransform, false, true, true);
 	}
 
-	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+	UpdateVisibility();
+}
+
+void AEnergyWall::StartDespawn(AActor* DestroyedActor)
+{
+	if (bIsDespawning)
 	{
-		if (NavObstacleBox)
+		if (GetLifeSpan() > 0.0f)
 		{
-			// Expand the dirty area to ensure neighboring NavMesh tiles are properly updated
-			FBox DirtyBox = NavObstacleBox->Bounds.GetBox().ExpandBy(DirtyAreaExpansion);
-			UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::StartDespawn: Removing Dirty Area. Box Center=%s, Box Extent=%s"), *DirtyBox.GetCenter().ToString(), *DirtyBox.GetExtent().ToString());
-			
-			// Mark area as dirty
-			NavSys->AddDirtyArea(DirtyBox, ENavigationDirtyFlag::All);
-			
-			// Update Octree
-			NavSys->UpdateNavOctreeBounds(this);
-			NavSys->UpdateActorInNavOctree(*this);
+			return;
 		}
 	}
+	
+	bIsDespawning = true;
+	bIsInitializing = false;
+	GetWorldTimerManager().ClearTimer(InitializationTimerHandle);
+
+	if (CachedBuildingA) CachedBuildingA->OnDestroyed.RemoveAll(this);
+	if (CachedBuildingB) CachedBuildingB->OnDestroyed.RemoveAll(this);
+
+	ApplyDespawnEffects();
+	DeactivateNavigation();
 	
 	if (HasAuthority())
 	{
