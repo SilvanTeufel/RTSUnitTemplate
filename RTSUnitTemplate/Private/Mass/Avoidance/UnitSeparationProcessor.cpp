@@ -21,6 +21,9 @@ namespace
 		float CapsuleRadius = 0.f;
 		FMassEntityHandle Target;
 		bool bUseWorkerStrength = false;
+
+		// NEU: Speichert, ob die Einheit gerade vom SoftAvoidanceProcessor gerettet wird
+		bool bIsBracingAgainstWall = false;
 	};
 
 	static FVector Horizontal(const FVector& V)
@@ -116,6 +119,9 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			
 			Info.bUseWorkerStrength = DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct());
 
+			// NEU: Prüfe, ob die Einheit an der Wand steht
+			Info.bIsBracingAgainstWall = DoesEntityHaveTag(EntityManager, Info.Entity, FMassSoftAvoidanceTag::StaticStruct());
+
 			/*DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToBaseTag::StaticStruct()) || 
 								   DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct()) ||
 								   DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToResourceExtractionTag::StaticStruct());
@@ -200,8 +206,17 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				}
 				FVector PushB = RightB * (LateralAmountB * Overlap * StrengthB);
 
-				AccumPush.FindOrAdd(A.Entity) += PushA;
-				AccumPush.FindOrAdd(B.Entity) += PushB;
+				// GEÄNDERT: Wende die Kraft NUR an, wenn die Einheit nicht an der Wand lehnt!
+				// So stoßen die Einheiten an der Wand die Crowd zurück, lassen sich aber nicht durch die Wand quetschen.
+				if (!A.bIsBracingAgainstWall)
+				{
+					AccumPush.FindOrAdd(A.Entity) += PushA;
+				}
+
+				if (!B.bIsBracingAgainstWall)
+				{
+					AccumPush.FindOrAdd(B.Entity) += PushB;
+				}
 
 				if (Debug)
 				{

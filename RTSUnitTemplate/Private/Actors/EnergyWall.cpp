@@ -251,9 +251,6 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 	TargetScaleY = Distance2D / NativeLength;
 	TargetDistance2D = Distance2D;
 	TargetWallHeight = NativeHeight;
-
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall Calculation: Dist2D=%f, TargetScaleY=%f, LocA=%s, LocB=%s"), 
-		TargetDistance2D, TargetScaleY, *LocA.ToString(), *LocB.ToString());
 }
 
 void AEnergyWall::InitializeWallInternal()
@@ -284,8 +281,6 @@ void AEnergyWall::InitializeWallInternal()
 
 	GetWorldTimerManager().SetTimer(InitializationTimerHandle, this, &AEnergyWall::OnInitializationTimerComplete, InitializationDuration, false);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Instances Added. TargetScaleY=%f, TargetWallHeight=%f"), TargetScaleY, TargetWallHeight);
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::InitializeWallInternal: Timer started. TargetDistance2D=%f"), TargetDistance2D);
 	UpdateVisibility();
 }
 
@@ -338,7 +333,6 @@ void AEnergyWall::OnInitializationTimerComplete()
 	{
 		TopTransform.SetScale3D(FVector(1.f, TargetScaleY, 1.f));
 		TopRodISM->UpdateInstanceTransform(0, TopTransform, false, true, true);
-		UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::OnInitializationTimerComplete: TopRod Final Scale=%s"), *TopTransform.GetScale3D().ToString());
 	}
 
 	FTransform BottomTransform;
@@ -346,7 +340,6 @@ void AEnergyWall::OnInitializationTimerComplete()
 	{
 		BottomTransform.SetScale3D(FVector(1.f, TargetScaleY, 1.f));
 		BottomRodISM->UpdateInstanceTransform(0, BottomTransform, false, true, true);
-		UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::OnInitializationTimerComplete: BottomRod Final Scale=%s"), *BottomTransform.GetScale3D().ToString());
 	}
 
 	// Update visibility based on FoW
@@ -435,8 +428,6 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 	// Map DiagonalScale [1.0, 1.414...] to [0, 1] for smoother control
 	float Alpha = FMath::Clamp((DiagonalScale - 1.0f) / 0.41421356f, 0.0f, 1.0f);
 
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::RegisterObstacle: [INPUT] Length=%f, Height=%f, StartPoint=%s, EndPoint=%s, DiagonalScale=%f, Alpha=%f"), Length, Height, *StartPoint.ToString(), *EndPoint.ToString(), DiagonalScale, Alpha);
-
 	if (NavObstacleBox)
 	{
 		// Toggle collision instead of CanEverAffectNavigation for more reliable updates
@@ -468,7 +459,6 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 		if (NavModifier)
 		{
 			NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
-			UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::RegisterObstacle: [FAILSAFE] BoxExtent=%s"), *BoxExtent.ToString());
 			NavModifier->FailsafeExtent = BoxExtent;
 			NavModifier->SetActive(true);
 		}
@@ -480,7 +470,6 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 		{
 			// Expand the dirty area to ensure neighboring NavMesh tiles are properly updated
 			FBox DirtyBox = NavObstacleBox->Bounds.GetBox().ExpandBy(DirtyAreaExpansion);
-			UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::RegisterObstacle: [DIRTY AREA] Box Center=%s, Box Extent=%s, Box Min=%s, Box Max=%s"), *DirtyBox.GetCenter().ToString(), *DirtyBox.GetExtent().ToString(), *DirtyBox.Min.ToString(), *DirtyBox.Max.ToString());
 			
 			// Mark area as dirty
 			NavSys->AddDirtyArea(DirtyBox, ENavigationDirtyFlag::All);
@@ -511,8 +500,6 @@ void AEnergyWall::DeactivateNavigation()
 		NavModifier->SetAreaClass(nullptr);
 		NavModifier->SetActive(false);
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("AEnergyWall::DeactivateNavigation: Navigation disabled and area dirtied."));
 
 	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
 	{

@@ -9,6 +9,11 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/UnitNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "AI/Navigation/NavigationTypes.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavAreas/NavArea_Obstacle.h"
 
 UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery()
 {
@@ -201,12 +206,29 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 const FVector ProjectionExtent(Characteristics.CapsuleRadius * 4.0f, Characteristics.CapsuleRadius * 4.0f, SoftAvoidanceZExtent);
 
                 FNavLocation ProjectedLocation;
-                // Use capsule-based extent to detect if we are on the mesh
+                // Use capsule-based extent to detect if we are on the mesh or inside a DirtyArea
+                bool bNeedsAvoidance = false;
                 if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
                     FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
                 {
-                    // If projection fails or is too far, the unit is trying to leave the mesh.
-                    // We add the tag so SoftAvoidance can push us back next frame
+                    bNeedsAvoidance = true;
+                }
+                else
+                {
+                    // NEU: Check, ob der projizierte Punkt in einer UNavArea_Obstacle (Energy Wall) liegt!
+                    if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())))
+                    {
+                        const uint32 PolyAreaID = Recast->GetPolyAreaID(ProjectedLocation.NodeRef);
+                        const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                        if (PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass()))
+                        {
+                            bNeedsAvoidance = true;
+                        }
+                    }
+                }
+
+                if (bNeedsAvoidance)
+                {
                     LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
                 }
             }
@@ -280,12 +302,29 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
                 const FVector ProjectionExtent(Characteristics.CapsuleRadius * 4.0f, Characteristics.CapsuleRadius * 4.0f, SoftAvoidanceZExtent);
 
                 FNavLocation ProjectedLocation;
-                // Use capsule-based extent to detect if we are on the mesh
+                // Use capsule-based extent to detect if we are on the mesh or inside a DirtyArea
+                bool bNeedsAvoidance = false;
                 if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
                     FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
                 {
-                    // If projection fails or is too far, the unit is trying to leave the mesh.
-                    // We add the tag so SoftAvoidance can push us back next frame
+                    bNeedsAvoidance = true;
+                }
+                else
+                {
+                    // NEU: Check, ob der projizierte Punkt in einer UNavArea_Obstacle (Energy Wall) liegt!
+                    if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())))
+                    {
+                        const uint32 PolyAreaID = Recast->GetPolyAreaID(ProjectedLocation.NodeRef);
+                        const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                        if (PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass()))
+                        {
+                            bNeedsAvoidance = true;
+                        }
+                    }
+                }
+
+                if (bNeedsAvoidance)
+                {
                     LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
                 }
             }

@@ -6,13 +6,12 @@
 #include "Steering/MassSteeringFragments.h" // Ensure included
 #include "NavigationSystem.h"
 #include "NavigationData.h"
+#include "NavigationPath.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
-#include "NavFilters/NavFilter_Strict.h"
-#include "NavFilters/NavFilter_Escape.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
@@ -130,24 +129,12 @@ void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExe
         EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
         if (!EntitySubsystem)
         {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client] UUnitMovementProcessor: EntitySubsystem not yet available; skipping this tick."));
-            }
             return;
         }
     }
 
     if (World->IsNetMode(NM_Client))
     {
-        static int32 GUnitMoveExecTickCounter = 0;
-        if ((++GUnitMoveExecTickCounter % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Execute tick"));
-            }
-        }
         ExecuteClient(EntityManager, Context);
     }
     else
@@ -178,23 +165,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
         TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
 
-        int32 SkippedCannotMove = 0;
-        int32 SkippedNotInit = 0;
-        int32 Arrivals = 0;
-        int32 PathRequests = 0;
-        int32 FollowingPath = 0;
-        int32 DirectSteer = 0;
-        int32 WaypointAdvance = 0;
-        int32 PathfindingInProgressCount = 0;
-
-        static int32 GUnitMoveClientChunkCounter = 0;
-        if (((++GUnitMoveClientChunkCounter) % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] ExecuteClient: Entities=%d, HasNav=%d"), NumEntities, bHasNavSystem ? 1 : 0);
-            }
-        }
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -207,12 +177,10 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             
             if (!AIState.IsInitialized)
             {
-                ++SkippedNotInit;
                 continue;
             }
             if (!AIState.CanMove)
             {
-                ++SkippedCannotMove;
                 continue;
             }
             
@@ -237,13 +205,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 else if (DesiredSpeedUsed <= KINDA_SMALL_NUMBER)
                 {
                     DesiredSpeedUsed = 100.f;
-                    if (bShowLogs)
-                    {
-                        if (const AActor* PredActor = ActorList[i].Get())
-                        {
-                            //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Using fallback speed for %s: %.1f (MoveTarget.DesiredSpeed was %.2f)"), *PredActor->GetName(), DesiredSpeedUsed, MoveTarget.DesiredSpeed.Get());
-                        }
-                    }
                 }
                 if (Pred.PredAcceptanceRadius > KINDA_SMALL_NUMBER)
                 {
@@ -253,25 +214,10 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 {
                     AcceptanceRadiusUsed = 100.f;
                 }
-                if (bShowLogs)
-                {
-                    if (const AActor* PredActor = ActorList[i].Get())
-                    {
-                        //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Active for %s -> Dest=%s (SrvTarget=%s), Speed=%.1f, AccRad=%.1f"),
-                        //    *PredActor->GetName(), *FinalDestination.ToString(), *MoveTarget.Center.ToString(), DesiredSpeedUsed, AcceptanceRadiusUsed);
-                    }
-                }
                 // Clear prediction when server target converges to predicted (2D check)
                 if (FVector::DistSquared2D(MoveTarget.Center, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
                 {
                     Pred.bHasData = false;
-                    if (bShowLogs)
-                    {
-                        if (const AActor* PredActor = ActorList[i].Get())
-                        {
-                            //UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Reconciled for %s (server MoveTarget matched predicted)"), *PredActor->GetName());
-                        }
-                    }
                 }
             }
 
@@ -296,7 +242,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             
             if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsed))
             {
-                ++Arrivals;
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
             }
@@ -305,7 +250,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // Begin a new path request if we have navigation; otherwise, steer directly.
                 if (bHasNavSystem)
                 {
-                    ++PathRequests;
                     PathFrag.bIsPathfindingInProgress = true;
                     
                     // WICHTIG: Wir speichern exakt das ab, was wir anfragen (UNPROJIZIERT)
@@ -319,6 +263,9 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     FNavLocation ProjectedStartLocation;
                     if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
                     {
+                        // FIX A: Absolute Bremse sofort aktivieren, damit Momentum uns nicht in die Wand drückt!
+                        Steering.DesiredVelocity = FVector::ZeroVector; 
+                        
                         // Wir übergeben FinalDestination direkt an den Pathfinder!
                         RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
                     }
@@ -332,7 +279,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
                 else
                 {
-                    ++DirectSteer;
                     // GEÄNDERT: DirectSteer für Bodentruppen OHNE Pfad ist gefährlich.
                     // Wenn sie keinen Pfad haben, sollen sie stehen bleiben, nicht fliegen!
                     Steering.DesiredVelocity = FVector::ZeroVector; 
@@ -341,21 +287,27 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             }
             else if (PathFrag.bIsPathfindingInProgress)
             {
-                ++PathfindingInProgressCount;
                 // GEÄNDERT: Kein blindes Vorwärtslaufen mehr! 
                 // Wenn wir den Pfad berechnen, bleiben wir stehen, um nicht durch Wände zu glitchen.
                 Steering.DesiredVelocity = FVector::ZeroVector; 
             }
             else if (PathFrag.HasValidPath())
             {
-                ++FollowingPath;
+                // NEU: Wenn das Navmesh unter uns neu generiert wurde (EnergyWall gebaut),
+                // verwerfen wir den alten Pfad sofort, damit wir im nächsten Frame neu planen!
+                if (!PathFrag.CurrentPath->IsValid())
+                {
+                    PathFrag.ResetPath();
+                    Steering.DesiredVelocity = FVector::ZeroVector;
+                    continue; 
+                }
+
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
-                    if (FVector::DistSquared(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
+                    if (FVector::DistSquared2D(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
                     {
-                        ++WaypointAdvance;
                         ++PathFrag.CurrentPathPointIndex;
                     }
                 }
@@ -372,20 +324,9 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             }
             else
             {
-                 ++DirectSteer;
                  // GEÄNDERT: DirectSteer für Bodentruppen OHNE Pfad ist gefährlich.
                  // Wenn sie keinen Pfad haben, sollen sie stehen bleiben, nicht fliegen!
                  Steering.DesiredVelocity = FVector::ZeroVector; 
-            }
-        }
-
-        static int32 GUnitMoveClientSummaryCounter = 0;
-        if (((++GUnitMoveClientSummaryCounter) % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Summary: Arrivals=%d, PathReq=%d, Following=%d, InProgress=%d, Direct=%d, WaypointAdvance=%d, SkippedInit=%d, SkippedCanMove=%d"),
-                    Arrivals, PathRequests, FollowingPath, PathfindingInProgressCount, DirectSteer, WaypointAdvance, SkippedNotInit, SkippedCannotMove);
             }
         }
     });
@@ -454,7 +395,7 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 }
             }
      
-            if (FVector::DistSquared(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
+            if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
             {
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
@@ -469,6 +410,9 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 FNavLocation ProjectedStartLocation;
                 if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
                 {
+                    // FIX A: Absolute Bremse sofort aktivieren, damit Momentum uns nicht in die Wand drückt!
+                    Steering.DesiredVelocity = FVector::ZeroVector; 
+                    
                     // Wir übergeben FinalDestination direkt an den Pathfinder!
                     RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
                 }
@@ -485,11 +429,20 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             }
             else if (PathFrag.HasValidPath())
             {
+                // NEU: Wenn das Navmesh unter uns neu generiert wurde (EnergyWall gebaut),
+                // verwerfen wir den alten Pfad sofort, damit wir im nächsten Frame neu planen!
+                if (!PathFrag.CurrentPath->IsValid())
+                {
+                    PathFrag.ResetPath();
+                    Steering.DesiredVelocity = FVector::ZeroVector;
+                    continue; 
+                }
+
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
                 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
-                    if (FVector::DistSquared(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
+                    if (FVector::DistSquared2D(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
                     {
                         PathFrag.CurrentPathPointIndex++;
                     }
@@ -535,40 +488,37 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
     }
     
     const bool bClientWorld = World->IsNetMode(NM_Client);
-    const bool bLog = bShowLogs;
+
+    if (!CachedStrictFilter.IsValid())
+    {
+        FSharedNavQueryFilter NewFilter = NavData->GetDefaultQueryFilter()->GetCopy();
+        NewFilter->SetExcludedArea(NavData->GetAreaID(UNavArea_Obstacle::StaticClass()));
+        CachedStrictFilter = NewFilter;
+    }
     
     AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, bLog] () mutable
+        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, StrictFilter = CachedStrictFilter] () mutable
     {
-        FString DebugLog = FString::Printf(TEXT("\n=== PATHFINDING REQUEST ===\nEntity Start: %s | Target: %s"), *StartLocation.ToString(), *EndLocation.ToString());
-
         // --- 1. STRICT MODE: Exklusion hartcodieren ---
-        // Wir holen eine Kopie des Standard-Filters und zwingen UNavArea_Obstacle auf "Excluded"
-        FSharedNavQueryFilter StrictFilter = NavData->GetDefaultQueryFilter()->GetCopy();
-        StrictFilter->SetExcludedArea(NavData->GetAreaID(UNavArea_Obstacle::StaticClass())); 
-
-        // Wir übergeben den dynamischen StrictFilter an die Query
+        // Wir nutzen den gecachten Filter
+        
         FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, StrictFilter);
         
         // Erlaubt Partial Paths: Er plant bis zum Ufer, weil die Insel jetzt mathematisch "unendlich" weit weg ist.
         Query.SetAllowPartialPaths(true); 
 
         FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
-        DebugLog += FString::Printf(TEXT("\n[StrictFilter] Result: %d (IsPartial: %d, IsValid: %d)"), (int32)PathResult.Result, PathResult.IsPartial(), PathResult.Path.IsValid() ? 1 : 0);
 
         // --- 2. ESCAPE MODE FALLBACK ---
         if (PathResult.Result == ENavigationQueryResult::Fail)
         {
-            DebugLog += TEXT("\n[Fallback] Strict failed. Testing EscapeFilter...");
-            
             // Inline Escape Filter (Erlaubt alles wieder)
-            FSharedNavQueryFilter EscapeFilter = NavData->GetDefaultQueryFilter()->GetCopy();
+            FSharedConstNavQueryFilter EscapeFilter = NavData->GetDefaultQueryFilter();
             
             FPathFindingQuery EscapeQuery(nullptr, *NavData, StartLocation, EndLocation, EscapeFilter);
             EscapeQuery.SetAllowPartialPaths(true);
 
             PathResult = NavSystem->FindPathSync(EscapeQuery, EPathFindingMode::Regular);
-            DebugLog += FString::Printf(TEXT("\n[EscapeFilter] Result: %d (IsPartial: %d, IsValid: %d)"), (int32)PathResult.Result, PathResult.IsPartial(), PathResult.Path.IsValid() ? 1 : 0);
 
             if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 0)
             {
@@ -576,30 +526,24 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                 
                 // Auf was für einem Polygon STARTEN wir?
                 bool bStartsInWall = false;
-                FString StartAreaName = TEXT("None");
                 
                 for (int32 i = 0; i < PathPoints.Num(); ++i)
                 {
                     if (PathPoints[i].HasNodeRef())
                     {
                         const UClass* AreaClass = NavData->GetAreaClass(PathPoints[i].NodeRef);
-                        if (AreaClass) StartAreaName = AreaClass->GetName();
                         bStartsInWall = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
                         break; 
                     }
                 }
 
-                DebugLog += FString::Printf(TEXT("\n[Escape Logic] Path starts on Area: %s. StartsInWall = %d"), *StartAreaName, bStartsInWall ? 1 : 0);
-
                 if (!bStartsInWall)
                 {
-                    DebugLog += TEXT("\n[Escape Logic] REJECTED! Path started on safe ground. Entity is just at the shore.");
                     PathResult.Result = ENavigationQueryResult::Fail;
                     PathResult.Path->ResetForRepath();
                 }
                 else
                 {
-                    DebugLog += TEXT("\n[Escape Logic] ACCEPTED! Entity is trapped. Calculating cut-off...");
                     int32 CutOffIndex = -1;
                     for (int32 i = 0; i < PathPoints.Num(); ++i)
                     {
@@ -608,6 +552,16 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         const bool bIsObstacle = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
 
                         if (!bIsObstacle) {
+                            // FIX B: ANTI-TUNNELING CHECK
+                            float DistToSafeGround = FVector::Dist2D(StartLocation, PathPoints[i].Location);
+                            if (DistToSafeGround > 120.0f) // Toleranzwert für Wanddicke
+                            {
+                                PathResult.Result = ENavigationQueryResult::Fail;
+                                PathResult.Path->ResetForRepath();
+                                CutOffIndex = -1; 
+                                break;
+                            }
+
                             CutOffIndex = i + 1; 
                             break;
                         }
@@ -615,42 +569,15 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
 
                     if (CutOffIndex > 0 && CutOffIndex < PathPoints.Num())
                     {
-                        DebugLog += FString::Printf(TEXT("\n[Escape Logic] Cut off path at index %d to prevent re-entry."), CutOffIndex);
                         TArray<FNavPathPoint>& MutablePoints = const_cast<TArray<FNavPathPoint>&>(PathResult.Path->GetPathPoints());
                         MutablePoints.SetNum(CutOffIndex);
                     }
                 }
             }
         }
-
-        // --- LOG PATH POINTS ---
-        if (PathResult.IsSuccessful() && PathResult.Path.IsValid())
-        {
-            const TArray<FNavPathPoint>& Pts = PathResult.Path->GetPathPoints();
-            DebugLog += FString::Printf(TEXT("\n--- Final Path Points (%d) ---"), Pts.Num());
-            for (int i = 0; i < Pts.Num(); i++)
-            {
-                FString AreaName = TEXT("Unknown");
-                if (Pts[i].HasNodeRef()) {
-                    const UClass* AC = NavData->GetAreaClass(Pts[i].NodeRef);
-                    if (AC) AreaName = AC->GetName();
-                }
-                DebugLog += FString::Printf(TEXT("\n   Pt %d: %s | Area: %s"), i, *Pts[i].Location.ToString(), *AreaName);
-            }
-        }
-        else
-        {
-             DebugLog += TEXT("\n--- NO VALID PATH ---");
-        }
-        DebugLog += TEXT("\n===========================");
-
-        if (bLog)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugLog);
-        }
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, World, EndLocation, bClientWorld, bLog]() mutable
+            [Entity, PathResult, World, EndLocation, bClientWorld]() mutable
         {
             if (!World) return;
 
@@ -662,7 +589,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation, bClientWorld, bLog](FMassEntityManager& System)
+                [Entity, PathResult, EndLocation, bClientWorld](FMassEntityManager& System)
                 {
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
@@ -671,7 +598,6 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         const bool bTargetChanged = FVector::DistSquared2D(PathFrag->PathTargetLocation, EndLocation) > FMath::Square(10.f);
                         if (bTargetChanged)
                         {
-                            if (bClientWorld && bLog) { UE_LOG(LogTemp, Warning, TEXT("[Client] Dropping stale path.")); }
                             return; 
                         }
 

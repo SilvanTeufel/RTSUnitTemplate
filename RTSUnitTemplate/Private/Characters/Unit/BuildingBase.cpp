@@ -77,11 +77,6 @@ void ABuildingBase::SetEnergyWallsActive(bool bActive)
 			if (bActive)
 			{
 				Wall->Multicast_ActivateWall();
-				/*
-				if (EnergyWallClass && Origin)
-				{
-					Wall->Multicast_InitializeWall(Origin, this);
-				}*/
 			}
 			else
 			{

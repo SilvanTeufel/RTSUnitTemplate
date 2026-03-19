@@ -9,6 +9,7 @@
 #include "MassMovementFragments.h"  // FMassVelocityFragment, FMassMoveTargetFragment
 #include "MassNavigationFragments.h" // FUnitNavigationPathFragment (Assumes this exists from previous step)
 #include "UnitNavigationFragments.h"
+#include "NavFilters/NavigationQueryFilter.h"
 #include "UnitMovementProcessor.generated.h"
 
 // Forward Declarations
@@ -23,9 +24,6 @@ class RTSUNITTEMPLATE_API UUnitMovementProcessor : public UMassProcessor
 
 public:
     UUnitMovementProcessor();
-
-    // Global logging toggle for this processor
-    bool bShowLogs = true;
 
 protected:
     // Configuration function called during initialization.
@@ -54,6 +52,8 @@ private:
 
 	UPROPERTY(Transient)
     TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
+
+    FSharedConstNavQueryFilter CachedStrictFilter;
     
     void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
     void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
