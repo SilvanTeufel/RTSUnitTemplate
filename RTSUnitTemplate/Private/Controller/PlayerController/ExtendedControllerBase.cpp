@@ -4155,7 +4155,7 @@ bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor
 			if (HitActor->IsA<ALandscape>() || HitActor->IsA<ALandscapeProxy>()) continue;
 
 			// Skip ALL WorkAreas to prevent blocking by foundation actors
-			if (HitActor->IsA<AWorkArea>()) continue;
+			//if (HitActor->IsA<AWorkArea>()) continue;
 
 			// Skip Energy Walls connected to the involved buildings
 			if (AEnergyWall* Wall = Cast<AEnergyWall>(HitActor))
