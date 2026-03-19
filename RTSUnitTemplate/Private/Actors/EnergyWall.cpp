@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "NavAreas/NavArea_EnergyWall.h"
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -492,7 +493,7 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 
 		if (NavModifier)
 		{
-			NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
+			NavModifier->SetAreaClass(UNavArea_EnergyWall::StaticClass());
 			NavModifier->FailsafeExtent = BoxExtent;
 			NavModifier->SetActive(true);
 		}

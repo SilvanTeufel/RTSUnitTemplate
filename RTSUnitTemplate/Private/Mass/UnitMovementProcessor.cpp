@@ -13,6 +13,7 @@
 #include "MassEntitySubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "NavAreas/NavArea_EnergyWall.h"
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
@@ -492,7 +493,8 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
     if (!CachedStrictFilter.IsValid())
     {
         FSharedNavQueryFilter NewFilter = NavData->GetDefaultQueryFilter()->GetCopy();
-        NewFilter->SetExcludedArea(NavData->GetAreaID(UNavArea_Obstacle::StaticClass()));
+        // GEÄNDERT: Exkludiere NUR die EnergyWall! Basis bleibt erreichbar.
+        NewFilter->SetExcludedArea(NavData->GetAreaID(UNavArea_EnergyWall::StaticClass()));
         CachedStrictFilter = NewFilter;
     }
     
@@ -532,7 +534,8 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                     if (PathPoints[i].HasNodeRef())
                     {
                         const UClass* AreaClass = NavData->GetAreaClass(PathPoints[i].NodeRef);
-                        bStartsInWall = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                        // GEÄNDERT: Prüfe auf EnergyWall
+                        bStartsInWall = AreaClass && AreaClass->IsChildOf(UNavArea_EnergyWall::StaticClass());
                         break; 
                     }
                 }
@@ -549,7 +552,8 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                     {
                         if (!PathPoints[i].HasNodeRef()) continue;
                         const UClass* AreaClass = NavData->GetAreaClass(PathPoints[i].NodeRef);
-                        const bool bIsObstacle = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                        // GEÄNDERT: Prüfe auf EnergyWall
+                        const bool bIsObstacle = AreaClass && AreaClass->IsChildOf(UNavArea_EnergyWall::StaticClass());
 
                         if (!bIsObstacle) {
                             // FIX B: ANTI-TUNNELING CHECK
