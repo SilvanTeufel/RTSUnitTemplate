@@ -56,11 +56,17 @@ void ABuildingBase::SetBeaconRange(float NewRange)
 void ABuildingBase::SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, ABuildingBase* InOrigin)
 {
 	if (!InEnergyWallClass || !InOrigin) return;
+
+	// Requirement 2: Only connect if TeamIds are the same
+	if (InOrigin->TeamId != this->TeamId) return;
+
 	if (UWorld* World = GetWorld())
 	{
 		AEnergyWall* NewWall = World->SpawnActor<AEnergyWall>(InEnergyWallClass, FTransform::Identity);
 		if (NewWall)
 		{
+			// Requirement 3: Get TeamId from Building
+			NewWall->TeamId = this->TeamId;
 			NewWall->Multicast_InitializeWall(InOrigin, this);
 			EnergyWallArray.Add(NewWall);
 			InOrigin->EnergyWallArray.Add(NewWall);

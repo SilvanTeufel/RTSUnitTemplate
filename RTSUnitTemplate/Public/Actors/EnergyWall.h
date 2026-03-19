@@ -46,6 +46,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* NavObstacleBox;
 
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "EnergyWall")
+	int32 TeamId;
+
+	UPROPERTY(EditAnywhere, Category = "EnergyWall|Effects")
+	TSubclassOf<class UGameplayEffect> FriendlyEffectClass;
+
+	UPROPERTY(EditAnywhere, Category = "EnergyWall|Effects")
+	TSubclassOf<class UGameplayEffect> EnemyEffectClass;
+
+	UFUNCTION()
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UNavModifierComponent* NavModifier;
 	

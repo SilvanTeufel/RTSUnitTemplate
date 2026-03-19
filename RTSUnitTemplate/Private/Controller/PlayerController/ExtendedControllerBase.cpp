@@ -4067,6 +4067,13 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 		}
 	}
 
+	// Requirement 2: Prevent connecting buildings of different teams
+	if (Initiator->TeamId != Target->TeamId)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] TeamId mismatch: %d vs %d"), Initiator->TeamId, Target->TeamId);
+		return false;
+	}
+
 	bool bSameClass = Initiator->EnergyWallClass && Initiator->EnergyWallClass == Target->EnergyWallClass;
 	bool bInitiatorHasSpace = Initiator->EnergyWallArray.Num() < 2;
 	bool bTargetHasSpace = Target->EnergyWallArray.Num() < 2;

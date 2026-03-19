@@ -6,7 +6,11 @@
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "NavigationSystem.h"
+#include "Net/UnrealNetwork.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/UnitBase.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/StaticMesh.h"
@@ -39,7 +43,9 @@ AEnergyWall::AEnergyWall()
 	NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	NavObstacleBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	NavObstacleBox->SetCanEverAffectNavigation(true);
+	NavObstacleBox->OnComponentBeginOverlap.AddDynamic(this, &AEnergyWall::OnOverlapBegin);
 
 	NavModifier = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifier"));
 	NavModifier->SetAreaClass(nullptr); 
@@ -320,6 +326,7 @@ void AEnergyWall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEnergyWall, CachedBuildingA);
 	DOREPLIFETIME(AEnergyWall, CachedBuildingB);
 	DOREPLIFETIME(AEnergyWall, bIsDeactivated);
+	DOREPLIFETIME(AEnergyWall, TeamId);
 }
 
 void AEnergyWall::OnInitializationTimerComplete()
@@ -415,6 +422,32 @@ int32 AEnergyWall::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMC
 	}
 }
 
+void AEnergyWall::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!HasAuthority()) return;
+
+	AUnitBase* Unit = Cast<AUnitBase>(OtherActor);
+	if (Unit)
+	{
+		UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+		if (ASC)
+		{
+			TSubclassOf<UGameplayEffect> EffectToApply = (Unit->TeamId == this->TeamId) ? FriendlyEffectClass : EnemyEffectClass;
+			if (EffectToApply)
+			{
+				FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+				EffectContext.AddInstigator(this, this);
+
+				FGameplayEffectSpecHandle NewHandle = ASC->MakeOutgoingSpec(EffectToApply, 1.0f, EffectContext);
+				if (NewHandle.IsValid())
+				{
+					ASC->ApplyGameplayEffectSpecToSelf(*NewHandle.Data.Get());
+				}
+			}
+		}
+	}
+}
+
 void AEnergyWall::RegisterObstacle(float Length, float Height)
 {
 	FVector StartPoint = CachedBuildingA ? CachedBuildingA->GetActorLocation() : FVector::ZeroVector;
@@ -432,6 +465,7 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 	{
 		// Toggle collision instead of CanEverAffectNavigation for more reliable updates
 		NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
 		FVector BoxExtent;
 		
