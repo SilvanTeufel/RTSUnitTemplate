@@ -11,6 +11,9 @@
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
+#include "NavFilters/NavFilter_Strict.h"
+#include "NavFilters/NavFilter_Escape.h"
+#include "NavAreas/NavArea_Obstacle.h"
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
@@ -304,76 +307,44 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 {
                     ++PathRequests;
                     PathFrag.bIsPathfindingInProgress = true;
-
-                    FNavLocation ProjectedDestinationLocation;
-                    if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
+                    
+                    // WICHTIG: Wir speichern exakt das ab, was wir anfragen (UNPROJIZIERT)
+                    PathFrag.PathTargetLocation = FinalDestination;
+                    
+                    if (Pred.bHasData)
                     {
-                        // Store the projected destination as our target to keep consistent with async result
-                        PathFrag.PathTargetLocation = ProjectedDestinationLocation.Location;
-                        // Keep predicted location consistent too (optional)
-                        if (Pred.bHasData)
-                        {
-                            Pred.Location = ProjectedDestinationLocation.Location;
-                        }
+                        Pred.Location = FinalDestination;
+                    }
 
-                        FNavLocation ProjectedStartLocation;
-                        if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
-                        {
-                            if (bShowLogs)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Start pathfinding: Start=%s Dest=%s"), *ProjectedStartLocation.Location.ToString(), *ProjectedDestinationLocation.Location.ToString());
-                            }
-                            RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
-                        }
-                        else
-                        {
-                            if (bShowLogs)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Project start failed for %s; steering directly"), *CurrentLocation.ToString());
-                            }
-                            FVector MoveDir = (ProjectedDestinationLocation.Location - CurrentLocation).GetSafeNormal();
-                            Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
-                            PathFrag.bIsPathfindingInProgress = false;
-                        }
+                    FNavLocation ProjectedStartLocation;
+                    if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
+                    {
+                        // Wir übergeben FinalDestination direkt an den Pathfinder!
+                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
                     }
                     else
                     {
-                        if (bShowLogs)
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Project destination failed for %s; prediction-safe cancel (no client MoveTarget write)"), *FinalDestination.ToString());
-                        }
-                        // Prediction-safe: never write to authoritative MoveTarget on clients
+                        // GEÄNDERT: Kein Blindflug!
+                        Steering.DesiredVelocity = FVector::ZeroVector;
                         PathFrag.bIsPathfindingInProgress = false;
                         PathFrag.ResetPath();
-                        // Optionally steer directly toward the unprojected destination this tick
-                        FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                        if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
-                        {
-                            Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
-                        }
                     }
                 }
                 else
                 {
-                    // No navmesh on client: steer straight to destination for prediction
                     ++DirectSteer;
-                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                    if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
-                    {
-                        Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
-                    }
+                    // GEÄNDERT: DirectSteer für Bodentruppen OHNE Pfad ist gefährlich.
+                    // Wenn sie keinen Pfad haben, sollen sie stehen bleiben, nicht fliegen!
+                    Steering.DesiredVelocity = FVector::ZeroVector; 
                     PathFrag.bIsPathfindingInProgress = false;
                 }
             }
             else if (PathFrag.bIsPathfindingInProgress)
             {
                 ++PathfindingInProgressCount;
-                // Keep moving while waiting for async path result to avoid visible freeze
-                FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
-                {
-                    Steering.DesiredVelocity = MoveDir * (DesiredSpeedUsed * 0.5f);
-                }
+                // GEÄNDERT: Kein blindes Vorwärtslaufen mehr! 
+                // Wenn wir den Pfad berechnen, bleiben wir stehen, um nicht durch Wände zu glitchen.
+                Steering.DesiredVelocity = FVector::ZeroVector; 
             }
             else if (PathFrag.HasValidPath())
             {
@@ -402,11 +373,9 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             else
             {
                  ++DirectSteer;
-                 FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                 if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
-                 {
-                    Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
-                 }
+                 // GEÄNDERT: DirectSteer für Bodentruppen OHNE Pfad ist gefährlich.
+                 // Wenn sie keinen Pfad haben, sollen sie stehen bleiben, nicht fliegen!
+                 Steering.DesiredVelocity = FVector::ZeroVector; 
             }
         }
 
@@ -493,27 +462,21 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
             {
                 PathFrag.bIsPathfindingInProgress = true;
+                
+                // WICHTIG: Wir speichern exakt das ab, was wir anfragen (UNPROJIZIERT)
                 PathFrag.PathTargetLocation = FinalDestination;
 
-                FNavLocation ProjectedDestinationLocation;
-                if (NavSystem->ProjectPointToNavigation(FinalDestination, ProjectedDestinationLocation, NavMeshProjectionExtent))
+                FNavLocation ProjectedStartLocation;
+                if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
                 {
-                    FNavLocation ProjectedStartLocation;
-                    if (NavSystem->ProjectPointToNavigation(CurrentLocation, ProjectedStartLocation, NavMeshProjectionExtent))
-                    {
-                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, ProjectedDestinationLocation.Location);
-                    }
-                    else
-                    {
-                        FVector MoveDir = (ProjectedDestinationLocation.Location - CurrentLocation).GetSafeNormal();
-                        Steering.DesiredVelocity = MoveDir * DesiredSpeed;
-                        PathFrag.bIsPathfindingInProgress = false; // We are not pathfinding, just steering.
-                    }
+                    // Wir übergeben FinalDestination direkt an den Pathfinder!
+                    RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
                 }
                 else
                 {
-                    MoveTarget.Center = CurrentLocation;
-                    PathFrag.bIsPathfindingInProgress = false;
+                    // GEÄNDERT: Kein Blindflug mehr! Wenn wir nicht auf dem Navmesh sind, bleiben wir stehen.
+                    Steering.DesiredVelocity = FVector::ZeroVector;
+                    PathFrag.bIsPathfindingInProgress = false; 
                     PathFrag.ResetPath();
                 }
             }
@@ -544,11 +507,8 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             }
             else
             {
-                 FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
-                 if (MoveDir.SizeSquared() > KINDA_SMALL_NUMBER)
-                 {
-                    Steering.DesiredVelocity = MoveDir * DesiredSpeed;
-                 }
+                 // GEÄNDERT: Auch auf dem Server darf eine Bodentruppe ohne Pfad nicht einfach stur geradeaus laufen.
+                 Steering.DesiredVelocity = FVector::ZeroVector; 
             }
         }
     });
@@ -574,23 +534,124 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         return;
     }
     
-    FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
-
     const bool bClientWorld = World->IsNetMode(NM_Client);
     const bool bLog = bShowLogs;
+    
     AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-        [NavSystem, NavData, QueryFilter, Entity, StartLocation, EndLocation, World, bClientWorld, bLog] () mutable
+        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, bLog] () mutable
     {
-        // --- Runs on a Background Thread ---
-        FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, QueryFilter);
-        Query.SetAllowPartialPaths(true);
+        FString DebugLog = FString::Printf(TEXT("\n=== PATHFINDING REQUEST ===\nEntity Start: %s | Target: %s"), *StartLocation.ToString(), *EndLocation.ToString());
+
+        // --- 1. STRICT MODE: Exklusion hartcodieren ---
+        // Wir holen eine Kopie des Standard-Filters und zwingen UNavArea_Obstacle auf "Excluded"
+        FSharedNavQueryFilter StrictFilter = NavData->GetDefaultQueryFilter()->GetCopy();
+        StrictFilter->SetExcludedArea(NavData->GetAreaID(UNavArea_Obstacle::StaticClass())); 
+
+        // Wir übergeben den dynamischen StrictFilter an die Query
+        FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, StrictFilter);
+        
+        // Erlaubt Partial Paths: Er plant bis zum Ufer, weil die Insel jetzt mathematisch "unendlich" weit weg ist.
+        Query.SetAllowPartialPaths(true); 
 
         FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
+        DebugLog += FString::Printf(TEXT("\n[StrictFilter] Result: %d (IsPartial: %d, IsValid: %d)"), (int32)PathResult.Result, PathResult.IsPartial(), PathResult.Path.IsValid() ? 1 : 0);
+
+        // --- 2. ESCAPE MODE FALLBACK ---
+        if (PathResult.Result == ENavigationQueryResult::Fail)
+        {
+            DebugLog += TEXT("\n[Fallback] Strict failed. Testing EscapeFilter...");
+            
+            // Inline Escape Filter (Erlaubt alles wieder)
+            FSharedNavQueryFilter EscapeFilter = NavData->GetDefaultQueryFilter()->GetCopy();
+            
+            FPathFindingQuery EscapeQuery(nullptr, *NavData, StartLocation, EndLocation, EscapeFilter);
+            EscapeQuery.SetAllowPartialPaths(true);
+
+            PathResult = NavSystem->FindPathSync(EscapeQuery, EPathFindingMode::Regular);
+            DebugLog += FString::Printf(TEXT("\n[EscapeFilter] Result: %d (IsPartial: %d, IsValid: %d)"), (int32)PathResult.Result, PathResult.IsPartial(), PathResult.Path.IsValid() ? 1 : 0);
+
+            if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 0)
+            {
+                const TArray<FNavPathPoint>& PathPoints = PathResult.Path->GetPathPoints();
+                
+                // Auf was für einem Polygon STARTEN wir?
+                bool bStartsInWall = false;
+                FString StartAreaName = TEXT("None");
+                
+                for (int32 i = 0; i < PathPoints.Num(); ++i)
+                {
+                    if (PathPoints[i].HasNodeRef())
+                    {
+                        const UClass* AreaClass = NavData->GetAreaClass(PathPoints[i].NodeRef);
+                        if (AreaClass) StartAreaName = AreaClass->GetName();
+                        bStartsInWall = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                        break; 
+                    }
+                }
+
+                DebugLog += FString::Printf(TEXT("\n[Escape Logic] Path starts on Area: %s. StartsInWall = %d"), *StartAreaName, bStartsInWall ? 1 : 0);
+
+                if (!bStartsInWall)
+                {
+                    DebugLog += TEXT("\n[Escape Logic] REJECTED! Path started on safe ground. Entity is just at the shore.");
+                    PathResult.Result = ENavigationQueryResult::Fail;
+                    PathResult.Path->ResetForRepath();
+                }
+                else
+                {
+                    DebugLog += TEXT("\n[Escape Logic] ACCEPTED! Entity is trapped. Calculating cut-off...");
+                    int32 CutOffIndex = -1;
+                    for (int32 i = 0; i < PathPoints.Num(); ++i)
+                    {
+                        if (!PathPoints[i].HasNodeRef()) continue;
+                        const UClass* AreaClass = NavData->GetAreaClass(PathPoints[i].NodeRef);
+                        const bool bIsObstacle = AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+
+                        if (!bIsObstacle) {
+                            CutOffIndex = i + 1; 
+                            break;
+                        }
+                    }
+
+                    if (CutOffIndex > 0 && CutOffIndex < PathPoints.Num())
+                    {
+                        DebugLog += FString::Printf(TEXT("\n[Escape Logic] Cut off path at index %d to prevent re-entry."), CutOffIndex);
+                        TArray<FNavPathPoint>& MutablePoints = const_cast<TArray<FNavPathPoint>&>(PathResult.Path->GetPathPoints());
+                        MutablePoints.SetNum(CutOffIndex);
+                    }
+                }
+            }
+        }
+
+        // --- LOG PATH POINTS ---
+        if (PathResult.IsSuccessful() && PathResult.Path.IsValid())
+        {
+            const TArray<FNavPathPoint>& Pts = PathResult.Path->GetPathPoints();
+            DebugLog += FString::Printf(TEXT("\n--- Final Path Points (%d) ---"), Pts.Num());
+            for (int i = 0; i < Pts.Num(); i++)
+            {
+                FString AreaName = TEXT("Unknown");
+                if (Pts[i].HasNodeRef()) {
+                    const UClass* AC = NavData->GetAreaClass(Pts[i].NodeRef);
+                    if (AC) AreaName = AC->GetName();
+                }
+                DebugLog += FString::Printf(TEXT("\n   Pt %d: %s | Area: %s"), i, *Pts[i].Location.ToString(), *AreaName);
+            }
+        }
+        else
+        {
+             DebugLog += TEXT("\n--- NO VALID PATH ---");
+        }
+        DebugLog += TEXT("\n===========================");
+
+        if (bLog)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugLog);
+        }
         
         AsyncTask(ENamedThreads::GameThread,
             [Entity, PathResult, World, EndLocation, bClientWorld, bLog]() mutable
         {
-            // --- Runs back on the Game Thread ---
             if (!World) return;
 
             UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
@@ -598,50 +659,43 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
 
             FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
-            if (!EntityManager.IsEntityValid(Entity))
-            {
-                return;
-            }
+            if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
                 [Entity, PathResult, EndLocation, bClientWorld, bLog](FMassEntityManager& System)
                 {
-                    // This lambda now runs at a safe time.
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
-                        PathFrag->bIsPathfindingInProgress = false; // Reset flag regardless of success/failure
+                        PathFrag->bIsPathfindingInProgress = false;
 
-                        // Drop stale results if target changed (compare in XY only, ignore Z disparities)
-                        const bool bTargetChanged = FVector::DistSquared2D(PathFrag->PathTargetLocation, EndLocation) > FMath::Square(1.f);
+                        const bool bTargetChanged = FVector::DistSquared2D(PathFrag->PathTargetLocation, EndLocation) > FMath::Square(10.f);
                         if (bTargetChanged)
                         {
-                            if (bClientWorld && bLog)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Dropping stale path result (target changed) TargetNow=%s Requested=%s"),
-                                    *PathFrag->PathTargetLocation.ToString(), *EndLocation.ToString());
-                            }
-                            return; // do not apply
+                            if (bClientWorld && bLog) { UE_LOG(LogTemp, Warning, TEXT("[Client] Dropping stale path.")); }
+                            return; 
                         }
 
                         if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
                         {
-                            const int32 NumPts = PathResult.Path->GetPathPoints().Num();
-                            if (bClientWorld && bLog)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Path result: SUCCESS points=%d"), NumPts);
-                            }
                             PathFrag->CurrentPath = PathResult.Path;
                             PathFrag->CurrentPathPointIndex = 1;
+
+                            const FVector PathEndLoc = PathResult.Path->GetEndLocation();
+                            if (FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
+                            {
+                                PathFrag->PathTargetLocation = PathEndLoc;
+                                if (FMassMoveTargetFragment* TargetFrag = System.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                                {
+                                    TargetFrag->Center = PathEndLoc;
+                                }
+                            }
+                            else
+                            {
+                                PathFrag->PathTargetLocation = EndLocation;
+                            }
                         }
                         else
                         {
-                            if (bClientWorld && bLog)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("[Client][UnitMovement] Path result: FAIL (IsSuccessful=%d, Valid=%d, Points=%d)"),
-                                    PathResult.IsSuccessful() ? 1 : 0,
-                                    PathResult.Path.IsValid() ? 1 : 0,
-                                    PathResult.Path.IsValid() ? PathResult.Path->GetPathPoints().Num() : 0);
-                            }
                             PathFrag->ResetPath();
                         }
                     }
