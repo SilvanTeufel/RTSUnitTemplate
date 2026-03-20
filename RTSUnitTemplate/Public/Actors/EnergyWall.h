@@ -92,7 +92,7 @@ public:
 	 * @return The index of the added or updated instance.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "EnergyWall")
-	int32 InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
+	void InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
 
 	/**
 	 * Starts the despawn process, notifying the navigation system and applying visual effects via materials.

@@ -404,22 +404,21 @@ void AEnergyWall::InitializeISMs()
 	}
 }
 
-int32 AEnergyWall::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
+void AEnergyWall::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (!InISMComponent || !InISMComponent->GetStaticMesh())
 	{
-		return INDEX_NONE;
+		return;
 	}
 
 	const FTransform LocalIdentityTransform = FTransform::Identity;
 	if (InISMComponent->GetInstanceCount() == 0)
 	{
-		return InISMComponent->AddInstance(LocalIdentityTransform, false);
+		InISMComponent->AddInstance(LocalIdentityTransform, false);
 	}
 	else
 	{
 		InISMComponent->UpdateInstanceTransform(0, LocalIdentityTransform, false, true, false);
-		return 0;
 	}
 }
 

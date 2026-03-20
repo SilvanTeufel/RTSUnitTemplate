@@ -169,27 +169,21 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 // --- Apply Tweens as Overrides ---
                 // Rotation
                 if (Tween.RotationTween.bActive || Tween.RotationTween.Elapsed > 0.f) {
-                    bool bShouldApply = (Tween.RotationTween.TargetInstanceIndex != INDEX_NONE)
-                        ? (Tween.RotationTween.TargetInstanceIndex == InstanceIdx)
-                        : (!Tween.RotationTween.TargetISM.IsValid() || Tween.RotationTween.TargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Tween.RotationTween.TargetISM.IsValid() || Tween.RotationTween.TargetISM == InstanceTemplate);
                     if (bShouldApply) {
                          NewTransform.SetRotation(CurrentRotTween);
                     }
                 }
                 // Location
                 if (Tween.LocationTween.bActive || Tween.LocationTween.Elapsed > 0.f) {
-                    bool bShouldApply = (Tween.LocationTween.TargetInstanceIndex != INDEX_NONE)
-                        ? (Tween.LocationTween.TargetInstanceIndex == InstanceIdx)
-                        : (!Tween.LocationTween.TargetISM.IsValid() || Tween.LocationTween.TargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Tween.LocationTween.TargetISM.IsValid() || Tween.LocationTween.TargetISM == InstanceTemplate);
                     if (bShouldApply) {
                         NewTransform.SetLocation(CurrentLocTween);
                     }
                 }
                 // Scale
                 if (Tween.ScaleTween.bActive || Tween.ScaleTween.Elapsed > 0.f) {
-                    bool bShouldApply = (Tween.ScaleTween.TargetInstanceIndex != INDEX_NONE)
-                        ? (Tween.ScaleTween.TargetInstanceIndex == InstanceIdx)
-                        : (!Tween.ScaleTween.TargetISM.IsValid() || Tween.ScaleTween.TargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Tween.ScaleTween.TargetISM.IsValid() || Tween.ScaleTween.TargetISM == InstanceTemplate);
                     if (bShouldApply) {
                         NewTransform.SetScale3D(CurrentScaleTween);
                     }
@@ -198,9 +192,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 // --- Apply Effects ---
                 // Pulsate (Pulsate values are usually absolute scales)
                 if (Effect.bPulsateEnabled) {
-                    bool bShouldApply = (Effect.PulsateTargetInstanceIndex != INDEX_NONE)
-                        ? (Effect.PulsateTargetInstanceIndex == InstanceIdx)
-                        : (!Effect.PulsateTargetISM.IsValid() || Effect.PulsateTargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Effect.PulsateTargetISM.IsValid() || Effect.PulsateTargetISM == InstanceTemplate);
                     if (bShouldApply) {
                          NewTransform.SetScale3D(CurrentPulsateScale);
                     }
@@ -208,9 +200,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Continuous Rotation (Combine with base rotation)
                 if (Effect.bRotationEnabled) {
-                    bool bShouldApply = (Effect.RotationTargetInstanceIndex != INDEX_NONE)
-                        ? (Effect.RotationTargetInstanceIndex == InstanceIdx)
-                        : (!Effect.RotationTargetISM.IsValid() || Effect.RotationTargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Effect.RotationTargetISM.IsValid() || Effect.RotationTargetISM == InstanceTemplate);
                     if (bShouldApply) {
                         NewTransform.SetRotation(TotalRotation * NewTransform.GetRotation());
                     }
@@ -218,9 +208,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Oscillation (Additively to location)
                 if (Effect.bOscillationEnabled) {
-                    bool bShouldApply = (Effect.OscillationTargetInstanceIndex != INDEX_NONE)
-                        ? (Effect.OscillationTargetInstanceIndex == InstanceIdx)
-                        : (!Effect.OscillationTargetISM.IsValid() || Effect.OscillationTargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Effect.OscillationTargetISM.IsValid() || Effect.OscillationTargetISM == InstanceTemplate);
                     if (bShouldApply) {
                         NewTransform.AddToTranslation(CurrentOscOffset);
                     }
@@ -228,9 +216,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Yaw-to-Chase (Slerp towards target relative rotation)
                 if (Effect.bYawChaseEnabled && bHasYawChaseTarget) {
-                    bool bShouldApply = (Effect.YawChaseTargetInstanceIndex != INDEX_NONE)
-                        ? (Effect.YawChaseTargetInstanceIndex == InstanceIdx)
-                        : (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate);
+                    bool bShouldApply = (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate);
                     if (bShouldApply) {
                         FQuat TargetQuat = TargetYawRot.Quaternion();
                         if (Effect.bYawChaseTeleport || Effect.YawChaseDuration <= 0.f) {

@@ -1334,15 +1334,15 @@ void AMassUnitBase::RemoveAdditionalISMInstances()
 	}
 }
 
-int32 AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (!InISMComponent)
 	{
-		return INDEX_NONE;
+		return;
 	}
 
 	// AddUnique returns the index where the component was added/found
-	int32 ListIndex = AdditionalISMComponents.AddUnique(InISMComponent);
+	AdditionalISMComponents.AddUnique(InISMComponent);
 
 	if (GetWorld() && GetWorld()->IsGameWorld())
 	{
@@ -1360,9 +1360,6 @@ int32 AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InIS
 			InISMComponent->AddInstance(LocalIdentityTransform, false);
 		}
 	}
-
-	// Return ListIndex + 1 to account for the main ISMComponent at index 0
-	return ListIndex + 1;
 }
 
 bool AMassUnitBase::GetMassVisualInstance(UInstancedStaticMeshComponent* TemplateISM, UInstancedStaticMeshComponent*& OutComponent, int32& OutInstanceIndex) const
@@ -1866,18 +1863,17 @@ void AMassUnitBase::MulticastTransformSync_Implementation(const FVector& Locatio
 	SwitchEntityTagByState(UnitData::Idle, UnitStatePlaceholder);
 }
 
-void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		TweenFrag->RotationTween.StartRotation = GetCurrentLocalVisualRotation(InstIndex, InISMComponent);
+		TweenFrag->RotationTween.StartRotation = GetCurrentLocalVisualRotation(InISMComponent);
 		TweenFrag->RotationTween.TargetRotation = NewRotation.Quaternion().GetNormalized();
 		TweenFrag->RotationTween.Duration = InRotateDuration;
 		TweenFrag->RotationTween.Elapsed = 0.f;
 		TweenFrag->RotationTween.EaseExp = FMath::Max(InRotationEaseExponent, 0.001f);
 		TweenFrag->RotationTween.bActive = true;
 		TweenFrag->RotationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		TweenFrag->RotationTween.TargetInstanceIndex = InstIndex;
 
 		// Shortest arc
 		if ((TweenFrag->RotationTween.StartRotation | TweenFrag->RotationTween.TargetRotation) < 0.f)
@@ -1887,7 +1883,7 @@ void AMassUnitBase::MulticastRotateISMLinear_Implementation(const FRotator& NewR
 	}
 }
 
-FQuat AMassUnitBase::GetCurrentLocalVisualRotation(int32 VisualInstanceIndex, UInstancedStaticMeshComponent* InISM) const
+FQuat AMassUnitBase::GetCurrentLocalVisualRotation(UInstancedStaticMeshComponent* InISM) const
 {
 	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
 	UInstancedStaticMeshComponent* TargetISM = nullptr;
@@ -1895,16 +1891,7 @@ FQuat AMassUnitBase::GetCurrentLocalVisualRotation(int32 VisualInstanceIndex, UI
 
 	if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 	{
-		if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-		{
-			const FMassUnitVisualInstance& Instance = VisualFrag->VisualInstances[VisualInstanceIndex];
-			TargetISM = Instance.TargetISM.Get();
-			TargetInstIndex = Instance.InstanceIndex;
-		}
-		else
-		{
-			GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
-		}
+		GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
 	}
 
 	// Prioritize Mass Manager Visuals
@@ -1924,11 +1911,6 @@ FQuat AMassUnitBase::GetCurrentLocalVisualRotation(int32 VisualInstanceIndex, UI
 		// If instance transform is not helpful, use the BaseOffset from the fragment
 		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 		{
-			if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-			{
-				return VisualFrag->VisualInstances[VisualInstanceIndex].BaseOffset.GetRotation().GetNormalized();
-			}
-			
 			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
 			{
 				if (Instance.TemplateISM == TemplateISM)
@@ -2182,7 +2164,7 @@ void AMassUnitBase::MulticastRotateActorYawToChase_Implementation(UStaticMeshCom
 	}
 }
 
-void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, int32 InstIndex, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees, bool bTeleport)
+void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStaticMeshComponent* ISMToRotate, float InRotateDuration, float InRotationEaseExponent, bool bEnable, float YawOffsetDegrees, bool bTeleport)
 {
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
 	{
@@ -2192,7 +2174,6 @@ void AMassUnitBase::MulticastRotateISMYawToChase_Implementation(UInstancedStatic
 		EffectFrag->YawChaseEaseExp = InRotationEaseExponent;
 		EffectFrag->bYawChaseTeleport = bTeleport;
 		EffectFrag->YawChaseTargetISM = ISMToRotate ? ISMToRotate : ISMComponent;
-		EffectFrag->YawChaseTargetInstanceIndex = InstIndex;
 	}
 }
 
@@ -2457,22 +2438,21 @@ void AMassUnitBase::UnitMove_Step()
 	}
 }
 
-void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastMoveISMLinear_Implementation(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		TweenFrag->LocationTween.StartLocation = GetCurrentLocalVisualLocation(InstIndex, InISMComponent);
+		TweenFrag->LocationTween.StartLocation = GetCurrentLocalVisualLocation(InISMComponent);
 		TweenFrag->LocationTween.TargetLocation = NewLocation;
 		TweenFrag->LocationTween.Duration = InMoveDuration;
 		TweenFrag->LocationTween.Elapsed = 0.f;
 		TweenFrag->LocationTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
 		TweenFrag->LocationTween.bActive = true;
 		TweenFrag->LocationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		TweenFrag->LocationTween.TargetInstanceIndex = InstIndex;
 	}
 }
 
-void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate, bool bEnable, float Duration, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate, bool bEnable, float Duration, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (HasAuthority())
 	{
@@ -2492,16 +2472,15 @@ void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate,
 			EffectFrag->RotationDuration = Duration;
 			EffectFrag->RotationElapsed = 0.f;
 			EffectFrag->RotationTargetISM = InISMComponent ? InISMComponent : ISMComponent;
-			EffectFrag->RotationTargetInstanceIndex = InstIndex;
 		}
 	}
 }
 
-void AMassUnitBase::MulticastMoveISMLinearRelative_Implementation(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastMoveISMLinearRelative_Implementation(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		FVector CurrentLoc = GetCurrentLocalVisualLocation(InstIndex, InISMComponent);
+		FVector CurrentLoc = GetCurrentLocalVisualLocation(InISMComponent);
 		TweenFrag->LocationTween.StartLocation = CurrentLoc;
 		TweenFrag->LocationTween.TargetLocation = CurrentLoc + RelativeLocationChange;
 		TweenFrag->LocationTween.Duration = InMoveDuration;
@@ -2509,11 +2488,10 @@ void AMassUnitBase::MulticastMoveISMLinearRelative_Implementation(const FVector&
 		TweenFrag->LocationTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
 		TweenFrag->LocationTween.bActive = true;
 		TweenFrag->LocationTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		TweenFrag->LocationTween.TargetInstanceIndex = InstIndex;
 	}
 }
 
-void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Location, const FRotator& Rotation, const FVector& Scale, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Location, const FRotator& Rotation, const FVector& Scale, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
@@ -2526,7 +2504,6 @@ void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Loca
 		TweenFrag->LocationTween.Elapsed = 0.f;
 		TweenFrag->LocationTween.bActive = false;
 		TweenFrag->LocationTween.TargetISM = TargetISM;
-		TweenFrag->LocationTween.TargetInstanceIndex = InstIndex;
 
 		// Snap rotation
 		TweenFrag->RotationTween.StartRotation = Rotation.Quaternion().GetNormalized();
@@ -2535,7 +2512,6 @@ void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Loca
 		TweenFrag->RotationTween.Elapsed = 0.f;
 		TweenFrag->RotationTween.bActive = false;
 		TweenFrag->RotationTween.TargetISM = TargetISM;
-		TweenFrag->RotationTween.TargetInstanceIndex = InstIndex;
 
 		// Snap scale
 		TweenFrag->ScaleTween.StartScale = Scale;
@@ -2544,34 +2520,22 @@ void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Loca
 		TweenFrag->ScaleTween.Elapsed = 0.f;
 		TweenFrag->ScaleTween.bActive = false;
 		TweenFrag->ScaleTween.TargetISM = TargetISM;
-		TweenFrag->ScaleTween.TargetInstanceIndex = InstIndex;
 	}
 
 	// Also directly apply to the visual fragment so PlacementProcessor picks it up immediately
 	if (FMassUnitVisualFragment* VisualFrag = GetMutableVisualFragment())
 	{
 		UInstancedStaticMeshComponent* TargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		if (InstIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(InstIndex))
+		for (FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
 		{
-			FTransform NewTransform;
-			NewTransform.SetLocation(Location);
-			NewTransform.SetRotation(Rotation.Quaternion().GetNormalized());
-			NewTransform.SetScale3D(Scale);
-			VisualFrag->VisualInstances[InstIndex].CurrentRelativeTransform = NewTransform;
-		}
-		else
-		{
-			for (FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+			if (!Instance.TemplateISM.IsValid()) continue;
+			if (Instance.TemplateISM == TargetISM)
 			{
-				if (!Instance.TemplateISM.IsValid()) continue;
-				if (Instance.TemplateISM == TargetISM)
-				{
-					FTransform NewTransform;
-					NewTransform.SetLocation(Location);
-					NewTransform.SetRotation(Rotation.Quaternion().GetNormalized());
-					NewTransform.SetScale3D(Scale);
-					Instance.CurrentRelativeTransform = NewTransform;
-				}
+				FTransform NewTransform;
+				NewTransform.SetLocation(Location);
+				NewTransform.SetRotation(Rotation.Quaternion().GetNormalized());
+				NewTransform.SetScale3D(Scale);
+				Instance.CurrentRelativeTransform = NewTransform;
 			}
 		}
 	}
@@ -2588,7 +2552,7 @@ void AMassUnitBase::MulticastISMTransformSync_Implementation(const FVector& Loca
 	}
 }
 
-FVector AMassUnitBase::GetCurrentLocalVisualLocation(int32 VisualInstanceIndex, UInstancedStaticMeshComponent* InISM) const
+FVector AMassUnitBase::GetCurrentLocalVisualLocation(UInstancedStaticMeshComponent* InISM) const
 {
 	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
 	UInstancedStaticMeshComponent* TargetISM = nullptr;
@@ -2596,16 +2560,7 @@ FVector AMassUnitBase::GetCurrentLocalVisualLocation(int32 VisualInstanceIndex, 
 
 	if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 	{
-		if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-		{
-			const FMassUnitVisualInstance& Instance = VisualFrag->VisualInstances[VisualInstanceIndex];
-			TargetISM = Instance.TargetISM.Get();
-			TargetInstIndex = Instance.InstanceIndex;
-		}
-		else
-		{
-			GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
-		}
+		GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
 	}
 
 	// Prioritize Mass Manager Visuals
@@ -2622,11 +2577,6 @@ FVector AMassUnitBase::GetCurrentLocalVisualLocation(int32 VisualInstanceIndex, 
 
 		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 		{
-			if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-			{
-				return VisualFrag->VisualInstances[VisualInstanceIndex].BaseOffset.GetLocation();
-			}
-
 			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
 			{
 				if (Instance.TemplateISM == TemplateISM)
@@ -2740,22 +2690,21 @@ void AMassUnitBase::StaticMeshMoves_Step()
 	}
 }
 
-void AMassUnitBase::MulticastScaleISMLinear_Implementation(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastScaleISMLinear_Implementation(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (FMassVisualTweenFragment* TweenFrag = GetMutableTweenFragment())
 	{
-		TweenFrag->ScaleTween.StartScale = GetCurrentLocalVisualScale(InstIndex, InISMComponent);
+		TweenFrag->ScaleTween.StartScale = GetCurrentLocalVisualScale(InISMComponent);
 		TweenFrag->ScaleTween.TargetScale = NewScale;
 		TweenFrag->ScaleTween.Duration = InScaleDuration;
 		TweenFrag->ScaleTween.Elapsed = 0.f;
 		TweenFrag->ScaleTween.EaseExp = FMath::Max(InScaleEaseExponent, 0.001f);
 		TweenFrag->ScaleTween.bActive = true;
 		TweenFrag->ScaleTween.TargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		TweenFrag->ScaleTween.TargetInstanceIndex = InstIndex;
 	}
 }
 
-FVector AMassUnitBase::GetCurrentLocalVisualScale(int32 VisualInstanceIndex, UInstancedStaticMeshComponent* InISM) const
+FVector AMassUnitBase::GetCurrentLocalVisualScale(UInstancedStaticMeshComponent* InISM) const
 {
 	UInstancedStaticMeshComponent* TemplateISM = InISM ? InISM : ISMComponent;
 	UInstancedStaticMeshComponent* TargetISM = nullptr;
@@ -2763,16 +2712,7 @@ FVector AMassUnitBase::GetCurrentLocalVisualScale(int32 VisualInstanceIndex, UIn
 
 	if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 	{
-		if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-		{
-			const FMassUnitVisualInstance& Instance = VisualFrag->VisualInstances[VisualInstanceIndex];
-			TargetISM = Instance.TargetISM.Get();
-			TargetInstIndex = Instance.InstanceIndex;
-		}
-		else
-		{
-			GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
-		}
+		GetMassVisualInstance(TemplateISM, TargetISM, TargetInstIndex);
 	}
 
 	// Prioritize Mass Manager Visuals
@@ -2789,11 +2729,6 @@ FVector AMassUnitBase::GetCurrentLocalVisualScale(int32 VisualInstanceIndex, UIn
 
 		if (const FMassUnitVisualFragment* VisualFrag = GetVisualFragment())
 		{
-			if (VisualInstanceIndex != INDEX_NONE && VisualFrag->VisualInstances.IsValidIndex(VisualInstanceIndex))
-			{
-				return VisualFrag->VisualInstances[VisualInstanceIndex].BaseOffset.GetScale3D();
-			}
-
 			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
 			{
 				if (Instance.TemplateISM == TemplateISM)
@@ -2909,7 +2844,7 @@ void AMassUnitBase::StaticMeshScales_Step()
 }
 
 
-void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, int32 InstIndex, UInstancedStaticMeshComponent* InISMComponent)
+void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, UInstancedStaticMeshComponent* InISMComponent)
 {
 	if (HasAuthority())
 	{
@@ -2928,7 +2863,6 @@ void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMin
 		EffectFrag->PulsateHalfPeriod = TimeMinToMax;
 		EffectFrag->PulsateElapsed = 0.f;
 		EffectFrag->PulsateTargetISM = InISMComponent ? InISMComponent : ISMComponent;
-		EffectFrag->PulsateTargetInstanceIndex = InstIndex;
 	}
 }
 

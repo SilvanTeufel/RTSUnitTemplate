@@ -47,9 +47,6 @@ struct RTSUNITTEMPLATE_API FMassVisualTweenState
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> TargetISM;
-
-    UPROPERTY()
-    int32 TargetInstanceIndex = INDEX_NONE;
 };
 
 USTRUCT()
@@ -139,9 +136,6 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> PulsateTargetISM;
 
-    UPROPERTY()
-    int32 PulsateTargetInstanceIndex = INDEX_NONE;
-
     // Yaw Chase Effect
     UPROPERTY()
     bool bYawChaseEnabled = false;
@@ -164,9 +158,6 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> YawChaseTargetISM;
 
-    UPROPERTY()
-    int32 YawChaseTargetInstanceIndex = INDEX_NONE;
-
     // Continuous Rotation
     UPROPERTY()
     bool bRotationEnabled = false;
@@ -185,9 +176,6 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> RotationTargetISM;
-
-    UPROPERTY()
-    int32 RotationTargetInstanceIndex = INDEX_NONE;
 
     // Oscillation
     UPROPERTY()
@@ -210,9 +198,6 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> OscillationTargetISM;
-
-    UPROPERTY()
-    int32 OscillationTargetInstanceIndex = INDEX_NONE;
 };
 
 template<>
