@@ -48,11 +48,14 @@ public:
 	// The Mass Actor Binding Component
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = ISM)
 	UMassActorBindingComponent* MassActorBindingComponent;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Mass")
+	void OnMassRegistrationFinished();
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = ISM)
 	UInstancedStaticMeshComponent* ISMComponent;
 
-	UPROPERTY(Transient)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM")
 	TArray<UInstancedStaticMeshComponent*> AdditionalISMComponents;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= ISM)
@@ -293,7 +296,7 @@ public:
 	void MulticastTransformSync(const FVector& Location);
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastRotateISMLinear(const FRotator& NewRotation, float InRotateDuration, float InRotationEaseExponent, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 	
 	// Rotate an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -305,7 +308,7 @@ public:
 
 	// Move the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastMoveISMLinear(const FVector& NewLocation, float InMoveDuration, float InMoveEaseExponent, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Move an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -313,7 +316,7 @@ public:
 
 	// Scale the ISM instance or skeletal mesh smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastScaleISMLinear(const FVector& NewScale, float InScaleDuration, float InScaleEaseExponent, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Scale an arbitrary static mesh component smoothly over time (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -321,7 +324,7 @@ public:
 
 	// Continuously pulsate the ISM/skeletal visual scale between Min and Max (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastPulsateISMScale(const FVector& InMinScale, const FVector& InMaxScale, float TimeMinToMax, bool bEnable, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Continuously rotate a static mesh component's Yaw to face UnitToChase (runs on server and clients)
 	// bEnable starts/stops the continuous follow; YawOffsetDegrees is added to the facing yaw.
@@ -350,30 +353,26 @@ public:
 	// Continuously rotate an ISM instance's Yaw at a constant rate (runs on server and clients)
 	// YawRate is in degrees per second. Duration <= 0 means infinite.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastContinuousISMRotation(float YawRate, bool bEnable, float Duration = -1.f, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastContinuousISMRotation(float YawRate, bool bEnable, float Duration = -1.f, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Smoothly move an ISM instance by a relative offset (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastMoveISMLinearRelative(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastMoveISMLinearRelative(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 	// Instantly sync the transform of an ISM instance across the network
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
-	void MulticastISMTransformSync(const FVector& Location, const FRotator& Rotation, const FVector& Scale, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+	void MulticastISMTransformSync(const FVector& Location, const FRotator& Rotation, const FVector& Scale, int32 InstIndex = -1, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
-	// Helpers to read/apply current visual rotation
-	FQuat GetCurrentLocalVisualRotation(UInstancedStaticMeshComponent* InISM = nullptr) const;
-	void ApplyLocalVisualRotation(const FQuat& NewLocalRotation, UInstancedStaticMeshComponent* InISM = nullptr);
+	FQuat GetCurrentLocalVisualRotation(int32 VisualInstanceIndex = -1, UInstancedStaticMeshComponent* InISM = nullptr) const;
 
-	FVector GetCurrentLocalVisualLocation(UInstancedStaticMeshComponent* InISM = nullptr) const;
-	void ApplyLocalVisualLocation(const FVector& NewLocalLocation, UInstancedStaticMeshComponent* InISM = nullptr);
+	FVector GetCurrentLocalVisualLocation(int32 VisualInstanceIndex = -1, UInstancedStaticMeshComponent* InISM = nullptr) const;
 
-	FVector GetCurrentLocalVisualScale(UInstancedStaticMeshComponent* InISM = nullptr) const;
-	void ApplyLocalVisualScale(const FVector& NewLocalScale, UInstancedStaticMeshComponent* InISM = nullptr);
+	FVector GetCurrentLocalVisualScale(int32 VisualInstanceIndex = -1, UInstancedStaticMeshComponent* InISM = nullptr) const;
 
 	// Fragment helpers
 public:

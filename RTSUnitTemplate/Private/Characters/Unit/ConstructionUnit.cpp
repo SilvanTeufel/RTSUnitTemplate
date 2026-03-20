@@ -146,7 +146,7 @@ void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinM
 		UInstancedStaticMeshComponent* TargetISM = Cast<UInstancedStaticMeshComponent>(ResolveVisualComponent());
 		if (!TargetISM) TargetISM = ISMComponent;
 		
-		FVector BaseScale = GetCurrentLocalVisualScale(TargetISM);
+		FVector BaseScale = GetCurrentLocalVisualScale(INDEX_NONE, TargetISM);
 		
 		EffectFrag->PulsateMinScale = BaseScale * MinMultiplier;
 		EffectFrag->PulsateMaxScale = BaseScale * MaxMultiplier;

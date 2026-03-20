@@ -4,6 +4,7 @@
 #include "MassExecutionContext.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "MassNavigationFragments.h"
 #include <type_traits>
 
 UMassUnitVisualTweenProcessor::UMassUnitVisualTweenProcessor() {
@@ -21,6 +22,7 @@ void UMassUnitVisualTweenProcessor::ConfigureQueries(const TSharedRef<FMassEntit
     EntityQuery.AddRequirement<FMassVisualTweenFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -42,6 +44,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
         TArrayView<FMassVisualTweenFragment> TweenList = Context.GetMutableFragmentView<FMassVisualTweenFragment>();
         TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
+        TConstArrayView<FMassAITargetFragment> TargetList = Context.GetFragmentView<FMassAITargetFragment>();
+        bool bHasTargetFrag = (TargetList.Num() > 0);
 
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& Visual = VisualList[i];
@@ -109,10 +113,6 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     LoggedThisFrame++;
                     UE_LOG(LogTemp, Log, TEXT("Entity %s: Rotating ISM %s - Total Angle: %f, Elapsed: %f"), *Context.GetEntity(i).DebugGetDescription(), *Effect.RotationTargetISM->GetName(), TotalAngle, Effect.RotationElapsed);
                 }
-            } else if (bShouldLog && LoggedThisFrame < 10 && Effect.RotationTargetISM.IsValid()) {
-                 // Log why it's not rotating
-                 // LoggedThisFrame++; // Don't count these as much
-                 // UE_LOG(LogTemp, Verbose, TEXT("Entity %s: Rotation disabled for %s"), *Context.GetEntity(i).DebugGetDescription(), *Effect.RotationTargetISM->GetName());
             }
 
             // Oscillation
@@ -136,25 +136,32 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             // Yaw-to-Chase
             FRotator TargetYawRot = FRotator::ZeroRotator;
             bool bHasYawChaseTarget = false;
-            if (Effect.bYawChaseEnabled && Effect.TargetEntity.IsValid()) {
-                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Effect.TargetEntity);
+            
+            FMassEntityHandle TargetEntity = Effect.TargetEntity;
+            if (!TargetEntity.IsValid() && bHasTargetFrag) {
+                TargetEntity = TargetList[i].TargetEntity;
+            }
+
+            if (Effect.bYawChaseEnabled && TargetEntity.IsValid()) {
+                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
                 if (TargetTransformFrag) {
                     FVector ToTarget = TargetTransformFrag->GetTransform().GetLocation() - EntityTransform.GetLocation();
                     ToTarget.Z = 0.f;
                     if (!ToTarget.IsNearlyZero()) {
                         FRotator TargetRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
                         TargetRot.Yaw += Effect.YawChaseOffset;
-                        TargetYawRot = (TargetRot.Quaternion() * EntityTransform.GetRotation().Inverse()).Rotator();
+                        // Correct relative rotation calculation: ParentInv * World
+                        TargetYawRot = (EntityTransform.GetRotation().Inverse() * TargetRot.Quaternion()).Rotator();
                         bHasYawChaseTarget = true;
                     }
                 }
             }
 
             // 3. Apply everything to instances
-            for (FMassUnitVisualInstance& Instance : Visual.VisualInstances) {
+            for (int32 InstanceIdx = 0; InstanceIdx < Visual.VisualInstances.Num(); ++InstanceIdx) {
+                FMassUnitVisualInstance& Instance = Visual.VisualInstances[InstanceIdx];
                 UInstancedStaticMeshComponent* InstanceTemplate = Instance.TemplateISM.Get();
                 if (!InstanceTemplate) continue;
-
 
                 // Start with the base offset from the Blueprint/Fragment
                 FTransform NewTransform = Instance.BaseOffset;
@@ -162,19 +169,28 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 // --- Apply Tweens as Overrides ---
                 // Rotation
                 if (Tween.RotationTween.bActive || Tween.RotationTween.Elapsed > 0.f) {
-                    if (!Tween.RotationTween.TargetISM.IsValid() || Tween.RotationTween.TargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Tween.RotationTween.TargetInstanceIndex != INDEX_NONE)
+                        ? (Tween.RotationTween.TargetInstanceIndex == InstanceIdx)
+                        : (!Tween.RotationTween.TargetISM.IsValid() || Tween.RotationTween.TargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                          NewTransform.SetRotation(CurrentRotTween);
                     }
                 }
                 // Location
                 if (Tween.LocationTween.bActive || Tween.LocationTween.Elapsed > 0.f) {
-                    if (!Tween.LocationTween.TargetISM.IsValid() || Tween.LocationTween.TargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Tween.LocationTween.TargetInstanceIndex != INDEX_NONE)
+                        ? (Tween.LocationTween.TargetInstanceIndex == InstanceIdx)
+                        : (!Tween.LocationTween.TargetISM.IsValid() || Tween.LocationTween.TargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                         NewTransform.SetLocation(CurrentLocTween);
                     }
                 }
                 // Scale
                 if (Tween.ScaleTween.bActive || Tween.ScaleTween.Elapsed > 0.f) {
-                    if (!Tween.ScaleTween.TargetISM.IsValid() || Tween.ScaleTween.TargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Tween.ScaleTween.TargetInstanceIndex != INDEX_NONE)
+                        ? (Tween.ScaleTween.TargetInstanceIndex == InstanceIdx)
+                        : (!Tween.ScaleTween.TargetISM.IsValid() || Tween.ScaleTween.TargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                         NewTransform.SetScale3D(CurrentScaleTween);
                     }
                 }
@@ -182,31 +198,52 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 // --- Apply Effects ---
                 // Pulsate (Pulsate values are usually absolute scales)
                 if (Effect.bPulsateEnabled) {
-                    if (!Effect.PulsateTargetISM.IsValid() || Effect.PulsateTargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Effect.PulsateTargetInstanceIndex != INDEX_NONE)
+                        ? (Effect.PulsateTargetInstanceIndex == InstanceIdx)
+                        : (!Effect.PulsateTargetISM.IsValid() || Effect.PulsateTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                          NewTransform.SetScale3D(CurrentPulsateScale);
                     }
                 }
 
                 // Continuous Rotation (Combine with base rotation)
                 if (Effect.bRotationEnabled) {
-                    if (!Effect.RotationTargetISM.IsValid() || Effect.RotationTargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Effect.RotationTargetInstanceIndex != INDEX_NONE)
+                        ? (Effect.RotationTargetInstanceIndex == InstanceIdx)
+                        : (!Effect.RotationTargetISM.IsValid() || Effect.RotationTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                         NewTransform.SetRotation(TotalRotation * NewTransform.GetRotation());
                     }
                 }
 
                 // Oscillation (Additively to location)
                 if (Effect.bOscillationEnabled) {
-                    if (!Effect.OscillationTargetISM.IsValid() || Effect.OscillationTargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Effect.OscillationTargetInstanceIndex != INDEX_NONE)
+                        ? (Effect.OscillationTargetInstanceIndex == InstanceIdx)
+                        : (!Effect.OscillationTargetISM.IsValid() || Effect.OscillationTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                         NewTransform.AddToTranslation(CurrentOscOffset);
                     }
                 }
 
                 // Yaw-to-Chase (Slerp towards target relative rotation)
                 if (Effect.bYawChaseEnabled && bHasYawChaseTarget) {
-                    if (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate) {
+                    bool bShouldApply = (Effect.YawChaseTargetInstanceIndex != INDEX_NONE)
+                        ? (Effect.YawChaseTargetInstanceIndex == InstanceIdx)
+                        : (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
                         FQuat TargetQuat = TargetYawRot.Quaternion();
-                        FQuat CurrentQuat = NewTransform.GetRotation();
-                        NewTransform.SetRotation(FQuat::Slerp(CurrentQuat, TargetQuat, DeltaTime / Effect.YawChaseDuration).GetNormalized());
+                        if (Effect.bYawChaseTeleport || Effect.YawChaseDuration <= 0.f) {
+                            NewTransform.SetRotation(TargetQuat);
+                        } else {
+                            // Slerp from CURRENT rotation (previous frame) to TARGET rotation
+                            FQuat StartQuat = Instance.CurrentRelativeTransform.GetRotation();
+                            float Alpha = FMath::Clamp(DeltaTime / Effect.YawChaseDuration, 0.f, 1.f);
+                            if (!FMath::IsNearlyEqual(Effect.YawChaseEaseExp, 1.f)) {
+                                Alpha = FMath::Pow(Alpha, Effect.YawChaseEaseExp);
+                            }
+                            NewTransform.SetRotation(FQuat::Slerp(StartQuat, TargetQuat, Alpha).GetNormalized());
+                        }
                     }
                 }
 

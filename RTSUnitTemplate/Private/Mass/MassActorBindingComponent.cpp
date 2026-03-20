@@ -228,6 +228,7 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
 	{
 		MassUnit->bIsMassUnit = true;
+		MassUnit->OnMassRegistrationFinished();
 	}
 }
 
@@ -306,6 +307,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 					MassUnit->bMassVisualsRegistered = true;
 					MassUnit->RemoveAdditionalISMInstances();
 				}
+				MassUnit->OnMassRegistrationFinished();
 			}
 			
 			// Client: Clear stale cache for any NetID this actor might have had previously 
@@ -742,6 +744,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 					MassUnit->bMassVisualsRegistered = true;
 					MassUnit->RemoveAdditionalISMInstances();
 				}
+				MassUnit->OnMassRegistrationFinished();
 			}
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
