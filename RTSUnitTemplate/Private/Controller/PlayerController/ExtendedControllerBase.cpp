@@ -1848,76 +1848,84 @@ void AExtendedControllerBase::PerformWorkAreaDistanceResolution(AWorkArea* Dragg
 
 void AExtendedControllerBase::GetSnappedExtensionTransform(ABuildingBase* Unit, const FVector& MouseLocation, FVector& OutLocation, FRotator& OutRotation)
 {
-	if (!Unit) return;
+    if (!Unit) return;
+    const FVector UnitLoc = Unit->GetActorLocation();
+    FVector UnitCenterBounds, UnitExtentBounds;
+    GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
 
-	const FVector UnitLoc = Unit->GetMassActorLocation();
-	FVector UnitCenterBounds(0.f, 0.f, 0.f), UnitExtentBounds(100.f, 100.f, 100.f);
-	GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
+    const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
+    const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+    FVector2D Delta2D(MouseLocation.X - UnitLoc.X, MouseLocation.Y - UnitLoc.Y);
+    const float MouseDist = Delta2D.Size();
 
-	const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
-	const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+    float DesiredYaw = 0.f;
+    FVector Offset(0.f, 0.f, 0.f);
 
-	FVector2D Delta2D(MouseLocation.X - UnitLoc.X, MouseLocation.Y - UnitLoc.Y);
-	const float MouseDist = Delta2D.Size();
-    
-	float DesiredYaw = 0.f;
-	FVector Offset(0.f, 0.f, 0.f);
+    switch (Unit->ExtensionSnapMethod)
+    {
+        case EExtensionSnapMethod::Snap8Way:
+            // 8-Wege (45°) Logik
+            {
+                float AngleDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta2D.Y, Delta2D.X));
+                if (AngleDeg < 0) AngleDeg += 360.f;
+                float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
+                DesiredYaw = (SnappedAngle >= 360.f) ? 0.f : SnappedAngle;
+                
+                float SnappedRad = FMath::DegreesToRadians(DesiredYaw);
+                float CosA = FMath::Cos(SnappedRad), SinA = FMath::Sin(SnappedRad);
+                float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
+                float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
 
-	if (Unit->ExtensionExtendedDominantSideSelection)
-	{
-		float AngleRad = FMath::Atan2(Delta2D.Y, Delta2D.X);
-		float AngleDeg = FMath::RadiansToDegrees(AngleRad);
-		if (AngleDeg < 0) AngleDeg += 360.f;
+                float Dist = Unit->ExtensionMovementAllowed ? FMath::Min(MouseDist, FVector2D(TargetX, TargetY).Size()) : FVector2D(TargetX, TargetY).Size();
+                Offset = FVector(CosA * Dist, SinA * Dist, 0.f);
+            }
+            break;
 
-		float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
-		if (SnappedAngle >= 360.f) SnappedAngle -= 360.f;
-		DesiredYaw = SnappedAngle;
-        
-		float SnappedRad = FMath::DegreesToRadians(SnappedAngle);
-		float CosA = FMath::Cos(SnappedRad);
-		float SinA = FMath::Sin(SnappedRad);
+        case EExtensionSnapMethod::Snap4Way:
+            // 4-Wege (90°) Logik
+            if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y)) {
+                float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
+                Offset.X = SignX * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.X), AbsX) : AbsX);
+                DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
+            } else {
+                float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
+                Offset.Y = SignY * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.Y), AbsY) : AbsY);
+                DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
+            }
+            break;
 
-		// Determine target distance for snapping
-		float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
-		float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
-        
-		if (Unit->ExtensionMovementAllowed)
-		{
-			float MaxDist = FVector2D(TargetX, TargetY).Size();
-			float CurrentDist = FMath::Min(MouseDist, MaxDist);
-			Offset = FVector(CosA * CurrentDist, SinA * CurrentDist, 0.f);
-		}
-		else
-		{
-			Offset = FVector(TargetX, TargetY, 0.f);
-		}
-	}
-	else if (Unit->ExtensionDominantSideSelection)
-	{
-		// 4 directions (90°)
-		if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
-		{
-			float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
-			float CurrentDist = Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.X), AbsX) : AbsX;
-			Offset.X = SignX * CurrentDist;
-			DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
-		}
-		else
-		{
-			float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
-			float CurrentDist = Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.Y), AbsY) : AbsY;
-			Offset.Y = SignY * CurrentDist;
-			DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
-		}
-	}
-	else
-	{
-		Offset = Unit->ExtensionOffset;
-		DesiredYaw = 0.f;
-	}
+        case EExtensionSnapMethod::Snap2Way:
+        case EExtensionSnapMethod::Snap1Way:
+            // Achs-Snap basierend auf dominantem ExtensionOffset
+            {
+                bool bIsXAxis = FMath::Abs(Unit->ExtensionOffset.X) >= FMath::Abs(Unit->ExtensionOffset.Y);
+                if (bIsXAxis) {
+                    float SignX = (Unit->ExtensionSnapMethod == EExtensionSnapMethod::Snap1Way) 
+                        ? FMath::Sign(Unit->ExtensionOffset.X) 
+                        : ((Delta2D.X >= 0.f) ? 1.f : -1.f);
+                    if (SignX == 0.f) SignX = 1.f;
+                    Offset.X = SignX * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.X), AbsX) : AbsX);
+                    DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
+                } else {
+                    float SignY = (Unit->ExtensionSnapMethod == EExtensionSnapMethod::Snap1Way) 
+                        ? FMath::Sign(Unit->ExtensionOffset.Y) 
+                        : ((Delta2D.Y >= 0.f) ? 1.f : -1.f);
+                    if (SignY == 0.f) SignY = 1.f;
+                    Offset.Y = SignY * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.Y), AbsY) : AbsY);
+                    DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
+                }
+            }
+            break;
 
-	OutLocation = UnitLoc + Offset;
-	OutRotation = FRotator(0.f, DesiredYaw, 0.f);
+        case EExtensionSnapMethod::None:
+        default:
+            Offset = Unit->ExtensionOffset;
+            DesiredYaw = 0.f;
+            break;
+    }
+
+    OutLocation = UnitLoc + Offset;
+    OutRotation = FRotator(0.f, DesiredYaw, 0.f);
 }
 
 void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* DraggedWorkArea, ABuildingBase* Unit, float DeltaSeconds)
@@ -1978,40 +1986,49 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	auto IsWithinSnapReach = [&](ABuildingBase* Target) -> bool
 	{
 		if (!Target || !Unit) return false;
-		const FVector UnitLoc = Unit->GetMassActorLocation();
+		const FVector UnitLoc = Unit->GetActorLocation();
 		const FVector TargetLocPos = Target->GetActorLocation();
 		const FVector2D Dir = FVector2D(TargetLocPos.X - UnitLoc.X, TargetLocPos.Y - UnitLoc.Y);
 		const float ActualDist = Dir.Size();
 		float MaxDist = 0.f;
 
-		if (Unit->ExtensionExtendedDominantSideSelection)
+		switch (Unit->ExtensionSnapMethod)
 		{
-			float AngleRad = FMath::Atan2(Dir.Y, Dir.X);
-			float AngleDeg = FMath::RadiansToDegrees(AngleRad);
-			if (AngleDeg < 0) AngleDeg += 360.f;
-			float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
-			if (SnappedAngle >= 360.f) SnappedAngle -= 360.f;
-			float SnappedRad = FMath::DegreesToRadians(SnappedAngle);
-			float CosA = FMath::Cos(SnappedRad);
-			float SinA = FMath::Sin(SnappedRad);
-			float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
-			float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
-			MaxDist = FVector2D(TargetX, TargetY).Size();
-		}
-		else if (Unit->ExtensionDominantSideSelection)
-		{
-			if (FMath::Abs(Dir.X) >= FMath::Abs(Dir.Y))
+			case EExtensionSnapMethod::Snap8Way:
 			{
-				MaxDist = AbsX;
+				float AngleRad = FMath::Atan2(Dir.Y, Dir.X);
+				float AngleDeg = FMath::RadiansToDegrees(AngleRad);
+				if (AngleDeg < 0) AngleDeg += 360.f;
+				float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
+				if (SnappedAngle >= 360.f) SnappedAngle -= 360.f;
+				float SnappedRad = FMath::DegreesToRadians(SnappedAngle);
+				float CosA = FMath::Cos(SnappedRad);
+				float SinA = FMath::Sin(SnappedRad);
+				float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
+				float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
+				MaxDist = FVector2D(TargetX, TargetY).Size();
 			}
-			else
+			break;
+
+			case EExtensionSnapMethod::Snap4Way:
 			{
-				MaxDist = AbsY;
+				if (FMath::Abs(Dir.X) >= FMath::Abs(Dir.Y)) MaxDist = AbsX;
+				else MaxDist = AbsY;
 			}
-		}
-		else
-		{
-			MaxDist = Unit->ExtensionOffset.Size();
+			break;
+
+			case EExtensionSnapMethod::Snap2Way:
+			case EExtensionSnapMethod::Snap1Way:
+			{
+				bool bIsXAxis = FMath::Abs(Unit->ExtensionOffset.X) >= FMath::Abs(Unit->ExtensionOffset.Y);
+				MaxDist = bIsXAxis ? AbsX : AbsY;
+			}
+			break;
+
+			case EExtensionSnapMethod::None:
+			default:
+				MaxDist = Unit->ExtensionOffset.Size();
+				break;
 		}
 
 		return ActualDist <= (MaxDist + SnapBuffer);
@@ -2343,7 +2360,23 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
     if (DraggedWorkArea->IsExtensionArea)
     {
         ABuildingBase* Unit = Cast<ABuildingBase>(SelectedUnits[0]);
-        UpdateExtensionWorkAreaPosition(DraggedWorkArea, Unit, DeltaSeconds);
+        if (!Unit)
+        {
+            if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]))
+            {
+                Unit = Worker->Base;
+            }
+        }
+
+        if (Unit)
+        {
+            UpdateExtensionWorkAreaPosition(DraggedWorkArea, Unit, DeltaSeconds);
+
+            if (Unit->ExtensionSnapMethod == EExtensionSnapMethod::None)
+            {
+                DropWorkArea();
+            }
+        }
         return;
     }
 
@@ -3079,7 +3112,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
 
         // Handle range blinking regardless of placement mode
         {
-            const FVector ALocation = Unit->GetMassActorLocation();
+            const FVector ALocation = Unit->GetActorLocation();
             const float Distance = FVector::Dist(MouseGround, ALocation);
             if (Unit->CurrentSnapshot.AbilityClass)
             {
@@ -3733,10 +3766,23 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 {
 	if (!UnitBase)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because UnitBase is NULL."));
 		return false;
 	}
 
 	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
+
+	if (!DraggedWorkArea)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Unit has no CurrentDraggedWorkArea."));
+		return false;
+	}
+
+	if (DraggedWorkArea->PlannedBuilding == true)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because WorkArea is already a PlannedBuilding."));
+		return false;
+	}
 
 	if (DraggedWorkArea && DraggedWorkArea->PlannedBuilding == false)
 	{
@@ -3823,6 +3869,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
  		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
 			{
+				if (bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because overlapping with valid area and not snapped."));
+				if (bIsNoBuildZone) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because in No-Build Zone."));
+				if (bNeedsBeaconOutOfRange) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because beacon required but out of range."));
+				if (bTooCloseToResources) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to resources."));
+				if (bOffNavMesh) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because location is off NavMesh."));
+
  				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);
@@ -3839,8 +3891,23 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		}
 		else
 		{
-			// Abbruch bei Überlappung mit Initiator
+			
 			ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+			if (InitiatingBuilding)
+			{
+				const float SavedZ = DraggedWorkArea->GetActorLocation().Z;
+				FVector SnappedLoc;
+				FRotator SnappedRot;
+				// Erzwungener Snap basierend auf der aktuellen Geister-Position
+				GetSnappedExtensionTransform(InitiatingBuilding, DraggedWorkArea->GetActorLocation(), SnappedLoc, SnappedRot);
+				
+				SnappedLoc.Z = SavedZ; // Behalte die Bodenhöhe bei
+				DraggedWorkArea->SetActorLocation(SnappedLoc);
+				DraggedWorkArea->SetActorRotation(SnappedRot);
+				DraggedWorkArea->ServerMeshRotationBuilding = SnappedRot;
+			}
+
+			// Abbruch bei Überlappung mit Initiator
 			if (InitiatingBuilding && InitiatingBuilding->ExtensionMovementAllowed)
 			{
 				TArray<AActor*> OverlappingActors;
@@ -3849,6 +3916,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				{
 					if (OA == InitiatingBuilding)
 					{
+						UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Extension overlaps with initiating building."));
 						if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
 						DraggedWorkArea->Destroy();
 						UnitBase->BuildArea = nullptr;
@@ -3899,6 +3967,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				float DummyTraceZOffset = 0.f;
 				if (WallTrace(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
 				{
+					UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Extension WallTrace path is blocked."));
 					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
 					DraggedWorkArea->Destroy();
 					UnitBase->BuildArea = nullptr;
@@ -3916,7 +3985,8 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 			// Height difference check for extensions
 			FHitResult UnitHit, WAHit;
-			FVector TraceOffset(0, 0, 2000.f);
+			FVector TraceStartOffset(0, 0, 1000.f);
+			FVector TraceEndOffset(0, 0, -2000.f);
 			FCollisionQueryParams TraceParams;
 			TraceParams.AddIgnoredActor(UnitBase);
 			TraceParams.AddIgnoredActor(DraggedWorkArea);
@@ -3924,12 +3994,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			float UnitGroundZ = UnitBase->GetActorLocation().Z;
 			float WAGroundZ = DraggedWorkArea->GetActorLocation().Z;
 
- 		if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetActorLocation() + TraceOffset, UnitBase->GetActorLocation() - TraceOffset, ECC_WorldStatic, TraceParams))
+			if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetActorLocation() + TraceStartOffset, UnitBase->GetActorLocation() + TraceEndOffset, ECC_WorldStatic, TraceParams))
 			{
 				UnitGroundZ = UnitHit.Location.Z;
 			}
 
-			if (GetWorld()->LineTraceSingleByChannel(WAHit, DraggedWorkArea->GetActorLocation() + TraceOffset, DraggedWorkArea->GetActorLocation() - TraceOffset, ECC_WorldStatic, TraceParams))
+			if (GetWorld()->LineTraceSingleByChannel(WAHit, DraggedWorkArea->GetActorLocation() + TraceStartOffset, DraggedWorkArea->GetActorLocation() + TraceEndOffset, ECC_WorldStatic, TraceParams))
 			{
 				WAGroundZ = WAHit.Location.Z;
 			}
@@ -3937,6 +4007,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
  			float ZThreshold = bWorkAreaIsSnapped ? (ExtensionGroundZThreshold * 2.f) : ExtensionGroundZThreshold;
  			if (FMath::Abs(UnitGroundZ - WAGroundZ) > ZThreshold)
  			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Extension Ground mismatch! UnitGroundZ: %.2f, WAGroundZ: %.2f, Diff: %.2f, Threshold: %.2f"), UnitGroundZ, WAGroundZ, FMath::Abs(UnitGroundZ - WAGroundZ), ZThreshold);
  				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);

@@ -212,7 +212,7 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 
 			if (Unit)
 			{
-				const FVector UnitLoc = Unit->GetMassActorLocation();
+				const FVector UnitLoc = Unit->GetActorLocation();
 				FVector UnitExtentBounds(100.f, 100.f, 100.f);
 
 				if (UCapsuleComponent* Capsule = Unit->FindComponentByClass<UCapsuleComponent>())
@@ -223,34 +223,76 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 					UnitExtentBounds.Z = Capsule->GetScaledCapsuleHalfHeight();
 				}
 
-				if (Unit->ExtensionDominantSideSelection)
-				{
-					const FVector2D Delta2D(SpawnLocation.X - UnitLoc.X, SpawnLocation.Y - UnitLoc.Y);
-					const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
-					const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+				const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
+				const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+				const FVector2D Delta2D(SpawnLocation.X - UnitLoc.X, SpawnLocation.Y - UnitLoc.Y);
+				const float MouseDist = Delta2D.Size();
 
-					TargetLocation = UnitLoc;
-					float DesiredYaw = 0.f;
-					if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
-					{
-						const float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
-						TargetLocation.X += SignX * AbsX;
-						DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
-					}
-					else
-					{
-						const float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
-						TargetLocation.Y += SignY * AbsY;
-						DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
-					}
-					TargetRotation = FRotator(0.f, DesiredYaw, 0.f);
-				}
-				else
+				TargetLocation = UnitLoc;
+				float DesiredYaw = 0.f;
+				FVector Offset(0.f, 0.f, 0.f);
+
+				switch (Unit->ExtensionSnapMethod)
 				{
-					TargetLocation = UnitLoc;
-					TargetLocation.X += Unit->ExtensionOffset.X;
-					TargetLocation.Y += Unit->ExtensionOffset.Y;
+					case EExtensionSnapMethod::Snap8Way:
+						{
+							float AngleDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta2D.Y, Delta2D.X));
+							if (AngleDeg < 0) AngleDeg += 360.f;
+							float SnappedAngle = FMath::RoundToFloat(AngleDeg / 45.f) * 45.f;
+							DesiredYaw = (SnappedAngle >= 360.f) ? 0.f : SnappedAngle;
+							
+							float SnappedRad = FMath::DegreesToRadians(DesiredYaw);
+							float CosA = FMath::Cos(SnappedRad), SinA = FMath::Sin(SnappedRad);
+							float TargetX = (FMath::Abs(CosA) > 0.1f) ? (FMath::Sign(CosA) * AbsX) : 0.f;
+							float TargetY = (FMath::Abs(SinA) > 0.1f) ? (FMath::Sign(SinA) * AbsY) : 0.f;
+
+							float Dist = Unit->ExtensionMovementAllowed ? FMath::Min(MouseDist, FVector2D(TargetX, TargetY).Size()) : FVector2D(TargetX, TargetY).Size();
+							Offset = FVector(CosA * Dist, SinA * Dist, 0.f);
+						}
+						break;
+
+					case EExtensionSnapMethod::Snap4Way:
+						if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y)) {
+							float SignX = (Delta2D.X >= 0.f) ? 1.f : -1.f;
+							Offset.X = SignX * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.X), AbsX) : AbsX);
+							DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
+						} else {
+							float SignY = (Delta2D.Y >= 0.f) ? 1.f : -1.f;
+							Offset.Y = SignY * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.Y), AbsY) : AbsY);
+							DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
+						}
+						break;
+
+					case EExtensionSnapMethod::Snap2Way:
+					case EExtensionSnapMethod::Snap1Way:
+						{
+							bool bIsXAxis = FMath::Abs(Unit->ExtensionOffset.X) >= FMath::Abs(Unit->ExtensionOffset.Y);
+							if (bIsXAxis) {
+								float SignX = (Unit->ExtensionSnapMethod == EExtensionSnapMethod::Snap1Way) 
+									? FMath::Sign(Unit->ExtensionOffset.X) 
+									: ((Delta2D.X >= 0.f) ? 1.f : -1.f);
+								if (SignX == 0.f) SignX = 1.f;
+								Offset.X = SignX * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.X), AbsX) : AbsX);
+								DesiredYaw = (SignX > 0.f) ? 0.f : 180.f;
+							} else {
+								float SignY = (Unit->ExtensionSnapMethod == EExtensionSnapMethod::Snap1Way) 
+									? FMath::Sign(Unit->ExtensionOffset.Y) 
+									: ((Delta2D.Y >= 0.f) ? 1.f : -1.f);
+								if (SignY == 0.f) SignY = 1.f;
+								Offset.Y = SignY * (Unit->ExtensionMovementAllowed ? FMath::Min(FMath::Abs(Delta2D.Y), AbsY) : AbsY);
+								DesiredYaw = (SignY > 0.f) ? 90.f : 270.f;
+							}
+						}
+						break;
+
+					case EExtensionSnapMethod::None:
+					default:
+						Offset = Unit->ExtensionOffset;
+						DesiredYaw = 0.f;
+						break;
 				}
+				TargetLocation += Offset;
+				TargetRotation = FRotator(0.f, DesiredYaw, 0.f);
 
 				if (Unit->ExtensionGroundTrace)
 				{
@@ -389,23 +431,37 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 
 	if( ExtendedControllerBase->SelectableTeamId == TeamId)
 	{
-		FVector MousePosition, MouseDirection;
-		ExtendedControllerBase->DeprojectMousePositionToWorld(MousePosition, MouseDirection);
-
-		// Raycast from the mouse position into the scene to find the ground
-		FVector Start = MousePosition;
-		FVector End = Start + MouseDirection * 1000000.f; // Extend to a maximum reasonable distance
-
-		FHitResult HitResult;
-		FCollisionQueryParams CollisionParams;
-		CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
-
-		// Perform the raycast
-		bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
-
-		if(bHit)
+		// Special handling for Extension Areas with EExtensionSnapMethod::None: skip mouse jump
+		bool bSkipMouseJump = false;
+		if (ClientArea->IsExtensionArea)
 		{
-			ClientArea->SetActorLocation(HitResult.Location);
+			ABuildingBase* Unit = Base;
+			if (Unit && Unit->ExtensionSnapMethod == EExtensionSnapMethod::None)
+			{
+				bSkipMouseJump = true;
+			}
+		}
+
+		if (!bSkipMouseJump)
+		{
+			FVector MousePosition, MouseDirection;
+			ExtendedControllerBase->DeprojectMousePositionToWorld(MousePosition, MouseDirection);
+
+			// Raycast from the mouse position into the scene to find the ground
+			FVector Start = MousePosition;
+			FVector End = Start + MouseDirection * 1000000.f; // Extend to a maximum reasonable distance
+
+			FHitResult HitResult;
+			FCollisionQueryParams CollisionParams;
+			CollisionParams.bTraceComplex = true; // Use complex collision for precise tracing
+
+			// Perform the raycast
+			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
+
+			if (bHit)
+			{
+				ClientArea->SetActorLocation(HitResult.Location);
+			}
 		}
 	}
 }

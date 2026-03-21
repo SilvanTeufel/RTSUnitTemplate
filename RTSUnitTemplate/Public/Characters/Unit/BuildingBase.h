@@ -16,6 +16,16 @@
 
 class AEnergyWall;
 
+UENUM(BlueprintType)
+enum class EExtensionSnapMethod : uint8
+{
+	None      UMETA(DisplayName = "Fixed Offset (No Snap)"),
+	Snap1Way  UMETA(DisplayName = "1-Way Snap (Fix Direction)"),
+	Snap2Way  UMETA(DisplayName = "2-Way Snap (180 Degree)"),
+	Snap4Way  UMETA(DisplayName = "4-Way Snap (90 Degree)"),
+	Snap8Way  UMETA(DisplayName = "8-Way Snap (45 Degree)")
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API ABuildingBase : public AUnitBase
 {
@@ -54,10 +64,7 @@ public:
 	bool ExtensionGroundTrace = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ExtensionDominantSideSelection = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool ExtensionExtendedDominantSideSelection = false;
+	EExtensionSnapMethod ExtensionSnapMethod = EExtensionSnapMethod::Snap4Way;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ExtensionMovementAllowed = false;
