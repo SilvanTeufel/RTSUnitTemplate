@@ -133,6 +133,19 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 }
             }
 
+            // Dish Rotation
+            FQuat DishRotation = FQuat::Identity;
+            if (Effect.bDishRotationEnabled) {
+                if (Effect.DishTimeRemaining <= 0.f) {
+                    Effect.DishCurrentSpeed = FMath::FRandRange(Effect.DishSpeedMin, Effect.DishSpeedMax);
+                    if (FMath::RandBool()) Effect.DishCurrentSpeed *= -1.f;
+                    Effect.DishTimeRemaining = FMath::FRandRange(Effect.DishDurationMin, Effect.DishDurationMax);
+                }
+                Effect.DishTimeRemaining -= DeltaTime;
+                Effect.DishAccumulatedAngle += Effect.DishCurrentSpeed * DeltaTime;
+                DishRotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(Effect.DishAccumulatedAngle));
+            }
+
             // Yaw-to-Chase
             FRotator TargetYawRot = FRotator::ZeroRotator;
             bool bHasYawChaseTarget = false;
@@ -214,6 +227,14 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     }
                 }
 
+                // Dish Rotation
+                if (Effect.bDishRotationEnabled) {
+                    bool bShouldApply = (!Effect.DishTargetISM.IsValid() || Effect.DishTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
+                        NewTransform.SetRotation(DishRotation * NewTransform.GetRotation());
+                    }
+                }
+
                 // Yaw-to-Chase (Slerp towards target relative rotation)
                 if (Effect.bYawChaseEnabled && bHasYawChaseTarget) {
                     bool bShouldApply = (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate);
@@ -240,7 +261,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             const bool bHasActiveTweenOrEffect =
                 Tween.RotationTween.bActive || Tween.LocationTween.bActive || Tween.ScaleTween.bActive ||
                 Effect.bPulsateEnabled || Effect.bRotationEnabled || Effect.bOscillationEnabled ||
-                (Effect.bYawChaseEnabled && bHasYawChaseTarget);
+                Effect.bDishRotationEnabled || (Effect.bYawChaseEnabled && bHasYawChaseTarget);
 
             if (bHasActiveTweenOrEffect)
             {

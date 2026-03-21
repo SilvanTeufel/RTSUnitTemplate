@@ -198,6 +198,34 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> OscillationTargetISM;
+
+    // Dish (Random) Rotation
+    UPROPERTY()
+    bool bDishRotationEnabled = false;
+
+    UPROPERTY()
+    float DishSpeedMin = 0.f;
+
+    UPROPERTY()
+    float DishSpeedMax = 0.f;
+
+    UPROPERTY()
+    float DishDurationMin = 0.f;
+
+    UPROPERTY()
+    float DishDurationMax = 0.f;
+
+    UPROPERTY()
+    float DishCurrentSpeed = 0.f;
+
+    UPROPERTY()
+    float DishTimeRemaining = 0.f;
+
+    UPROPERTY()
+    float DishAccumulatedAngle = 0.f;
+
+    UPROPERTY()
+    TWeakObjectPtr<UInstancedStaticMeshComponent> DishTargetISM;
 };
 
 template<>

@@ -102,6 +102,18 @@ public:
 	UPROPERTY(Replicated)
 	float Rep_VE_OscillationCyclesPerSecond = 0.f;
 
+	UPROPERTY(Replicated)
+	float Rep_VE_DishSpeedMin = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_DishSpeedMax = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_DishDurationMin = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_DishDurationMax = 0.f;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AddEffectTargetFragement = false;
@@ -354,6 +366,12 @@ public:
 	// YawRate is in degrees per second. Duration <= 0 means infinite.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastContinuousISMRotation(float YawRate, bool bEnable, float Duration = -1.f, UInstancedStaticMeshComponent* InISMComponent = nullptr);
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastEndlessISMYawRotation(UInstancedStaticMeshComponent* InISMComponent, float YawRate, bool bEnable);
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastDishISMYawRotation(UInstancedStaticMeshComponent* InISMComponent, float MinSpeed, float MaxSpeed, float MinDur, float MaxDur, bool bEnable);
 
 	// Smoothly move an ISM instance by a relative offset (runs on server and clients)
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)

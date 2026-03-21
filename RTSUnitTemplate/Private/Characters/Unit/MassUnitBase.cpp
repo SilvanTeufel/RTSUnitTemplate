@@ -106,6 +106,10 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetA);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetB);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationCyclesPerSecond);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishSpeedMin);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishSpeedMax);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMin);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMax);
 
 	DOREPLIFETIME(AMassUnitBase, HealthWidgetComp);
 	DOREPLIFETIME(AMassUnitBase, TimerWidgetComp);
@@ -1247,9 +1251,16 @@ bool AMassUnitBase::RegisterVisualsToMass()
 							EffectFrag->OscillationOffsetB = Rep_VE_OscillationOffsetB;
 							EffectFrag->OscillationCyclesPerSecond = Rep_VE_OscillationCyclesPerSecond;
 
+							EffectFrag->bDishRotationEnabled = (Rep_VE_ActiveEffects & (1 << 3)) != 0;
+							EffectFrag->DishSpeedMin = Rep_VE_DishSpeedMin;
+							EffectFrag->DishSpeedMax = Rep_VE_DishSpeedMax;
+							EffectFrag->DishDurationMin = Rep_VE_DishDurationMin;
+							EffectFrag->DishDurationMax = Rep_VE_DishDurationMax;
+
 							EffectFrag->PulsateTargetISM = ISMComponent;
 							EffectFrag->RotationTargetISM = ISMComponent;
 							EffectFrag->OscillationTargetISM = ISMComponent;
+							EffectFrag->DishTargetISM = ISMComponent;
 						}
 
 						return true;
@@ -2472,6 +2483,41 @@ void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate,
 			EffectFrag->RotationDuration = Duration;
 			EffectFrag->RotationElapsed = 0.f;
 			EffectFrag->RotationTargetISM = InISMComponent ? InISMComponent : ISMComponent;
+		}
+	}
+}
+
+void AMassUnitBase::MulticastEndlessISMYawRotation_Implementation(UInstancedStaticMeshComponent* InISMComponent, float YawRate, bool bEnable)
+{
+	MulticastContinuousISMRotation(YawRate, bEnable, -1.f, InISMComponent);
+}
+
+void AMassUnitBase::MulticastDishISMYawRotation_Implementation(UInstancedStaticMeshComponent* InISMComponent, float MinSpeed, float MaxSpeed, float MinDur, float MaxDur, bool bEnable)
+{
+	if (HasAuthority())
+	{
+		if (bEnable) Rep_VE_ActiveEffects |= (1 << 3);
+		else Rep_VE_ActiveEffects &= ~(1 << 3);
+
+		Rep_VE_DishSpeedMin = MinSpeed;
+		Rep_VE_DishSpeedMax = MaxSpeed;
+		Rep_VE_DishDurationMin = MinDur;
+		Rep_VE_DishDurationMax = MaxDur;
+	}
+
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+	{
+		EffectFrag->bDishRotationEnabled = bEnable;
+		if (bEnable)
+		{
+			EffectFrag->DishSpeedMin = MinSpeed;
+			EffectFrag->DishSpeedMax = MaxSpeed;
+			EffectFrag->DishDurationMin = MinDur;
+			EffectFrag->DishDurationMax = MaxDur;
+			EffectFrag->DishCurrentSpeed = 0.f;
+			EffectFrag->DishTimeRemaining = 0.f;
+			EffectFrag->DishAccumulatedAngle = 0.f;
+			EffectFrag->DishTargetISM = InISMComponent ? InISMComponent : ISMComponent;
 		}
 	}
 }
