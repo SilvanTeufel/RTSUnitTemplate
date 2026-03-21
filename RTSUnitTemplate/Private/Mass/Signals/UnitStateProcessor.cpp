@@ -2266,15 +2266,18 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								FVector ActorLocation = UnitBase->BuildArea->GetActorLocation();
 
 								bool bDoGroundTrace = true;
-
-   								ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase);
-								if (BuildingBase)
-								{
-									if (UnitBase->BuildArea && UnitBase->BuildArea->IsExtensionArea && !BuildingBase->ExtensionGroundTrace)
+   								
+   								if (UnitBase->BuildArea && UnitBase->BuildArea->Origin)
+   								{
+   									ABuildingBase* BuildingBase = Cast<ABuildingBase>(UnitBase->BuildArea->Origin);
+									if (BuildingBase)
 									{
-										bDoGroundTrace = false;
+										if (!BuildingBase->ExtensionGroundTrace)
+										{
+											bDoGroundTrace = false;
+										}
 									}
-								}
+   								}
    								
     							if(!ControllerBase)
     							{
