@@ -35,7 +35,7 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 
 	if (CameraUnitWithTag)
 	{
-		if (TargetLocation.Equals(CameraUnitWithTag->GetActorLocation(), 10.0f))
+		if (TargetLocation.Equals(CameraUnitWithTag->GetMassActorLocation(), 10.0f))
 		{
 			FMassEntityManager* EntityManager = nullptr;
 			FMassEntityHandle EntityHandle;
@@ -1481,22 +1481,7 @@ void ACameraControllerBase::ToggleLockCamToCharacter()
 		}
 	}
 }
-void ACameraControllerBase::UnlockCamFromCharacter()
-{
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit);
 
-	if (Hit.bBlockingHit)
-	{
-		AUnitBase* CharacterFound = Cast<AUnitBase>(Hit.GetActor());
-
-		if(!CharacterFound){
-			CameraBase->SetCameraState(CameraData::UseScreenEdges);
-			LockCameraToCharacter = false;
-		}
-	}
-	
-}
 
 void ACameraControllerBase::LockCamToSpecificUnit(AUnitBase* SUnit)
 {
@@ -1643,145 +1628,6 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 	}
 }
 
-void ACameraControllerBase::MoveAndRotateUnit_Implementation(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
-{
-	if (!Unit)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveAndRotateUnit: Invalid Unit pointer!"));
-		return;
-	}
-
-	// 1) Compute the movement speed (just like before).
-	const float DefaultSpeedScale = 4.0f;
-	float SpeedScale = (Unit->Attributes)
-		? Unit->Attributes->GetRunSpeedScale() * 2.f
-		: DefaultSpeedScale;
-
-	// 2) Add input vector to the Unit’s movement component.
-	//    Make sure AUnitBase::InitializeComponents() has created/assigned UnitMovementComponent.
-	if ( UPawnMovementComponent* MovementComponent = Unit->GetMovementComponent())
-	{
-		// "Direction * SpeedScale" will be interpreted by your movement component.
-		MovementComponent->AddInputVector(Direction * SpeedScale);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UnitMovementComponent not found on %s"), *Unit->GetName());
-	}
-
-	SetUnitState_Multi(Unit, 1);
-	Unit->ForceNetUpdate(); 
-}
-
-void ACameraControllerBase::LocalMoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime)
-{
-	if (!Unit)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalMoveAndRotateUnit: Invalid Unit pointer!"));
-		return;
-	}
-    
-	// Calculate movement speed, same as in the server RPC.
-	const float DefaultSpeedScale = 4.0f;
-	float SpeedScale = (Unit->Attributes)
-		? Unit->Attributes->GetRunSpeedScale() * 2.f
-		: DefaultSpeedScale;
-    
-	// Add movement input locally
-	if (UPawnMovementComponent* MovementComponent = Unit->GetMovementComponent())
-	{
-		MovementComponent->AddInputVector(Direction * SpeedScale);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalMoveAndRotateUnit: UnitMovementComponent not found on %s"), *Unit->GetName());
-	}
-    
-	// Optionally update any local unit state
-	SetUnitState_Multi(Unit, 1);
-	
-}
-
-void ACameraControllerBase::MoveCameraUnit()
-{
-	// Ensure the CameraUnitWithTag and its attributes are valid
-		
-	if (!CameraUnitWithTag)
-	{
-		return;
-	}
-
-	if (!IsLocalController()) return;
-	
-	FVector SpringArmForward = CameraBase->SpringArmRotator.Vector();
-	SpringArmForward.Z = 0.f;
-	FVector SpringArmRight   = CameraBase->SpringArmRotator.RotateVector(FVector::RightVector);
-	SpringArmRight.Z = 0.f;
-	
-	FVector MoveDirection = FVector::ZeroVector;
-	if (WIsPressedState) MoveDirection += SpringArmForward;
-	if (SIsPressedState) MoveDirection -= SpringArmForward;
-	if (AIsPressedState) MoveDirection -= SpringArmRight;
-	if (DIsPressedState) MoveDirection += SpringArmRight;
-
-	bool bHasInput = !MoveDirection.IsNearlyZero();
-	//if (bHasInput)
-	{
-		MoveDirection.Normalize();
-	}
-
-	// Set the Pawn's location to the Camera's location
-	FVector TargetLocation  = GetPawn()->GetActorLocation();
-
-	// Set the Pawn's rotation to match the Spring Arm's rotation (yaw)
-	FRotator TargetRotation = MoveDirection.Rotation();  // CameraBase->SpringArmRotator;
-	TargetRotation.Pitch = 0.f; // Optional: Keep the pawn from tilting up or down
-	TargetRotation.Roll = 0.f;  // Optional: Keep the pawn from rolling
-	
-
-	SetCameraUnitTransform(TargetLocation, TargetRotation);
-	// Apply the new transform to the pawn
-	const float DeltaTime = GetWorld()->GetDeltaSeconds();
-	const float ClientInterpSpeed =5.0f;
-
-	FVector NewLocation = FMath::VInterpTo(CameraUnitWithTag->GetActorLocation(), TargetLocation, DeltaTime, ClientInterpSpeed);
-	FRotator NewRotation = FMath::RInterpTo(CameraUnitWithTag->GetActorRotation(), TargetRotation, DeltaTime, ClientInterpSpeed);
-    
-	CameraUnitWithTag->SetActorTransform(FTransform(NewRotation, NewLocation));
-}
-
-
-void ACameraControllerBase::SetCameraUnitTransform_Implementation(FVector TargetLocation, FRotator TargetRotation)
-{
-	// --- Interpolation ---
-	// Get the DeltaTime for frame-rate independent interpolation.
-	const float DeltaTime = GetWorld()->GetDeltaSeconds();
-
-	// Set an interpolation speed. Higher values will make the movement faster.
-	const float InterpSpeed = 5.0f;
-
-	// Smoothly interpolate the pawn's current location to the target location.
-	FVector NewPawnLocation = FMath::VInterpTo(
-		CameraUnitWithTag->GetActorLocation(), // Current location
-		TargetLocation,                         // Target location
-		DeltaTime,                              // Time since last frame
-		InterpSpeed                             // Interpolation speed
-	);
-
-	// Smoothly interpolate the pawn's current rotation to the target rotation.
-	FRotator NewPawnRotation = FMath::RInterpTo(
-		CameraUnitWithTag->GetActorRotation(), // Current rotation
-		TargetRotation,                         // Target rotation
-		DeltaTime,                              // Time since last frame
-		InterpSpeed                             // Interpolation speed
-	);
-	// Create the new transform
-	FTransform NewTransform = FTransform(NewPawnRotation, NewPawnLocation);
-	
-	CameraUnitWithTag->SetActorTransform(NewTransform, false, nullptr, ETeleportType::None);
-	CameraUnitWithTag->SyncTranslation();
-}
-
 void ACameraControllerBase::Server_MoveInDirection_Implementation(FVector Direction, float DeltaTime)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Server_MoveInDirection called - Direction: %s, DeltaTime: %f"), *Direction.ToString(), DeltaTime);
@@ -1869,7 +1715,10 @@ void ACameraControllerBase::Server_ZoomOutAutoCam_Implementation(float Position)
 
 void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 {
-        if (CameraUnitWithTag)
+	CameraUnitUpdateTimer -= DeltaTime;
+	CameraSyncTimer -= DeltaTime;
+
+	if (CameraUnitWithTag)
         {
         	bool bCanMove = true;
 			if (bIsCameraMovementHaltedByUI)
@@ -1925,9 +1774,11 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         			CameraBase->MoveInDirection(MoveDirection, DeltaTime);
 
         			// Sende die neue Kamera-Position zum Server (unreliable für Performance)
-        			if (!HasAuthority())
+        			if (!HasAuthority() && CameraSyncTimer <= 0.f && !CameraBase->GetActorLocation().Equals(LastSyncedCameraLocation, 25.0f))
         			{
         				Server_SyncCameraPosition(CameraBase->GetActorLocation());
+        				LastSyncedCameraLocation = CameraBase->GetActorLocation();
+        				CameraSyncTimer = CameraSyncInterval;
         			}
         		}
         	}
@@ -1953,15 +1804,16 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         		else
         		{
         			// STOP: Use current unit location
-        			MoveTargetLocation = CameraUnitWithTag->GetActorLocation();
+        			MoveTargetLocation = CameraUnitWithTag->GetMassActorLocation();
         		}
 
-        		if (!MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
+        		if (CameraUnitUpdateTimer <= 0.f && !MoveTargetLocation.Equals(LastCameraUnitMovementLocation, 50.0f))
         		{
         			if (!CameraUnitMouseFollow || bIsLocal || !bCanMove)
         			{
         				LastCameraUnitMovementLocation = MoveTargetLocation;
         				Server_UpdateCameraUnitMovement(MoveTargetLocation);
+        				CameraUnitUpdateTimer = CameraUnitUpdateInterval;
         			}
         		}
         	}

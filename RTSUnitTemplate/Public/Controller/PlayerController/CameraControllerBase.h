@@ -46,7 +46,19 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_UpdateCameraUnitMovement(const FVector& TargetLocation);
 
-	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
+	UPROPERTY(EditAnywhere, Category = "RTS|Network")
+	float CameraUnitUpdateInterval = 0.15f; // 150ms für Einheiten-Bewegung
+
+	UPROPERTY(EditAnywhere, Category = "RTS|Network")
+	float CameraSyncInterval = 0.1f; // 100ms für Kamera-Sync
+
+	// Interne Timer
+	float CameraUnitUpdateTimer = 0.0f;
+	float CameraSyncTimer = 0.0f;
+
+	// Cache für die letzte Position zur Vermeidung redundanter Pakete
+	FVector LastSyncedCameraLocation = FVector::ZeroVector;
+	
 	FVector LastCameraUnitMovementLocation = FVector::ZeroVector;
 
 	UPROPERTY()
@@ -241,10 +253,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ToggleLockCamToCharacter", Keywords = "TopDownRTSCamLib ToggleLockCamToCharacter"), Category = RTSUnitTemplate)
 	void ToggleLockCamToCharacter();
-
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UnlockCamFromCharacter", Keywords = "TopDownRTSCamLib UnlockCamFromCharacter"), Category = RTSUnitTemplate)
-	void UnlockCamFromCharacter();
-
+	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "LockCamToSpecificUnit", Keywords = "TopDownRTSCamLib LockCamToSpecificUnit"), Category = RTSUnitTemplate)
 	void LockCamToSpecificUnit(AUnitBase* SUnit);
 
@@ -253,25 +262,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockCamToCharacter(int Index);
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void MoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void LocalMoveAndRotateUnit(AUnitBase* Unit, const FVector& Direction, float DeltaTime);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LockCamToCharacterWithTag(float DeltaTime);
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void MoveCameraUnit();
-
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SetCameraUnitTransform(FVector TargetLocation, FRotator TargetRotation);
-	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
-	FVector CameraUnitMovementLocation = FVector::ZeroVector;
 	
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_MoveInDirection(FVector Direction, float DeltaTime);
@@ -328,7 +321,7 @@ public:
 	bool bIsCameraMovementHaltedByUI = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool RotateBehindCharacterIfLocked = true;
+	bool RotateBehindCharacterIfLocked = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CameraUnitMouseFollow = true;
