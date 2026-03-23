@@ -3967,7 +3967,6 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				float DummyTraceZOffset = 0.f;
 				if (WallTrace(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
 				{
-					UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Extension WallTrace path is blocked."));
 					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
 					DraggedWorkArea->Destroy();
 					UnitBase->BuildArea = nullptr;
@@ -4007,7 +4006,6 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
  			float ZThreshold = bWorkAreaIsSnapped ? (ExtensionGroundZThreshold * 2.f) : ExtensionGroundZThreshold;
  			if (FMath::Abs(UnitGroundZ - WAGroundZ) > ZThreshold)
  			{
-				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Extension Ground mismatch! UnitGroundZ: %.2f, WAGroundZ: %.2f, Diff: %.2f, Threshold: %.2f"), UnitGroundZ, WAGroundZ, FMath::Abs(UnitGroundZ - WAGroundZ), ZThreshold);
  				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);
@@ -4133,7 +4131,6 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	{
 		if (Wall && (Wall->GetBuildingA() == Target || Wall->GetBuildingB() == Target))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] Connection already exists between %s and %s"), *Initiator->GetName(), *Target->GetName());
 			return false;
 		}
 	}
@@ -4141,7 +4138,6 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	// Requirement 2: Prevent connecting buildings of different teams
 	if (Initiator->TeamId != Target->TeamId)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] TeamId mismatch: %d vs %d"), Initiator->TeamId, Target->TeamId);
 		return false;
 	}
 
@@ -4169,8 +4165,6 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 
 	if (!bSameClass || !bInitiatorHasSpace || !bTargetHasSpace || !bZValid)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IsCompatibleForEnergyWall] Incompatible: %s -> %s | SameClass: %d, InitSpace: %d (%d/2), TargetSpace: %d (%d/2), ZValid: %d (Diff: %f)"),
-			*Initiator->GetName(), *Target->GetName(), bSameClass, bInitiatorHasSpace, Initiator->EnergyWallArray.Num(), bTargetHasSpace, Target->EnergyWallArray.Num(), bZValid, ZDiff);
 		return false;
 	}
 
