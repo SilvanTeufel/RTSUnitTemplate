@@ -1073,11 +1073,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			TransportFrag->InstantLoadRange = TransportUnit->InstantLoadRange;
 			TransportFrag->TransportId = TransportUnit->TransportId;
 		}
-		else
-		{
-			TransportFrag->InstantLoadRange = InstantLoadRange;
-			TransportFrag->TransportId = TransportId;
-		}
 	}
 
 	if (FMassUnitYawFollowFragment* FollowFrag = EntityManager.GetFragmentDataPtr<FMassUnitYawFollowFragment>(EntityHandle))

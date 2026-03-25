@@ -228,7 +228,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	{
 		return;
 	}
-
+	
 	// Handle global startup freeze release
 	if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
 	{
@@ -264,7 +264,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 					// Fallback for any other case (e.g. early ListenServer)
 					bCanRelease = true;
 				}
-
+				
+				
+			
 				if (bCanRelease)
 				{
 					TArray<AUnitBase*> UnitsToBatchMove;
@@ -277,17 +279,17 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 						{
 							FMassEntityHandle Entity = FreezeCtx.GetEntity(i);
 							EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(Entity);
-							if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
+							/*if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
 							{
 								UnitsToBatchMove.Add(Unit);
 								if (UCharacterMovementComponent* MoveComp = Unit->GetCharacterMovement())
 								{
 									MoveComp->SetMovementMode(CharList[i].bIsFlying ? MOVE_Flying : MOVE_Walking);
 								}
-							}
+							}*/
 						}
 					});
-
+					/*
 					if (UnitsToBatchMove.Num() > 0)
 					{
 						TArray<FVector> NewTargetLocations;
@@ -326,15 +328,17 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 						{
 							AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, UnitsToBatchMove, NewTargetLocations, DesiredSpeeds, BatchRadii, false, false);
 						}
-					}
+					}*/
 
 					GS->bStartupFreezeReleased = true;
 					UE_LOG(LogTemp, Log, TEXT("ServerKick: Startup freeze released for all units (MatchStartTime reached or skipped. Mode=%d, PC=%d, MatchStartTime=%.2f)."), 
 						(int32)World->GetNetMode(), World->GetNumPlayerControllers(), GS->MatchStartTime);
 				}
+				
 			}
 		}
 	}
+
 	// Respect global replication mode: only run in custom Mass mode
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
 	{
