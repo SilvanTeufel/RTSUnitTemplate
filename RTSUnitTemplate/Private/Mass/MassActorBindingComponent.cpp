@@ -276,6 +276,10 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		NewMassEntityHandle = EM.CreateEntity(Archetype, SharedValues);
 		if (NewMassEntityHandle.IsValid())
 		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[MassLink] Created Entity for %s"), *MyOwner->GetName());
+			}
 			// Perform synchronous initializations
 			MassEntityHandle = NewMassEntityHandle;
 			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
@@ -711,6 +715,10 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 
 		if (NewMassEntityHandle.IsValid())
 		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[MassLink] Created Building Entity for %s"), *MyOwner->GetName());
+			}
 			
 			MassEntityHandle = NewMassEntityHandle;
 			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
@@ -1153,66 +1161,143 @@ void UMassActorBindingComponent::SetupMassOnEffectArea()
 void UMassActorBindingComponent::RequestClientMassLink()
 {
 	UWorld* World = GetWorld();
-	if (!World)
+	if (!World || MassEntityHandle.IsValid())
 	{
 		return;
 	}
-	// Only meaningful on clients; but allow call on server to be a no-op
-	if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwner()))
+
+	AActor* OwnerActor = GetOwner();
+	const FString OwnerName = OwnerActor ? OwnerActor->GetName() : TEXT("None");
+
+	if (AUnitBase* UnitBase = Cast<AUnitBase>(OwnerActor))
 	{
 		// Do not (re)create or register Mass for dead units
 		if (UnitBase->UnitState == UnitData::Dead)
 		{
 			return;
 		}
+
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[MassLink] RequestClientMassLink for Unit: %s (Index: %d)"), *OwnerName, UnitBase->UnitIndex);
+		}
+
 		const bool bCanMove = UnitBase->CanMove;
-		if (bCanMove)
-		{
-			bNeedsMassUnitSetup = true;
-			bNeedsMassBuildingSetup = false;
-		}
-		else
-		{
-			bNeedsMassBuildingSetup = true;
-			bNeedsMassUnitSetup = false;
-		}
+		bNeedsMassUnitSetup = bCanMove;
+		bNeedsMassBuildingSetup = !bCanMove;
+
 		if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 		{
 			SpawnerSubsystem->RegisterUnitForMassCreation(UnitBase);
 		}
 
-		// Fast path: on clients, if Mass subsystems are ready and we don't yet have an entity, create/link immediately
-		// BUT never call synchronous CreateEntity during Mass processing. Guard with EntityManager.IsProcessing()==false.
+		// Initialer Freeze für den Client (Optional, wird im Processor gesteuert)
 		if (World->GetNetMode() == NM_Client)
 		{
-			if (!MassEntityHandle.IsValid())
-			{
-				if (!MassEntitySubsystemCache)
-				{
-					MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
-				}
-				if (MassEntitySubsystemCache)
-				{
-					FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
-					// Avoid calling too early at time 0.0 to give systems a frame to initialize
-					const float Now = World->GetTimeSeconds();
-					const bool bSafeToCreateNow = (Now > 0.05f) && (EM.IsProcessing() == false);
-					if (bSafeToCreateNow)
-					{
-						if (bCanMove)
-						{
-							CreateAndLinkOwnerToMassEntity();
-						}
-						else
-						{
-							CreateAndLinkBuildingToMassEntity();
-						}
-					}
-					// If not safe, we rely on the end-of-phase CreatePendingEntities() via the spawner registration above.
-				}
-			}
+			// SetVisualFreeze(true); // Deaktiviert auf Wunsch des Nutzers
 		}
 	}
+	else
+	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MassLink] RequestClientMassLink called for non-unit actor: %s"), *OwnerName);
+		}
+	}
+}
+
+bool UMassActorBindingComponent::IsReadyForClientMassLink() const
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() != NM_Client)
+	{
+		return true;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	const FString OwnerName = OwnerActor ? OwnerActor->GetName() : TEXT("None");
+
+	URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>();
+	if (!CacheSub)
+	{
+		return false;
+	}
+
+	// 1. Registry Check: Hat der Server uns bereits eine NetID zugewiesen?
+	AUnitRegistryReplicator* Registry = CacheSub->GetRegistry(false);
+	if (!Registry)
+	{
+		return false;
+	}
+
+	AUnitBase* Unit = Cast<AUnitBase>(OwnerActor);
+	const FUnitRegistryItem* RegItem = nullptr;
+
+	if (Unit && Unit->UnitIndex != INDEX_NONE)
+	{
+		RegItem = Registry->Registry.FindByUnitIndex(Unit->UnitIndex);
+	}
+	else if (OwnerActor)
+	{
+		RegItem = Registry->Registry.FindByOwner(OwnerActor->GetFName());
+	}
+
+	if (!RegItem)
+	{
+		// Zu viel Spam vermeiden, aber für Diagnose wichtig wenn es hakt
+		// UE_LOG(LogTemp, Verbose, TEXT("[MassLink] %s: No Registry Item found yet."), *OwnerName);
+		return false;
+	}
+
+	if (!RegItem->NetID.IsValid())
+	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Registry Item found but NetID is invalid."), *OwnerName);
+		}
+		return false;
+	}
+
+	// 2. Bubble Check: Sind die eigentlichen Replikationsdaten (Transform, Tags) da?
+	AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false);
+	if (!Bubble)
+	{
+		return false;
+	}
+
+	// Wenn das Item in der Bubble-Liste ist, sind initiale Daten vorhanden
+	bool bInBubble = Bubble->Agents.FindItemByNetID(RegItem->NetID) != nullptr;
+	if (!bInBubble)
+	{
+		// Wir haben eine NetID, aber die Bubble-Daten fehlen noch
+		static float LastLogTime = 0;
+		if (bDebugLogs && World->GetTimeSeconds() - LastLogTime > 1.0f) // Verhindere Frame-Spam
+		{
+			UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Waiting for Bubble data (NetID: %u)"), *OwnerName, RegItem->NetID.GetValue());
+			LastLogTime = World->GetTimeSeconds();
+		}
+		return false;
+	}
+
+	if (bDebugLogs)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Validation SUCCESS (NetID: %u, InBubble: Yes)"), *OwnerName, RegItem->NetID.GetValue());
+	}
+	return true;
+}
+
+void UMassActorBindingComponent::SetVisualFreeze(bool bFrozen)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	// Nur wenn vom Nutzer explizit gewollt. Aktuell deaktiviert.
+	// Owner->SetActorHiddenInGame(bFrozen);
+	// Owner->SetActorTickEnabled(!bFrozen);
+	// Owner->SetActorEnableCollision(!bFrozen);
 }
 
 void UMassActorBindingComponent::RequestClientMassUnlink()

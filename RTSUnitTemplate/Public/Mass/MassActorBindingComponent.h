@@ -62,6 +62,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	EMassBindingType BindingType = EMassBindingType::Unit;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool bDebugLogs = false;
+
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void SetupMassOnActor();
 
@@ -90,6 +93,12 @@ public:
 	// Client-side request to queue safe Mass link after server creation
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void RequestClientMassLink();
+
+	// Verifies if all replication data (NetID + Bubble data) are available on the client
+	bool IsReadyForClientMassLink() const;
+
+	// Controls visual freeze/visibility during initialization
+	void SetVisualFreeze(bool bFrozen);
 
 	// Client-side request to unlink/destroy the Mass entity when server unregistered
 	UFUNCTION(BlueprintCallable, Category = Mass)

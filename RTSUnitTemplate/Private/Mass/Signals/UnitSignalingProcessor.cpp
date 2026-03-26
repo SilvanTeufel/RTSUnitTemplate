@@ -122,8 +122,24 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
     if (!PendingActors.IsEmpty())
     {
-        // Add the newly spawned actors to our internal queue.
-        ActorsToCreateThisFrame.Append(PendingActors);
+        // Add the newly spawned actors to our internal queue for validation.
+        for (AUnitBase* Unit : PendingActors)
+        {
+            if (IsValid(Unit))
+            {
+                if (bDebugLogs)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor received Unit: %s. Adding to PendingRetryQueue."), *Unit->GetName());
+                }
+                PendingRetryQueue.AddUnique(Unit);
+                
+                // Client-side visual protection (Disabled on user request, but logic remains)
+                if (Unit->GetNetMode() == NM_Client && Unit->MassActorBindingComponent)
+                {
+                    // Unit->MassActorBindingComponent->SetVisualFreeze(true);
+                }
+            }
+        }
     }
 
     // Client-side proactive registry reconciliation for Mass replication mode
@@ -217,13 +233,18 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     }
 }
 
+// CVAR for dynamic budgeting
+static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_MaxRegistrationsPerFrame(
+    TEXT("net.RTS.UnitSignaling.MaxRegistrationsPerFrame"),
+    15,
+    TEXT("Maximum number of Mass entity creations per frame on client to avoid hitches."),
+    ECVF_Default);
+
 // This function is called by the delegate system at a safe time.
 void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 {
-    
     UWorld* World = GetWorld();
-
-    if (!World) return;
+    if (!World || PendingRetryQueue.IsEmpty()) return;
     
     const float Now = World->GetTimeSeconds();
 
@@ -256,39 +277,68 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 
     if (Now <= StartDelay) return;
 
+    const int32 Budget = CVarRTS_UnitSignaling_MaxRegistrationsPerFrame.GetValueOnGameThread();
+    int32 RegistrationsThisFrame = 0;
+    const bool bIsClient = World->GetNetMode() == NM_Client;
 
-    if (ActorsToCreateThisFrame.IsEmpty())
+    // Process from end to allow safe removal
+    for (int32 i = PendingRetryQueue.Num() - 1; i >= 0; --i)
     {
-        // UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!ActorsToCreateThisFrame!!!!!!!"));
-        return;
-    }
-	
-    // It is now SAFE to call synchronous creation functions.
-    for (AUnitBase* Unit : ActorsToCreateThisFrame)
-    {
-        if (IsValid(Unit))
+        AUnitBase* Unit = PendingRetryQueue[i];
+        if (!IsValid(Unit))
         {
-            UMassActorBindingComponent* BindingComp = Unit->MassActorBindingComponent;
+            PendingRetryQueue.RemoveAt(i);
+            continue;
+        }
 
-            if (BindingComp)
+        UMassActorBindingComponent* BindingComp = Unit->MassActorBindingComponent;
+        if (!BindingComp || BindingComp->GetMassEntityHandle().IsValid())
+        {
+            PendingRetryQueue.RemoveAt(i);
+            continue;
+        }
+
+        // 1. Budget-Check (only critical on clients to avoid frame drops)
+        if (bIsClient && RegistrationsThisFrame >= Budget)
+        {
+            if (bDebugLogs)
             {
-                //BindingComp->CreateAndLinkOwnerToMassEntity();
+                UE_LOG(LogTemp, Warning, TEXT("[MassLink] Budget hit! Deferring %d units to next frame."), PendingRetryQueue.Num());
+            }
+            break;
+        }
+
+        // 2. Strict Validation (Wait for replication data)
+        if (BindingComp->IsReadyForClientMassLink())
+        {
+            if (bDebugLogs)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor initializing validated unit: %s"), *Unit->GetName());
+            }
+            // 3. Actual Creation
+            if (BindingComp->bNeedsMassUnitSetup)
+            {
+                BindingComp->CreateAndLinkOwnerToMassEntity();
+            }
+            else if (BindingComp->bNeedsMassBuildingSetup)
+            {
+                BindingComp->CreateAndLinkBuildingToMassEntity();
             }
 
-
-           if (BindingComp && BindingComp->bNeedsMassUnitSetup) // !BindingComp->GetEntityHandle().IsValid())
-           {
-                // We call your original, working function from the binding component.
-              BindingComp->CreateAndLinkOwnerToMassEntity();
-           }else if (BindingComp && BindingComp->bNeedsMassBuildingSetup) // !BindingComp->GetEntityHandle().IsValid())
-           {
-                // We call your original, working function from the binding component.
-              BindingComp->CreateAndLinkBuildingToMassEntity();
-           }
-            
+            if (BindingComp->GetMassEntityHandle().IsValid())
+            {
+                // Success: "unfreeze" unit and remove from queue
+                if (bIsClient)
+                {
+                    BindingComp->SetVisualFreeze(false);
+                }
+                PendingRetryQueue.RemoveAt(i);
+                RegistrationsThisFrame++;
+            }
+        }
+        else
+        {
+            // Data not yet there -> Remains in PendingRetryQueue for next tick
         }
     }
-
-    // Clear the queue for the next frame.
-    ActorsToCreateThisFrame.Empty();
 }
