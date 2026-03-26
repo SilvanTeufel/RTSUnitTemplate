@@ -64,7 +64,7 @@ void ARTSGameModeBase::BeginPlay()
 			float WidgetDuration = FMath::Max(10.f, (float)GatherControllerTimer + 5.f + (AllUnits.Num() * LoadingTimePerUnit));
 			
 			if (WidgetDuration > 40.f)
-				WidgetDuration = 40;
+				WidgetDuration = MaxLoadingTime;
 			
 			const int32 NewTriggerId = FMath::RandRange(1, 2147483647);
 

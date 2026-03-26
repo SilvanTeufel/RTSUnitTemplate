@@ -94,6 +94,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float LoadingTimePerUnit = 0.25f;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MaxLoadingTime = 40.f;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	TSubclassOf<class ULoadingWidget> LoadingWidgetClass;
 

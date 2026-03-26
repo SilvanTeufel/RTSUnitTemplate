@@ -24,7 +24,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, VisibleAnywhere, Category = "Leveling")
-	int32 UnitIndex;
+	int32 UnitIndex = INDEX_NONE;
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void SetUnitIndex(int32 NewIndex);
