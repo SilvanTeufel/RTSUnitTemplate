@@ -219,7 +219,7 @@ void UResourceExtractionStateProcessor::HandleUpdateResourceScale(FName SignalNa
 
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
-            if (!EntityManager.IsEntityValid(Entity)) continue;
+            if (!EntityManager.IsEntityActive(Entity)) continue;
 
             FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
             if (!ActorFrag) continue;

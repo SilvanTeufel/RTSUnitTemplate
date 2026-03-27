@@ -78,8 +78,30 @@ void URepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // 1) Distance regression/out-of-range check with hysteresis
-            const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
-            if (bHasFriendly)
+            const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetEntity);
+            bool bIsTargetAlive = false;
+
+            if (bIsTargetActive)
+            {
+                if (const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity))
+                {
+                    bIsTargetAlive = TargetStats->Health > 0.f;
+                }
+            }
+
+            if ((!bIsTargetActive || !bIsTargetAlive) && !StateFrag.SwitchingState)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Repair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                }
+                continue;
+            }
+            
+            if (bIsTargetActive && bIsTargetAlive)
             {
                 FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
                 float FriendlyRadius = 0.f;

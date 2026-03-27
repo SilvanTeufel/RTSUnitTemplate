@@ -155,7 +155,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 TargetEntity = TargetList[i].TargetEntity;
             }
 
-            if (Effect.bYawChaseEnabled && TargetEntity.IsValid()) {
+            if (Effect.bYawChaseEnabled && EntityManager.IsEntityActive(TargetEntity)) {
                 const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
                 if (TargetTransformFrag) {
                     FVector ToTarget = TargetTransformFrag->GetTransform().GetLocation() - EntityTransform.GetLocation();

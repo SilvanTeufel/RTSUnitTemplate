@@ -134,8 +134,8 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
                       // If following a friendly target, evaluate desired follow position (ring + optional offset)
             if (bFollowTickThisFrame && !StateFrag.SwitchingState && SignalSubsystem)
             {
-                const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
-                if (bHasFriendly)
+                const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+                if (bIsFriendlyActive)
                 {
                     // Friendly location
                     FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;

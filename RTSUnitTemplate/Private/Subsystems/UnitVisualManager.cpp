@@ -25,6 +25,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	}
 
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	if (!EntityManager.IsEntityActive(Entity)) return;
 	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
 
 	if (!VisualFrag) {
@@ -129,6 +130,7 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 	if (!EntitySubsystem) return;
 
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	if (!EntityManager.IsEntityActive(Entity)) return;
 	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
 
 	if (VisualFrag) {
@@ -155,6 +157,7 @@ void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVi
 	if (!EntitySubsystem) return;
 
 	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	if (!EntityManager.IsEntityActive(Entity)) return;
 	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
 	FMassVisualEffectFragment* EffectFrag = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity);
 

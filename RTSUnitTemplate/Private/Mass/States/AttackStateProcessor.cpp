@@ -97,11 +97,11 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            // --- Target Lost ---
-            FMassCombatStatsFragment* TgtStatsPtr = TargetFrag.TargetEntity.IsSet() ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
             const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || (!TargetFrag.TargetEntity.IsSet() || bIsTargetDead))
+            if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
             {
                 if (!StateFrag.SwitchingState)
                 {
@@ -129,8 +129,9 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-                FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCharFrag->CapsuleRadius;
+                FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+                const float TargetCapsule = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
+                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCapsule;
             
                 if (Dist <= AttackRange)
                 {

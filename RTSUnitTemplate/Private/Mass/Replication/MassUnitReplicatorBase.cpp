@@ -163,6 +163,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
 
     // Read fragments directly from the entity (safely)
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+    if (!EntityManager.IsEntityActive(Entity)) return;
 
     // Note: We now replicate dead entities too. Do NOT early-return when FMassStateDeadTag is present.
 
@@ -235,7 +236,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AbilityTargetLocation = AIT->AbilityTargetLocation;
             // Resolve target NetID if the target entity is valid
             uint32 TargetNetIDVal = 0u;
-            if (AIT->TargetEntity.IsSet() && EntityManager.IsEntityValid(AIT->TargetEntity))
+            if (AIT->TargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->TargetEntity))
             {
                 if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
                 {
@@ -249,7 +250,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             int32 CountPrev = 0;
             for (const FMassEntityHandle& H : AIT->PreviouslySeen)
             {
-                if (EntityManager.IsEntityValid(H))
+                if (EntityManager.IsEntityActive(H))
                 {
                     if (const FMassNetworkIDFragment* SNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(H))
                     {
@@ -261,7 +262,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             int32 CountCurr = 0;
             for (const FMassEntityHandle& H : AIT->CurrentlySeen)
             {
-                if (EntityManager.IsEntityValid(H))
+                if (EntityManager.IsEntityActive(H))
                 {
                     if (const FMassNetworkIDFragment* SNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(H))
                     {

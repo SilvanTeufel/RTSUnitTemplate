@@ -96,10 +96,11 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                TargetFrag.bHasValidTarget = false;
             }
             
-            FMassCombatStatsFragment* TgtStatsPtr = TargetFrag.TargetEntity.IsSet() ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
             const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || !TargetFrag.bHasValidTarget || !TargetFrag.TargetEntity.IsSet() || bIsTargetDead)
+            if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
             {
                 if (!StateFrag.SwitchingState)
                 {
@@ -122,8 +123,8 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             
             StateFrag.StateTimer += ExecutionInterval;
             
-            FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-            FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity);
+            FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+            FMassCombatStatsFragment* TargetStats = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
             
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 

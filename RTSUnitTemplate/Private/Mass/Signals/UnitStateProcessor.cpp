@@ -499,9 +499,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
 	
 	        // Check entity validity *on the game thread*
-            if (!EntityManager.IsEntityValid(Entity)) 
+            if (!EntityManager.IsEntityActive(Entity)) 
             {
-            	UE_LOG(LogTemp, Error, TEXT("Entity or Manager is not Valid!"));
+            	UE_LOG(LogTemp, Error, TEXT("Entity or Manager is not Active!"));
                 return;
             }
             // Get fragments and actors *on the game thread*
@@ -868,7 +868,7 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
 
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
-            if (!EntityManager.IsEntityValid(Entity))
+            if (!EntityManager.IsEntityActive(Entity))
             {
                 continue;
             }
@@ -925,7 +925,7 @@ void UUnitStateProcessor::ForceSetPatrolRandomTarget(FMassEntityHandle& Entity)
         if (!SignalSubsystem) {  return; }
 
    
-            if (!EntityManager.IsEntityValid(Entity))
+            if (!EntityManager.IsEntityActive(Entity))
             {
                 return;
             }
@@ -1214,7 +1214,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+170.f;
             		}
 
-            		WorkerStats->BuildingAreaAvailable = StrongUnitActor->BuildArea? true : false;
+            		WorkerStats->BuildingAreaAvailable = (StrongUnitActor->BuildArea && IsValid(StrongUnitActor->BuildArea)) ? true : false;
             		if (StrongUnitActor->BuildArea)
             		{
             			FVector Origin, BoxExtent;
@@ -1758,7 +1758,7 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
     for (FMassEntityHandle& DetectorEntity : Entities)
     {
         // Minimal validation for the detector entity itself
-        if (!EntityManager.IsEntityValid(DetectorEntity)) continue;
+            if (!EntityManager.IsEntityActive(DetectorEntity)) continue;
     	
         FMassActorFragment* DetectorActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(DetectorEntity);
         // Use GetMutable() to get AActor* instead of const AActor*
@@ -1779,7 +1779,7 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
             const FMassEntityHandle TargetEntity = TargetFrag->TargetEntity;
 
             // Validate the target entity and get its Actor (non-const)
-            if (EntityManager.IsEntityValid(TargetEntity))
+            if (EntityManager.IsEntityActive(TargetEntity))
             {
                 // Use GetMutableFragmentDataPtr to potentially get a non-const Actor pointer
                 FMassActorFragment* TargetActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(TargetEntity);
@@ -1831,12 +1831,11 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
         for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
         {
             // Check entity validity *on the game thread*
-            if (!EntityManager.IsEntityValid(Entity)) 
+            if (!EntityManager.IsEntityActive(Entity))
             {
                 continue;
             }
 
-        	
             // Get fragments and actors *on the game thread*
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
         	FMassAgentCharacteristicsFragment* CharFragPtr = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);

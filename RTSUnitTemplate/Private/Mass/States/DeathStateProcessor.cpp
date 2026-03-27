@@ -95,7 +95,7 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
         if (!PC || !PC->HUDBase) return;
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
-            if (!EntityManager.IsEntityValid(Entity)) continue;
+            if (!EntityManager.IsEntityActive(Entity)) continue;
 
             FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
             if (ActorFragPtr && IsValid(ActorFragPtr->GetMutable()))
@@ -155,7 +155,7 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
-            if (!EntityManager.IsEntityValid(Entity)) continue;
+            if (!EntityManager.IsEntityActive(Entity)) continue;
 
             if (VisualManager)
             {

@@ -230,9 +230,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 
 	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
-    if (!EntityManager.IsEntityValid(MassEntityHandle))
+    if (!EntityManager.IsEntityActive(MassEntityHandle))
     {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 
@@ -451,9 +451,9 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 
 		// Mass entity handle
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		if (!EntityManager.IsEntityValid(MassEntityHandle))
+		if (!EntityManager.IsEntityActive(MassEntityHandle))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Invalid MassEntityHandle. Skipping."), *GetNameSafe(Unit));
+			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] MassEntityHandle is not active. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
@@ -466,7 +466,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 
 		// Unless queuing with Shift, clear any existing path waypoints for Mass units before issuing a fresh command
 		FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle);
-		if (!IsShiftPressed && Unit->bIsMassUnit)
+		if (!this->IsShiftPressed && Unit->bIsMassUnit)
 		{
 			if (PathFrag)
 			{
@@ -477,7 +477,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			}
 		}
 
-		if (IsShiftPressed && Unit->bIsMassUnit && PathFrag)
+		if (this->IsShiftPressed && Unit->bIsMassUnit && PathFrag)
 		{
 			if (PathFrag->Waypoints.Num() < 10)
 			{
@@ -749,7 +749,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		}
 
 		// Update path fragment for client-side visualization/logic if Shift is held
-		if (IsShiftPressed && Unit->bIsMassUnit)
+		if (this->IsShiftPressed && Unit->bIsMassUnit)
 		{
 			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
 			{
@@ -762,7 +762,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 				}
 			}
 		}
-		else if (!IsShiftPressed && Unit->bIsMassUnit)
+		else if (!this->IsShiftPressed && Unit->bIsMassUnit)
 		{
 			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
 			{
@@ -861,9 +861,9 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 
 	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
 	
-    if (!EntityManager.IsEntityValid(MassEntityHandle))
+    if (!EntityManager.IsEntityActive(MassEntityHandle))
     {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is invalid."), *MassEntityHandle.DebugGetDescription());
+        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
         return;
     }
 

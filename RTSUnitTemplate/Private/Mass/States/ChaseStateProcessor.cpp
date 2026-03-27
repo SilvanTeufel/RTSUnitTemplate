@@ -164,7 +164,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             }
 
             // Case 2: Lost/invalid target AND placeholder is Idle => switch to Idle locally
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
+            if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                 {
@@ -244,7 +244,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 continue;
             }
             
-            if (!EntityManager.IsEntityValid(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            if (!bIsTargetActive || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 // Queue signal instead of sending directly
                 UpdateMoveTarget(
@@ -265,7 +266,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+            FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
             const float TargetRadius = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
             const float EffectiveAttackRange = Stats.AttackRange + CharFrag.CapsuleRadius + TargetRadius;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);

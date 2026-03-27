@@ -108,7 +108,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             {
                  if (SignalSubsystem)
                  {
-                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
+                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBase, Entity);
                  }
                  continue;
             }

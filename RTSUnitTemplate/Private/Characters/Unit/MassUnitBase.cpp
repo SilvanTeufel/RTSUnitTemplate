@@ -1093,6 +1093,10 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 	}
 
 	OutEntityManager = &EntitySubsystem->GetMutableEntityManager();
+	if (!OutEntityManager->IsEntityActive(OutEntityHandle))
+	{
+		return false;
+	}
 	return true;
 }
 
@@ -1113,6 +1117,10 @@ bool AMassUnitBase::GetMassEntityData(const FMassEntityManager*& OutEntityManage
 	if (!OutEntityHandle.IsSet()) return false;
 
 	OutEntityManager = &EntitySubsystem->GetEntityManager();
+	if (!OutEntityManager->IsEntityActive(OutEntityHandle))
+	{
+		return false;
+	}
 	return true;
 }
 

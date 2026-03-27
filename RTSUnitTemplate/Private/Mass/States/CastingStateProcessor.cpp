@@ -157,7 +157,7 @@ void UCastingStateProcessor::HandleClientSetToPlaceholder(FName SignalName, TArr
 
         for (const FMassEntityHandle& Entity : EntitiesCopy)
         {
-            if (!EntityManager.IsEntityValid(Entity)) continue;
+            if (!EntityManager.IsEntityActive(Entity)) continue;
 
             FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
             FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);

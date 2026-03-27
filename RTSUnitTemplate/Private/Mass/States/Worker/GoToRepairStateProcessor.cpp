@@ -87,20 +87,37 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
             // Validate friendly target
-            const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
-            if (!bHasFriendly)
+            const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetEntity);
+            bool bIsTargetAlive = false;
+
+            if (bIsTargetActive)
             {
-                continue; // Nothing to approach
+                if (const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity))
+                {
+                    bIsTargetAlive = TargetStats->Health > 0.f;
+                }
+            }
+
+            if (!bIsTargetActive || (!bIsTargetAlive && !StateFrag.SwitchingState))
+            {
+                UE_LOG(LogTemp, Log, TEXT("[GoToRepair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                }
+                continue;
             }
 
             // Get friendly target location and radius
             FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
             float FriendlyRadius = 0.f;
-            if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+            if (const FTransformFragment* FriendlyXform = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity) : nullptr)
             {
                 FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
             }
-            if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+            if (const FMassAgentCharacteristicsFragment* FriendlyChar = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity) : nullptr)
             {
                 FriendlyRadius = FriendlyChar->CapsuleRadius;
             }
