@@ -40,6 +40,8 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Construction)
 	void MulticastRotateNiagaraToOrigin(UNiagaraComponent* NiagaraToRotate, const FRotator& RotationOffset, float InRotateDuration, float InRotationEaseExponent, ERotationAxis AxisSelection = ERotationAxis::Full);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool RunTimeCustomDepthSwitch = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HasWaypoint = true;

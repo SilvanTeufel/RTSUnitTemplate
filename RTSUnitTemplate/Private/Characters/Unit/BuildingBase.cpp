@@ -552,6 +552,19 @@ void ABuildingBase::MulticastSetEnemyVisibility_Implementation(AActor* Detecting
 
 void ABuildingBase::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 {
+	if (ISMComponent && RunTimeCustomDepthSwitch && !IsMyTeam)
+	{
+		UInstancedStaticMeshComponent* TargetISM = nullptr;
+		int32 TargetInstIndex = INDEX_NONE;
+		if (GetMassVisualInstance(ISMComponent, TargetISM, TargetInstIndex))
+		{
+			if (TargetISM)
+			{
+				TargetISM->SetRenderCustomDepth(bVisible);
+			}
+		}
+	}
+
 	if (!CanMove && bVisible == false) return;
 	Super::SetEnemyVisibility(DetectingActor, bVisible);
 }
