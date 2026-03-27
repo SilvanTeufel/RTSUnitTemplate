@@ -726,16 +726,45 @@ void AUnitBase::SetTimerWidgetCastingColor(FLinearColor Color)
 FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) const
 {
 	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
-
-	// 1. Prüfen, ob wir eine Mass-Einheit sind
 	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
+
+	// 1. Try to find a component with the specific tag
+	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
+	if (Comps.Num() > 0)
+	{
+		if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
+		{
+			// Check if it's attached to an ISM
+			UInstancedStaticMeshComponent* ParentISM = Cast<UInstancedStaticMeshComponent>(SpawnComp->GetAttachParent());
+			if (ParentISM && MassUnit)
+			{
+				const FMassUnitVisualFragment* VisualFrag = MassUnit->GetVisualFragment();
+				if (VisualFrag)
+				{
+					for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+					{
+						if (Instance.TemplateISM == ParentISM)
+						{
+							// Use the Mass transform logic with this specific component's relative transform
+							FTransform VisualMuzzleTransform = SpawnComp->GetRelativeTransform() * Instance.CurrentRelativeTransform * MassUnit->GetMassActorTransform();
+							return VisualMuzzleTransform.GetLocation();
+						}
+					}
+				}
+			}
+			
+			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
+			// StaticMeshComponents handle their own world transform correctly even when rotating via processors
+			return SpawnComp->GetComponentLocation();
+		}
+	}
+
+	// 2. Fallback: Old Mass-based search for bHasMuzzle
 	if (MassUnit) {
 		const FMassUnitVisualFragment* VisualFrag = MassUnit->GetVisualFragment();
 		if (VisualFrag) {
 			for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances) {
 				if (Instance.bHasMuzzle) {
-					// VERBESSERUNG: Nutze GetMassActorTransform() statt GetActorTransform()
-					// GetMassActorTransform() liefert bei ISM-Einheiten den aktuellen PositionedTransform aus Mass.
 					FTransform VisualMuzzleTransform = Instance.MuzzleOffset * Instance.CurrentRelativeTransform * MassUnit->GetMassActorTransform();
 					return VisualMuzzleTransform.GetLocation();
 				}
@@ -743,18 +772,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 		}
 	}
 
-	// 2. Try to find a component with the specific tag
-	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
-	if (Comps.Num() > 0)
-	{
-		if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
-		{
-			return SpawnComp->GetComponentLocation();
-		}
-	}
-
 	// 3. Fallback to default offset logic
-	// Auch hier verwenden wir die Mass-Location und Rotation für korrekte Ergebnisse bei ISM-Einheiten
 	const FVector ShootingUnitLocation = GetMassActorLocation();
 	const FRotator ShootingUnitRotation = MassUnit ? MassUnit->GetMassActorRotation() : GetActorRotation();
 	const FVector ShootingUnitForward = ShootingUnitRotation.Vector();

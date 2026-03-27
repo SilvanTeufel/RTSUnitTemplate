@@ -3,6 +3,7 @@
 
 #include "Actors/Projectile.h"
 #include "Actors/EnergyWall.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 #include "MassSignalSubsystem.h"
 #include "Components/CapsuleComponent.h"
@@ -830,22 +831,23 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
    			);
 
 
-   			for (AActor* HitActor : OutActors)
-   			{
-   				// An overlap doesn't provide a detailed FHitResult, so we create one manually.
-   				FHitResult ManualHitResult;
-   				ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
-   				ManualHitResult.bBlockingHit = true;   // Best guess for the component
-   				// Call the overlap function for each actor found in the sphere
-   				OnOverlapBegin_Implementation(
-   					nullptr,          // We don't have an "OverlappedComp" from the projectile
-   					HitActor,         // The actor we hit
-   					nullptr, // The component we hit
-   					-1,               // OtherBodyIndex, not available from an overlap
-   					false,            // This was not from a sweep
-   					ManualHitResult   // The manually created HitResult
-   				);
-   			}
+			for (AActor* HitActor : OutActors)
+			{
+				// An overlap doesn't provide a detailed FHitResult, so we create one manually.
+				FHitResult ManualHitResult;
+				ManualHitResult.ImpactPoint = HitActor->GetActorLocation(); // Approximating impact point
+				ManualHitResult.bBlockingHit = true;   // Best guess for the component
+				// Call the overlap function for each actor found in the sphere
+				OnOverlapBegin_Implementation(
+					nullptr,          // We don't have an "OverlappedComp" from the projectile
+					HitActor,         // The actor we hit
+					nullptr, // The component we hit
+					-1,               // OtherBodyIndex, not available from an overlap
+					false,            // This was not from a sweep
+					ManualHitResult   // The manually created HitResult
+				);
+				if (bImpacted) return;
+			}
    		}
    	}
 }
@@ -1002,7 +1004,7 @@ void AProjectile::FlyInArc(float DeltaTime)
             for (AActor* HitActor : OutActors)
             {
                 Impact(HitActor);
-                return; // Exit the function early since the projectile is destroyed.
+                if (bImpacted) return;
             }
         }
         
@@ -1035,6 +1037,12 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	// Sicherheitscheck am Anfang: Nur auf dem Server, gültiges Ziel und noch nicht getroffen
 	if (!HasAuthority() || !ImpactTarget || PiercedActors.Contains(ImpactTarget)) return;
 
+	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
+	if (UnitToHit && UnitToHit->TeamId == TeamId && !IsHealing && ImpactTarget != Target)
+	{
+		return; // Ignore hits on friendly units if not healing and not the intended target
+	}
+
 	// Ziel als getroffen markieren
 	PiercedActors.Add(ImpactTarget);
 
@@ -1042,7 +1050,6 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	ImpactEvent();
 
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
-	AUnitBase* UnitToHit = Cast<AUnitBase>(ImpactTarget);
 
 	if (!UnitToHit || !UnitToHit->IsUnitDetectable())
 	{
@@ -1322,6 +1329,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 		if(UnitToHit && UnitToHit->GetUnitState() == UnitData::Dead)
 		{
+			if (UnitToHit->TeamId == TeamId && !IsHealing && UnitToHit != Target) return;
 			if (PiercedActors.Contains(UnitToHit)) return;
 			PiercedActors.Add(UnitToHit);
 			ImpactEvent();
@@ -1385,10 +1393,10 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 				UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
 			}
 			DestroyWhenMaxPierced();
-		}else if(UnitToHit && UnitToHit->TeamId != TeamId && !IsHealing)
+		}else if(UnitToHit && (UnitToHit->TeamId != TeamId || UnitToHit == Target) && !IsHealing)
 		{
 			Impact(UnitToHit);
-			SetIsAttacked(UnitToHit);
+			if (bImpacted && UnitToHit->TeamId != TeamId) SetIsAttacked(UnitToHit);
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && IsHealing)
 		{
 			ImpactHeal(UnitToHit);
