@@ -182,7 +182,7 @@ public:
 	FBuildingCost ConstructionCost;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float ResetStartBuildTime = 25.f;
+	float ResetStartBuildTime = 10.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ControlTimer = 0.f;

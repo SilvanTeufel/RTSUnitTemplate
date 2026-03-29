@@ -120,10 +120,10 @@ public:
 	FName DespawnStartTimeParameterName = "DespawnStartTime";
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
-	float MinThickness = 150.0f;
+	float MinThickness = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
-	float MaxThickness = 500.0f;
+	float MaxThickness = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Navigation")
 	float MinPadding = 100.0f;

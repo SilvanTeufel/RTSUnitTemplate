@@ -44,6 +44,15 @@ void AWorkingUnitBase::BeginPlay()
 
 void AWorkingUnitBase::Destroyed()
 {
+	if (BuildArea)
+	{
+		BuildArea->RemoveWorkerFromArray(this);
+		if (BuildArea->Workers.Num() == 0 && !BuildArea->StartedBuilding)
+		{
+			BuildArea->PlannedBuilding = false;
+		}
+	}
+	
 	if (WorkResource)
 	{
 		WorkResource->Destroy();

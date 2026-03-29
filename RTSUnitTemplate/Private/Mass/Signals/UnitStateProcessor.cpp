@@ -1882,6 +1882,20 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
 							}
 	
                     	UnitBase->SpawnPickupsArray();
+                        
+                        if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+                        {
+                            if (Worker->BuildArea)
+                            {
+                                Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                                if (Worker->BuildArea->Workers.Num() == 0 && !Worker->BuildArea->StartedBuilding)
+                                {
+                                    Worker->BuildArea->PlannedBuilding = false;
+                                    Worker->BuildArea->ControlTimer = 0.f;
+                                }
+                                Worker->BuildArea = nullptr;
+                            }
+                        }
                     }
                 }
             }
