@@ -266,15 +266,15 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 			if (UnitHandle.IsValid())
 			{
 				VisualManager->SetUnitVisualVisible(UnitHandle, true);
+				LoadedUnit->EditUnitDetection(true);
 			}
 		}
 	}
-
-	LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
 	LoadedUnit->CanAttack = true;
 	LoadedUnit->IsInitialized = true;
 	LoadedUnit->CanActivateAbilities = true;
 	LoadedUnit->CanBeSelected = true;
+	LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
 }
 
 void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToLoad, const FVector& TransporterLocation)

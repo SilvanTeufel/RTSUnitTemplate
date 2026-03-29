@@ -554,13 +554,22 @@ void ABuildingBase::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 {
 	if (ISMComponent && RunTimeCustomDepthSwitch && !IsMyTeam)
 	{
-		UInstancedStaticMeshComponent* TargetISM = nullptr;
-		int32 TargetInstIndex = INDEX_NONE;
-		if (GetMassVisualInstance(ISMComponent, TargetISM, TargetInstIndex))
+		if (!bUseSkeletalMovement)
 		{
-			if (TargetISM)
+			UInstancedStaticMeshComponent* TargetISM = nullptr;
+			int32 TargetInstIndex = INDEX_NONE;
+			if (GetMassVisualInstance(ISMComponent, TargetISM, TargetInstIndex))
 			{
-				TargetISM->SetRenderCustomDepth(bVisible);
+				if (TargetISM)
+				{
+					TargetISM->SetRenderCustomDepth(bVisible);
+				}
+			}
+		}else
+		{
+			if (USkeletalMeshComponent* SKM = GetMesh())
+			{
+				SKM->SetRenderCustomDepth(bVisible);
 			}
 		}
 	}
