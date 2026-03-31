@@ -91,6 +91,7 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetGenerateOverlapEvents(TemplateISM->GetGenerateOverlapEvents());
 	ISM->SetRenderCustomDepth(TemplateISM->bRenderCustomDepth);
 	ISM->SetCustomDepthStencilValue(TemplateISM->CustomDepthStencilValue);
+	ISM->SetNumCustomDataFloats(TemplateISM->NumCustomDataFloats);
 	// Create a new instance with zero scale to avoid flicker
 	int32 NewIndex = ISM->AddInstance(FTransform::Identity);
 	ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
