@@ -24,22 +24,13 @@ Remember, if you purchase the plugin from the Epic Games Store, it already inclu
 
 For a detailed understanding of the classes, refer to the documentation available at [wiki.teufel-engineering.com](http://wiki.teufel-engineering.com). I am trying to keep the documentation updated regularly.
 
-## License
+## ⚖️ License & Usage (Source-Available)
 
-This code is provided under the Mozilla Public License 2.0 (MPL 2.0).
+This repository operates under a **Dual-Licensing Model** (Free for Non-Commercial / Paid for Commercial). 
 
-Please note the following terms:
+* **Free for Non-Commercial Use:** You can download, fork, modify, and use this plugin entirely for free in your personal, educational, and non-monetized projects. 
+* **Paid for Commercial Use:** If you plan to sell your game or monetize it in any way (including microtransactions, ads, or Patreon), you **must** purchase a commercial license from the official Fab Store here:
+👉 **[Get the Commercial License on Fab](HIER_DEINEN_FAB_LINK_EINFÜGEN)**
 
-* Users are not permitted to sell this code directly as a standalone plugin.
-* Modify the plugin's code for their personal use or within their games, but not sell the modified code as a standalone plugin.
-* By obtaining the plugin (buying the Plugin from UE-Marketplace), users are granted the rights to:
-    * Integrate it into their games and sell those games.
-    * Modify the plugin's code for their personal use or within their games, and sell this Games.
-
-However, I provide no guarantees or warranties for the games developed using this plugin. Use at your own discretion.
-
-**Please read on for the full licensing terms under the Mozilla Public License 2.0 (MPL 2.0). Or see the LICENSE file.**
-
----
-
-Your feedback and queries are always welcome. Happy coding!
+**⚠️ Important Restriction for all users:**
+Regardless of whether you use the free or paid tier, **you are strictly prohibited from reselling or redistributing this source code (unmodified or modified) as a standalone plugin, asset pack, template, or development tool.** For the complete legal terms, please read the [LICENSE](LICENSE) file included in this repository.
