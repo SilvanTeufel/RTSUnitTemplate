@@ -42,6 +42,7 @@
 #include "Characters/Unit/MassUnitBase.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Actors/WorkArea.h"
 #include "GAS/AttributeSetBase.h"
 #include "Blueprint/UserWidget.h"
 
@@ -2381,7 +2382,14 @@ void ACustomControllerBase::LeftClickPressedMass()
     else
     {
         FHitResult HitPawn;
+        // 1. Primary trace for pawns
         GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+
+        // 2. FALLBACK: If no pawn hit, trace for WorldDynamic (e.g., WorkArea)
+        if (!HitPawn.bBlockingHit)
+        {
+            GetHitResultUnderCursor(ECollisionChannel::ECC_WorldDynamic, false, HitPawn);
+        }
 
         // Only call the server if we previously activated an ability via keyboard
         if (bUsedKeyboardAbilityBeforeClick)
@@ -2458,6 +2466,20 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
             ClickedActor = nullptr;
 
         AUnitBase* HitUnit = GetUnitFromHitResult(HitPawn);
+        
+        // --- NEW: Select ConstructionUnit if we clicked on a WorkArea ---
+        if (!HitUnit && HitActor)
+        {
+            if (AWorkArea* WorkArea = Cast<AWorkArea>(HitActor))
+            {
+                if (WorkArea->ConstructionUnit)
+                {
+                    HitUnit = WorkArea->ConstructionUnit;
+                }
+            }
+        }
+        // ----------------------------------------------------------------
+
         ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
 
         if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)

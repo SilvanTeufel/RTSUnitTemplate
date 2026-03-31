@@ -663,6 +663,8 @@ void AExtendedControllerBase::Server_FinalizeWorkAreaPosition_Implementation(AWo
 {
 	if (!DraggedArea) return;
 
+	DraggedArea->AreaDropped = true;
+
 	FTransform FinalTransform = NewActorTransform;
 
 	if (!DraggedArea->IsExtensionArea)
@@ -4300,7 +4302,6 @@ void AExtendedControllerBase::Server_DropWorkAreaForUnit_Implementation(AUnitBas
 {
 	if (!UnitBase || !UnitBase->CurrentDraggedWorkArea || UnitBase->CurrentDraggedWorkArea->AreaDropped) return;
 	
-	UnitBase->CurrentDraggedWorkArea->AreaDropped = true;
 	UnitBase->CurrentDraggedWorkArea->SetActorTransform(ClientWorkAreaTransform);
 	DropWorkAreaForUnit(UnitBase, bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
 }
@@ -4799,6 +4800,17 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 		}
 		
 		AWorkArea* WorkArea = Cast<AWorkArea>(HitActor);
+
+		if (!WorkArea)
+		{
+			if (AConstructionUnit* ConstructionUnit = Cast<AConstructionUnit>(HitActor))
+			{
+				if (ConstructionUnit->WorkArea && !ConstructionUnit->WorkArea->IsExtensionArea)
+				{
+					WorkArea = ConstructionUnit->WorkArea;
+				}
+			}
+		}
 
 		if(WorkArea && !WorkArea->IsNoBuildZone)
 		{

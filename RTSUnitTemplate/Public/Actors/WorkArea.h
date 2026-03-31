@@ -318,6 +318,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool InstantDrop = false;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AreaDropped = false;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool GetAreaDropped() const { return AreaDropped; }
 };
