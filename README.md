@@ -30,7 +30,7 @@ This repository operates under a **Dual-Licensing Model** (Free for Non-Commerci
 
 * **Free for Non-Commercial Use:** You can download, fork, modify, and use this plugin entirely for free in your personal, educational, and non-monetized projects. 
 * **Paid for Commercial Use:** If you plan to sell your game or monetize it in any way (including microtransactions, ads, or Patreon), you **must** purchase a commercial license from the official Fab Store here:
-👉 **[Get the Commercial License on Fab](HIER_DEINEN_FAB_LINK_EINFÜGEN)**
+👉 **[Get the Commercial License on Fab](https://www.fab.com/listings/4a251276-1063-41b2-b443-f02d75cd610d)**
 
 **⚠️ Important Restriction for all users:**
 Regardless of whether you use the free or paid tier, **you are strictly prohibited from reselling or redistributing this source code (unmodified or modified) as a standalone plugin, asset pack, template, or development tool.** For the complete legal terms, please read the [LICENSE](LICENSE) file included in this repository.
