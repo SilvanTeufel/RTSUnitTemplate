@@ -33,4 +33,4 @@ This repository operates under a **Dual-Licensing Model** (Free for Non-Commerci
 👉 **[Get the Commercial License on Fab](https://www.fab.com/listings/4a251276-1063-41b2-b443-f02d75cd610d)**
 
 **⚠️ Important Restriction for all users:**
-Regardless of whether you use the free or paid tier, **you are strictly prohibited from reselling or redistributing this source code (unmodified or modified) as a standalone plugin, asset pack, template, or development tool.** For the complete legal terms, please read the [LICENSE](LICENSE) file included in this repository.
+Regardless of whether you use the free or paid tier, **you are strictly prohibited from reselling or redistributing this source code (unmodified or modified) as a standalone plugin, asset pack, template, or development tool.** For the complete legal terms, please read the [LICENSE](https://github.com/SilvanTeufel/RTSUnitTemplate/blob/main/LICENSE.txt) file included in this repository.
