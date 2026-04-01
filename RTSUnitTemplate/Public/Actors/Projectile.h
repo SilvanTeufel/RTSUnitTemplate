@@ -22,6 +22,9 @@ public:
 	float OverlapCheckInterval = 0.1f;
 	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate")
+	bool bUseMass = true;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	bool DebugTargetLocation = false;
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Movement")
@@ -223,7 +226,7 @@ protected:
 	
 public:	
 	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+	//virtual void Tick(float DeltaTime) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool IsOnViewport = true;

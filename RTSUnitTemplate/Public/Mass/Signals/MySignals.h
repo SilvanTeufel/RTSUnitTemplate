@@ -75,6 +75,8 @@ namespace UnitSignals
 	const FName UpdateSelectionCircle(TEXT("UpdateSelectionCircle"));
 	const FName UpdateVisibility(TEXT("UpdateVisibility"));
 
+	const FName ProjectileImpact(TEXT("ProjectileImpact"));
+
 	const FName UseRangedAbilitys(TEXT("UseRangedAbilitys"));
 
 	const FName InitUnit(TEXT("InitUnit"));
@@ -110,6 +112,32 @@ struct FUnitPresenceSignal
 
 	// Add other relevant data that detectors might need without accessing fragments directly
 	// e.g., maybe a faction identifier, or specific target type flags
+};
+USTRUCT()
+struct FProjectileImpactSignalPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FMassEntityHandle TargetEntity;
+
+	UPROPERTY()
+	FMassEntityHandle ShooterEntity;
+
+	UPROPERTY()
+	TSubclassOf<class AProjectile> ProjectileClass;
+
+	UPROPERTY()
+	FVector ImpactLocation = FVector::ZeroVector;
+};
+
+USTRUCT()
+struct FMassProjectileImpactSignalFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FProjectileImpactSignalPayload Payload;
 };
 // Add other custom signal structs here if needed
 

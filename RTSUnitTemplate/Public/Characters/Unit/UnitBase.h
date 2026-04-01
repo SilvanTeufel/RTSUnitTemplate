@@ -311,6 +311,15 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClassWithAim(FVector Aim, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f);
+
+    /** Version that accepts Mass Entity handles for direct registration */
+    void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle());
+
+   	UFUNCTION(NetMulticast, Reliable)
+   	void MulticastSpawnMassProjectile(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), float ProjectileSpeed = 0.f, int32 ShooterTeamId = -1);
+
+   	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+   	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass);
 	
 	/** 
 	 * Returns the world location for spawning projectiles.

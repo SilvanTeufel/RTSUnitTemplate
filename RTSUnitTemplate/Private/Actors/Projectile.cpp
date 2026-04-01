@@ -90,12 +90,15 @@ AProjectile::AProjectile()
 	ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Disable collision on the ISM
 	ISMComponent->SetIsReplicated(true);
 	ISMComponent->SetVisibility(false, true);
+	ISMComponent->SetMobility(EComponentMobility::Movable);
 	
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_A"));
 	Niagara_A->SetupAttachment(SceneRoot);
+	Niagara_A->SetMobility(EComponentMobility::Movable);
 	
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(SceneRoot);
+	Niagara_B->SetMobility(EComponentMobility::Movable);
 	
 	SceneRoot->SetVisibility(false, true);
 
@@ -453,7 +456,7 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 	}
 }
 
-
+/*
 // Called every frame
 void AProjectile::Tick(float DeltaTime)
 {
@@ -577,7 +580,7 @@ void AProjectile::Tick(float DeltaTime)
 		}
 	}
 }
-
+*/
 void AProjectile::CheckViewport()
 {
 	if (IsInViewport(GetActorLocation(), VisibilityOffset))

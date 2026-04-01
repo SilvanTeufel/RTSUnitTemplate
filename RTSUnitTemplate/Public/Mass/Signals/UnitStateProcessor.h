@@ -147,6 +147,7 @@ private:
 	FDelegateHandle FogParametersDelegateHandle;
 	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
+	FDelegateHandle ProjectileImpactSignalDelegateHandle;
 	FDelegateHandle LoadUnitDelegateHandle;
 
 	
@@ -274,6 +275,9 @@ private:
 	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void HandleProjectileImpact(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	UFUNCTION()
 	void HandleLoadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities);

@@ -13,6 +13,8 @@ struct FMassSightFragment;
 struct FMassGameplayEffectFragment;
 struct FUnitNavigationPathFragment;
 struct FMassUnitPathFragment;
+struct FMassProjectileFragment;
+struct FMassProjectileVisualFragment;
 
 // These are explicit specializations of the Mass fragment traits.
 // They must be visible to translation units before templates like AddRequirement/GetFragmentDataPtr are instantiated.
@@ -43,6 +45,18 @@ struct TMassFragmentTraits<FUnitNavigationPathFragment>
 
 template<>
 struct TMassFragmentTraits<FMassUnitPathFragment>
+{
+	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
+};
+
+template<>
+struct TMassFragmentTraits<FMassProjectileFragment>
+{
+	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
+};
+
+template<>
+struct TMassFragmentTraits<FMassProjectileVisualFragment>
 {
 	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
 };

@@ -32,6 +32,8 @@
 #include "EngineUtils.h"
 #include <climits>
 // Mass includes for follow application and spawn return adjustments
+#include "Mass/Projectile/ProjectileVisualManager.h"
+#include "MassCommonFragments.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
 #include "Mass/UnitMassTag.h"
@@ -789,6 +791,13 @@ void AUnitBase::SpawnProjectile_Implementation(AActor* Target, AActor* Attacker)
 	if (!ProjectileBaseClass || !ShootingUnit) return;
 
 	const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+	
+	if (ProjectileCDO->bUseMass)
+	{
+		SpawnProjectileWithEntities(Target, Attacker);
+		return;
+	}
+
 	float TwinDistance = ProjectileCDO->TwinProjectileDistance;
 	int32 HomingCount = ProjectileCDO->HomingMissleCount;
 
@@ -884,6 +893,22 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
     AUnitBase* TargetUnit   = Cast<AUnitBase>(Aim);
 
     const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
+
+    if (ProjectileCDO->bUseMass)
+    {
+        // For now, simpler mass spawning for specific classes, could be expanded for spread
+        FTransform SpawnXf;
+        FVector ActualSpawnPos = ShootingUnit->GetProjectileSpawnLocation(SpawnOffset);
+        SpawnXf.SetLocation(ActualSpawnPos);
+        FVector Direction = (Aim->GetActorLocation() - ActualSpawnPos).GetSafeNormal();
+        SpawnXf.SetRotation(FQuat(Direction.Rotation() + ShootingUnit->ProjectileRotationOffset));
+        SpawnXf.SetScale3D(FVector(Scale));
+
+        float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+        MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, Aim->GetActorLocation(), FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
+        return;
+    }
+
     float TwinDistance = ProjectileCDO->TwinProjectileDistance;
     int32 HomingCount = ProjectileCDO->HomingMissleCount;
 
@@ -956,37 +981,46 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
 
             // 4) Deferred spawn + init
-            AProjectile* MyProj = Cast<AProjectile>(
-                UGameplayStatics::BeginDeferredActorSpawnFromClass(
-                    this,
-                    ProjectileClass,
-                    SpawnXf,
-                    ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-                )
-            );
+            UE_LOG(LogTemp, Log, TEXT("Spawning Projectile: Class=%s, bUseMass=%d"), *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1);
+            if (ProjectileCDO && ProjectileCDO->bUseMass)
+            {
+                float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+                MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
+            }
+            else
+            {
+                AProjectile* MyProj = Cast<AProjectile>(
+                    UGameplayStatics::BeginDeferredActorSpawnFromClass(
+                        this,
+                        ProjectileClass,
+                        SpawnXf,
+                        ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+                    )
+                );
 
-         			if (MyProj)
-         			{
-         				// cache our manually computed aim point
-         				MyProj->TargetLocation   = LocationToShoot;
-				
-         				if (HomingCount > 0) MyProj->FollowTarget = true;
-         				else MyProj->FollowTarget = FollowTarget;
-				
-         				// Ensure projectile uses the same mesh rotation offset as the shooter
-         				MyProj->RotationOffset = ShootingUnit->ProjectileRotationOffset;
-				
-         				MyProj->InitForAbility(Aim, Attacker);
-				
-         				//MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
-         				MyProj->MaxPiercedTargets = MaxPiercedTargets;
-         				MyProj->IsBouncingNext    = IsBouncingNext;
-         				MyProj->IsBouncingBack    = IsBouncingBack;
-				
-         				MyProj->SetProjectileVisibility();
-         				UGameplayStatics::FinishSpawningActor(MyProj, SpawnXf);
-         				MyProj->SetReplicates(true);
-         			}
+                if (MyProj)
+                {
+                    // cache our manually computed aim point
+                    MyProj->TargetLocation   = LocationToShoot;
+            
+                    if (HomingCount > 0) MyProj->FollowTarget = true;
+                    else MyProj->FollowTarget = FollowTarget;
+            
+                    // Ensure projectile uses the same mesh rotation offset as the shooter
+                    MyProj->RotationOffset = ShootingUnit->ProjectileRotationOffset;
+            
+                    MyProj->InitForAbility(Aim, Attacker);
+            
+                    //MyProj->Mesh_A->OnComponentBeginOverlap.AddDynamic(MyProj, &AProjectile::OnOverlapBegin);
+                    MyProj->MaxPiercedTargets = MaxPiercedTargets;
+                    MyProj->IsBouncingNext    = IsBouncingNext;
+                    MyProj->IsBouncingBack    = IsBouncingBack;
+            
+                    MyProj->SetProjectileVisibility();
+                    UGameplayStatics::FinishSpawningActor(MyProj, SpawnXf);
+                    MyProj->SetReplicates(true);
+                }
+            }
         }
     }
 }
@@ -1003,6 +1037,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     float Scale
 )
 {
+    UE_LOG(LogTemp, Log, TEXT("SpawnProjectileFromClassWithAim: Class=%s"), ProjectileClass ? *ProjectileClass->GetName() : TEXT("None"));
     if (!ProjectileClass)
         return;
 
@@ -1071,34 +1106,43 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             SpawnXf.SetScale3D(ProjectileScale * Scale);
 
             // Spawn deferred so we can Init
-            AProjectile* Proj = Cast<AProjectile>(
-                UGameplayStatics::BeginDeferredActorSpawnFromClass(
-                    this,
-                    ProjectileClass,
-                    SpawnXf,
-                    ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-                )
-            );
+            UE_LOG(LogTemp, Log, TEXT("Spawning Projectile (Aim): Class=%s, bUseMass=%d"), *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1);
+            if (ProjectileCDO && ProjectileCDO->bUseMass)
+            {
+                float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+                MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
+            }
+            else
+            {
+                AProjectile* Proj = Cast<AProjectile>(
+                    UGameplayStatics::BeginDeferredActorSpawnFromClass(
+                        this,
+                        ProjectileClass,
+                        SpawnXf,
+                        ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+                    )
+                );
 
-         			if (Proj)
-         			{
-         				// Cache our manual location‐aim
-         				Proj->TargetLocation    = LocationToShoot;
-				
-         				// Initialize in-projectile rotation offset from this unit
-         				Proj->RotationOffset = ProjectileRotationOffset;
-				
-         				Proj->InitForLocationPosition(LocationToShoot, this);
-				
-         				//Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
-         				Proj->MaxPiercedTargets = MaxPiercedTargets;
-         				Proj->IsBouncingNext    = IsBouncingNext;
-         				Proj->IsBouncingBack    = IsBouncingBack;
-				
-         				Proj->SetProjectileVisibility();
-         				UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
-         				Proj->SetReplicates(true);
-         			}
+                if (Proj)
+                {
+                    // Cache our manual location‐aim
+                    Proj->TargetLocation    = LocationToShoot;
+            
+                    // Initialize in-projectile rotation offset from this unit
+                    Proj->RotationOffset = ProjectileRotationOffset;
+            
+                    Proj->InitForLocationPosition(LocationToShoot, this);
+            
+                    //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
+                    Proj->MaxPiercedTargets = MaxPiercedTargets;
+                    Proj->IsBouncingNext    = IsBouncingNext;
+                    Proj->IsBouncingBack    = IsBouncingBack;
+            
+                    Proj->SetProjectileVisibility();
+                    UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
+                    Proj->SetReplicates(true);
+                }
+            }
         }
     }
 }
@@ -1359,6 +1403,107 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 		UpdateNavigationRelevance();
 	});
 
+}
+
+void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass)
+{
+	if (!ProjectileClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[SERVER] HandleProjectileImpact failed: ProjectileClass is null for unit %s"), *GetName());
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[SERVER] HandleProjectileImpact triggered on %s (Shooter: %s)"), *GetName(), Shooter ? *Shooter->GetName() : TEXT("None"));
+
+	const AProjectile* CDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject());
+	if (!CDO)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[SERVER] HandleProjectileImpact failed: CDO is null for %s"), *ProjectileClass->GetName());
+		return;
+	}
+
+	// Mark as attacked
+	Attacked(Shooter);
+
+	// Calculate Damage
+	float NewDamage = CDO->Damage;
+	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+
+	if (ShootingUnit && ShootingUnit->Attributes)
+	{
+		if (CDO->UseAttributeDamage)
+		{
+			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetArmor();
+			if (ShootingUnit->IsDoingMagicDamage)
+				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetMagicResistance();
+		}
+		else
+		{
+			NewDamage = CDO->Damage - Attributes->GetArmor();
+			if (ShootingUnit->IsDoingMagicDamage)
+				NewDamage = CDO->Damage - Attributes->GetMagicResistance();
+		}
+	}
+
+	if (Attributes && Attributes->GetShield() <= 0)
+		SetHealth_Implementation(Attributes->GetHealth() - NewDamage);
+	else if (Attributes)
+		SetShield_Implementation(Attributes->GetShield() - NewDamage);
+
+	// Visuals/Sound (Multicast/Client logic would be better but let's keep it simple for now)
+	if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
+	{
+		// Face towards impact
+		const FVector FromLoc = ShootingUnit->GetMassActorLocation();
+		const FRotator FaceRot = (ImpactLocation - FromLoc).Rotation();
+		PerfShooter->FireEffectsAtLocation(CDO->ImpactVFX, CDO->ImpactSound, CDO->ScaleImpactVFX, CDO->ScaleImpactSound, ImpactLocation, 2.0f, FaceRot);
+	}
+}
+
+void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity)
+{
+	if (!ProjectileBaseClass) return;
+
+	const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+	if (ProjectileCDO && ProjectileCDO->bUseMass)
+	{
+		// Calculate transform on server and multicast it
+		FVector ActualSpawnPos = GetProjectileSpawnLocation();
+		FVector AimLocation = Target->GetActorLocation();
+		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
+		{
+			if (!UnitTarget->bUseSkeletalMovement)
+				AimLocation = UnitTarget->GetMassActorLocation();
+		}
+
+		FTransform Transform;
+		Transform.SetLocation(ActualSpawnPos);
+		FVector Direction = (AimLocation - ActualSpawnPos).GetSafeNormal();
+		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+		Transform.SetRotation(FQuat(InitialRotation));
+		Transform.SetScale3D(FVector(ProjectileScale));
+
+		float SpeedFromAttributes = 0.f;
+		if (Attributes)
+		{
+			SpeedFromAttributes = Attributes->GetProjectileSpeed();
+		}
+
+		MulticastSpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, SpeedFromAttributes, TeamId);
+	}
+	else
+	{
+		// Fallback to standard server RPC
+		SpawnProjectile(Target, Attacker);
+	}
+}
+
+void AUnitBase::MulticastSpawnMassProjectile_Implementation(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId)
+{
+	if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
+	{
+		VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId);
+	}
 }
 
 void AUnitBase::UpdateUnitNavigation()

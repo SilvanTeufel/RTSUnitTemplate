@@ -16,7 +16,10 @@
 #include "Mass/MassFragmentTraitsOverrides.h"
 #include "MassVisibilityInterface.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "NiagaraComponent.h"
 #include "UnitMassTag.generated.h"
+
+class UNiagaraComponent;
 
 
 USTRUCT()
@@ -909,6 +912,153 @@ const FragmentType* TryGetFragmentDataPtr(const FMassEntityManager& EntityManage
 
 	return EntityManager.GetFragmentDataPtr<FragmentType>(Entity);
 }
+
+/** Tags for Projectiles */
+USTRUCT(BlueprintType)
+struct FMassProjectileTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT(BlueprintType)
+struct FMassProjectileActiveTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+/** Fragment for Projectile Data */
+USTRUCT(BlueprintType)
+struct FMassProjectileFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector TargetLocation = FVector::ZeroVector;
+
+	UPROPERTY(Transient)
+	FMassEntityHandle TargetEntity;
+
+	UPROPERTY(Transient)
+	FMassEntityHandle ShooterEntity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TSubclassOf<class AProjectile> ProjectileClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Speed = 1000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Damage = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float LifeTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxLifeTime = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ArcHeight = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector ArcStartLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ArcTravelTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bFollowTarget = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bIsHoming = false;
+
+	// Homing params
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector HomingOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HomingInterpSpeed = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HomingInitialAngle = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HomingRotationSpeed = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HomingMaxSpiralRadius = 0.f;
+
+	// Rotation
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FRotator RotationOffset = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector RotationSpeed = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bDisableAnyRotation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bRotateMesh = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool IsHealing = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 TeamId = 1;
+
+	// Bouncing
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bIsBouncing = false;
+    
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PiercedTargets = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxPiercedTargets = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bCanBeRepelledByEnergyWall = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasWallImpact = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector WallImpactLocation = FVector::ZeroVector;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AActor> WallActor;
+};
+
+/** Fragment for Projectile Visualization */
+USTRUCT(BlueprintType)
+struct FMassProjectileVisualFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 InstanceIndex = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TWeakObjectPtr<UInstancedStaticMeshComponent> ISMComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TSubclassOf<class AProjectile> ProjectileClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FTransform VisualRelativeTransform = FTransform::Identity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TWeakObjectPtr<UNiagaraComponent> Niagara_A;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FTransform Niagara_A_RelativeTransform = FTransform::Identity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TWeakObjectPtr<UNiagaraComponent> Niagara_B;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FTransform Niagara_B_RelativeTransform = FTransform::Identity;
+};
 
 inline bool IsFullyValidTarget(FMassEntityManager& EM, FMassEntityHandle H)
 {

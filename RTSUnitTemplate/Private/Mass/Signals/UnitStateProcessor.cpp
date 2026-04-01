@@ -43,6 +43,13 @@
 #include "Mass/States/ChaseStateProcessor.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
+#include "Mass/Projectile/ProjectileVisualManager.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "Characters/Unit/UnitBase.h"
+#include "InstancedStruct.h"
+#include "Mass/Signals/MySignals.h"
+#include "Actors/Projectile.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "EngineUtils.h"
 #include "MassReplicationFragments.h"
@@ -244,6 +251,9 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
     	SpawnSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UnitSpawned)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUnitSpawnedSignal));
+
+		ProjectileImpactSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::ProjectileImpact)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleProjectileImpact));
 
    		UpdateWorkerMovementDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateWorkerMovement)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, UpdateWorkerMovement));
@@ -1737,7 +1747,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         }
 
                         // Fallback: Spawn Projectile manually if no ability activated
-                        StrongAttacker->SpawnProjectile(StrongTarget, StrongAttacker);
+                        StrongAttacker->SpawnProjectileWithEntities(StrongTarget, StrongAttacker, Entity, TargetEntity);
                         
                         // Switch State (assuming UnitSignals::Attack moves to Cooldown or similar)
                         SwitchState(UnitSignals::Attack, Entity, GTEntityManager);
@@ -3053,6 +3063,29 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	//HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  Worker);
 }
 
+
+void UUnitStateProcessor::HandleProjectileImpact(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	if (!EntitySubsystem || !World) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+	for (FMassEntityHandle TargetEntity : Entities)
+	{
+		if (!EntityManager.IsEntityValid(TargetEntity)) continue;
+
+		FMassActorFragment* TargetActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(TargetEntity);
+		if (TargetActorFrag)
+		{
+			AUnitBase* TargetUnit = Cast<AUnitBase>(TargetActorFrag->GetMutable());
+			if (TargetUnit)
+			{
+				// On client, we could trigger local effects if needed
+				// But we handle this via NetMulticast or Server RPC usually
+			}
+		}
+	}
+}
 
 void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {

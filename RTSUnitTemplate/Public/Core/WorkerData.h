@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/DataTable.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "WorkerData.generated.h"
 
 UENUM(BlueprintType)
