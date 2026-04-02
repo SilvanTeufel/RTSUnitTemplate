@@ -174,7 +174,8 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					// Shrink as we get closer than 500 units
 					if (DistanceToTarget < 500.f)
 					{
-						DesiredRadius *= (DistanceToTarget / 500.f);
+						// Aggressively shrink to 0 when we are close to the target (e.g. 100 units) to prevent circling
+						DesiredRadius *= FMath::Clamp((DistanceToTarget - 150.f) / 350.f, 0.f, 1.f);
 					}
 					// Grow during the first 0.1 seconds of flight
 					const float GrowthTime = 0.1f;
@@ -200,20 +201,26 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				}
 
 				if (Projectile.ArcHeight > 0.f)
-			{
-				// Arc Movement logic
-				Projectile.ArcTravelTime += DeltaTime;
-				float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
-				if (TotalDistance > 0.f)
-                {
-                    float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
-                    float Alpha = FMath::Clamp(CurrentDist / TotalDistance, 0.f, 1.f);
-                    
-                    NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
-                    float Height = 4.0f * Projectile.ArcHeight * Alpha * (1.0f - Alpha);
-                    NewLocation.Z += Height;
-                }
-			}
+				{
+					// Arc Movement logic
+					Projectile.ArcTravelTime += DeltaTime;
+					float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
+					if (TotalDistance > 0.f)
+					{
+						float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
+						float Alpha = FMath::Clamp(CurrentDist / TotalDistance, 0.f, 1.f);
+						
+						NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+						float Height = 4.0f * Projectile.ArcHeight * Alpha * (1.0f - Alpha);
+						NewLocation.Z += Height;
+
+						// Add Homing Spiral offset to the Arc position if enabled
+						if (Projectile.bIsHoming)
+						{
+							NewLocation += Projectile.HomingOffset;
+						}
+					}
+				}
 			else
 			{
 				// Linear / Homing Movement logic
@@ -313,7 +320,10 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			if (!Projectile.bDisableAnyRotation)
 			{
 				FVector MoveDir = (NewLocation - CurrentLocation).GetSafeNormal();
-				if (!MoveDir.IsNearlyZero())
+				float DistSqToTarget = FVector::DistSquared(NewLocation, TargetLocation);
+
+				// Stop updating orientation at the very end to prevent weird flips or circling visuals
+				if (DistSqToTarget > FMath::Square(100.f) && !MoveDir.IsNearlyZero())
 				{
 					// 1. Base rotation from movement direction (facing direction)
 					FQuat BaseQuat = MoveDir.ToOrientationQuat();
