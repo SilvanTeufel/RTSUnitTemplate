@@ -1295,6 +1295,9 @@ bool AMassUnitBase::RegisterAdditionalVisualsToMass()
 {
 	if (!GetWorld() || !GetWorld()->IsGameWorld() || bMassVisualsRegistered) return true;
 
+	// Cleanup null pointers to ensure accurate count and avoid processing dead components
+	AdditionalISMComponents.Remove(nullptr);
+
 	if (AdditionalISMComponents.Num() == 0) return true;
 
 	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: Called for unit %s with %d additional ISMs"), *GetName(), AdditionalISMComponents.Num());
@@ -1359,6 +1362,9 @@ void AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISM
 	{
 		return;
 	}
+
+	// Cleanup: Remove null pointers from previous construction cycles
+	AdditionalISMComponents.Remove(nullptr);
 
 	// AddUnique returns the index where the component was added/found
 	AdditionalISMComponents.AddUnique(InISMComponent);
