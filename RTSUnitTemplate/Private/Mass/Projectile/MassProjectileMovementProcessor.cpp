@@ -82,12 +82,23 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			}
 
 			Projectile.LifeTime += DeltaTime;
+
+			if (Projectile.bIsHoming)
+			{
+				Projectile.bFollowTarget = true;
+			}
 			
 			if (bShouldLog && i == 0 && EntityManager.GetWorld())
 			{
 				FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-				UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d: LifeTime %f, Speed %f, Pos %s, Target %s"), 
-					*NetModeStr, Context.GetEntity(i).Index, Projectile.LifeTime, Projectile.Speed, *Transform.GetLocation().ToString(), *Projectile.TargetLocation.ToString());
+				UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d: LifeTime %f, Speed %f, ArcHeight %f, Pos %s, Target %s, bIsHoming: %d, bFollowTarget: %d"), 
+					*NetModeStr, Context.GetEntity(i).Index, Projectile.LifeTime, Projectile.Speed, Projectile.ArcHeight, *Transform.GetLocation().ToString(), *Projectile.TargetLocation.ToString(), Projectile.bIsHoming, Projectile.bFollowTarget);
+                
+                if (Projectile.bIsHoming)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d: HomingRadius: %f, HomingRotSpeed: %f, CurrentOffset: %s"), 
+                        *NetModeStr, Context.GetEntity(i).Index, Projectile.HomingMaxSpiralRadius, Projectile.HomingRotationSpeed, *Projectile.HomingOffset.ToString());
+                }
                 
                 if (Visual.ISMComponent.IsValid())
                 {
@@ -152,28 +163,8 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			FVector NewLocation = CurrentLocation;
 
-			if (Projectile.ArcHeight > 0.f)
-			{
-				// Arc Movement logic
-				Projectile.ArcTravelTime += DeltaTime;
-				float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
-				if (TotalDistance > 0.f)
-                {
-                    float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
-                    float Alpha = FMath::Clamp(CurrentDist / TotalDistance, 0.f, 1.f);
-                    
-                    NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
-                    float Height = 4.0f * Projectile.ArcHeight * Alpha * (1.0f - Alpha);
-                    NewLocation.Z += Height;
-                }
-			}
-			else
-			{
-				// Linear / Homing Movement logic
-				FVector FlightDirection;
-				if (Projectile.bFollowTarget && Projectile.bIsHoming)
+				if (Projectile.bIsHoming && Projectile.bFollowTarget)
 				{
-					// Homing Spiral Logic (Ported from AProjectile::FlyToUnitTarget)
 					const FVector DirToTarget = (TargetLocation - CurrentLocation).GetSafeNormal();
 					const float CurrentAngle = Projectile.HomingInitialAngle + Projectile.LifeTime * Projectile.HomingRotationSpeed;
 
@@ -195,9 +186,41 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					FVector Right, Up;
 					DirToTarget.FindBestAxisVectors(Right, Up);
 
-					Projectile.HomingOffset = (Right * FMath::Cos(FMath::DegreesToRadians(CurrentAngle)) +
+					FVector NewOffset = (Right * FMath::Cos(FMath::DegreesToRadians(CurrentAngle)) +
 									Up * FMath::Sin(FMath::DegreesToRadians(CurrentAngle))) * DesiredRadius;
+					
+					Projectile.HomingOffset = NewOffset;
+					
+					if (bShouldLog && i == 0)
+					{
+						FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
+						UE_LOG(LogTemp, Warning, TEXT("%s Homing Details: Radius=%f, Angle=%f, Offset=%s"), 
+							*NetModeStr, DesiredRadius, CurrentAngle, *NewOffset.ToString());
+					}
+				}
 
+				if (Projectile.ArcHeight > 0.f)
+			{
+				// Arc Movement logic
+				Projectile.ArcTravelTime += DeltaTime;
+				float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
+				if (TotalDistance > 0.f)
+                {
+                    float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
+                    float Alpha = FMath::Clamp(CurrentDist / TotalDistance, 0.f, 1.f);
+                    
+                    NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+                    float Height = 4.0f * Projectile.ArcHeight * Alpha * (1.0f - Alpha);
+                    NewLocation.Z += Height;
+                }
+			}
+			else
+			{
+				// Linear / Homing Movement logic
+				FVector FlightDirection;
+				if (Projectile.bFollowTarget && Projectile.bIsHoming)
+				{
+					// We already calculated HomingOffset above
 					const FVector CurrentTarget = TargetLocation + Projectile.HomingOffset;
 					FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
 				}

@@ -1462,47 +1462,100 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 
 void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity)
 {
-	if (!ProjectileBaseClass) return;
+    if (!ProjectileBaseClass || !Target || !Attacker) return;
 
-	const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
-	if (ProjectileCDO && ProjectileCDO->bUseMass)
-	{
-		// Calculate transform on server and multicast it
-		FVector ActualSpawnPos = GetProjectileSpawnLocation();
-		FVector AimLocation = Target->GetActorLocation();
-		if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
-		{
-			if (!UnitTarget->bUseSkeletalMovement)
-				AimLocation = UnitTarget->GetMassActorLocation();
-		}
+    AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
+    if (!ShootingUnit) return;
 
-		FTransform Transform;
-		Transform.SetLocation(ActualSpawnPos);
-		FVector Direction = (AimLocation - ActualSpawnPos).GetSafeNormal();
-		FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
-		Transform.SetRotation(FQuat(InitialRotation));
-		Transform.SetScale3D(FVector(ProjectileScale));
+    const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+    if (ProjectileCDO && ProjectileCDO->bUseMass)
+    {
+        float TwinDistance = ProjectileCDO->TwinProjectileDistance;
+        int32 HomingCount = ProjectileCDO->HomingMissleCount;
+        int32 BaseCount = (HomingCount > 0) ? HomingCount : 1;
 
-		float SpeedFromAttributes = 0.f;
-		if (Attributes)
-		{
-			SpeedFromAttributes = Attributes->GetProjectileSpeed();
-		}
+        FVector ActualSpawnPos = GetProjectileSpawnLocation();
+        FVector AimLocation = Target->GetActorLocation();
+        if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
+        {
+            if (!UnitTarget->bUseSkeletalMovement)
+                AimLocation = UnitTarget->GetMassActorLocation();
+        }
 
-		MulticastSpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, SpeedFromAttributes, TeamId);
-	}
-	else
-	{
-		// Fallback to standard server RPC
-		SpawnProjectile(Target, Attacker);
-	}
+        TArray<FVector> SpawnPositions;
+        if (TwinDistance >= 10.f)
+        {
+            FVector DirToTarget = (AimLocation - ActualSpawnPos).GetSafeNormal2D();
+            FVector RightVector = DirToTarget.IsNearlyZero() ? Attacker->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
+            FVector RightOffset = RightVector * TwinDistance;
+            SpawnPositions.Add(ActualSpawnPos - RightOffset); // Left
+            SpawnPositions.Add(ActualSpawnPos + RightOffset); // Right
+        }
+        else
+        {
+            SpawnPositions.Add(ActualSpawnPos);
+        }
+
+        float SpeedFromAttributes = 0.f;
+        if (Attributes)
+        {
+            SpeedFromAttributes = Attributes->GetProjectileSpeed();
+        }
+
+        for (const FVector& Pos : SpawnPositions)
+        {
+            for (int32 i = 0; i < BaseCount; ++i)
+            {
+                FTransform Transform;
+                Transform.SetLocation(Pos);
+                FVector Direction = (AimLocation - Pos).GetSafeNormal();
+
+                if (HomingCount > 0 && BaseCount > 1)
+                {
+                    float Angle = (360.0f / BaseCount) * i;
+                    FVector Right, Up;
+                    Direction.FindBestAxisVectors(Right, Up);
+                    Direction = (Direction + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+                }
+
+                FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+                Transform.SetRotation(FQuat(InitialRotation));
+                Transform.SetScale3D(FVector(ProjectileScale));
+
+                float FinalSpeed = SpeedFromAttributes;
+                float InitialAngle = 0.f;
+                float RotSpeed = 0.f;
+                float MaxRadius = 0.f;
+                float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
+                bool bFollow = ProjectileCDO->FollowTarget;
+
+                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                {
+                    bFollow = true;
+                    FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    InitialAngle = FMath::RandRange(0.f, 360.f);
+                    RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
+                    if (FMath::RandBool()) RotSpeed *= -1.f;
+                    MaxRadius = ProjectileCDO->HomingMaxSpiralRadius * FMath::RandRange(0.8f, 1.2f);
+                    
+                    UE_LOG(LogTemp, Warning, TEXT("[SERVER] Spawning Homing Projectile: Count=%d, MaxRadius=%f, RotSpeed=%f"), HomingCount, MaxRadius, RotSpeed);
+                }
+
+                MulticastSpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+            }
+        }
+    }
+    else
+    {
+        SpawnProjectile(Target, Attacker);
+    }
 }
 
-void AUnitBase::MulticastSpawnMassProjectile_Implementation(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId)
+void AUnitBase::MulticastSpawnMassProjectile_Implementation(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed)
 {
 	if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
 	{
-		VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId);
+		VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed);
 	}
 }
 

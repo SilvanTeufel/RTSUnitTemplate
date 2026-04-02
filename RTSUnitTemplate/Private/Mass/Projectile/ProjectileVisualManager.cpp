@@ -143,7 +143,7 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId)
+FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed)
 {
     UWorld* World = GetWorld();
     bool bIsClient = World && World->GetNetMode() == NM_Client;
@@ -228,34 +228,34 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	FMassProjectileFragment& ProjectileFragment = EntityManager->GetFragmentDataChecked<FMassProjectileFragment>(Entity);
 	ProjectileFragment.ProjectileClass = ProjectileClass;
 	ProjectileFragment.TargetLocation = TargetLocation;
-	ProjectileFragment.Speed = (ProjectileSpeed > 0.f) ? ProjectileSpeed : CDO->MovementSpeed;
+	ProjectileFragment.Speed = ProjectileSpeed;
 	ProjectileFragment.Damage = CDO->Damage;
 	ProjectileFragment.MaxLifeTime = CDO->MaxLifeTime;
 	ProjectileFragment.LifeTime = 0.f;
 	ProjectileFragment.ArcHeight = CDO->ArcHeight;
 	ProjectileFragment.ArcStartLocation = Transform.GetLocation();
-	ProjectileFragment.bFollowTarget = CDO->FollowTarget;
+	ProjectileFragment.bFollowTarget = bFollowTarget;
 	ProjectileFragment.TeamId = (ShooterTeamId != -1) ? ShooterTeamId : CDO->TeamId;
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = CDO->MaxPiercedTargets;
 
-	// Homing and Rotation parameters from CDO
-	ProjectileFragment.bIsHoming = CDO->HomingMissleCount > 0;
-	if (ProjectileFragment.bIsHoming)
-	{
-		ProjectileFragment.HomingRotationSpeed = CDO->HomingRotationSpeed * FMath::RandRange(0.8f, 2.0f);
-		if (FMath::RandBool()) ProjectileFragment.HomingRotationSpeed *= -1.f;
-		ProjectileFragment.HomingInitialAngle = FMath::RandRange(0.f, 360.f);
-		ProjectileFragment.HomingMaxSpiralRadius = CDO->HomingMaxSpiralRadius * FMath::RandRange(0.6f, 1.5f);
-		ProjectileFragment.Speed += FMath::RandRange(-CDO->HomingSpeedVariation, CDO->HomingSpeedVariation);
-	}
-	else
-	{
-		ProjectileFragment.HomingRotationSpeed = CDO->HomingRotationSpeed;
-		ProjectileFragment.HomingMaxSpiralRadius = CDO->HomingMaxSpiralRadius;
-		ProjectileFragment.HomingInitialAngle = CDO->HomingInitialAngle;
-	}
-	ProjectileFragment.HomingInterpSpeed = CDO->HomingInterpSpeed;
+	// Homing and Rotation parameters from server
+	ProjectileFragment.bIsHoming = bFollowTarget && HomingMaxSpiralRadius > 0.f;
+	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;
+	ProjectileFragment.HomingRotationSpeed = HomingRotationSpeed;
+	ProjectileFragment.HomingMaxSpiralRadius = HomingMaxSpiralRadius;
+	ProjectileFragment.HomingInterpSpeed = HomingInterpSpeed;
+
+    if (bIsClient)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Projectile %d: bIsHoming: %d, MaxRadius: %f, RotSpeed: %f, InitialAngle: %f"), 
+            Entity.Index, ProjectileFragment.bIsHoming, ProjectileFragment.HomingMaxSpiralRadius, ProjectileFragment.HomingRotationSpeed, ProjectileFragment.HomingInitialAngle);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[SERVER] Projectile %d: bIsHoming: %d, MaxRadius: %f, RotSpeed: %f, InitialAngle: %f"), 
+            Entity.Index, ProjectileFragment.bIsHoming, ProjectileFragment.HomingMaxSpiralRadius, ProjectileFragment.HomingRotationSpeed, ProjectileFragment.HomingInitialAngle);
+    }
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;
