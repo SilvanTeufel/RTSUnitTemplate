@@ -39,9 +39,6 @@ void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	static uint32 LogThrottle = 0;
-	bool bShouldLog = (LogThrottle++ % 60 == 0);
-
 	TArray<FMassEntityHandle> Units;
 	TArray<FVector> UnitLocations;
 	TArray<float> UnitRadii;
@@ -112,28 +109,15 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				// Enhanced distance check considering speed to prevent tunneling
 				float DistSq = FVector::DistSquared(ProjPos, UnitLocations[j]);
 				float SpeedFactor = Projectile.Speed * Context.GetDeltaTimeSeconds();
-				float CollisionRadius = UnitRadii[j]; 
+				float TargetCollisionRadius = UnitRadii[j]; 
 				
 				// Be more generous on the server to ensure damage application
 				float SafetyMargin = (Context.GetWorld()->GetNetMode() < NM_Client) ? 50.f : 25.f;
-				float CombinedRadius = CollisionRadius + SpeedFactor + SafetyMargin;
-
-				// DEBUG LOG (Throttled per projectile entity)
-				if (bShouldLog && i == 0)
-				{
-					FString NetModeStr = (Context.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-					FString TargetStr = bIsTarget ? TEXT("(TARGET)") : TEXT("");
-					UE_LOG(LogTemp, Warning, TEXT("%s Proj %d checking Unit %d %s: Dist %f, CombinedRad %f (Coll %f + Spd %f + %f), ProjTeam %d, UnitTeam %d"), 
-						*NetModeStr, ProjEntity.Index, Units[j].Index, *TargetStr, FMath::Sqrt(DistSq), CombinedRadius, CollisionRadius, SpeedFactor, SafetyMargin, Projectile.TeamId, UnitTeams[j]);
-				}
+				float CombinedRadius = TargetCollisionRadius + Projectile.CollisionRadius + SpeedFactor + SafetyMargin;
 
 				if (DistSq <= FMath::Square(CombinedRadius))
 				{
 					// Impact!
-					FString NetModeStr = (Context.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-					UE_LOG(LogTemp, Warning, TEXT("%s !!! IMPACT TRIGGERED !!! Proj %d -> Unit %d (Dist %f <= %f)"), 
-						*NetModeStr, ProjEntity.Index, Units[j].Index, FMath::Sqrt(DistSq), CombinedRadius);
-					
 					// Register hit
 					if (Projectile.HitCount < 16)
 					{
@@ -176,7 +160,6 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 						{
 							if (World->GetNetMode() < NM_Client)
 							{
-								UE_LOG(LogTemp, Warning, TEXT("[SERVER] Triggering HandleProjectileImpact for Unit %d"), Units[j].Index);
 								FMassActorFragment* TargetActorFrag = EntityManager.IsEntityActive(Units[j]) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Units[j]) : nullptr;
 								FMassActorFragment* ShooterActorFrag = EntityManager.IsEntityActive(Projectile.ShooterEntity) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Projectile.ShooterEntity) : nullptr;
 
@@ -187,8 +170,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 									if (AUnitBase* TargetUnit = Cast<AUnitBase>(TargetActor))
 									{
-										UE_LOG(LogTemp, Warning, TEXT("[SERVER] HandleProjectileImpact being called on %s by shooter %s"), *TargetUnit->GetName(), ShooterActor ? *ShooterActor->GetName() : TEXT("null"));
-										TargetUnit->HandleProjectileImpact(ShooterActor, ProjPos, Projectile.ProjectileClass);
+										TargetUnit->HandleProjectileImpact(ShooterActor, ProjPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
 									else
 									{

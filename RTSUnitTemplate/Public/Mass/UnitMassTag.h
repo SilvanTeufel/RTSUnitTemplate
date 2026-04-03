@@ -417,6 +417,12 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FVector LastProjectileScale = FVector::OneVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastProjectileDamage = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	int32 LastProjectileMaxPiercedTargets = 1;
 	
 };
 
@@ -990,6 +996,9 @@ struct FMassProjectileFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float Damage = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CollisionRadius = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float LifeTime = 0.f;

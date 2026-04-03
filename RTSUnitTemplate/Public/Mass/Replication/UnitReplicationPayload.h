@@ -150,6 +150,12 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	FVector_NetQuantize10 AIS_ProjectileScale = FVector::OneVector;
 
+	UPROPERTY()
+	float AIS_ProjectileDamage = 0.f;
+
+	UPROPERTY()
+	int32 AIS_ProjectileMaxPiercedTargets = 1;
+
 	uint8 LastProjectileFireCounter = 0; // Legacy / will remove later if unused
 	
 	// Client-side reconciliation
@@ -205,6 +211,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, AIS_ProjectileSpeed(0.f)
 		, AIS_LastTargetNetID(0u)
 		, AIS_ProjectileScale(FVector::OneVector)
+		, AIS_ProjectileDamage(0.f)
+		, AIS_ProjectileMaxPiercedTargets(1)
 		, LastProjectileFireCounter(0)
 		, LastServerProjectileFireCounter(0)
 		, PredictedPendingShots(0)

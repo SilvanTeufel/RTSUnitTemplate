@@ -346,6 +346,8 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
             NewItem.AIS_ProjectileSpread = AIS->LastProjectileSpread;
             NewItem.AIS_ProjectileScale = AIS->LastProjectileScale;
+            NewItem.AIS_ProjectileDamage = AIS->LastProjectileDamage;
+            NewItem.AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
         }
 
         // Fill Visual Effect Fragment
@@ -960,6 +962,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 Item->AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
                                 Item->AIS_ProjectileSpread = AIS->LastProjectileSpread;
                                 Item->AIS_ProjectileScale = AIS->LastProjectileScale;
+                                Item->AIS_ProjectileDamage = AIS->LastProjectileDamage;
+                                Item->AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
                             }
                         }
 

@@ -254,7 +254,10 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                                 Item->AIS_HomingRotationSpeed,
                                 Item->AIS_HomingMaxSpiralRadius,
                                 Item->AIS_HomingInterpSpeed,
-                                &Context.Defer()
+                                &Context.Defer(),
+                                Item->AIS_ProjectileScale,
+                                Item->AIS_ProjectileDamage,
+                                Item->AIS_ProjectileMaxPiercedTargets
                             );
 
                             // Latch and increment pending for reconciliation

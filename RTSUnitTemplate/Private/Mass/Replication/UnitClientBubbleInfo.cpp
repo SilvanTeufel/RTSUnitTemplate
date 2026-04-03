@@ -207,7 +207,9 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								LocalMaxRadius,
 								Interp,
 								nullptr,
-								LocalScale
+								LocalScale,
+								AIS_ProjectileDamage,
+								AIS_ProjectileMaxPiercedTargets
 							);
 						}
 					}

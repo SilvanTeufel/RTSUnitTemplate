@@ -63,7 +63,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					Projectile.bRotateMesh = CDO->RotateMesh;
 					Projectile.bDisableAnyRotation = CDO->DisableAnyRotation;
 					Projectile.MaxLifeTime = CDO->MaxLifeTime;
-                    Projectile.Damage = CDO->Damage;
+                    if (Projectile.Damage >= 0.f) Projectile.Damage = CDO->Damage;
                     Projectile.IsHealing = CDO->IsHealing;
                     Projectile.bContinueAfterTarget = CDO->bContinueAfterTarget;
                     Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
@@ -220,30 +220,35 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 						float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
 						float Alpha = CurrentDist / TotalDistance;
                         
-                        if (Alpha > 1.0f && !Projectile.bContinueAfterTarget)
+                        if (Alpha >= 1.0f && Projectile.bContinueAfterTarget)
                         {
-                            Alpha = 1.0f;
+                            // Transition to Linear flight
+                            Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
+                            if (Projectile.FlightDirection.IsNearlyZero())
+                            {
+                                Projectile.FlightDirection = Transform.GetRotation().GetForwardVector();
+                            }
+                            Projectile.ArcHeight = 0.f;
+                            Projectile.ArcHeightDistanceFactor = 0.f;
+                            Projectile.bIsHoming = false; // Stop homing when switching to linear
+                            
+                            // Extrapolate linearly past target
+                            NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
                         }
-
-						NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
-                        
-                        // Only apply height if we haven't reached target, or if we want to continue parabolic (usually looks weird)
-                        // Actually, let's keep height at 0 after Alpha 1.0 to look like it continues straight
-                        if (Alpha <= 1.0f)
+                        else
                         {
+                            if (Alpha > 1.0f) Alpha = 1.0f;
+
+						    NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+                            
 						    float Height = 4.0f * EffectiveArcHeight * Alpha * (1.0f - Alpha);
 						    NewLocation.Z += Height;
-                        }
 
-						// Add Homing Spiral offset to the Arc position if enabled
-						if (Projectile.bIsHoming)
-						{
-							NewLocation += Projectile.HomingOffset;
-						}
-
-                        if (Alpha >= 1.0f && Projectile.FlightDirection.IsNearlyZero())
-                        {
-                             Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
+						    // Add Homing Spiral offset to the Arc position if enabled
+						    if (Projectile.bIsHoming)
+						    {
+							    NewLocation += Projectile.HomingOffset;
+						    }
                         }
 					}
 				}
@@ -251,22 +256,38 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			{
 				// Linear / Homing Movement logic
 				FVector LocalFlightDirection;
-				if (Projectile.bFollowTarget && Projectile.bIsHoming)
+				if (Projectile.bFollowTarget)
 				{
-					// We already calculated HomingOffset above
 					const FVector CurrentTarget = TargetLocation + Projectile.HomingOffset;
-					LocalFlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
-                    Projectile.FlightDirection = LocalFlightDirection;
-				}
-				else if (Projectile.bFollowTarget)
-				{
-					// Simple Homing with offset interpolation
-					const FVector CurrentTarget = TargetLocation + Projectile.HomingOffset;
-					LocalFlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
-                    Projectile.FlightDirection = LocalFlightDirection;
+					FVector NewFlightDir = (CurrentTarget - CurrentLocation).GetSafeNormal();
+                    
+                    bool bStopFollowing = false;
+                    if (Projectile.bContinueAfterTarget && !Projectile.TargetEntity.IsValid())
+                    {
+                        // Check if reached static target location (oscillation/flip prevention)
+                        if (NewFlightDir.IsNearlyZero() || (NewFlightDir | Projectile.FlightDirection) < -0.5f)
+                        {
+                            bStopFollowing = true;
+                        }
+                    }
+
+                    if (bStopFollowing)
+                    {
+                        Projectile.bFollowTarget = false;
+                        Projectile.bIsHoming = false;
+                        LocalFlightDirection = Projectile.FlightDirection;
+                    }
+                    else
+                    {
+                        LocalFlightDirection = NewFlightDir;
+                        Projectile.FlightDirection = LocalFlightDirection;
+                    }
 					
-					// Gradually reduce the offset
-					Projectile.HomingOffset = FMath::VInterpTo(Projectile.HomingOffset, FVector::ZeroVector, DeltaTime, Projectile.HomingInterpSpeed);
+					// Gradually reduce the offset if not pure homing
+                    if (!Projectile.bIsHoming)
+                    {
+					    Projectile.HomingOffset = FMath::VInterpTo(Projectile.HomingOffset, FVector::ZeroVector, DeltaTime, Projectile.HomingInterpSpeed);
+                    }
 				}
 				else
 				{
@@ -331,7 +352,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 									// If the wall is actually a unit, trigger normal impact (damage)
 									if (AUnitBase* WallUnit = Cast<AUnitBase>(WallActor))
 									{
-										WallUnit->HandleProjectileImpact(ShooterActor, Projectile.WallImpactLocation, Projectile.ProjectileClass);
+										WallUnit->HandleProjectileImpact(ShooterActor, Projectile.WallImpactLocation, Projectile.ProjectileClass, Projectile.Damage);
 									}
 									else if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 									{

@@ -144,7 +144,7 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale)
+FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets)
 {
     UWorld* World = GetWorld();
     bool bIsClient = World && World->GetNetMode() == NM_Client;
@@ -168,10 +168,10 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     {
         FMassCommandBuffer& TargetBuffer = CommandBuffer ? *CommandBuffer : EntityManager->Defer();
         
-        TargetBuffer.PushCommand<FMassDeferredSetCommand>([this, ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, Scale](FMassEntityManager& Manager)
+        TargetBuffer.PushCommand<FMassDeferredSetCommand>([this, ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, Scale, Damage, MaxPiercedTargets](FMassEntityManager& Manager)
         {
             // This will run in a safe state (not processing) on the main thread
-            SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale);
+            SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale, Damage, MaxPiercedTargets);
         });
         return FMassEntityHandle();
     }
@@ -213,7 +213,8 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.ProjectileClass = ProjectileClass;
 	ProjectileFragment.TargetLocation = TargetLocation;
 	ProjectileFragment.Speed = ProjectileSpeed;
-	ProjectileFragment.Damage = CDO->Damage;
+	ProjectileFragment.Damage = (Damage >= 0.f) ? Damage : CDO->Damage;
+	ProjectileFragment.CollisionRadius = CDO->CollisionRadius;
 	ProjectileFragment.MaxLifeTime = CDO->MaxLifeTime;
 	ProjectileFragment.LifeTime = 0.f;
 	ProjectileFragment.ArcHeight = CDO->ArcHeight;
@@ -222,10 +223,14 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.bFollowTarget = bFollowTarget;
 	ProjectileFragment.TeamId = (ShooterTeamId != -1) ? ShooterTeamId : CDO->TeamId;
 	ProjectileFragment.IsHealing = CDO->IsHealing;
-	ProjectileFragment.MaxPiercedTargets = CDO->MaxPiercedTargets;
+	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
     ProjectileFragment.ProjectileScale = Scale;
     ProjectileFragment.bContinueAfterTarget = CDO->bContinueAfterTarget;
     ProjectileFragment.FlightDirection = (TargetLocation - Transform.GetLocation()).GetSafeNormal();
+    if (ProjectileFragment.FlightDirection.IsNearlyZero())
+    {
+        ProjectileFragment.FlightDirection = Transform.GetRotation().GetForwardVector();
+    }
 
 	// Homing and Rotation parameters from server
 	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;

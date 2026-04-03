@@ -1017,13 +1017,13 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets);
                 }
 
                 // 2) Increment replication counter for clients
                 if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
                 {
-                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread);
+                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread, -1.f, MaxPiercedTargets);
                 }
             }
             else
@@ -1155,7 +1155,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 float RotSpeed = 0.f;
                 float MaxRadius = 0.f;
                 float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
-                bool bFollow = ProjectileCDO->FollowTarget;
+                
+                // For aimed shots (static point), we only want to "follow" if it's a homing projectile
+                // Non-homing aimed shots should be linear to allow flying past the target easily
+                bool bFollow = false;
 
                 if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
                 {
@@ -1177,13 +1180,13 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), ProjectileCDO->Damage, MaxPiercedTargets);
                 }
 
                 // 2) Increment replication counter for clients
                 if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
                 {
-                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, FMassEntityHandle(), InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread);
+                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, FMassEntityHandle(), InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread, ProjectileCDO->Damage, MaxPiercedTargets);
                 }
             }
             else
@@ -1480,7 +1483,7 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 }
 
 void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity,
-    float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread)
+    float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread, float Damage, int32 MaxPiercedTargets)
 {
     if (!ProjectileClass || !HasAuthority()) return;
 
@@ -1515,6 +1518,8 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileTargetLocation = TargetLocation;
             AIS->LastProjectileScale = Scale;
             AIS->LastProjectileSpread = Spread;
+            AIS->LastProjectileDamage = Damage;
+            AIS->LastProjectileMaxPiercedTargets = MaxPiercedTargets;
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;
@@ -1537,7 +1542,7 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
 }
 
 
-void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass)
+void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride)
 {
 	if (!ProjectileClass)
 	{
@@ -1558,18 +1563,18 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 	Attacked(Shooter);
 
 	// Calculate Damage
-	float NewDamage = CDO->Damage;
+	float NewDamage = (DamageOverride >= 0.f) ? DamageOverride : CDO->Damage;
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 
 	if (ShootingUnit && ShootingUnit->Attributes)
 	{
-		if (CDO->UseAttributeDamage)
+		if (CDO->UseAttributeDamage && DamageOverride < 0.f)
 		{
 			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetArmor();
 			if (ShootingUnit->IsDoingMagicDamage)
 				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetMagicResistance();
 		}
-		else
+		else if (DamageOverride < 0.f) // Only apply armor if we use default CDO damage
 		{
 			NewDamage = CDO->Damage - Attributes->GetArmor();
 			if (ShootingUnit->IsDoingMagicDamage)
@@ -1577,12 +1582,34 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 		}
 	}
 
-	if (Attributes && Attributes->GetShield() <= 0)
-		SetHealth_Implementation(Attributes->GetHealth() - NewDamage);
-	else if (Attributes)
-		SetShield_Implementation(Attributes->GetShield() - NewDamage);
+    if (CDO->IsHealing)
+    {
+        if (Attributes)
+        {
+            SetHealth_Implementation(FMath::Min(Attributes->GetMaxHealth(), Attributes->GetHealth() + NewDamage));
+        }
+    }
+    else
+    {
+        if (Attributes && Attributes->GetShield() <= 0)
+            SetHealth_Implementation(Attributes->GetHealth() - NewDamage);
+        else if (Attributes)
+            SetShield_Implementation(Attributes->GetShield() - NewDamage);
 
-	// Visuals/Sound (Multicast/Client logic would be better but let's keep it simple for now)
+        // Grant Experience
+        if (ShootingUnit)
+        {
+            ShootingUnit->IncreaseExperience();
+        }
+    }
+
+	// Apply ProjectileEffect
+	if (CDO->ProjectileEffect)
+	{
+		ApplyInvestmentEffect(CDO->ProjectileEffect);
+	}
+
+	// Visuals/Sound
 	if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 	{
 		// Face towards impact
@@ -1688,13 +1715,13 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
 
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
                 }
 
                 // Increment replication counter for each projectile in the loop
                 if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
                 {
-                    IncrementMassProjectileFireCounter(ProjectileBaseClass, FinalSpeed, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, AimLocation, Transform.GetScale3D());
+                    IncrementMassProjectileFireCounter(ProjectileBaseClass, FinalSpeed, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, AimLocation, Transform.GetScale3D(), 0.f, -1.f, ProjectileCDO->MaxPiercedTargets);
                 }
             }
         }
