@@ -265,6 +265,9 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_InitializeMainHUD();
 
+	UFUNCTION(BlueprintCallable, Category = "Mass")
+	void Batch_RemoveRotateToMouseTag();
+	
 	void Retry_InitializeMainHUD();
 
 protected:

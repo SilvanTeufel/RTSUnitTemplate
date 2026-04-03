@@ -85,6 +85,8 @@ namespace UnitSignals
 
 	// Client-side resource scale update
 	const FName UpdateResourceScale(TEXT("UpdateResourceScale"));
+
+	const FName UpdateMouseLocation(TEXT("UpdateMouseLocation"));
 }
 
 USTRUCT()

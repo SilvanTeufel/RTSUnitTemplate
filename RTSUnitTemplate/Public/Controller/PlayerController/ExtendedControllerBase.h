@@ -280,6 +280,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
 
+	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayForUnit(AUnitBase* Unit);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<UGameplayAbilityBase*> GetAbilityObjectArrayByIndex();
 	
@@ -440,6 +442,11 @@ public:
 	
 	UFUNCTION(Client, Reliable)
 	void Client_DeselectSingleUnit(AUnitBase* UnitToDeselect);
+
+	void BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd);
+
+	UFUNCTION(Server, Reliable)
+	void Server_BatchSetRotateToMouseTag(const TArray<AUnitBase*>& Units, bool bAdd);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);
@@ -453,5 +460,11 @@ public:
 	
 	UFUNCTION(Client, Reliable)
 	void Client_SelectUnitsFromSameSquad(const TArray<AUnitBase*>& Units);
+
+	UPROPERTY(Replicated)
+	FVector ReplicatedMouseLocation;
+
+	UFUNCTION(Server, Unreliable)
+	void Server_UpdateMouseLocation(FVector NewLocation);
 	
 };

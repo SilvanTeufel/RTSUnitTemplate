@@ -479,9 +479,9 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 							if (UMassActorBindingComponent* Bind = Unit->FindComponentByClass<UMassActorBindingComponent>())
 							{
 								const FMassEntityHandle EHandle = Bind->GetMassEntityHandle();
-								if (EHandle.IsSet() && EM->IsEntityValid(EHandle))
+								if (EHandle.IsSet() && EM->IsEntityActive(EHandle))
 								{
-									if (FMassNetworkIDFragment* NetFrag = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+									if (FMassNetworkIDFragment* NetFrag = TryGetFragmentDataPtrMutable<FMassNetworkIDFragment>(*EM, EHandle))
 									{
 										if (NetFrag->NetID.GetValue() != 0)
 										{
@@ -500,7 +500,8 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 										// Add missing NetID fragment on-the-fly so the entity becomes eligible for replication queries
 										NetIDValue = FMassNetworkID(Reg->GetNextNetID());
 										EM->AddFragmentToEntity(EHandle, FMassNetworkIDFragment::StaticStruct());
-										if (FMassNetworkIDFragment* NewFragPtr = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(EHandle))
+										// Re-fetch using TryGetFragmentDataPtrMutable (EM->AddFragmentToEntity is immediate here)
+										if (FMassNetworkIDFragment* NewFragPtr = TryGetFragmentDataPtrMutable<FMassNetworkIDFragment>(*EM, EHandle))
 										{
 											NewFragPtr->NetID = NetIDValue;
 											bHaveNetID = true;
@@ -510,7 +511,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 											UE_LOG(LogTemp, Warning, TEXT("ServerKick: Added FMassNetworkIDFragment for %s with NetID=%u"), *Unit->GetName(), NetIDValue.GetValue());
 										}
 									}
-							}
+								}
 						}
 						if (!bHaveNetID)
 						{
@@ -713,12 +714,9 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			if (AIT)
 			{
 				bHas = AIT->bHasValidTarget; bFocused = AIT->IsFocusedOnTarget; LKL = AIT->LastKnownLocation; AbilityLoc = AIT->AbilityTargetLocation; bTargetSet = AIT->TargetEntity.IsSet();
-				if (bTargetSet && EntityManager.IsEntityValid(AIT->TargetEntity))
+				if (const FMassNetworkIDFragment* TgtNet = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, AIT->TargetEntity))
 				{
-					if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
-					{
-						TargetNetID = TgtNet->NetID.GetValue();
-					}
+					TargetNetID = TgtNet->NetID.GetValue();
 				}
 			}
 			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: AITarget NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
@@ -792,12 +790,9 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 
 			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
 			{
-				if (ATF->TargetEntity.IsValid())
+				if (const FMassNetworkIDFragment* TargetNetIDFrag = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, ATF->TargetEntity))
 				{
-					if (const FMassNetworkIDFragment* TargetNetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(ATF->TargetEntity))
-					{
-						S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
-					}
+					S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
 				}
 			}
 
@@ -841,12 +836,9 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 
 			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
 			{
-				if (ATF->TargetEntity.IsValid())
+				if (const FMassNetworkIDFragment* TargetNetIDFrag = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, ATF->TargetEntity))
 				{
-					if (const FMassNetworkIDFragment* TargetNetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(ATF->TargetEntity))
-					{
-						S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
-					}
+					S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
 				}
 			}
 

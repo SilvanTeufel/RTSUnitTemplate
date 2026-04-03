@@ -167,6 +167,11 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	{
 		return EState::Evasion;
 	}
+	
+	if (HasTag(FMassRotateToMouseTag::StaticStruct()))
+	{
+		return EState::Pause;
+	}
 	/*
 	if (HasTag(FMassStateIdleTag::StaticStruct()))
 	{

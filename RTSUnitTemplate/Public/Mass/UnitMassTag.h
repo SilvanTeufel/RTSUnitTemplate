@@ -95,6 +95,19 @@ struct FMassUnitYawFollowTag : public FMassTag
 	GENERATED_BODY()
 };
 
+USTRUCT()
+struct FMassRotateToMouseTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
+struct FMassRotateToMouseFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	FVector TargetLocation = FVector::ZeroVector;
+};
+
 // Fragment to store the smoothing parameters
 USTRUCT()
 struct FMassUnitYawFollowFragment : public FMassFragment
@@ -884,9 +897,8 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 		return false;
 	}
 
-	// 1. Get the entity's archetype handle (use Unsafe if you know the entity is valid and built)
-	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
-	// Or safer: const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
+	// 1. Get the entity's archetype handle
+	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
 
 	if (!ArchetypeHandle.IsValid())
 	{
@@ -937,6 +949,31 @@ bool DoesEntityHaveFragment(
 
 template<typename FragmentType>
 const FragmentType* TryGetFragmentDataPtr(const FMassEntityManager& EntityManager, FMassEntityHandle Entity)
+{
+	if (!EntityManager.IsEntityValid(Entity))
+	{
+		return nullptr;
+	}
+
+	const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Entity);
+	if (!ArchetypeHandle.IsValid())
+	{
+		return nullptr;
+	}
+
+	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
+
+	if (!FragmentStruct || !Composition.GetFragments().Contains(*FragmentStruct))
+	{
+		return nullptr;
+	}
+
+	return EntityManager.GetFragmentDataPtr<FragmentType>(Entity);
+}
+
+template<typename FragmentType>
+FragmentType* TryGetFragmentDataPtrMutable(FMassEntityManager& EntityManager, FMassEntityHandle Entity)
 {
 	if (!EntityManager.IsEntityValid(Entity))
 	{
@@ -1172,6 +1209,7 @@ namespace UnitTagBits
 	// Startup freeze state
 	static constexpr uint32 Frozen              = 1u << 24;
 	static constexpr uint32 SoftAvoidance       = 1u << 25;
+	static constexpr uint32 RotateToMouse       = 1u << 26;
 }
 
 
@@ -1205,6 +1243,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateDisableObstacleTag::StaticStruct()))      Bits |= UnitTagBits::DisableObstacle;
 	if (H(FMassStateStopXYMovementTag::StaticStruct()))       Bits |= UnitTagBits::StopXYMovement;
 	if (H(FMassSoftAvoidanceTag::StaticStruct()))             Bits |= UnitTagBits::SoftAvoidance;
+	if (H(FMassRotateToMouseTag::StaticStruct()))             Bits |= UnitTagBits::RotateToMouse;
 	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
@@ -1235,6 +1274,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::DisableObstacle,     FMassStateDisableObstacleTag());
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
+	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
 
 	// If the client already has Dead tag AND Health <= 0 on client, skip replication of other state tags
 	const bool bClientHasDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());

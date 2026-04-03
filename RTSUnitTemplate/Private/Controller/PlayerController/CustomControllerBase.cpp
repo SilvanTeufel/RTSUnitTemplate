@@ -13,6 +13,7 @@
 #include "MassEntityManager.h"  // For FMassEntityManager::FlushCommands
 #include "MassExecutor.h"          // Provides Defer() method context typically
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
+#include "MassCommonFragments.h"
 #include "Mass/UnitNavigationFragments.h"  // For FUnitNavigationPathFragment reset on client prediction
 #include "MassReplicationFragments.h" // For FMassNetworkIDFragment
 #include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
@@ -1547,6 +1548,8 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 
 void ACustomControllerBase::RightClickPressedMass()
 {
+	Batch_RemoveRotateToMouseTag();
+	
 	if (SwapAttackMove && AttackToggled)
 	{
 		HandleAttackMovePressed();
@@ -3204,6 +3207,16 @@ void ACustomControllerBase::Retry_InitializeMainHUD()
 			Camera->UpdateTabModeUI();
 		}
 		GetWorldTimerManager().ClearTimer(MainHUDRetryTimerHandle);
+	}
+}
+
+void ACustomControllerBase::Batch_RemoveRotateToMouseTag()
+{
+	if (SelectedUnits.Num() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ACustomControllerBase::Batch_RemoveRotateToMouseTag: Removing tag for %d units"), SelectedUnits.Num());
+		BatchSetRotateToMouseTagLocally(SelectedUnits, false);
+		Server_BatchSetRotateToMouseTag(SelectedUnits, false);
 	}
 }
 

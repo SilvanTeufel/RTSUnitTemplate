@@ -15,6 +15,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayAbilitySpec.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/EngineTypes.h"
 #include "Kismet/GameplayStatics.h"
@@ -23,6 +24,8 @@
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/GASUnit.h"
 #include "GameModes/ResourceGameMode.h"
+#include "MassEntitySubsystem.h"
+#include "Mass/UnitMassTag.h"
 
 // Static registry of disabled ability keys per team
 static TMap<int32, TSet<FString>> GDisabledAbilityKeysByTeam;
@@ -141,6 +144,7 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	{
 		GExecutedAbilityClasses.Add(ThisClass);
 	}
+	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
 
@@ -149,6 +153,39 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
 		return;
+	}
+
+	if (bRotateUnitsToMouse)
+	{
+		if (ActorInfo && ActorInfo->IsNetAuthority())
+		{
+			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+			{
+				UE_LOG(LogTemp, Log, TEXT("UGameplayAbilityBase::EndAbility: Removing RotateToMouse from Unit %s"), *Unit->GetName());
+				// Remove tag/fragment from this entity locally on server
+				// Mass replication will sync this to all clients
+				UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+				if (MassSubsystem && Unit->MassActorBindingComponent)
+				{
+					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+					if (Entity.IsValid())
+					{
+						UE_LOG(LogTemp, Log, TEXT("UGameplayAbilityBase::EndAbility: Deferring removal for Entity index=%d"), Entity.Index);
+						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+						EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+						EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("UGameplayAbilityBase::EndAbility: Invalid Entity handle for unit %s"), *Unit->GetName());
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("UGameplayAbilityBase::EndAbility: MassSubsystem or MassActorBindingComponent missing for unit %s"), *Unit->GetName());
+				}
+			}
+		}
 	}
 	
 	if (bWasCancelled && bRefundOnCancel && ActorInfo && ActorInfo->OwnerActor.IsValid())

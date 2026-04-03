@@ -32,8 +32,10 @@
 #include "NavAreas/NavArea_Default.h"
 #include "Engine/EngineTypes.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Mass/UnitMassTag.h"
+#include "MassEntitySubsystem.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -183,6 +185,57 @@ void AExtendedControllerBase::LogSelectedUnitsTags()
 void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AExtendedControllerBase, ReplicatedMouseLocation);
+}
+
+void AExtendedControllerBase::Server_UpdateMouseLocation_Implementation(FVector NewLocation)
+{
+	ReplicatedMouseLocation = NewLocation;
+}
+
+void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd)
+{
+	UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::BatchSetRotateToMouseTagLocally: bAdd=%s, Units.Num=%d"), bAdd ? TEXT("true") : TEXT("false"), Units.Num());
+	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AExtendedControllerBase::BatchSetRotateToMouseTagLocally: No MassSubsystem found!"));
+		return;
+	}
+
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+	for (AUnitBase* Unit : Units)
+	{
+		if (Unit && Unit->MassActorBindingComponent)
+		{
+			FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+			if (Entity.IsValid())
+			{
+				if (bAdd)
+				{
+					UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::BatchSetRotateToMouseTagLocally: Adding Tag/Fragment to Entity index=%d"), Entity.Index);
+					EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
+					EntityManager.Defer().AddFragment<FMassRotateToMouseFragment>(Entity);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::BatchSetRotateToMouseTagLocally: Removing Tag/Fragment from Entity index=%d"), Entity.Index);
+					EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+					EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("AExtendedControllerBase::BatchSetRotateToMouseTagLocally: Invalid Entity handle for unit %s"), *Unit->GetName());
+			}
+		}
+	}
+}
+
+void AExtendedControllerBase::Server_BatchSetRotateToMouseTag_Implementation(const TArray<AUnitBase*>& Units, bool bAdd)
+{
+	UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::Server_BatchSetRotateToMouseTag_Implementation: bAdd=%s, Units.Num=%d"), bAdd ? TEXT("true") : TEXT("false"), Units.Num());
+	BatchSetRotateToMouseTagLocally(Units, bAdd);
 }
 
 void AExtendedControllerBase::Client_ApplyCustomizations_Implementation(USoundBase* InWaypointSound,
@@ -288,26 +341,32 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 }
 
 
+TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayForUnit(AUnitBase* Unit)
+{
+	if (!Unit) return TArray<TSubclassOf<UGameplayAbilityBase>>();
+	
+	switch (AbilityArrayIndex)
+	{
+	case 0:
+		return Unit->DefaultAbilities;
+	case 1:
+		return Unit->SecondAbilities;
+	case 2:
+		return Unit->ThirdAbilities;
+	case 3:
+		return Unit->FourthAbilities;
+	default:
+		return Unit->DefaultAbilities;
+	}
+}
+
 TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayByIndex()
 {
 
 	if (!SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return TArray<TSubclassOf<UGameplayAbilityBase>>();
-	if (!SelectedUnits[CurrentUnitWidgetIndex]) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	
-	switch (AbilityArrayIndex)
-	{
-	case 0:
-		return SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities;
-	case 1:
-		return SelectedUnits[CurrentUnitWidgetIndex]->SecondAbilities;
-	case 2:
-		return SelectedUnits[CurrentUnitWidgetIndex]->ThirdAbilities;
-	case 3:
-		return SelectedUnits[CurrentUnitWidgetIndex]->FourthAbilities;
-	default:
-		return SelectedUnits[CurrentUnitWidgetIndex]->DefaultAbilities;
-	}
+	return GetAbilityArrayForUnit(SelectedUnits[CurrentUnitWidgetIndex]);
 }
 
 TArray<UGameplayAbilityBase*> AExtendedControllerBase::GetAbilityObjectArrayByIndex()
@@ -465,6 +524,17 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 		ClosestUnit->SetSelected();
 		SelectedUnits.Emplace(ClosestUnit);
 		HUDBase->SetUnitSelected(ClosestUnit, bIsAi);
+
+		// Check if the ability being activated requires rotation
+		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(ClosestUnit);
+		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse)
+		{
+			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ClientReceiveClosestUnit_Implementation: ClosestUnit ability requires rotation."));
+			TArray<AUnitBase*> TargetUnits = { ClosestUnit };
+			BatchSetRotateToMouseTagLocally(TargetUnits, true);
+			Server_BatchSetRotateToMouseTag(TargetUnits, true);
+		}
 	}
 	// Update your local CloseUnit reference with ClosestUnit here.
 	// Example:
@@ -503,6 +573,57 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	bool bActivatedAny = false;
 	if (SelectedUnits.Num() > 0)
 	{
+		// 1. Identify the ability class from the current selection and InputID
+		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayByIndex();
+		TSubclassOf<UGameplayAbilityBase> AbilityClass = nullptr;
+
+		if (AbilityArray.IsValidIndex(AbilityIndex))
+		{
+			AbilityClass = AbilityArray[AbilityIndex];
+		}
+
+		// Log all abilities in the array for debugging purposes
+		for (int32 i = 0; i < AbilityArray.Num(); ++i)
+		{
+			if (AbilityArray[i])
+			{
+				UE_LOG(LogTemp, Log, TEXT("Slot %d: %s (bRotateUnitsToMouse=%s, InputIDProp=%d)"), 
+					i, *AbilityArray[i]->GetName(), 
+					AbilityArray[i].GetDefaultObject()->bRotateUnitsToMouse ? TEXT("True") : TEXT("False"),
+					(int32)AbilityArray[i].GetDefaultObject()->AbilityInputID);
+			}
+		}
+
+		// 2. Batch apply tag if CDO says so
+		if (AbilityClass && AbilityClass.GetDefaultObject()->bRotateUnitsToMouse)
+		{
+			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits: Found ability %s at index %d with bRotateUnitsToMouse=true"), *AbilityClass->GetName(), AbilityIndex);
+			TArray<AUnitBase*> TargetUnits;
+			for (AUnitBase* Unit : SelectedUnits)
+			{
+				if (Unit && Unit->CanActivateAbilities && !Unit->IsWorker)
+				{
+					TargetUnits.Add(Unit);
+				}
+			}
+
+			if (TargetUnits.Num() > 0)
+			{
+				UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits: Batching %d units for rotation"), TargetUnits.Num());
+				BatchSetRotateToMouseTagLocally(TargetUnits, true);
+				Server_BatchSetRotateToMouseTag(TargetUnits, true);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits: No valid target units found in selection!"));
+			}
+		}
+		else if (AbilityClass)
+		{
+			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits: Ability %s has bRotateUnitsToMouse=false"), *AbilityClass->GetName());
+		}
+		
 		// Validate CurrentUnitWidgetIndex is within bounds
 		if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num())
 		{
@@ -552,6 +673,18 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		if (!bIsAi) CameraUnitWithTag->SetSelected();
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag, bIsAi);
+
+		// Check if CameraUnit's ability needs rotation
+		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
+		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse)
+		{
+			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits: CameraUnit ability requires rotation."));
+			TArray<AUnitBase*> TargetUnits = { CameraUnitWithTag };
+			BatchSetRotateToMouseTagLocally(TargetUnits, true);
+			Server_BatchSetRotateToMouseTag(TargetUnits, true);
+		}
+
 		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
 		bActivatedAny = true;
 	}
