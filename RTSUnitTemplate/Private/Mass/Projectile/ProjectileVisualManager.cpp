@@ -1,4 +1,5 @@
 ﻿#include "Mass/Projectile/ProjectileVisualManager.h"
+#include "MassCommandBuffer.h"
 #include "MassEntityManager.h"
 #include "MassEntitySubsystem.h"
 #include "Actors/Projectile.h"
@@ -143,15 +144,10 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed)
+FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale)
 {
     UWorld* World = GetWorld();
     bool bIsClient = World && World->GetNetMode() == NM_Client;
-
-    if (bIsClient)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[CLIENT] SpawnMassProjectile [NetMode: %d] in World: %s"), (int32)NM_Client, World ? *World->GetName() : TEXT("None"));
-    }
 
     // Lazy-Initialisierung des EntityManager (besonders wichtig auf Clients)
     if (!EntityManager && World)
@@ -159,29 +155,33 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
         if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
         {
             EntityManager = &MassSubsystem->GetMutableEntityManager();
-            if (bIsClient)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Successfully resolved EntityManager during Spawn."));
-            }
         }
     }
 
 	if (!EntityManager || !ProjectileClass)
     {
-        if (bIsClient)
+        return FMassEntityHandle();
+    }
+
+    // Defer the call if we are processing or if a command buffer is provided
+    if (CommandBuffer || EntityManager->IsProcessing())
+    {
+        FMassCommandBuffer& TargetBuffer = CommandBuffer ? *CommandBuffer : EntityManager->Defer();
+        
+        TargetBuffer.PushCommand<FMassDeferredSetCommand>([this, ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, Scale](FMassEntityManager& Manager)
         {
-            UE_LOG(LogTemp, Warning, TEXT("[CLIENT] SpawnMassProjectile failed: EntityManager %p, ProjectileClass %s"), EntityManager, ProjectileClass ? *ProjectileClass->GetName() : TEXT("None"));
-        }
+            // This will run in a safe state (not processing) on the main thread
+            SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale);
+        });
         return FMassEntityHandle();
     }
 
 	UInstancedStaticMeshComponent* ISM = GetOrCreateISMComponent(ProjectileClass);
     AActor* ManagerActor = GetOrCreateManagerActor();
 
-	// Ensure archetype is created
+	// Ensure archetype is created - Note: CreateArchetype must be done on main thread usually or protected
 	if (!ProjectileArchetype.IsValid())
 	{
-        UE_LOG(LogTemp, Log, TEXT("Creating Projectile Archetype"));
 		TArray<const UScriptStruct*> Fragments;
 		Fragments.Add(FTransformFragment::StaticStruct());
 		Fragments.Add(FMassProjectileFragment::StaticStruct());
@@ -196,36 +196,20 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		AllFragmentsAndTags.Append(Tags);
 
 		ProjectileArchetype = EntityManager->CreateArchetype(AllFragmentsAndTags);
-		UE_LOG(LogTemp, Log, TEXT("Projectile Archetype Created."));
 	}
 
 	// Create Mass Entity
 	FMassEntityHandle Entity = EntityManager->CreateEntity(ProjectileArchetype);
 
-    if (GetWorld() && GetWorld()->GetNetMode() == NM_Client)
-    {
-	    UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Entity Created: %d"), Entity.Index);
-
-	    if (EntityManager->IsEntityValid(Entity))
-	    {
-		    bool bHasTransform = DoesEntityHaveFragment<FTransformFragment>(*EntityManager, Entity);
-		    bool bHasProjectile = DoesEntityHaveFragment<FMassProjectileFragment>(*EntityManager, Entity);
-		    bool bHasActiveTag = DoesEntityHaveTag(*EntityManager, Entity, FMassProjectileActiveTag::StaticStruct());
-		    UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Entity %d Status: Transform:%d, Projectile:%d, ActiveTag:%d"), Entity.Index, bHasTransform, bHasProjectile, bHasActiveTag);
-	    }
-	    else
-	    {
-		    UE_LOG(LogTemp, Error, TEXT("[CLIENT] Entity %d is NOT Valid immediately after creation!"), Entity.Index);
-	    }
-    }
-
 	// Initialize fragments
-	FTransformFragment& TransformFragment = EntityManager->GetFragmentDataChecked<FTransformFragment>(Entity);
-	TransformFragment.SetTransform(Transform);
+	FTransformFragment TransformFragment;
+    FTransform ScaledTransform = Transform;
+    ScaledTransform.SetScale3D(Scale);
+	TransformFragment.SetTransform(ScaledTransform);
 
 	const AProjectile* CDO = GetProjectileCDO(ProjectileClass);
 
-	FMassProjectileFragment& ProjectileFragment = EntityManager->GetFragmentDataChecked<FMassProjectileFragment>(Entity);
+	FMassProjectileFragment ProjectileFragment;
 	ProjectileFragment.ProjectileClass = ProjectileClass;
 	ProjectileFragment.TargetLocation = TargetLocation;
 	ProjectileFragment.Speed = ProjectileSpeed;
@@ -233,29 +217,22 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.MaxLifeTime = CDO->MaxLifeTime;
 	ProjectileFragment.LifeTime = 0.f;
 	ProjectileFragment.ArcHeight = CDO->ArcHeight;
+    ProjectileFragment.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
 	ProjectileFragment.ArcStartLocation = Transform.GetLocation();
 	ProjectileFragment.bFollowTarget = bFollowTarget;
 	ProjectileFragment.TeamId = (ShooterTeamId != -1) ? ShooterTeamId : CDO->TeamId;
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = CDO->MaxPiercedTargets;
+    ProjectileFragment.ProjectileScale = Scale;
+    ProjectileFragment.bContinueAfterTarget = CDO->bContinueAfterTarget;
+    ProjectileFragment.FlightDirection = (TargetLocation - Transform.GetLocation()).GetSafeNormal();
 
 	// Homing and Rotation parameters from server
-	ProjectileFragment.bIsHoming = bFollowTarget && HomingMaxSpiralRadius > 0.f;
+	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;
 	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;
 	ProjectileFragment.HomingRotationSpeed = HomingRotationSpeed;
 	ProjectileFragment.HomingMaxSpiralRadius = HomingMaxSpiralRadius;
 	ProjectileFragment.HomingInterpSpeed = HomingInterpSpeed;
-
-    if (bIsClient)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Projectile %d: bIsHoming: %d, MaxRadius: %f, RotSpeed: %f, InitialAngle: %f"), 
-            Entity.Index, ProjectileFragment.bIsHoming, ProjectileFragment.HomingMaxSpiralRadius, ProjectileFragment.HomingRotationSpeed, ProjectileFragment.HomingInitialAngle);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[SERVER] Projectile %d: bIsHoming: %d, MaxRadius: %f, RotSpeed: %f, InitialAngle: %f"), 
-            Entity.Index, ProjectileFragment.bIsHoming, ProjectileFragment.HomingMaxSpiralRadius, ProjectileFragment.HomingRotationSpeed, ProjectileFragment.HomingInitialAngle);
-    }
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;
@@ -274,7 +251,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		FVector TraceStart = Transform.GetLocation();
 		FVector TraceEnd = TargetLocation;
 		
-		// Falls kein TargetLocation (z.B. Aiming an eine Stelle im Raum ohne Actor)
 		if (TraceEnd.IsNearlyZero()) {
 			TraceEnd = TraceStart + Transform.GetRotation().GetForwardVector() * 10000.f;
 		}
@@ -286,7 +262,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 				ProjectileFragment.bHasWallImpact = true;
 				ProjectileFragment.WallImpactLocation = WallHit.ImpactPoint;
 				ProjectileFragment.WallActor = EnergyWall;
-				UE_LOG(LogTemp, Log, TEXT("SpawnMassProjectile: Wall Impact predicted at %s"), *WallHit.ImpactPoint.ToString());
 			}
 		}
 	}
@@ -300,14 +275,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			if (UMassActorBindingComponent* Binding = Shooter->FindComponentByClass<UMassActorBindingComponent>())
 			{
 				ResolvedShooterEntity = Binding->GetEntityHandle();
-				if (bIsClient && ResolvedShooterEntity.IsValid())
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Resolved local ShooterEntity for projectile."));
-				}
-				else if (!bIsClient && ResolvedShooterEntity.IsValid())
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[SERVER] Resolved local ShooterEntity for projectile."));
-				}
 			}
 		}
 	}
@@ -321,27 +288,19 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			if (UMassActorBindingComponent* Binding = Target->FindComponentByClass<UMassActorBindingComponent>())
 			{
 				ResolvedTargetEntity = Binding->GetEntityHandle();
-				if (bIsClient && ResolvedTargetEntity.IsValid())
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Resolved local TargetEntity for projectile."));
-				}
-				else if (!bIsClient && ResolvedTargetEntity.IsValid())
-				{
-					UE_LOG(LogTemp, Warning, TEXT("[SERVER] Resolved local TargetEntity for projectile."));
-				}
 			}
 		}
 	}
 	ProjectileFragment.TargetEntity = ResolvedTargetEntity;
 
-	FMassProjectileVisualFragment& VisualFragment = EntityManager->GetFragmentDataChecked<FMassProjectileVisualFragment>(Entity);
+	FMassProjectileVisualFragment VisualFragment;
 	VisualFragment.ProjectileClass = ProjectileClass;
 	VisualFragment.VisualRelativeTransform = CDO->ISMComponent ? CDO->ISMComponent->GetRelativeTransform() : FTransform::Identity;
     
     if (ISM)
     {
 		// Initial Transform: Relative Offset * Entity Transform
-		FTransform InitialTransform = VisualFragment.VisualRelativeTransform * Transform;
+		FTransform InitialTransform = VisualFragment.VisualRelativeTransform * ScaledTransform;
         VisualFragment.InstanceIndex = ISM->AddInstance(InitialTransform, true);
         VisualFragment.ISMComponent = ISM;
     }
@@ -354,20 +313,11 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	VisualFragment.Niagara_A_RelativeTransform = (CDO->Niagara_A) ? CDO->Niagara_A->GetRelativeTransform() : CDO->Niagara_A_Start_Transform;
 	VisualFragment.Niagara_B_RelativeTransform = (CDO->Niagara_B) ? CDO->Niagara_B->GetRelativeTransform() : CDO->Niagara_B_Start_Transform;
 
-	if (bIsClient)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Niagara_A Offset Variable: %s"), *CDO->Niagara_A_Start_Transform.ToString());
-		if (CDO->Niagara_A) UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Niagara_A Component Relative: %s"), *CDO->Niagara_A->GetRelativeTransform().ToString());
-		UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Niagara_B Offset Variable: %s"), *CDO->Niagara_B_Start_Transform.ToString());
-		if (CDO->Niagara_B) UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Niagara_B Component Relative: %s"), *CDO->Niagara_B->GetRelativeTransform().ToString());
-	}
-
 	// Niagara initialization
 	if (ManagerActor)
 	{
 		if (CDO->Niagara_A && CDO->Niagara_A->GetAsset())
 		{
-			// Berechne initiale Welt-Position unter Berücksichtigung des Offsets
 			FTransform InitialTransform = VisualFragment.Niagara_A_RelativeTransform * Transform;
 			UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(CDO->Niagara_A->GetAsset(), ManagerActor->GetRootComponent(), NAME_None, InitialTransform.GetLocation(), InitialTransform.Rotator(), EAttachLocation::KeepWorldPosition, false);
 			if (NC)
@@ -378,7 +328,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		}
 		if (CDO->Niagara_B && CDO->Niagara_B->GetAsset())
 		{
-			// Berechne initiale Welt-Position unter Berücksichtigung des Offsets
 			FTransform InitialTransform = VisualFragment.Niagara_B_RelativeTransform * Transform;
 			UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(CDO->Niagara_B->GetAsset(), ManagerActor->GetRootComponent(), NAME_None, InitialTransform.GetLocation(), InitialTransform.Rotator(), EAttachLocation::KeepWorldPosition, false);
 			if (NC)
@@ -389,10 +338,10 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		}
 	}
 
-   	if (GetWorld() && GetWorld()->GetNetMode() == NM_Client)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[CLIENT] SpawnMassProjectile: Created Entity %d for class %s (ISM Index %d)"), Entity.Index, *ProjectileClass->GetName(), VisualFragment.InstanceIndex);
-    }
+    // Apply fragments
+    EntityManager->GetFragmentDataChecked<FTransformFragment>(Entity) = TransformFragment;
+    EntityManager->GetFragmentDataChecked<FMassProjectileFragment>(Entity) = ProjectileFragment;
+    EntityManager->GetFragmentDataChecked<FMassProjectileVisualFragment>(Entity) = VisualFragment;
     
 	return Entity;
 }

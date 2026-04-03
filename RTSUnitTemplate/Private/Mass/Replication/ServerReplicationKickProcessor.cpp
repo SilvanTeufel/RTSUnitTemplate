@@ -92,6 +92,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 			{
 				FVector Loc; uint16 P=0,Y=0,R=0; FVector Scale; uint32 TagBits = 0u;
 				float Health = 0.f; float Shield = 0.f;
+				uint8 FireCounter = 0; uint32 TargetNetID = 0;
 				
 				// Optional: track uncritical data hash to detect changes without full replication? 
 				// No, FSig is just for the "Kick" decision.
@@ -99,6 +100,8 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				bool IsNearlyEqual(const FSig& O, float LocThresh, float AngleThresh, float ScaleThresh) const
 				{
 					if (TagBits != O.TagBits) return false;
+					if (FireCounter != O.FireCounter) return false;
+					if (TargetNetID != O.TargetNetID) return false;
 					if (!FMath::IsNearlyEqual(Health, O.Health, 0.1f)) return false;
 					if (!FMath::IsNearlyEqual(Shield, O.Shield, 0.1f)) return false;
 
@@ -122,7 +125,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 
 				bool operator==(const FSig& O) const
 				{
-					return Loc.Equals(O.Loc, 0.1f) && P==O.P && Y==O.Y && R==O.R && Scale.Equals(O.Scale, 0.01f) && TagBits == O.TagBits;
+					return Loc.Equals(O.Loc, 0.1f) && P==O.P && Y==O.Y && R==O.R && Scale.Equals(O.Scale, 0.01f) && TagBits == O.TagBits && FireCounter == O.FireCounter && TargetNetID == O.TargetNetID;
 				}
 			};
 			static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
@@ -200,6 +203,8 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	// Do NOT require FMassReplicationSharedFragment here. We want to include entities that are missing it,
 	// so the replicator fallback below can still process them and populate the bubble.
 	EntityQuery.RegisterWithProcessor(*this);
@@ -779,6 +784,23 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			S.Scale = Xf.GetScale3D();
 			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
 
+			if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
+			{
+				S.FireCounter = AIS->ProjectileFireCounter;
+				S.TargetNetID = AIS->LastTargetNetID;
+			}
+
+			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
+			{
+				if (ATF->TargetEntity.IsValid())
+				{
+					if (const FMassNetworkIDFragment* TargetNetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(ATF->TargetEntity))
+					{
+						S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
+					}
+				}
+			}
+
 			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
 			{
 				S.Health = CS->Health;
@@ -810,6 +832,23 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			S.R = QuantizeAngle(Rot.Roll);
 			S.Scale = Xf.GetScale3D();
 			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
+
+			if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
+			{
+				S.FireCounter = AIS->ProjectileFireCounter;
+				S.TargetNetID = AIS->LastTargetNetID;
+			}
+
+			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
+			{
+				if (ATF->TargetEntity.IsValid())
+				{
+					if (const FMassNetworkIDFragment* TargetNetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(ATF->TargetEntity))
+					{
+						S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
+					}
+				}
+			}
 
 			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
 			{

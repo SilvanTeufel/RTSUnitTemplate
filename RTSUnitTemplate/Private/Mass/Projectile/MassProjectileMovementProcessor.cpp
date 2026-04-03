@@ -35,19 +35,10 @@ void UMassProjectileMovementProcessor::ConfigureQueries(const TSharedRef<FMassEn
 void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	static uint32 LogThrottle = 0;
-	bool bShouldLog = (LogThrottle % 60 == 0);
 	bool bSyncFromCDO = (LogThrottle % 120 == 0); // Sync from CDO every 120 frames
 	LogThrottle++;
 	
-	// Check if query is valid and has matching entities
-	int32 NumEntities = EntityQuery.GetNumMatchingEntities(EntityManager);
-	if (NumEntities > 0 && bShouldLog && EntityManager.GetWorld())
-	{
-		FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-		UE_LOG(LogTemp, Warning, TEXT("%s UMassProjectileMovementProcessor::Execute - Matching Entities: %d"), *NetModeStr, NumEntities);
-	}
-
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, ([this, &EntityManager, bShouldLog, bSyncFromCDO](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(EntityManager, Context, ([this, &EntityManager, bSyncFromCDO](FMassExecutionContext& Context)
 	{
 		UProjectileVisualManager* VisualManager = EntityManager.GetWorld()->GetSubsystem<UProjectileVisualManager>();
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
@@ -72,6 +63,11 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					Projectile.bRotateMesh = CDO->RotateMesh;
 					Projectile.bDisableAnyRotation = CDO->DisableAnyRotation;
 					Projectile.MaxLifeTime = CDO->MaxLifeTime;
+                    Projectile.Damage = CDO->Damage;
+                    Projectile.IsHealing = CDO->IsHealing;
+                    Projectile.bContinueAfterTarget = CDO->bContinueAfterTarget;
+                    Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
+                    Projectile.ArcHeight = CDO->ArcHeight;
 					// Robust sync for Niagara
 					Visual.Niagara_A_RelativeTransform = (CDO->Niagara_A) ? CDO->Niagara_A->GetRelativeTransform() : CDO->Niagara_A_Start_Transform;
 					Visual.Niagara_B_RelativeTransform = (CDO->Niagara_B) ? CDO->Niagara_B->GetRelativeTransform() : CDO->Niagara_B_Start_Transform;
@@ -83,41 +79,46 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			Projectile.LifeTime += DeltaTime;
 
+			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
+			{
+				// Deactivate projectile
+				Context.Defer().RemoveTag<FMassProjectileActiveTag>(Context.GetEntity(i));
+
+				// Cleanup visuals
+				if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
+				{
+					FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
+				}
+
+				if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
+				{
+					NC_A->Deactivate();
+					NC_A->SetVisibility(false);
+					NC_A->DestroyComponent();
+				}
+
+				if (UNiagaraComponent* NC_B = Visual.Niagara_B.Get())
+				{
+					NC_B->Deactivate();
+					NC_B->SetVisibility(false);
+					NC_B->DestroyComponent();
+				}
+
+				continue;
+			}
+
 			if (Projectile.bIsHoming)
 			{
 				Projectile.bFollowTarget = true;
 			}
 			
-			if (bShouldLog && i == 0 && EntityManager.GetWorld())
+			if (Projectile.LifeTime < DeltaTime && EntityManager.GetWorld())
 			{
-				FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-				UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d: LifeTime %f, Speed %f, ArcHeight %f, Pos %s, Target %s, bIsHoming: %d, bFollowTarget: %d"), 
-					*NetModeStr, Context.GetEntity(i).Index, Projectile.LifeTime, Projectile.Speed, Projectile.ArcHeight, *Transform.GetLocation().ToString(), *Projectile.TargetLocation.ToString(), Projectile.bIsHoming, Projectile.bFollowTarget);
-                
-                if (Projectile.bIsHoming)
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d: HomingRadius: %f, HomingRotSpeed: %f, CurrentOffset: %s"), 
-                        *NetModeStr, Context.GetEntity(i).Index, Projectile.HomingMaxSpiralRadius, Projectile.HomingRotationSpeed, *Projectile.HomingOffset.ToString());
-                }
-                
-                if (Visual.ISMComponent.IsValid())
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d ISM Status: Visible: %d, Hidden: %d, Mesh: %s"), 
-                        *NetModeStr, Context.GetEntity(i).Index, Visual.ISMComponent->IsVisible(), Visual.ISMComponent->bHiddenInGame, 
-                        Visual.ISMComponent->GetStaticMesh() ? *Visual.ISMComponent->GetStaticMesh()->GetName() : TEXT("None"));
-                }
-                
-                if (Visual.Niagara_A.IsValid())
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d Niagara_A WorldPos: %s, Relative: %s"), 
-                        *NetModeStr, Context.GetEntity(i).Index, *Visual.Niagara_A->GetComponentLocation().ToString(), *Visual.Niagara_A_RelativeTransform.GetLocation().ToString());
-                }
-                
-                if (Visual.Niagara_B.IsValid())
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("%s Projectile %d Niagara_B WorldPos: %s, Relative: %s"), 
-                        *NetModeStr, Context.GetEntity(i).Index, *Visual.Niagara_B->GetComponentLocation().ToString(), *Visual.Niagara_B_RelativeTransform.GetLocation().ToString());
-                }
+				if (EntityManager.GetWorld()->GetNetMode() == NM_Client && Projectile.TargetLocation.IsZero())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Projectile %d started with ZERO TargetLocation!"), Context.GetEntity(i).Index);
+				}
 			}
 
 			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
@@ -149,15 +150,30 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			FVector CurrentLocation = Transform.GetLocation();
 			FVector TargetLocation = Projectile.TargetLocation;
 
+            if (LogThrottle % 60 == 0) {
+                FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
+                UE_LOG(LogTemp, Verbose, TEXT("%s Proj %d: Loc=%s, Tgt=%s, Dir=%s, bCont=%d, Speed=%.1f"), 
+                    *NetModeStr, Context.GetEntity(i).Index, *CurrentLocation.ToString(), *TargetLocation.ToString(), *Projectile.FlightDirection.ToString(), Projectile.bContinueAfterTarget, Projectile.Speed);
+            }
+
 			// UE_LOG(LogTemp, Warning, TEXT("Projectile %d: Speed %f, CurrentLoc %s, TargetLoc %s, DeltaTime %f"), i, Projectile.Speed, *CurrentLocation.ToString(), *TargetLocation.ToString(), DeltaTime);
 
 			// If following target entity, update TargetLocation
 			if (Projectile.bFollowTarget && Projectile.TargetEntity.IsValid())
 			{
-				if (const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(Projectile.TargetEntity))
+				if (EntityManager.IsEntityActive(Projectile.TargetEntity))
 				{
-					TargetLocation = TargetTransform->GetTransform().GetLocation();
-					Projectile.TargetLocation = TargetLocation;
+					if (const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(Projectile.TargetEntity))
+					{
+						TargetLocation = TargetTransform->GetTransform().GetLocation();
+						Projectile.TargetLocation = TargetLocation;
+					}
+				}
+				else
+				{
+					// Target is gone, stop following but keep the last known location
+					Projectile.bFollowTarget = false;
+					Projectile.TargetEntity = FMassEntityHandle();
 				}
 			}
 
@@ -191,71 +207,92 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 									Up * FMath::Sin(FMath::DegreesToRadians(CurrentAngle))) * DesiredRadius;
 					
 					Projectile.HomingOffset = NewOffset;
-					
-					if (bShouldLog && i == 0)
-					{
-						FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-						UE_LOG(LogTemp, Warning, TEXT("%s Homing Details: Radius=%f, Angle=%f, Offset=%s"), 
-							*NetModeStr, DesiredRadius, CurrentAngle, *NewOffset.ToString());
-					}
 				}
 
-				if (Projectile.ArcHeight > 0.f)
+				if (Projectile.ArcHeight > 0.f || Projectile.ArcHeightDistanceFactor > 0.f)
 				{
 					// Arc Movement logic
 					Projectile.ArcTravelTime += DeltaTime;
 					float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
 					if (TotalDistance > 0.f)
 					{
+                        const float EffectiveArcHeight = Projectile.ArcHeight + (TotalDistance * Projectile.ArcHeightDistanceFactor);
 						float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
-						float Alpha = FMath::Clamp(CurrentDist / TotalDistance, 0.f, 1.f);
-						
+						float Alpha = CurrentDist / TotalDistance;
+                        
+                        if (Alpha > 1.0f && !Projectile.bContinueAfterTarget)
+                        {
+                            Alpha = 1.0f;
+                        }
+
 						NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
-						float Height = 4.0f * Projectile.ArcHeight * Alpha * (1.0f - Alpha);
-						NewLocation.Z += Height;
+                        
+                        // Only apply height if we haven't reached target, or if we want to continue parabolic (usually looks weird)
+                        // Actually, let's keep height at 0 after Alpha 1.0 to look like it continues straight
+                        if (Alpha <= 1.0f)
+                        {
+						    float Height = 4.0f * EffectiveArcHeight * Alpha * (1.0f - Alpha);
+						    NewLocation.Z += Height;
+                        }
 
 						// Add Homing Spiral offset to the Arc position if enabled
 						if (Projectile.bIsHoming)
 						{
 							NewLocation += Projectile.HomingOffset;
 						}
+
+                        if (Alpha >= 1.0f && Projectile.FlightDirection.IsNearlyZero())
+                        {
+                             Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
+                        }
 					}
 				}
 			else
 			{
 				// Linear / Homing Movement logic
-				FVector FlightDirection;
+				FVector LocalFlightDirection;
 				if (Projectile.bFollowTarget && Projectile.bIsHoming)
 				{
 					// We already calculated HomingOffset above
 					const FVector CurrentTarget = TargetLocation + Projectile.HomingOffset;
-					FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+					LocalFlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+                    Projectile.FlightDirection = LocalFlightDirection;
 				}
 				else if (Projectile.bFollowTarget)
 				{
 					// Simple Homing with offset interpolation
 					const FVector CurrentTarget = TargetLocation + Projectile.HomingOffset;
-					FlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+					LocalFlightDirection = (CurrentTarget - CurrentLocation).GetSafeNormal();
+                    Projectile.FlightDirection = LocalFlightDirection;
 					
 					// Gradually reduce the offset
 					Projectile.HomingOffset = FMath::VInterpTo(Projectile.HomingOffset, FVector::ZeroVector, DeltaTime, Projectile.HomingInterpSpeed);
 				}
 				else
 				{
-					// Direct flight to target location
-					FlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
+					// Direct flight to target location - keep original direction to allow flying past target
+					LocalFlightDirection = Projectile.FlightDirection;
+                    if (LocalFlightDirection.IsNearlyZero())
+                    {
+                        LocalFlightDirection = (TargetLocation - CurrentLocation).GetSafeNormal();
+                        if (LocalFlightDirection.IsNearlyZero())
+                        {
+                            LocalFlightDirection = Transform.GetRotation().GetForwardVector();
+                        }
+                        Projectile.FlightDirection = LocalFlightDirection;
+                    }
 				}
 
 				float MoveDist = (Projectile.Speed * 10.f) * DeltaTime;
 				float DistToTarget = FVector::Dist(CurrentLocation, TargetLocation);
 
-				if (MoveDist >= DistToTarget && !Projectile.bFollowTarget)
+				if (MoveDist >= DistToTarget && !Projectile.bFollowTarget && !Projectile.bContinueAfterTarget)
 				{
 					NewLocation = TargetLocation;
 				}
 				else
 				{
-					NewLocation = CurrentLocation + FlightDirection * MoveDist;
+					NewLocation = CurrentLocation + Projectile.FlightDirection * MoveDist;
 				}
 			}
 
@@ -345,12 +382,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					}
 					
 					Transform.SetRotation(FinalQuat);
-
-					if (bShouldLog && i == 0)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("Projectile %d Rotation: %s, Speed: %f"), 
-							Context.GetEntity(i).Index, *FinalQuat.Rotator().ToString(), Projectile.Speed);
-					}
 				}
 			}
 			Transform.SetLocation(NewLocation);
@@ -371,14 +402,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			// Update ISM
 			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{
-                if (bShouldLog && i == 0)
-                {
-                    bool bCompVisible = Visual.ISMComponent->IsVisible();
-                    bool bCompHidden = Visual.ISMComponent->bHiddenInGame;
-                    UE_LOG(LogTemp, Log, TEXT("Updating ISM %p Index %d. Visible: %d, Hidden: %d"), 
-                        Visual.ISMComponent.Get(), Visual.InstanceIndex, bCompVisible, bCompHidden);
-                }
-
 				// Auf dem Client stellen wir sicher, dass die Sichtbarkeit aktiv bleibt
 				if (EntityManager.GetWorld() && EntityManager.GetWorld()->GetNetMode() == NM_Client)
 				{

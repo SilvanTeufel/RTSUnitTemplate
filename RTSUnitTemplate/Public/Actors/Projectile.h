@@ -21,6 +21,9 @@ public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	float OverlapCheckInterval = 0.1f;
 	
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bContinueAfterTarget = true;
+
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate")
 	bool bUseMass = true;
 

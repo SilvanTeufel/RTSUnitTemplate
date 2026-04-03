@@ -97,6 +97,18 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 				if (!bShouldImpact) continue; 
 
+				// --- NEW: Skip if already hit this unit (Impact only once per Unit) ---
+				bool bAlreadyHit = false;
+				for (uint8 HitIdx = 0; HitIdx < Projectile.HitCount; ++HitIdx)
+				{
+					if (Projectile.HitEntities[HitIdx] == Units[j])
+					{
+						bAlreadyHit = true;
+						break;
+					}
+				}
+				if (bAlreadyHit) continue;
+
 				// Enhanced distance check considering speed to prevent tunneling
 				float DistSq = FVector::DistSquared(ProjPos, UnitLocations[j]);
 				float SpeedFactor = Projectile.Speed * Context.GetDeltaTimeSeconds();
@@ -122,6 +134,12 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					UE_LOG(LogTemp, Warning, TEXT("%s !!! IMPACT TRIGGERED !!! Proj %d -> Unit %d (Dist %f <= %f)"), 
 						*NetModeStr, ProjEntity.Index, Units[j].Index, FMath::Sqrt(DistSq), CombinedRadius);
 					
+					// Register hit
+					if (Projectile.HitCount < 16)
+					{
+						Projectile.HitEntities[Projectile.HitCount++] = Units[j];
+					}
+
 					Projectile.PiercedTargets++;
 					
 					if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
@@ -159,8 +177,8 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 							if (World->GetNetMode() < NM_Client)
 							{
 								UE_LOG(LogTemp, Warning, TEXT("[SERVER] Triggering HandleProjectileImpact for Unit %d"), Units[j].Index);
-								FMassActorFragment* TargetActorFrag = EntityManager.IsEntityValid(Units[j]) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Units[j]) : nullptr;
-								FMassActorFragment* ShooterActorFrag = EntityManager.IsEntityValid(Projectile.ShooterEntity) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Projectile.ShooterEntity) : nullptr;
+								FMassActorFragment* TargetActorFrag = EntityManager.IsEntityActive(Units[j]) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Units[j]) : nullptr;
+								FMassActorFragment* ShooterActorFrag = EntityManager.IsEntityActive(Projectile.ShooterEntity) ? EntityManager.GetFragmentDataPtr<FMassActorFragment>(Projectile.ShooterEntity) : nullptr;
 
 								if (TargetActorFrag)
 								{

@@ -32,6 +32,14 @@ protected:
 	float ExecutionInterval = 0.1f;
 	
 private:
+	void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
+		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
+
+	void ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+		const FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
+		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
+
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;

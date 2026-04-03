@@ -194,6 +194,14 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             if (AActor* Ow = ActorFrag->GetMutable())
             {
                 NewItem.OwnerName = Ow->GetFName();
+                if (AUnitBase* UnitActor = Cast<AUnitBase>(Ow))
+                {
+                    NewItem.AIS_ProjectileClass = UnitActor->ProjectileBaseClass;
+                    if (UnitActor->Attributes)
+                    {
+                        NewItem.AIS_ProjectileSpeed = UnitActor->Attributes->GetProjectileSpeed();
+                    }
+                }
             }
         }
         NewItem.Location = Xf.GetLocation();
@@ -326,6 +334,18 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_BirthTime = AIS->BirthTime;
             NewItem.AIS_DeathTime = AIS->DeathTime;
             NewItem.AIS_IsInitialized = AIS->IsInitialized;
+            NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
+            NewItem.AIS_ProjectileClass = AIS->LastProjectileClass;
+            NewItem.AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
+            NewItem.AIS_HomingInitialAngle = AIS->LastHomingInitialAngle;
+            NewItem.AIS_HomingRotationSpeed = AIS->LastHomingRotationSpeed;
+            NewItem.AIS_HomingMaxSpiralRadius = AIS->LastHomingMaxSpiralRadius;
+            NewItem.AIS_HomingInterpSpeed = AIS->LastHomingInterpSpeed;
+            NewItem.AIS_bFollowTarget = AIS->LastbFollowTarget;
+            NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
+            NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
+            NewItem.AIS_ProjectileSpread = AIS->LastProjectileSpread;
+            NewItem.AIS_ProjectileScale = AIS->LastProjectileScale;
         }
 
         // Fill Visual Effect Fragment
@@ -708,6 +728,16 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.AIS_BirthTime = AIS->BirthTime;
                             NewItem.AIS_DeathTime = AIS->DeathTime;
                             NewItem.AIS_IsInitialized = AIS->IsInitialized;
+                            NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
+                            NewItem.AIS_ProjectileClass = AIS->LastProjectileClass;
+                            NewItem.AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
+                            NewItem.AIS_HomingInitialAngle = AIS->LastHomingInitialAngle;
+                            NewItem.AIS_HomingRotationSpeed = AIS->LastHomingRotationSpeed;
+                            NewItem.AIS_HomingMaxSpiralRadius = AIS->LastHomingMaxSpiralRadius;
+                            NewItem.AIS_HomingInterpSpeed = AIS->LastHomingInterpSpeed;
+                            NewItem.AIS_bFollowTarget = AIS->LastbFollowTarget;
+                            NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
+                            NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
                         }
 
                         // Fill Visual Effect Fragment
@@ -914,6 +944,23 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!FMath::IsNearlyEqual(Item->AIS_BirthTime, AIS->BirthTime, 0.001f)) { Item->AIS_BirthTime = AIS->BirthTime; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->AIS_DeathTime, AIS->DeathTime, 0.001f)) { Item->AIS_DeathTime = AIS->DeathTime; bDirty = true; }
                             if (Item->AIS_IsInitialized != AIS->IsInitialized) { Item->AIS_IsInitialized = AIS->IsInitialized; bDirty = true; }
+                            if (Item->AIS_ProjectileFireCounter != AIS->ProjectileFireCounter) { Item->AIS_ProjectileFireCounter = AIS->ProjectileFireCounter; bDirty = true; }
+                            
+                            // Also ensure Projectile details and LastTargetNetID is current if we are firing
+                            if (bDirty)
+                            {
+                                Item->AIS_LastTargetNetID = AIS->LastTargetNetID;
+                                Item->AIS_ProjectileClass = AIS->LastProjectileClass;
+                                Item->AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
+                                Item->AIS_HomingInitialAngle = AIS->LastHomingInitialAngle;
+                                Item->AIS_HomingRotationSpeed = AIS->LastHomingRotationSpeed;
+                                Item->AIS_HomingMaxSpiralRadius = AIS->LastHomingMaxSpiralRadius;
+                                Item->AIS_HomingInterpSpeed = AIS->LastHomingInterpSpeed;
+                                Item->AIS_bFollowTarget = AIS->LastbFollowTarget;
+                                Item->AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
+                                Item->AIS_ProjectileSpread = AIS->LastProjectileSpread;
+                                Item->AIS_ProjectileScale = AIS->LastProjectileScale;
+                            }
                         }
 
                         // Update Visual Effect Fragment

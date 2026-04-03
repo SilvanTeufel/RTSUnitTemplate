@@ -13,7 +13,6 @@
 #include "Core/UnitData.h"
 #include "Core/WorkerData.h"
 #include "MassExternalSubsystemTraits.h"
-#include "Mass/MassFragmentTraitsOverrides.h"
 #include "MassVisibilityInterface.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "NiagaraComponent.h"
@@ -382,7 +381,49 @@ struct FMassAIStateFragment : public FMassFragment
 
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasExtendedLoseSight = false;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    uint8 ProjectileFireCounter = 0;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float LastProjectileSpread = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	TSubclassOf<class AProjectile> LastProjectileClass;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastProjectileSpeed = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastHomingInitialAngle = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastHomingRotationSpeed = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastHomingMaxSpiralRadius = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float LastHomingInterpSpeed = 2.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool LastbFollowTarget = false;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	uint32 LastTargetNetID = 0;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastProjectileTargetLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastProjectileScale = FVector::OneVector;
 	
+};
+
+template<>
+struct TMassFragmentTraits<FMassAIStateFragment>
+{
+	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
 };
 
 
@@ -960,6 +1001,9 @@ struct FMassProjectileFragment : public FMassFragment
 	float ArcHeight = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ArcHeightDistanceFactor = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ArcStartLocation = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -1027,6 +1071,19 @@ struct FMassProjectileFragment : public FMassFragment
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> WallActor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector ProjectileScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bContinueAfterTarget = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector FlightDirection = FVector::ZeroVector;
+
+    FMassEntityHandle HitEntities[16];
+
+    uint8 HitCount = 0;
 };
 
 /** Fragment for Projectile Visualization */

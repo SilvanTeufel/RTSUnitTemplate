@@ -315,10 +315,10 @@ public:
     /** Version that accepts Mass Entity handles for direct registration */
     void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle());
 
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastSpawnMassProjectile(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), float ProjectileSpeed = 0.f, int32 ShooterTeamId = -1, bool bFollowTarget = false, float HomingInitialAngle = 0.f, float HomingRotationSpeed = 0.f, float HomingMaxSpiralRadius = 0.f, float HomingInterpSpeed = 2.f);
+	void IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(),
+		float InitialAngle = 0.f, float RotSpeed = 0.f, float MaxRadius = 0.f, float InterpSpeed = 0.f, bool bFollow = false, FVector TargetLocation = FVector::ZeroVector, FVector Scale = FVector::OneVector, float Spread = 0.f);
 
-   	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
    	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass);
 	
 	/** 

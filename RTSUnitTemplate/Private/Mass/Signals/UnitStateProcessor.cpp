@@ -55,6 +55,7 @@
 #include "MassReplicationFragments.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
+#include "Mass/Replication/ReplicationSettings.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Characters/Unit/TransportUnit.h"
 #include "Characters/Unit/BuildingBase.h"

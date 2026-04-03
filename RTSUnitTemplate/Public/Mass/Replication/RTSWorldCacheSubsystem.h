@@ -32,6 +32,8 @@ public:
 	UMassActorBindingComponent* FindBindingByOwnerName(FName OwnerName);
 	// Find a binding by UnitIndex (preferred unique key)
 	UMassActorBindingComponent* FindBindingByUnitIndex(int32 UnitIndex);
+	// Find a binding by MassNetID (replicated for projectiles)
+	UMassActorBindingComponent* FindBindingByMassNetID(uint32 NetID);
 
 	// Clear caches explicitly
 	void ClearAll();
@@ -41,5 +43,6 @@ private:
 	TWeakObjectPtr<AUnitClientBubbleInfo> CachedBubble;
 	TMap<FName, TWeakObjectPtr<UMassActorBindingComponent>> BindingByOwnerName;
 	TMap<int32, TWeakObjectPtr<UMassActorBindingComponent>> BindingByUnitIndex;
+	TMap<uint32, TWeakObjectPtr<UMassActorBindingComponent>> BindingByMassNetID;
 	double LastBindingRebuildTime = -1000.0;
 };

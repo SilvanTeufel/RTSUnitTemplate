@@ -42,6 +42,8 @@
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "Mass/MassUnitVisualFragments.h"
+#include "Mass/Replication/ReplicationSettings.h"
+#include "MassReplicationFragments.h"
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -894,19 +896,10 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
 
     const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
 
+    // We proceed to the main loop to handle both Actor-based and Mass-based projectiles uniformly,
+    // ensuring correct transforms and multi-shot logic.
     if (ProjectileCDO->bUseMass)
     {
-        // For now, simpler mass spawning for specific classes, could be expanded for spread
-        FTransform SpawnXf;
-        FVector ActualSpawnPos = ShootingUnit->GetProjectileSpawnLocation(SpawnOffset);
-        SpawnXf.SetLocation(ActualSpawnPos);
-        FVector Direction = (Aim->GetActorLocation() - ActualSpawnPos).GetSafeNormal();
-        SpawnXf.SetRotation(FQuat(Direction.Rotation() + ShootingUnit->ProjectileRotationOffset));
-        SpawnXf.SetScale3D(FVector(Scale));
-
-        float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
-        MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, Aim->GetActorLocation(), FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
-        return;
     }
 
     float TwinDistance = ProjectileCDO->TwinProjectileDistance;
@@ -981,11 +974,57 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
 
             // 4) Deferred spawn + init
-            UE_LOG(LogTemp, Log, TEXT("Spawning Projectile: Class=%s, bUseMass=%d"), *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1);
+            UE_LOG(LogTemp, Log, TEXT("[SERVER] SpawnProjectileFromClass: Class=%s, bUseMass=%d, RTSReplicationMode=%d"), 
+                *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1, (int32)RTSReplicationSettings::GetReplicationMode());
+            
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
                 float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
-                MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
+
+                float FinalSpeed = SpeedFromAttributes;
+                float InitialAngle = 0.f;
+                float RotSpeed = 0.f;
+                float MaxRadius = 0.f;
+                float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
+                bool bFollow = ProjectileCDO->FollowTarget;
+
+                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                {
+                    bFollow = true;
+                    FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    InitialAngle = FMath::RandRange(0.f, 360.f);
+                    RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
+                    if (FMath::RandBool()) RotSpeed *= -1.f;
+                    MaxRadius = ProjectileCDO->HomingMaxSpiralRadius * FMath::RandRange(0.8f, 1.2f);
+                }
+
+                // Resolve Entity Handles for server/client replication
+                FMassEntityHandle ShooterEntity;
+                if (UMassActorBindingComponent* ShooterBind = ShootingUnit->FindComponentByClass<UMassActorBindingComponent>())
+                {
+                    ShooterEntity = ShooterBind->GetEntityHandle();
+                }
+
+                FMassEntityHandle TargetEntity;
+                if (Aim)
+                {
+                    if (UMassActorBindingComponent* TargetBind = Aim->FindComponentByClass<UMassActorBindingComponent>())
+                    {
+                        TargetEntity = TargetBind->GetEntityHandle();
+                    }
+                }
+
+                // 1) Spawn authoritative entity on Server
+                if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
+                {
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                }
+
+                // 2) Increment replication counter for clients
+                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+                {
+                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread);
+                }
             }
             else
             {
@@ -1110,7 +1149,42 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
                 float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
-                MulticastSpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, FMassEntityHandle(), FMassEntityHandle(), SpeedFromAttributes, TeamId);
+
+                float FinalSpeed = SpeedFromAttributes;
+                float InitialAngle = 0.f;
+                float RotSpeed = 0.f;
+                float MaxRadius = 0.f;
+                float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
+                bool bFollow = ProjectileCDO->FollowTarget;
+
+                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                {
+                    bFollow = true;
+                    FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    InitialAngle = FMath::RandRange(0.f, 360.f);
+                    RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
+                    if (FMath::RandBool()) RotSpeed *= -1.f;
+                    MaxRadius = ProjectileCDO->HomingMaxSpiralRadius * FMath::RandRange(0.8f, 1.2f);
+                }
+
+                // Resolve Shooter Entity Handle
+                FMassEntityHandle ShooterEntity;
+                if (UMassActorBindingComponent* ShooterBind = FindComponentByClass<UMassActorBindingComponent>())
+                {
+                    ShooterEntity = ShooterBind->GetEntityHandle();
+                }
+
+                // 1) Spawn authoritative entity on Server
+                if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
+                {
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                }
+
+                // 2) Increment replication counter for clients
+                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+                {
+                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, FMassEntityHandle(), InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread);
+                }
             }
             else
             {
@@ -1405,6 +1479,64 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 
 }
 
+void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity,
+    float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread)
+{
+    if (!ProjectileClass || !HasAuthority()) return;
+
+    FMassEntityHandle EntityToUse = ShooterEntity;
+    if (!EntityToUse.IsValid())
+    {
+        if (UMassActorBindingComponent* Binding = FindComponentByClass<UMassActorBindingComponent>())
+        {
+            EntityToUse = Binding->GetEntityHandle();
+        }
+    }
+
+    if (!EntityToUse.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[SERVER] IncrementMassProjectileFireCounter: Entity invalid for unit %s"), *GetName());
+        return;
+    }
+
+    if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+    {
+        FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+        if (FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EntityToUse))
+        {
+            AIS->ProjectileFireCounter++;
+            AIS->LastProjectileClass = ProjectileClass;
+            AIS->LastProjectileSpeed = Speed;
+            AIS->LastHomingInitialAngle = InitialAngle;
+            AIS->LastHomingRotationSpeed = RotSpeed;
+            AIS->LastHomingMaxSpiralRadius = MaxRadius;
+            AIS->LastHomingInterpSpeed = InterpSpeed;
+            AIS->LastbFollowTarget = bFollow;
+            AIS->LastProjectileTargetLocation = TargetLocation;
+            AIS->LastProjectileScale = Scale;
+            AIS->LastProjectileSpread = Spread;
+
+            // Resolve target NetID
+            AIS->LastTargetNetID = 0;
+            if (TargetEntity.IsValid())
+            {
+                if (const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(TargetEntity))
+                {
+                    AIS->LastTargetNetID = NetIDFrag->NetID.GetValue();
+                }
+            }
+
+            UE_LOG(LogTemp, Verbose, TEXT("[SERVER] IncrementMassProjectileFireCounter: Unit=%s, Counter=%d, Class=%s, Speed=%.1f, TargetNetID=%u, InitialAngle=%.1f"), 
+                *GetName(), AIS->ProjectileFireCounter, *ProjectileClass->GetName(), Speed, AIS->LastTargetNetID, InitialAngle);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[SERVER] IncrementMassProjectileFireCounter: FMassAIStateFragment not found for entity of unit %s"), *GetName());
+        }
+    }
+}
+
+
 void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass)
 {
 	if (!ProjectileClass)
@@ -1462,10 +1594,25 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 
 void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity)
 {
+    // Note: ProjectileBaseClass is available via inheritance from APerformanceUnit
     if (!ProjectileBaseClass || !Target || !Attacker) return;
 
     AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
     if (!ShootingUnit) return;
+
+    // --- Optimization: Increment Mass Replication Counter for Clients ---
+    if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+    {
+        const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+        if (ProjectileCDO && ProjectileCDO->bUseMass)
+        {
+            // We no longer return here. The main logic below will spawn the authoritative entity on the server.
+            // Note: We might want to move this increment into the loop for multi-shot, 
+            // but for now we keep it here to avoid multiple increments if not needed.
+            // Actually, for consistency with other functions, let's move it into the loop.
+        }
+    }
+    // --- End Optimization ---
 
     const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
     if (ProjectileCDO && ProjectileCDO->bUseMass)
@@ -1537,11 +1684,18 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                     RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
                     if (FMath::RandBool()) RotSpeed *= -1.f;
                     MaxRadius = ProjectileCDO->HomingMaxSpiralRadius * FMath::RandRange(0.8f, 1.2f);
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("[SERVER] Spawning Homing Projectile: Count=%d, MaxRadius=%f, RotSpeed=%f"), HomingCount, MaxRadius, RotSpeed);
                 }
 
-                MulticastSpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
+                {
+                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed);
+                }
+
+                // Increment replication counter for each projectile in the loop
+                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+                {
+                    IncrementMassProjectileFireCounter(ProjectileBaseClass, FinalSpeed, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, AimLocation, Transform.GetScale3D());
+                }
             }
         }
     }
@@ -1549,14 +1703,6 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
     {
         SpawnProjectile(Target, Attacker);
     }
-}
-
-void AUnitBase::MulticastSpawnMassProjectile_Implementation(TSubclassOf<class AProjectile> ProjectileClass, const FTransform& SpawnXf, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed)
-{
-	if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
-	{
-		VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed);
-	}
 }
 
 void AUnitBase::UpdateUnitNavigation()

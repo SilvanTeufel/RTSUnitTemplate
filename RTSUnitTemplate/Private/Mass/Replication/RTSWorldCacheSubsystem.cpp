@@ -8,6 +8,9 @@
 #include "Mass/Replication/ReplicationBootstrap.h"
 #include "Characters/Unit/UnitBase.h"
 #include "HAL/IConsoleManager.h"
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
+#include "MassReplicationFragments.h"
 
 URTSWorldCacheSubsystem::URTSWorldCacheSubsystem()
 {
@@ -36,6 +39,7 @@ void URTSWorldCacheSubsystem::ClearAll()
 	CachedBubble.Reset();
 	BindingByOwnerName.Reset();
 	BindingByUnitIndex.Reset();
+	BindingByMassNetID.Reset();
 	LastBindingRebuildTime = -1000.0;
 }
 
@@ -118,6 +122,11 @@ void URTSWorldCacheSubsystem::RebuildBindingCacheIfNeeded(float IntervalSeconds)
 	}
 	BindingByOwnerName.Reset();
 	BindingByUnitIndex.Reset();
+	BindingByMassNetID.Reset();
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	FMassEntityManager* EntityManager = MassSubsystem ? &MassSubsystem->GetMutableEntityManager() : nullptr;
+
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		if (UMassActorBindingComponent* Bind = It->FindComponentByClass<UMassActorBindingComponent>())
@@ -128,6 +137,21 @@ void URTSWorldCacheSubsystem::RebuildBindingCacheIfNeeded(float IntervalSeconds)
 				if (Unit->UnitIndex != INDEX_NONE)
 				{
 					BindingByUnitIndex.Add(Unit->UnitIndex, Bind);
+				}
+			}
+
+			if (EntityManager)
+			{
+				FMassEntityHandle Entity = Bind->GetEntityHandle();
+				if (Entity.IsValid())
+				{
+					if (const FMassNetworkIDFragment* NetIDFrag = EntityManager->GetFragmentDataPtr<FMassNetworkIDFragment>(Entity))
+					{
+						if (NetIDFrag->NetID.IsValid())
+						{
+							BindingByMassNetID.Add(NetIDFrag->NetID.GetValue(), Bind);
+						}
+					}
 				}
 			}
 		}
@@ -147,6 +171,15 @@ UMassActorBindingComponent* URTSWorldCacheSubsystem::FindBindingByOwnerName(FNam
 UMassActorBindingComponent* URTSWorldCacheSubsystem::FindBindingByUnitIndex(int32 UnitIndex)
 {
 	if (TWeakObjectPtr<UMassActorBindingComponent>* Found = BindingByUnitIndex.Find(UnitIndex))
+	{
+		return Found->Get();
+	}
+	return nullptr;
+}
+
+UMassActorBindingComponent* URTSWorldCacheSubsystem::FindBindingByMassNetID(uint32 NetID)
+{
+	if (TWeakObjectPtr<UMassActorBindingComponent>* Found = BindingByMassNetID.Find(NetID))
 	{
 		return Found->Get();
 	}

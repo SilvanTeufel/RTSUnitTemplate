@@ -128,6 +128,35 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float AIS_BirthTime = 0.f;
 	UPROPERTY() float AIS_DeathTime = 0.f;
 	UPROPERTY() bool AIS_IsInitialized = true;
+	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
+	UPROPERTY() TSubclassOf<class AProjectile> AIS_ProjectileClass;
+	UPROPERTY() float AIS_ProjectileSpeed = 0.f;
+	UPROPERTY() float AIS_HomingInitialAngle = 0.f;
+	UPROPERTY() float AIS_HomingRotationSpeed = 0.f;
+	UPROPERTY() float AIS_HomingMaxSpiralRadius = 0.f;
+	UPROPERTY() float AIS_HomingInterpSpeed = 2.f;
+	UPROPERTY()
+	bool AIS_bFollowTarget = false;
+	
+	UPROPERTY()
+	uint32 AIS_LastTargetNetID = 0u;
+
+	UPROPERTY()
+	FVector_NetQuantize10 AIS_ProjectileTargetLocation = FVector::ZeroVector;
+
+	UPROPERTY()
+	float AIS_ProjectileSpread = 0.f;
+
+	UPROPERTY()
+	FVector_NetQuantize10 AIS_ProjectileScale = FVector::OneVector;
+
+	uint8 LastProjectileFireCounter = 0; // Legacy / will remove later if unused
+	
+	// Client-side reconciliation
+	uint8 LastServerProjectileFireCounter = 0;
+	uint8 PredictedPendingShots = 0;
+	float PredictionTimer = 0.f;
+	bool bPredictedLatch = false;
 
 	// --- FMassMoveTargetFragment (subset + versioning) ---
 	UPROPERTY() bool Move_bHasTarget = false;
@@ -172,6 +201,15 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, Scale(FVector(1.0f, 1.0f, 1.0f))
 		, AITargetLastKnownLocation(FVector::ZeroVector)
 		, AbilityTargetLocation(FVector::ZeroVector)
+		, AIS_ProjectileFireCounter(0)
+		, AIS_ProjectileSpeed(0.f)
+		, AIS_LastTargetNetID(0u)
+		, AIS_ProjectileScale(FVector::OneVector)
+		, LastProjectileFireCounter(0)
+		, LastServerProjectileFireCounter(0)
+		, PredictedPendingShots(0)
+		, PredictionTimer(0.f)
+		, bPredictedLatch(false)
 	{
 	}
 
