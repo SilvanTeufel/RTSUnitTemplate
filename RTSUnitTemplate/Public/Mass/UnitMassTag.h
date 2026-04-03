@@ -106,6 +106,7 @@ struct FMassRotateToMouseFragment : public FMassFragment
 {
 	GENERATED_BODY()
 	FVector TargetLocation = FVector::ZeroVector;
+	int32 PlayerId = -1;
 };
 
 // Fragment to store the smoothing parameters
@@ -1275,6 +1276,20 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
+	{
+		const bool bShouldHave = (Bits & UnitTagBits::RotateToMouse) != 0;
+		const bool bHasFrag = DoesEntityHaveFragment<FMassRotateToMouseFragment>(EntityManager, Entity);
+		if (bShouldHave && !bHasFrag) 
+		{ 
+			UE_LOG(LogTemp, Log, TEXT("ApplyReplicatedTagBits: Adding FMassRotateToMouseFragment for Entity index=%d"), Entity.Index);
+			EntityManager.Defer().AddFragment<FMassRotateToMouseFragment>(Entity); 
+		}
+		else if (!bShouldHave && bHasFrag) 
+		{ 
+			UE_LOG(LogTemp, Log, TEXT("ApplyReplicatedTagBits: Removing FMassRotateToMouseFragment for Entity index=%d"), Entity.Index);
+			EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity); 
+		}
+	}
 
 	// If the client already has Dead tag AND Health <= 0 on client, skip replication of other state tags
 	const bool bClientHasDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());

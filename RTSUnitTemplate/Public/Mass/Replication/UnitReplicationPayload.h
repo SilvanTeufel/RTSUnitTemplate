@@ -109,6 +109,12 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() bool AC_bCanDetectInvisible = false;
 	UPROPERTY() float AC_LastGroundLocation = 0.f;
 	UPROPERTY() float AC_DespawnTime = 0.f;
+
+	// --- FMassRotateToMouseFragment ---
+	UPROPERTY()
+	FVector_NetQuantize10 RotateToMouse_TargetLocation = FVector::ZeroVector;
+	UPROPERTY()
+	int32 RotateToMouse_PlayerId = -1;
 	UPROPERTY() bool AC_RotatesToMovement = true;
 	UPROPERTY() bool AC_RotatesToEnemy = true;
 	UPROPERTY() float AC_RotationSpeed = 0.f;

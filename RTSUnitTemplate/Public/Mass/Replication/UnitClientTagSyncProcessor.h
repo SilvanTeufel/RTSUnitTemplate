@@ -28,6 +28,9 @@ private:
 	// Compute the mirrored enum state for an entity by inspecting replicated Mass tags
 	TEnumAsByte<UnitData::EState> ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const;
 
+	// Server-only variant of ComputeState that only handles RotateToMouse -> Pause
+	TEnumAsByte<UnitData::EState> ComputeStateServer(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const;
+
 	// Apply to owning actor if it's an AbilityUnit
 	void ApplyStateToActor(AAbilityUnit* AbilityUnit, TEnumAsByte<UnitData::EState> NewState) const;
 };

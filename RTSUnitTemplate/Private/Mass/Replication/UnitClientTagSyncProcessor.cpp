@@ -15,7 +15,7 @@ UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	: EntityQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
-	ExecutionFlags = (int32)EProcessorExecutionFlags::Client; // client-only
+	ExecutionFlags = (int32)EProcessorExecutionFlags::All; // Allow Client and Server execution
 	bRequiresGameThreadExecution = true; // we touch AActors
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
@@ -34,18 +34,14 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		return;
 	}
 
-	// Iterate all AbilityUnit actors on the client and mirror their Mass tag-derived state
+	// Iterate all AbilityUnit actors and mirror their Mass tag-derived state
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return;
 	}
 
-	// This processor is client-only. If not on a client, do nothing.
-	if (!World->IsNetMode(NM_Client))
-	{
-		return;
-	}
+	const bool bIsServer = World->GetNetMode() != NM_Client;
 	
 	if (bShowLogs)
 	{
@@ -63,7 +59,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			const FMassEntityHandle Entity = Bind->GetEntityHandle();
 			if (Entity.IsValid())
 			{
-				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
+				const TEnumAsByte<UnitData::EState> NewState = bIsServer ? ComputeStateServer(EntityManager, Entity) : ComputeState(EntityManager, Entity);
 
 				if (NewState == UnitData::Casting && SignalSubsystem)
 				{
@@ -79,6 +75,16 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			}
 		}
 	}
+}
+
+TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeStateServer(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const
+{
+	using namespace UnitData;
+	if (DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
+	{
+		return EState::Pause;
+	}
+	return EState::None;
 }
 
 TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const

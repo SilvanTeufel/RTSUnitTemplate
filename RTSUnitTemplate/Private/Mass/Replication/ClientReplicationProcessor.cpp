@@ -103,6 +103,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassRotateToMouseFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
@@ -463,6 +464,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
 			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
+			TArrayView<FMassRotateToMouseFragment> RotateToMouseList = Context.GetMutableFragmentView<FMassRotateToMouseFragment>();
 			// Prediction fragment view (mutable)
 			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
 
@@ -678,6 +680,34 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
     								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
+								if (RotateToMouseList.IsValidIndex(EntityIdx))
+								{
+									FMassRotateToMouseFragment& RTM = RotateToMouseList[EntityIdx];
+									const bool bHasRotateTag = (TagItem->TagBits & UnitTagBits::RotateToMouse) != 0;
+									if (bHasRotateTag)
+									{
+										RTM.TargetLocation = FVector(TagItem->RotateToMouse_TargetLocation);
+										RTM.PlayerId = TagItem->RotateToMouse_PlayerId;
+										// Diagnostic Log: 1s Throttled
+										static float LastLogTimeSync = 0.f;
+										if ((WorldForTags->GetTimeSeconds() - LastLogTimeSync) > 1.0f)
+										{
+											LastLogTimeSync = WorldForTags->GetTimeSeconds();
+											UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Syncing RotateToMouse_TargetLocation=%s PlayerId=%d for Entity NetID=%u"), 
+												*RTM.TargetLocation.ToString(), RTM.PlayerId, NetIDList[EntityIdx].NetID.GetValue());
+										}
+									}
+								}
+								else if ((TagItem->TagBits & UnitTagBits::RotateToMouse) != 0)
+								{
+									// Diagnostic Warning: Missing Fragment for Tag
+									static float LastLogTimeWarn = 0.f;
+									if ((WorldForTags->GetTimeSeconds() - LastLogTimeWarn) > 1.0f)
+									{
+										LastLogTimeWarn = WorldForTags->GetTimeSeconds();
+										UE_LOG(LogTemp, Warning, TEXT("ClientReplicationProcessor: Entity NetID=%u has RotateToMouse bit but NO fragment locally! Archetype mismatch?"), NetIDList[EntityIdx].NetID.GetValue());
+									}
+								}
        							if (AIStateList.IsValidIndex(EntityIdx))
 							{
 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
@@ -1071,6 +1101,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					// Disable reconciliation: directly set the Mass transform to authoritative
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
+					
+					// If rotating to mouse, preserve current Yaw to avoid fighting with UMassRotateToMouseProcessor
+					if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct()))
+					{
+						FRotator FinalRot = FinalXf.Rotator();
+						FRotator CurrentRot = ClientXf.Rotator();
+						FinalRot.Yaw = CurrentRot.Yaw;
+						FinalXf.SetRotation(FinalRot.Quaternion());
+					}
+
 					ClientXf = FinalXf;
 					// Also zero out steering/force to prevent drift from movement systems this tick
 					TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();

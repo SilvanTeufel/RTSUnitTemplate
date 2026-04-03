@@ -9,6 +9,7 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 
 UMassRotateToMouseProcessor::UMassRotateToMouseProcessor()
 {
@@ -20,7 +21,6 @@ UMassRotateToMouseProcessor::UMassRotateToMouseProcessor()
 
 void UMassRotateToMouseProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::ConfigureQueries - World: %s"), EntityManager->GetWorld() ? *EntityManager->GetWorld()->GetName() : TEXT("None"));
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRotateToMouseFragment>(EMassFragmentAccess::ReadWrite);
@@ -33,7 +33,6 @@ void UMassRotateToMouseProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 
 void UMassRotateToMouseProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::InitializeInternal - World: %s"), EntityManager->GetWorld() ? *EntityManager->GetWorld()->GetName() : TEXT("None"));
 	Super::InitializeInternal(Owner, EntityManager);
 	if (UWorld* World = EntityManager->GetWorld())
 	{
@@ -52,18 +51,14 @@ void UMassRotateToMouseProcessor::HandleMouseUpdateSignal(FName SignalName, TCon
 
 void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Performance optimization: skip execution if no units require rotation
+	if (EntityQuery.GetNumMatchingEntities(EntityManager) == 0)
+	{
+		return;
+	}
+
 	UWorld* World = EntityManager.GetWorld();
 	if (!World) return;
-
-	static float LastLogTime = 0.f;
-	float CurrentTime = World->GetTimeSeconds();
-	bool bShouldLog = (CurrentTime - LastLogTime) >= 1.0f;
-	if (bShouldLog)
-	{
-		LastLogTime = CurrentTime;
-		//int32 EntityCount = EntityQuery.CalculateEntityCount(EntityManager);
-		UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::Execute: Running..."));
-	}
 
 	AExtendedControllerBase* LocalPC = Cast<AExtendedControllerBase>(World->GetFirstPlayerController());
 	FVector CurrentMouseHit = FVector::ZeroVector;
@@ -77,35 +72,31 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			CurrentMouseHit = Hit.Location;
 			bIsLocalUpdateNeeded = true;
 			LocalPC->Server_UpdateMouseLocation(CurrentMouseHit);
-			
-			if (bShouldLog)
-			{
-				UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::Execute: Local Mouse Hit at %s"), *CurrentMouseHit.ToString());
-			}
 		}
 	}
-	else if (bShouldLog)
-	{
-		UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::Execute: No LocalPC or not LocalController."));
-	}
 
-	// Cache Team to PC for server-side logic
-	TMap<int32, AExtendedControllerBase*> TeamToPC;
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	// Get local player ID for comparison
+	int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
+	const FString NetModeStr = World->GetNetMode() == NM_Client ? TEXT("[Client]") : TEXT("[Server]");
+
+	// Cache PlayerId to PC for server-side logic
+	TMap<int32, AExtendedControllerBase*> PlayerIdToPC;
+	if (World->GetNetMode() != NM_Client)
 	{
-		if (AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(It->Get()))
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 		{
-			TeamToPC.Add(PC->SelectableTeamId, PC);
+			if (AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(It->Get()))
+			{
+				if (PC->PlayerState)
+				{
+					PlayerIdToPC.Add(PC->PlayerState->GetPlayerId(), PC);
+				}
+			}
 		}
 	}
 
 	EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&](FMassExecutionContext& ChunkContext)
 	{
-		if (bShouldLog)
-		{
-			UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::Execute: Processing chunk with %d entities"), ChunkContext.GetNumEntities());
-		}
-		
 		const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 		auto Transforms = ChunkContext.GetMutableFragmentView<FTransformFragment>();
 		auto MouseFrags = ChunkContext.GetMutableFragmentView<FMassRotateToMouseFragment>();
@@ -113,31 +104,59 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		auto Actors = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		auto Characteristics = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 
+		static float LastLogTime = 0.f;
+		const bool bShouldLog = (World->GetTimeSeconds() - LastLogTime) > 1.0f;
+		if (bShouldLog) LastLogTime = World->GetTimeSeconds();
+
+		if (bShouldLog)
+		{
+			UE_LOG(LogTemp, Log, TEXT("%s UMassRotateToMouseProcessor: Processing %d entities. bIsLocalUpdateNeeded=%d LocalPlayerId=%d"), *NetModeStr, ChunkContext.GetNumEntities(), bIsLocalUpdateNeeded ? 1 : 0, LocalPlayerId);
+		}
+
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
 			FVector TargetLocation = FVector::ZeroVector;
 			bool bFoundTarget = false;
+			FString TargetSource = TEXT("None");
 
-			if (bIsLocalUpdateNeeded && CombatStats[i].TeamId == LocalPC->SelectableTeamId)
+			// 1. If this unit belongs to our PlayerId, use our local mouse hit
+			if (MouseFrags[i].PlayerId == LocalPlayerId && bIsLocalUpdateNeeded)
 			{
 				TargetLocation = CurrentMouseHit;
 				bFoundTarget = true;
+				TargetSource = TEXT("LocalPC");
+				// Update fragment so server/others see it
+				MouseFrags[i].TargetLocation = TargetLocation;
 			}
-			else if (AExtendedControllerBase** PCPtr = TeamToPC.Find(CombatStats[i].TeamId))
+			else if (World->GetNetMode() != NM_Client)
 			{
-				TargetLocation = (*PCPtr)->ReplicatedMouseLocation;
-				bFoundTarget = true;
+				// 2. On Server, if we found a PC for this unit's PlayerId, use its replicated mouse location
+				if (AExtendedControllerBase** PCPtr = PlayerIdToPC.Find(MouseFrags[i].PlayerId))
+				{
+					TargetLocation = (*PCPtr)->ReplicatedMouseLocation;
+					bFoundTarget = true;
+					TargetSource = TEXT("PlayerIdPC");
+					MouseFrags[i].TargetLocation = TargetLocation;
+				}
+			}
+
+			// 3. Fallback to replicated fragment location
+			if (!bFoundTarget)
+			{
+				TargetLocation = MouseFrags[i].TargetLocation;
+				if (!TargetLocation.IsNearlyZero())
+				{
+					bFoundTarget = true;
+					TargetSource = TEXT("Fragment");
+				}
 			}
 
 			if (bFoundTarget)
 			{
-				MouseFrags[i].TargetLocation = TargetLocation;
-
 				if (bShouldLog && i == 0)
 				{
-					UE_LOG(LogTemp, Log, TEXT("UMassRotateToMouseProcessor::Execute: Entity %d rotating to %s (RotationSpeed=%.2f)"), i, *TargetLocation.ToString(), Characteristics[i].RotationSpeed);
+					UE_LOG(LogTemp, Log, TEXT("%s Entity 0 PlayerId=%d Target=%s Source=%s Speed=%.1f"), *NetModeStr, MouseFrags[i].PlayerId, *TargetLocation.ToString(), *TargetSource, Characteristics[i].RotationSpeed);
 				}
-				
 				FTransform& MassTransform = Transforms[i].GetMutableTransform();
 				FVector Dir = TargetLocation - MassTransform.GetLocation();
 				Dir.Z = 0.f;
@@ -146,7 +165,10 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					FQuat TargetQuat = Dir.ToOrientationQuat();
 					FQuat CurrentQuat = MassTransform.GetRotation();
-					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * Characteristics[i].RotationSpeed, 0.f, 1.f));
+					float RotSpeed = Characteristics[i].RotationSpeed;
+					if (RotSpeed <= 0.01f) { RotSpeed = 15.0f; }
+
+					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * RotSpeed, 0.f, 1.f));
 					MassTransform.SetRotation(NewQuat);
 
 					Characteristics[i].PositionedTransform = MassTransform;
@@ -156,14 +178,10 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						Actor->SetActorRotation(NewQuat);
 					}
 				}
-				else if (bShouldLog && i == 0) // Log only for first entity in chunk if it fails to normalize
-				{
-					UE_LOG(LogTemp, Warning, TEXT("UMassRotateToMouseProcessor::Execute: Failed to normalize direction for entity %d"), i);
-				}
 			}
 			else if (bShouldLog && i == 0)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("UMassRotateToMouseProcessor::Execute: No target found for entity %d (TeamId=%d)"), i, CombatStats[i].TeamId);
+				UE_LOG(LogTemp, Warning, TEXT("%s Entity 0 PlayerId=%d NO TARGET FOUND (TargetSource=%s)"), *NetModeStr, MouseFrags[i].PlayerId, *TargetSource);
 			}
 		}
 	}));

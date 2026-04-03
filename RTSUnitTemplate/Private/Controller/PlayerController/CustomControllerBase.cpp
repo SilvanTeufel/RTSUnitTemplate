@@ -3214,7 +3214,6 @@ void ACustomControllerBase::Batch_RemoveRotateToMouseTag()
 {
 	if (SelectedUnits.Num() > 0)
 	{
-		UE_LOG(LogTemp, Log, TEXT("ACustomControllerBase::Batch_RemoveRotateToMouseTag: Removing tag for %d units"), SelectedUnits.Num());
 		BatchSetRotateToMouseTagLocally(SelectedUnits, false);
 		Server_BatchSetRotateToMouseTag(SelectedUnits, false);
 	}

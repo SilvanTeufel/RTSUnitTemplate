@@ -161,7 +161,6 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 		{
 			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 			{
-				UE_LOG(LogTemp, Log, TEXT("UGameplayAbilityBase::EndAbility: Removing RotateToMouse from Unit %s"), *Unit->GetName());
 				// Remove tag/fragment from this entity locally on server
 				// Mass replication will sync this to all clients
 				UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
@@ -170,19 +169,10 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 					if (Entity.IsValid())
 					{
-						UE_LOG(LogTemp, Log, TEXT("UGameplayAbilityBase::EndAbility: Deferring removal for Entity index=%d"), Entity.Index);
 						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 						EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
 						EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 					}
-					else
-					{
-						UE_LOG(LogTemp, Warning, TEXT("UGameplayAbilityBase::EndAbility: Invalid Entity handle for unit %s"), *Unit->GetName());
-					}
-				}
-				else
-				{
-					UE_LOG(LogTemp, Warning, TEXT("UGameplayAbilityBase::EndAbility: MassSubsystem or MassActorBindingComponent missing for unit %s"), *Unit->GetName());
 				}
 			}
 		}

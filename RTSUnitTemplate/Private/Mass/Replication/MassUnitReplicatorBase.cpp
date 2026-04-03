@@ -350,6 +350,13 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
         }
 
+        // Fill RotateToMouse target location
+        if (const FMassRotateToMouseFragment* RTM = EntityManager.GetFragmentDataPtr<FMassRotateToMouseFragment>(Entity))
+        {
+            NewItem.RotateToMouse_TargetLocation = RTM->TargetLocation;
+            NewItem.RotateToMouse_PlayerId = RTM->PlayerId;
+        }
+
         // Fill Visual Effect Fragment
         if (const FMassVisualEffectFragment* VE = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity))
         {
@@ -742,6 +749,12 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
                         }
 
+                        // Fill RotateToMouse target location
+                        if (const FMassRotateToMouseFragment* RTM = EM->GetFragmentDataPtr<FMassRotateToMouseFragment>(EH))
+                        {
+                            NewItem.RotateToMouse_TargetLocation = RTM->TargetLocation;
+                        }
+
                         // Fill Visual Effect Fragment
                         if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
                         {
@@ -824,6 +837,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
                             if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 10.0f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
                             if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 10.0f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
+
                             // Seen arrays (throttled/only if content changed and enabled)
                             if (CVarRTS_ServerRep_ReplicateSeenIDs.GetValueOnGameThread() != 0)
                             {
@@ -902,6 +916,16 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!FMath::IsNearlyEqual(Item->CS_LoseSightRadius, CS->LoseSightRadius, SightThresh)) { Item->CS_LoseSightRadius = CS->LoseSightRadius; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->CS_PauseDuration, CS->PauseDuration, 0.5f)) { Item->CS_PauseDuration = CS->PauseDuration; bDirty = true; }
                             if (Item->CS_bUseProjectile != CS->bUseProjectile) { Item->CS_bUseProjectile = CS->bUseProjectile; bDirty = true; }
+                        }
+                        // Sync RotateToMouse target location and PlayerId
+                        if (const FMassRotateToMouseFragment* RTM = EM->GetFragmentDataPtr<FMassRotateToMouseFragment>(EH))
+                        {
+                            if (!Item->RotateToMouse_TargetLocation.Equals(RTM->TargetLocation, 1.0f) || Item->RotateToMouse_PlayerId != RTM->PlayerId)
+                            {
+                                Item->RotateToMouse_TargetLocation = RTM->TargetLocation;
+                                Item->RotateToMouse_PlayerId = RTM->PlayerId;
+                                bDirty = true;
+                            }
                         }
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
