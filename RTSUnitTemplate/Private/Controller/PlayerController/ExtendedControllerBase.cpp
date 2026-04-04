@@ -37,6 +37,9 @@
 #include "GameFramework/PlayerState.h"
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
+#include "MassCommandBuffer.h"
+#include "MassCommonFragments.h"
+#include "Core/UnitData.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -234,6 +237,69 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 void AExtendedControllerBase::Server_BatchSetRotateToMouseTag_Implementation(const TArray<AUnitBase*>& Units, bool bAdd)
 {
 	BatchSetRotateToMouseTagLocally(Units, bAdd);
+}
+
+void AExtendedControllerBase::BatchSetRunAnimationTagLocally(const TArray<AUnitBase*>& Units, float Duration, bool bAdd)
+{
+	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem)
+	{
+		return;
+	}
+
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+	for (AUnitBase* Unit : Units)
+	{
+		if (Unit && Unit->MassActorBindingComponent)
+		{
+			FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+			if (Entity.IsValid())
+			{
+				if (bAdd)
+				{
+					ApplyRunAnimationTag(EntityManager, Entity, Duration, UnitData::Attack);
+				}
+				else
+				{
+					EntityManager.Defer().RemoveTag<FRunAnimationTag>(Entity);
+					EntityManager.Defer().RemoveFragment<FRunAnimationFragment>(Entity);
+				}
+			}
+		}
+	}
+
+	if (IsLocalPlayerController() && !HasAuthority())
+	{
+		Server_BatchSetRunAnimationTag(Units, Duration, bAdd);
+	}
+}
+
+void AExtendedControllerBase::Server_BatchSetRunAnimationTag_Implementation(const TArray<AUnitBase*>& Units, float Duration, bool bAdd)
+{
+	BatchSetRunAnimationTagLocally(Units, Duration, bAdd);
+}
+
+void AExtendedControllerBase::ApplyRunAnimationTag(FMassEntityManager& EntityManager, FMassEntityHandle Entity, float Duration, UnitData::EState State)
+{
+	if (!Entity.IsValid()) return;
+
+	// 1. Transition: Remove RotateToMouse
+	EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+	EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+
+	// 2. Add RunAnimation
+	EntityManager.Defer().AddTag<FRunAnimationTag>(Entity);
+	
+	FRunAnimationFragment RAF;
+	RAF.Duration = Duration; 
+	RAF.AnimationState = State;
+	EntityManager.Defer().PushCommand<FMassCommandAddFragmentInstances<FRunAnimationFragment>>(Entity, RAF);
+	
+	// Reset StateTimer for the new state
+	if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+	{
+		StateFrag->StateTimer = 0.f;
+	}
 }
 
 void AExtendedControllerBase::Client_ApplyCustomizations_Implementation(USoundBase* InWaypointSound,

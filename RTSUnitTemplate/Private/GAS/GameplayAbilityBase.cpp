@@ -26,6 +26,7 @@
 #include "GameModes/ResourceGameMode.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "MassCommonFragments.h"
 
 // Static registry of disabled ability keys per team
 static TMap<int32, TSet<FString>> GDisabledAbilityKeysByTeam;
@@ -144,6 +145,41 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	{
 		GExecutedAbilityClasses.Add(ThisClass);
 	}
+
+	if (bRotateUnitsToMouse)
+	{
+		if (ActorInfo && ActorInfo->IsNetAuthority())
+		{
+			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+			{
+				if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+				{
+					if (Unit->MassActorBindingComponent)
+					{
+						FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+						if (Entity.IsValid())
+						{
+							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+							{
+								FTransform& Current = TransformFrag->GetMutableTransform();
+								Current.SetTranslation(Unit->GetActorLocation());
+								Current.SetRotation(Unit->GetActorRotation().Quaternion());
+								Current.SetScale3D(Unit->GetActorScale3D());
+
+								if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
+								{
+									CharFrag->PositionedTransform = Current;
+									CharFrag->bTransformDirty = true;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
@@ -161,17 +197,30 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 		{
 			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 			{
-				// Remove tag/fragment from this entity locally on server
-				// Mass replication will sync this to all clients
-				UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
-				if (MassSubsystem && Unit->MassActorBindingComponent)
+				if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 				{
-					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
-					if (Entity.IsValid())
+					if (Unit->MassActorBindingComponent)
 					{
-						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-						EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
-						EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+						FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+						if (Entity.IsValid())
+						{
+							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+							AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, 1.0f, UnitData::Attack);
+
+							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+							{
+								FTransform& Current = TransformFrag->GetMutableTransform();
+								Current.SetTranslation(Unit->GetActorLocation());
+								Current.SetRotation(Unit->GetActorRotation().Quaternion());
+								Current.SetScale3D(Unit->GetActorScale3D());
+
+								if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
+								{
+									CharFrag->PositionedTransform = Current;
+									CharFrag->bTransformDirty = true;
+								}
+							}
+						}
 					}
 				}
 			}

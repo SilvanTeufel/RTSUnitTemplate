@@ -115,6 +115,13 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	FVector_NetQuantize10 RotateToMouse_TargetLocation = FVector::ZeroVector;
 	UPROPERTY()
 	int32 RotateToMouse_PlayerId = -1;
+
+	// --- FRunAnimationFragment ---
+	UPROPERTY()
+	float RunAnimation_Duration = 1.0f;
+	UPROPERTY()
+	uint8 RunAnimation_AnimationState = 0; // Use uint8 for EState
+
 	UPROPERTY() bool AC_RotatesToMovement = true;
 	UPROPERTY() bool AC_RotatesToEnemy = true;
 	UPROPERTY() float AC_RotationSpeed = 0.f;

@@ -14,8 +14,12 @@ class UGameplayAbilityBase;
 #include "GameplayTagContainer.h"
 #include "Controller/PlayerController/WidgetController.h"
 #include "Core/WorkerData.h"
+#include "Core/UnitData.h"
+#include "MassEntityTypes.h"
 #include "Components/AudioComponent.h"
 #include "ExtendedControllerBase.generated.h"
+
+struct FMassEntityManager;
 
 USTRUCT()
 struct FExtractionAudioData
@@ -447,6 +451,13 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_BatchSetRotateToMouseTag(const TArray<AUnitBase*>& Units, bool bAdd);
+
+	void BatchSetRunAnimationTagLocally(const TArray<AUnitBase*>& Units, float Duration, bool bAdd);
+
+	UFUNCTION(Server, Reliable)
+	void Server_BatchSetRunAnimationTag(const TArray<AUnitBase*>& Units, float Duration, bool bAdd);
+
+	static void ApplyRunAnimationTag(FMassEntityManager& EntityManager, FMassEntityHandle Entity, float Duration, UnitData::EState State);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);

@@ -755,6 +755,13 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.RotateToMouse_TargetLocation = RTM->TargetLocation;
                         }
 
+                        // Fill RunAnimation fragment data
+                        if (const FRunAnimationFragment* RAF = EM->GetFragmentDataPtr<FRunAnimationFragment>(EH))
+                        {
+                            NewItem.RunAnimation_Duration = RAF->Duration;
+                            NewItem.RunAnimation_AnimationState = (uint8)RAF->AnimationState.GetValue();
+                        }
+
                         // Fill Visual Effect Fragment
                         if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
                         {
@@ -837,6 +844,14 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
                             if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 10.0f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
                             if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 10.0f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
+
+                            // Sync RunAnimation fragment data
+                            if (const FRunAnimationFragment* RAF = EM->GetFragmentDataPtr<FRunAnimationFragment>(EH))
+                            {
+                                if (Item->RunAnimation_Duration != RAF->Duration) { Item->RunAnimation_Duration = RAF->Duration; bDirty = true; }
+                                uint8 NewStateVal = (uint8)RAF->AnimationState.GetValue();
+                                if (Item->RunAnimation_AnimationState != NewStateVal) { Item->RunAnimation_AnimationState = NewStateVal; bDirty = true; }
+                            }
 
                             // Seen arrays (throttled/only if content changed and enabled)
                             if (CVarRTS_ServerRep_ReplicateSeenIDs.GetValueOnGameThread() != 0)

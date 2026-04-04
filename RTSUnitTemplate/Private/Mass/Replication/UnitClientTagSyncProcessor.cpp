@@ -84,6 +84,14 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeStateServer(co
 	{
 		return EState::Pause;
 	}
+	if (DoesEntityHaveTag(EntityManager, Entity, FRunAnimationTag::StaticStruct()))
+	{
+		if (const FRunAnimationFragment* RunAnimFrag = EntityManager.GetFragmentDataPtr<FRunAnimationFragment>(Entity))
+		{
+			return RunAnimFrag->AnimationState;
+		}
+		return EState::Attack;
+	}
 	return EState::None;
 }
 
@@ -177,6 +185,14 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	if (HasTag(FMassRotateToMouseTag::StaticStruct()))
 	{
 		return EState::Pause;
+	}
+	if (HasTag(FRunAnimationTag::StaticStruct()))
+	{
+		if (const FRunAnimationFragment* RunAnimFrag = EntityManager.GetFragmentDataPtr<FRunAnimationFragment>(Entity))
+		{
+			return RunAnimFrag->AnimationState;
+		}
+		return EState::Attack;
 	}
 	/*
 	if (HasTag(FMassStateIdleTag::StaticStruct()))

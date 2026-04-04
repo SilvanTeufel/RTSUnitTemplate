@@ -104,6 +104,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRotateToMouseFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
@@ -465,6 +466,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
 			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
 			TArrayView<FMassRotateToMouseFragment> RotateToMouseList = Context.GetMutableFragmentView<FMassRotateToMouseFragment>();
+			TArrayView<FRunAnimationFragment> RunAnimList = Context.GetMutableFragmentView<FRunAnimationFragment>();
 			// Prediction fragment view (mutable)
 			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
 
@@ -954,8 +956,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = UseItem->AIS_IsInitialized;
  							}
+
+ 							if (RunAnimList.IsValidIndex(EntityIdx))
+ 							{
+ 								FRunAnimationFragment& RAF = RunAnimList[EntityIdx];
+ 								RAF.Duration = UseItem->RunAnimation_Duration;
+ 								RAF.AnimationState = (UnitData::EState)UseItem->RunAnimation_AnimationState;
+ 							}
 							
-							if (EffectList.IsValidIndex(EntityIdx))
+ 							if (EffectList.IsValidIndex(EntityIdx))
 							{
 								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
 

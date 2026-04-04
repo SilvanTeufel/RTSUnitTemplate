@@ -48,7 +48,9 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-    
+    EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -259,7 +261,8 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                                 Item->AIS_ProjectileDamage,
                                 Item->AIS_ProjectileMaxPiercedTargets
                             );
-
+                            
+                            Context.Defer().AddTag<FMassStateAttackTag>(Entity);
                             // Latch and increment pending for reconciliation
                             Item->bPredictedLatch = true;
                             Item->PredictedPendingShots++;

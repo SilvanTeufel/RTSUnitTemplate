@@ -109,6 +109,24 @@ struct FMassRotateToMouseFragment : public FMassFragment
 	int32 PlayerId = -1;
 };
 
+USTRUCT()
+struct FRunAnimationTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
+struct FRunAnimationFragment : public FMassFragment
+{
+	GENERATED_BODY()
+    
+	UPROPERTY()
+	float Duration = 1.0f;
+
+	UPROPERTY()
+	TEnumAsByte<UnitData::EState> AnimationState = UnitData::Attack;
+};
+
 // Fragment to store the smoothing parameters
 USTRUCT()
 struct FMassUnitYawFollowFragment : public FMassFragment
@@ -1211,6 +1229,7 @@ namespace UnitTagBits
 	static constexpr uint32 Frozen              = 1u << 24;
 	static constexpr uint32 SoftAvoidance       = 1u << 25;
 	static constexpr uint32 RotateToMouse       = 1u << 26;
+	static constexpr uint32 RunAnimation        = 1u << 27;
 }
 
 
@@ -1245,6 +1264,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateStopXYMovementTag::StaticStruct()))       Bits |= UnitTagBits::StopXYMovement;
 	if (H(FMassSoftAvoidanceTag::StaticStruct()))             Bits |= UnitTagBits::SoftAvoidance;
 	if (H(FMassRotateToMouseTag::StaticStruct()))             Bits |= UnitTagBits::RotateToMouse;
+	if (H(FRunAnimationTag::StaticStruct()))                  Bits |= UnitTagBits::RunAnimation;
 	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
 	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
@@ -1276,6 +1296,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
+	SetTag(UnitTagBits::RunAnimation,        FRunAnimationTag());
 	{
 		const bool bShouldHave = (Bits & UnitTagBits::RotateToMouse) != 0;
 		const bool bHasFrag = DoesEntityHaveFragment<FMassRotateToMouseFragment>(EntityManager, Entity);
@@ -1288,6 +1309,18 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		{ 
 			UE_LOG(LogTemp, Log, TEXT("ApplyReplicatedTagBits: Removing FMassRotateToMouseFragment for Entity index=%d"), Entity.Index);
 			EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity); 
+		}
+	}
+	{
+		const bool bShouldHave = (Bits & UnitTagBits::RunAnimation) != 0;
+		const bool bHasFrag = DoesEntityHaveFragment<FRunAnimationFragment>(EntityManager, Entity);
+		if (bShouldHave && !bHasFrag) 
+		{ 
+			EntityManager.Defer().AddFragment<FRunAnimationFragment>(Entity); 
+		}
+		else if (!bShouldHave && bHasFrag) 
+		{ 
+			EntityManager.Defer().RemoveFragment<FRunAnimationFragment>(Entity); 
 		}
 	}
 

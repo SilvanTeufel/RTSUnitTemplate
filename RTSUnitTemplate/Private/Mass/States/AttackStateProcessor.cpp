@@ -53,7 +53,9 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
     EntityQuery.AddTagRequirement<FMassStateChaseTag>(EMassFragmentPresence::None); // Exclude Chase too
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None); // Already excluded by other logic, but explicit
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-    
+    EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 
