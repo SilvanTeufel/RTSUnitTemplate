@@ -213,7 +213,7 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 						if (Entity.IsValid())
 						{
 							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-							AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, 1.0f, UnitData::Attack);
+							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, 1.0f, UnitData::Attack);
 
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
